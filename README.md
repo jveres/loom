@@ -119,21 +119,28 @@ mutate(rows, (value) => {
 
 ## DOM API
 
-Import DOM helpers from `loom/dom`. The DOM layer is small and explicit:
-helpers create nodes, bind text, bind attributes, bind classes, reconcile keyed
-lists, and dispose owned effects when nodes are removed.
+Import DOM helpers from `loom/dom`. The DOM layer creates nodes, binds reactive
+text, attributes, classes, and styles, reconciles keyed lists, and disposes
+owned effects when nodes are removed.
 
 ```ts
 import { state } from "loom";
-import { classed, h, text } from "loom/dom";
+import { attr, classed, h, style, text } from "loom/dom";
 
 const hot = state(false);
 const label = state("Ready");
 
 document.body.append(
-  h("button", { class: classed("hot", hot), onClick: () => hot(!hot()) }, [
-    text(label),
-  ]),
+  h(
+    "button",
+    {
+      "aria-pressed": attr("aria-pressed", hot),
+      class: classed("hot", hot),
+      style: style("opacity", () => (hot() ? 1 : 0.65)),
+      onClick: () => hot(!hot()),
+    },
+    [text(label)],
+  ),
 );
 ```
 
@@ -141,9 +148,9 @@ The DOM entrypoint exports these functions:
 
 - `h(tag, props, children)` creates an element.
 - `text(read)` creates a text node bound to a reactive read.
-- `attr(name, read)` creates a reactive attribute binding.
-- `classed(name, read)` creates a reactive class binding.
-- `style(name, read)` creates a reactive style binding.
+- `attr(name, read)` creates an explicit reactive attribute binding.
+- `classed(name, read)` creates an explicit reactive class binding.
+- `style(name, read)` creates an explicit reactive style binding.
 - `list(container, read, options)` reconciles a keyed list.
 - `dispose(root)` disposes effects owned by a node subtree.
 - `remove(node)` disposes a node subtree and removes it from the DOM.
@@ -169,22 +176,80 @@ If your bundler transpiles TSX directly, configure it to use the same automatic
 runtime. This repository sets Vite's `oxc.jsx.importSource` to `"loom"`.
 
 JSX doesn't create a virtual DOM, and function components are plain functions.
+Reactive reads can be used directly as children, attribute values, and class
+map values.
 
 ```tsx
 import { state } from "loom";
-import { text } from "loom/dom";
 
 const count = state(0);
 
 function Counter() {
   return (
-    <button type="button" onClick={() => count(count() + 1)}>
-      {text(count)}
+    <button
+      type="button"
+      aria-pressed={() => count() > 0}
+      class={{ active: () => count() > 0 }}
+      onClick={() => count(count() + 1)}
+    >
+      {count}
     </button>
   );
 }
 
 document.body.append(<Counter />);
+```
+
+Class values can be strings, arrays, or object maps. Object map values can be
+plain booleans or reactive reads.
+
+```tsx
+const running = state(false);
+
+<section
+  class={[
+    "shell",
+    "compact",
+    { interactive: true, running, idle: () => !running() },
+  ]}
+/>
+```
+
+Style values can be strings, arrays, object maps, or explicit `style()`
+bindings. Object keys can use camelCase or CSS property names. Reactive style
+reads can return `null` to remove the property.
+
+```tsx
+import { style } from "loom/dom";
+
+const active = state(false);
+
+<section
+  style={[
+    "font-size:12px",
+    { backgroundColor: "white" },
+    { opacity: () => (active() ? 1 : 0.5) },
+    style("color", () => (active() ? "red" : null)),
+  ]}
+/>
+```
+
+### Reactive JSX expressions
+
+Loom is runtime-only. JSX expressions run once when the DOM node is created, so
+derived reactive values need a read function or `computed()`.
+
+```tsx
+import { computed, state } from "loom";
+
+const running = state(false);
+const label = computed(() => (running() ? "Stop chaos" : "Start chaos"));
+
+<button class={{ running }} aria-pressed={running}>
+  {label}
+</button>;
+
+<button>{() => (running() ? "Stop chaos" : "Start chaos")}</button>;
 ```
 
 Use these entrypoints for browser JSX:
@@ -224,9 +289,9 @@ Use these entrypoints for static HTML:
 ## Demo and benchmark
 
 The demo is a realtime stress UI written in Loom JSX. It exercises state cells,
-object fields, computed values, effects, keyed list reconciliation, class
-bindings, text bindings, manual mutation triggers, cleanup through DOM
-disposal, and the browser JSX runtime.
+object fields, computed values, effects, keyed list reconciliation, direct JSX
+text and attribute bindings, class map bindings, cleanup through DOM disposal,
+and the browser JSX runtime.
 
 The benchmark compares Loom against native `alien-signals` primitives under a
 full-chaos workload. The benchmark intentionally includes:

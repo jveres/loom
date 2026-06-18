@@ -1,13 +1,17 @@
-import { attr, classed, list, remove, text } from "../src/dom.js";
 import {
   batch,
   computed,
   effect,
   type Fields,
   fields,
+  mutate,
+  type State,
   state,
+  trigger,
+  untrack,
   update,
-} from "../src/loom.js";
+} from "loom";
+import { dispose, list } from "loom/dom";
 import "./styles.css";
 
 type Tone = 0 | 1 | 2 | 3 | 4;
@@ -91,39 +95,35 @@ const metrics = fields({
   fps: 0,
   ops: 0,
   edits: 0,
-  cells: 0,
   events: 0,
   checks: "idle",
 });
 
 let nextCardId = 0;
 let nextEventId = 0;
-let cardsValue = Array.from({ length: 12 }, () => makeCard());
-const cards = state<readonly Card[]>(cardsValue);
+const initialCards = Array.from({ length: 12 }, () => makeCard());
+const cards = state<readonly Card[]>(initialCards);
 const events = state<readonly EventItem[]>([]);
-const selectedId = state(pick(cardsValue, 0).id);
+const selectedId = state(pick(initialCards, 0).id);
 const selected = computed(() => {
+  const items = cards();
   const id = selectedId();
-  return cards().find((card) => card.id === id) ?? cards()[0];
+  return items.find((card) => card.id === id) ?? items[0];
 });
-
-metrics.cells(cardsValue.length * 10);
+const cellCount = computed(() => cards().length * 10);
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root.");
 
-const board = (
-  <section class={["grid", classed("xform", settings.transform)]} />
-);
+const board = <section class={["grid", { xform: settings.transform }]} />;
 const eventList = <div class="event-list" />;
-const cardNodes = new Map<number, Element>();
 let boardLayoutQueued = false;
 let boardColumnWidth = -1;
 let boardRowHeight = 0;
 let checksFeedbackTimer = 0;
 
 app.replaceChildren(
-  <div class={["shell", classed("chaos", settings.running)]}>
+  <div class={["shell", { chaos: settings.running }]}>
     <header class="bar">
       <div class="brand">
         <b>Loom</b>
@@ -131,11 +131,11 @@ app.replaceChildren(
       </div>
       <button
         type="button"
-        class={["primary", classed("on", settings.running)]}
-        aria-pressed={attr("aria-pressed", settings.running)}
+        class={["primary", { on: settings.running }]}
+        aria-pressed={settings.running}
         onClick={() => settings.running(!settings.running())}
       >
-        {text(() => (settings.running() ? "Stop chaos" : "Start chaos"))}
+        {() => (settings.running() ? "Stop chaos" : "Start chaos")}
       </button>
       {rangeControl("viewers", settings.viewers, 0, 5_000, 50)}
       {rangeControl("events / viewer s", settings.eventRate, 0, 12, 1)}
@@ -156,12 +156,12 @@ app.replaceChildren(
         cycleTheme,
         () => settings.theme() !== "auto",
       )}
-      {command("Run checks", runChecks)}
     </header>
     <div class="workspace">
       {board}
       <aside class="side">
         {runtimePanel()}
+        {checksPanel()}
         {selectedPanel()}
         <section class="panel events-panel">
           <div class="panel-head">
@@ -175,23 +175,25 @@ app.replaceChildren(
       </aside>
     </div>
     <div
-      class={[
-        "feedback",
-        classed("show", () => metrics.checks() !== "idle"),
-        classed("error", () => metrics.checks().startsWith("fail")),
-      ]}
+      class={{
+        feedback: true,
+        show: () => metrics.checks() !== "idle",
+        error: () => metrics.checks().startsWith("fail"),
+      }}
     >
-      {text(() => metrics.checks())}
+      {metrics.checks}
     </div>
   </div>,
 );
 
-effect(() => {
-  syncCards(cards());
-  queueBoardLayout();
+list(board, cards, {
+  key: (card) => card.id,
+  render: renderCard,
+  animate: () => !settings.transform(),
 });
 
 effect(() => {
+  cards();
   settings.transform();
   queueBoardLayout();
 });
@@ -258,14 +260,13 @@ function renderCard(card: Card): Element {
     <article
       class={[
         "card",
-        classed("selected", () => selectedId() === card.id),
-        classed("hot", model.hot),
+        { selected: () => selectedId() === card.id, hot: model.hot },
       ]}
-      data-tone={attr("data-tone", () => toneName(model.tone()))}
+      data-tone={() => toneName(model.tone())}
     >
       <div class="kicker">
         <span class="dot" />
-        {text(() => `REPOST / ${model.section().toUpperCase()}`)}
+        {() => `REPOST / ${model.section().toUpperCase()}`}
       </div>
       <h2 class="headline">
         <button
@@ -273,23 +274,23 @@ function renderCard(card: Card): Element {
           class="card-title-button"
           onClick={() => selectedId(card.id)}
         >
-          {text(model.title)}
+          {model.title}
         </button>
       </h2>
-      <div class="byline">{text(() => `By ${model.source()}`)}</div>
+      <div class="byline">{() => `By ${model.source()}`}</div>
       <div class="foot">
         {metricButton("likes", "♥", model.likes, () => model.liked())}
         {metricButton("views", "▣", () => compact(model.views()))}
         <button
           type="button"
-          class={["metric", "trend", classed("hidden", () => !model.hot())]}
+          class={["metric", "trend", { hidden: () => !model.hot() }]}
         >
           <span class="glyph">🔥</span>
-          {text(model.trend)}
+          {model.trend}
         </button>
         <span class="presence">
           <span class="live" />
-          <span>{text(() => `${model.readers()} reading`)}</span>
+          <span>{() => `${model.readers()} reading`}</span>
         </span>
       </div>
     </article>
@@ -305,44 +306,12 @@ function metricButton(
   return (
     <button
       type="button"
-      class={["metric", keyName, active ? classed("liked", active) : undefined]}
+      class={["metric", keyName, active ? { liked: active } : undefined]}
     >
       <span class="glyph">{glyph}</span>
-      <span class="value">{text(read)}</span>
+      <span class="value">{read}</span>
     </button>
   );
-}
-
-function syncCards(items: readonly Card[]): void {
-  const wanted = new Set(items.map((card) => card.id));
-  for (const [id, node] of cardNodes) {
-    if (wanted.has(id)) continue;
-    remove(node);
-    cardNodes.delete(id);
-  }
-
-  if (settings.transform()) {
-    for (const card of items) {
-      let node = cardNodes.get(card.id);
-      if (!node) {
-        node = renderCard(card);
-        cardNodes.set(card.id, node);
-        board.appendChild(node);
-      }
-    }
-    return;
-  }
-
-  let cursor = board.firstChild;
-  for (const card of items) {
-    let node = cardNodes.get(card.id);
-    if (!node) {
-      node = renderCard(card);
-      cardNodes.set(card.id, node);
-    }
-    if (node !== cursor) board.insertBefore(node, cursor);
-    cursor = node.nextSibling;
-  }
 }
 
 function queueBoardLayout(): void {
@@ -355,7 +324,7 @@ function queueBoardLayout(): void {
 }
 
 function layoutBoard(): void {
-  const nodes = [...cardNodes.values()].filter(
+  const nodes = [...board.children].filter(
     (node): node is HTMLElement => node instanceof HTMLElement,
   );
   if (!settings.transform()) {
@@ -390,8 +359,7 @@ function layoutBoard(): void {
   const rowHeight = boardRowHeight || 168;
   const items = cards();
   for (let index = 0; index < items.length; index++) {
-    const card = items[index] as Card;
-    const node = cardNodes.get(card.id) as HTMLElement | undefined;
+    const node = nodes[index] as HTMLElement | undefined;
     if (!node) continue;
     const x = (index % columns) * (columnWidth + gap);
     const y = Math.floor(index / columns) * (rowHeight + gap);
@@ -425,10 +393,31 @@ function runtimePanel(): Element {
         {metric("FPS", metrics.fps)}
         {metric("OPS", () => compact(metrics.ops()))}
         {metric("EDIT", metrics.edits)}
-        {metric("CELL", metrics.cells)}
+        {metric("CELL", cellCount)}
         {metric("EVENT", metrics.events)}
         {metric("CARD", () => cards().length)}
       </div>
+    </section>
+  );
+}
+
+function checksPanel(): Element {
+  return (
+    <section class="panel checks-panel">
+      <div class="panel-head">
+        <h2>Core checks</h2>
+        <button type="button" class="ghost" onClick={runChecks}>
+          Run
+        </button>
+      </div>
+      <p
+        class={{
+          "checks-status": true,
+          error: () => metrics.checks().startsWith("fail"),
+        }}
+      >
+        {() => (metrics.checks() === "idle" ? "Idle" : metrics.checks())}
+      </p>
     </section>
   );
 }
@@ -437,19 +426,17 @@ function selectedPanel(): Element {
   return (
     <section class="panel selected-panel">
       <div class="selected-title">
-        <h2>{text(() => selected()?.model.title() ?? "")}</h2>
-        <strong
-          class={classed("hidden", () => selected()?.model.hot() !== true)}
-        >
+        <h2>{() => selected()?.model.title() ?? ""}</h2>
+        <strong class={{ hidden: () => selected()?.model.hot() !== true }}>
           🔥 HOT
         </strong>
       </div>
       <p class="selected-meta">
-        {text(() => {
+        {() => {
           const card = selected();
           if (!card) return "";
           return `${card.model.section()} by ${card.model.source()}`;
-        })}
+        }}
       </p>
       <div class="button-row">
         {command("Toggle hot", toggleSelectedHot)}
@@ -472,7 +459,7 @@ function renderEvent(event: EventItem): Element {
 
 function rangeControl(
   label: string,
-  value: (next?: number) => number | undefined,
+  value: State<number>,
   min: number,
   max: number,
   step: number,
@@ -486,12 +473,11 @@ function rangeControl(
         max={max}
         step={step}
         value={value()}
-        onInput={(event: Event) => {
-          const input = event.currentTarget as HTMLInputElement;
-          value(Number(input.value));
+        onInput={(event) => {
+          value(event.currentTarget.valueAsNumber);
         }}
       />
-      <strong>{text(() => String(value()))}</strong>
+      <strong>{() => String(value())}</strong>
     </label>
   );
 }
@@ -504,10 +490,10 @@ function command(
   return (
     <button
       type="button"
-      class={["ghost", active ? classed("on", active) : undefined]}
+      class={["ghost", active ? { on: active } : undefined]}
       onClick={run}
     >
-      {typeof label === "function" ? text(label) : label}
+      {label}
     </button>
   );
 }
@@ -516,7 +502,7 @@ function metric(label: string, read: () => unknown): Element {
   return (
     <div class="metric">
       <span>{label}</span>
-      <strong>{text(read)}</strong>
+      <strong>{read}</strong>
     </div>
   );
 }
@@ -574,15 +560,17 @@ function editRandom(): void {
 
 function insertCard(): void {
   const card = makeCard();
-  setCards([card, ...cardsValue].slice(0, 80));
+  const next = [card, ...cards()].slice(0, 80);
+  setCards(next);
   selectedId(card.id);
-  pushEvent("PATCH", card.model.title(), `${cardsValue.length} cards`);
+  pushEvent("PATCH", card.model.title(), `${next.length} cards`);
   update(metrics.edits, (value) => value + 1);
 }
 
 function shuffleCards(): void {
-  setCards(shuffled(cardsValue));
-  pushEvent("PATCH", "list", `${cardsValue.length} nodes`);
+  const next = shuffled(cards());
+  setCards(next);
+  pushEvent("PATCH", "list", `${next.length} nodes`);
   update(metrics.edits, (value) => value + 1);
 }
 
@@ -609,9 +597,11 @@ function likeSelected(): void {
 
 function removeSelected(): void {
   const card = selected();
-  if (!card || cardsValue.length <= 1) return;
-  setCards(cardsValue.filter((item) => item.id !== card.id));
-  selectedId(pick(cardsValue, 0).id);
+  const current = cards();
+  if (!card || current.length <= 1) return;
+  const next = current.filter((item) => item.id !== card.id);
+  setCards(next);
+  selectedId(next[0]?.id ?? 0);
   pushEvent("PATCH", card.model.title(), "removed");
 }
 
@@ -623,15 +613,16 @@ function toggleCardHot(card: Card): void {
 function runChecks(): void {
   try {
     const count = state(0);
+    const doubled = computed(() => count() * 2);
     let seen = 0;
     const stop = effect(() => {
-      seen = count();
+      seen = doubled();
     });
     batch(() => {
       count(1);
       count(2);
     });
-    if (seen !== 2) throw new Error("batch failed");
+    assertEqual(seen, 4, "batch/computed failed");
     stop();
 
     let cleanups = 0;
@@ -641,13 +632,74 @@ function runChecks(): void {
       };
     });
     cleanupStop();
-    if (cleanups !== 1) throw new Error("cleanup failed");
+    assertEqual(cleanups, 1, "cleanup failed");
 
     const model = fields({ value: 0 });
     model.value(7);
-    if (model.value() !== 7) throw new Error("fields failed");
+    assertEqual(model.value(), 7, "fields failed");
 
-    showChecksFeedback("pass · state, batch, cleanup, fields");
+    const objectState = state({ count: 0 });
+    let objectSeen = 0;
+    const stopObject = effect(() => {
+      objectSeen = objectState().count;
+    });
+    objectState().count = 1;
+    trigger(objectState);
+    assertEqual(objectSeen, 1, "trigger failed");
+    mutate(objectState, (value) => {
+      value.count = 2;
+    });
+    assertEqual(objectSeen, 2, "mutate failed");
+    stopObject();
+
+    const tracked = state(0);
+    const ignored = state(0);
+    let runs = 0;
+    const stopUntrack = effect(() => {
+      runs++;
+      tracked();
+      untrack(() => ignored());
+    });
+    ignored(1);
+    assertEqual(runs, 1, "untrack failed");
+    tracked(1);
+    assertEqual(runs, 2, "untrack tracking failed");
+    stopUntrack();
+
+    type Row = { readonly id: number; readonly label: string };
+    const host = document.createElement("div");
+    const rows = state<readonly Row[]>([{ id: 1, label: "a" }]);
+    const stopList = list<Row>(host, rows, {
+      key: (row) => row.id,
+      render: (row) => <span>{row.label}</span>,
+    });
+    assertEqual(host.textContent, "a", "list mount failed");
+    rows([
+      { id: 2, label: "b" },
+      { id: 1, label: "a" },
+    ]);
+    assertEqual(host.textContent, "ba", "list patch failed");
+    stopList();
+    assertEqual(host.childNodes.length, 0, "list cleanup failed");
+
+    const active = state(false);
+    const label = state("off");
+    const node = (
+      <button type="button" aria-pressed={active} class={{ active }}>
+        {label}
+      </button>
+    );
+    assertEqual(node.textContent, "off", "jsx text failed");
+    active(true);
+    label("on");
+    assertEqual(node.textContent, "on", "jsx text failed");
+    assertEqual(node.getAttribute("aria-pressed"), "true", "jsx attr failed");
+    assertEqual(node.classList.contains("active"), true, "jsx class failed");
+    dispose(node);
+
+    showChecksFeedback(
+      "pass · state, computed, batch, cleanup, fields, trigger, mutate, untrack, list, jsx",
+    );
     pushEvent("CHECK", "core", "pass");
   } catch (error) {
     showChecksFeedback(
@@ -655,6 +707,14 @@ function runChecks(): void {
     );
     pushEvent("CHECK", "core", "fail");
   }
+}
+
+function assertEqual(
+  actual: unknown,
+  expected: unknown,
+  message: string,
+): void {
+  if (actual !== expected) throw new Error(message);
 }
 
 function showChecksFeedback(message: string): void {
@@ -667,9 +727,7 @@ function showChecksFeedback(message: string): void {
 }
 
 function setCards(next: readonly Card[]): void {
-  cardsValue = [...next];
-  cards(cardsValue);
-  metrics.cells(cardsValue.length * 10);
+  cards([...next]);
 }
 
 function pushEvent(kind: string, title: string, meta: string): void {
@@ -679,7 +737,8 @@ function pushEvent(kind: string, title: string, meta: string): void {
 }
 
 function randomCard(): Card {
-  return pick(cardsValue, Math.floor(random() * cardsValue.length));
+  const current = untrack(() => cards());
+  return pick(current, Math.floor(random() * current.length));
 }
 
 function pick<T>(items: readonly T[], index: number): T {

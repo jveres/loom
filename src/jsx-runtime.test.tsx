@@ -157,4 +157,32 @@ describe("loom DOM JSX runtime", () => {
     count(2);
     expect((node as HTMLButtonElement).textContent).toBe("2");
   });
+
+  it("binds reactive JSX children, attributes, and class maps", () => {
+    const count = state(0);
+    const active = state(false);
+    const node = (
+      <button
+        type="button"
+        aria-pressed={active}
+        class={{ active }}
+        data-count={() => count()}
+      >
+        {() => `Count ${count()}`}
+      </button>
+    ) as HTMLButtonElement;
+
+    expect(node.textContent).toBe("Count 0");
+    expect(node.getAttribute("aria-pressed")).toBe("false");
+    expect(node.getAttribute("data-count")).toBe("0");
+    expect(node.className).toBe("");
+
+    count(2);
+    active(true);
+
+    expect(node.textContent).toBe("Count 2");
+    expect(node.getAttribute("aria-pressed")).toBe("true");
+    expect(node.getAttribute("data-count")).toBe("2");
+    expect(node.className).toBe("active");
+  });
 });

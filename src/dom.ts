@@ -2,6 +2,7 @@ import { effect, type Read, type Stop, untrack } from "./loom.js";
 
 export type Child =
   | Node
+  | Read<unknown>
   | string
   | number
   | boolean
@@ -30,9 +31,11 @@ export interface StyleBinding {
 type ClassProp =
   | string
   | ClassBinding
+  | ClassMap
   | null
   | undefined
   | readonly ClassProp[];
+type ClassMap = Record<string, unknown>;
 type StyleMap = Record<string, unknown>;
 type StyleProp =
   | string
@@ -181,7 +184,7 @@ function applyProps(node: Element, props: Props): void {
   for (const name in props) {
     if (!Object.hasOwn(props, name)) continue;
     const value = props[name];
-    if (value == null || value === false) continue;
+    if (value == null || (value === false && !isAriaAttr(name))) continue;
     if (name === "key") {
       node.setAttribute("data-loom-key", String(value));
       continue;
@@ -202,6 +205,10 @@ function applyProps(node: Element, props: Props): void {
       node.addEventListener(eventName(name), value as EventListener);
       continue;
     }
+    if (typeof value === "function") {
+      bindAttr(node, attr(name, value as Read<unknown>));
+      continue;
+    }
     setAttr(node, name, value);
   }
 }
@@ -212,6 +219,10 @@ function appendChild(parent: Node, child: Child): void {
     return;
   }
   if (child == null || child === true || child === false) return;
+  if (typeof child === "function") {
+    parent.appendChild(text(child as Read<unknown>));
+    return;
+  }
   parent.appendChild(
     child instanceof Node ? child : document.createTextNode(String(child)),
   );
@@ -227,7 +238,15 @@ function applyClassProp(node: Element, value: ClassProp): void {
     node.classList.add(...value.trim().split(/\s+/).filter(Boolean));
     return;
   }
-  if (isClassBinding(value)) bindClass(node, value);
+  if (isClassBinding(value)) {
+    bindClass(node, value);
+    return;
+  }
+  if (!isClassMap(value)) return;
+  for (const name in value) {
+    if (!Object.hasOwn(value, name)) continue;
+    applyClassMapValue(node, name, value[name]);
+  }
 }
 
 function applyStyleProp(node: Element, value: StyleProp): void {
@@ -249,7 +268,20 @@ function applyStyleProp(node: Element, value: StyleProp): void {
   for (const name in value) {
     if (!Object.hasOwn(value, name)) continue;
     const styleValue = value[name];
-    if (styleValue != null) styleDecl.setProperty(name, String(styleValue));
+    const property = styleName(name);
+    if (typeof styleValue === "function") {
+      bindStyle(node, style(property, styleValue as Read<unknown>));
+    } else if (styleValue != null) {
+      styleDecl.setProperty(property, String(styleValue));
+    }
+  }
+}
+
+function applyClassMapValue(node: Element, name: string, value: unknown): void {
+  if (typeof value === "function") {
+    bindClass(node, classed(name, value as Read<unknown>));
+  } else if (value) {
+    node.classList.add(name);
   }
 }
 
@@ -270,7 +302,7 @@ function bindAttr(node: Element, binding: AttrBinding): void {
   let previous: string | null | undefined;
   const stop = untrack(() =>
     effect(() => {
-      const next = attrValue(binding.read());
+      const next = attrValue(binding.name, binding.read());
       if (next === previous) return;
       previous = next;
       setAttrValue(node, binding.name, next);
@@ -284,7 +316,7 @@ function bindStyle(node: Element, binding: StyleBinding): void {
   const styleDecl = (node as HTMLElement).style;
   const stop = untrack(() =>
     effect(() => {
-      const next = attrValue(binding.read());
+      const next = attrValue(binding.name, binding.read());
       if (next === previous) return;
       previous = next;
       if (next === null) styleDecl.removeProperty(binding.name);
@@ -295,7 +327,7 @@ function bindStyle(node: Element, binding: StyleBinding): void {
 }
 
 function setAttr(node: Element, name: string, value: unknown): void {
-  setAttrValue(node, name, attrValue(value));
+  setAttrValue(node, name, attrValue(name, value));
 }
 
 function setAttrValue(node: Element, name: string, value: string | null): void {
@@ -303,10 +335,15 @@ function setAttrValue(node: Element, name: string, value: string | null): void {
   else node.setAttribute(name, value);
 }
 
-function attrValue(value: unknown): string | null {
+function attrValue(name: string, value: unknown): string | null {
+  if (isAriaAttr(name) && typeof value === "boolean") return String(value);
   if (value == null || value === false) return null;
   if (value === true) return "";
   return String(value);
+}
+
+function isAriaAttr(name: string): boolean {
+  return name.startsWith("aria-");
 }
 
 function stringValue(value: unknown): string {
@@ -332,6 +369,14 @@ function isStyleBinding(value: unknown): value is StyleBinding {
 
 function isStyleMap(value: unknown): value is StyleMap {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isClassMap(value: unknown): value is ClassMap {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function styleName(name: string): string {
+  return name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
 
 function isBinding<TKind extends "attr" | "class" | "style">(

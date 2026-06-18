@@ -450,6 +450,27 @@ h2 {
   gap: 10px;
 }
 
+.checks-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.checks-status {
+  min-height: 34px;
+  padding: 8px;
+  color: var(--tone-green);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.checks-status.error {
+  color: var(--bad);
+}
+
 .selected-title {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
