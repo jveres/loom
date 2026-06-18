@@ -208,6 +208,42 @@ Use `depsOf(handle)` to inspect the current semantic dependencies for an effect.
 It returns state, signal, and computed dependencies without exposing internal
 slot objects.
 
+## Related reactive systems
+
+Loom combines plain-object state, a small signal graph, DOM ownership, and
+runtime observation. The core object reactivity uses `Proxy` traps in
+`state()`. The traps use `Reflect` to preserve normal JavaScript object
+semantics while Loom records reads and writes.
+
+Modern browsers and runtimes support this model, but `Proxy` is a hard runtime
+requirement. Loom targets modern JavaScript environments, not Internet Explorer
+11 or runtimes without `Proxy`. The DOM helpers also require browser DOM APIs or
+a DOM-compatible test environment.
+
+Signal libraries such as
+[`alien-signals`](https://github.com/stackblitz/alien-signals) are closest to
+Loom's internal dependency graph. They focus on `signal`, `computed`, `effect`,
+batching, and graph propagation. Loom keeps its public API broader: it adds
+deep proxy state, DOM bindings, keyed reconciliation, ownership cleanup, and
+observable runtime metadata.
+
+Store libraries such as
+[`nanostores`](https://github.com/nanostores/nanostores) take a different
+approach. Nano Stores uses explicit store objects with `get()`, `set()`,
+`listen()`, and `subscribe()` methods, plus lifecycle hooks for lazy external
+resources. That design is useful for framework-agnostic application state.
+Loom keeps local UI state closer to plain JavaScript objects and reserves
+`observe()` for diagnostics, not value subscription.
+
+These comparisons guide the core roadmap:
+
+- Keep Loom's public state surface plain and compact.
+- Consider a small value-level `subscribe()` only if application code needs it.
+- Treat optimized signal engines as possible internal graph replacements only
+  after benchmarks show a clear bottleneck.
+- Keep lazy lifecycle hooks out of core until demos or inspector work prove the
+  need.
+
 ## API
 
 Loom exports these core functions and types from `src/loom.ts`.
