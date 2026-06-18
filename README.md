@@ -1,8 +1,8 @@
 # Loom
 
 Loom is a tiny runtime reactive UI layer for static-first pages and small
-interactive surfaces. This package contains the core runtime, focused tests,
-and a core benchmark.
+interactive surfaces. This package contains the core runtime, a full core
+coverage gate, and a core benchmark.
 
 > **Note:** This is a preview package under active development.
 
@@ -39,6 +39,7 @@ Run the validation commands:
 ```sh
 pnpm run check
 pnpm test
+pnpm run coverage
 pnpm run lint
 pnpm run bench
 ```
@@ -261,11 +262,16 @@ Use these scripts while working on Loom:
 
 ```sh
 pnpm test
+pnpm run coverage
 pnpm run check
 pnpm run lint
 pnpm run format
 pnpm run bench
 ```
+
+Coverage is enforced at 100% for statements, branches, functions, and lines in
+`src/loom.ts`. When behavior changes, update the focused tests in
+`src/loom.test.ts` with the implementation.
 
 The benchmark in `bench/core.bench.ts` measures core behavior: state writes,
 effect scheduling, and keyed row reconciliation.

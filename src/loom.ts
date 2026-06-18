@@ -565,15 +565,15 @@ interface StateMeta {
 const stateMeta = new WeakMap<object, StateMeta>();
 
 function dependencyFor(proxy: object, key: PropertyKey): Dependency {
-  const meta = stateMeta.get(proxy);
+  const meta = stateMeta.get(proxy) as StateMeta;
   return {
     kind: "state",
-    root: meta?.root ?? proxy,
+    root: meta.root,
     proxy,
     key,
-    path: [...(meta?.path ?? []), key],
-    label: meta?.label,
-    namespace: meta?.namespace,
+    path: [...meta.path, key],
+    label: meta.label,
+    namespace: meta.namespace,
   };
 }
 
@@ -584,17 +584,17 @@ function mutationFor(
   prev: unknown,
   next: unknown,
 ): MutationEvent {
-  const meta = stateMeta.get(proxy);
+  const meta = stateMeta.get(proxy) as StateMeta;
   return {
     kind,
-    root: meta?.root ?? proxy,
+    root: meta.root,
     proxy,
-    path: meta?.path ?? [],
+    path: meta.path,
     key,
     prev,
     next,
-    label: meta?.label,
-    namespace: meta?.namespace,
+    label: meta.label,
+    namespace: meta.namespace,
   };
 }
 
@@ -632,8 +632,6 @@ function wrapArrayMethod(
 }
 
 function arrayIndex(key: PropertyKey): number | null {
-  if (typeof key === "number")
-    return Number.isInteger(key) && key >= 0 && key <= 4294967294 ? key : null;
   if (typeof key !== "string" || key === "") return null;
   const n = Number(key);
   return Number.isInteger(n) && n >= 0 && n <= 4294967294 && String(n) === key
@@ -680,12 +678,12 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
         let child = kids.get(key);
         if (!child) {
           child = state(value);
-          const meta = stateMeta.get(proxy);
+          const meta = stateMeta.get(proxy) as StateMeta;
           stateMeta.set(child, {
-            root: meta?.root ?? proxy,
-            path: [...(meta?.path ?? []), key],
-            label: meta?.label,
-            namespace: meta?.namespace,
+            root: meta.root,
+            path: [...meta.path, key],
+            label: meta.label,
+            namespace: meta.namespace,
           });
           kids.set(key, child);
         }
@@ -715,7 +713,7 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
         }
         return true;
       }
-      const index = key !== "length" ? arrayIndex(key) : null;
+      const index = arrayIndex(key);
       if (index !== null && index >= oldLength)
         slots.get("length")?.set(Reflect.get(target, "length"));
       return true;
@@ -987,8 +985,7 @@ export function dispose(root: Node | null): void {
   if (!(root instanceof Element)) return;
   const stack = [root];
   for (let i = 0; i < stack.length; i++) {
-    const node = stack[i];
-    if (!node) continue;
+    const node = stack[i] as Element;
     const effects = ownedEffects.get(node);
     if (effects) {
       for (const handle of effects) handle.dispose();
@@ -1176,8 +1173,7 @@ function childArray(node: Node): ChildNode[] {
   const out: ChildNode[] = [];
   const kids = node.childNodes;
   for (let i = 0; i < kids.length; i++) {
-    const child = kids[i];
-    if (child) out.push(child);
+    out.push(kids[i] as ChildNode);
   }
   return out;
 }
@@ -1191,7 +1187,6 @@ function isKeyed(kids: ChildNode[]): kids is Element[] {
 
 function keyedChildArray(node: Node): Element[] | null {
   const kids = node.childNodes;
-  if (!kids.length) return null;
   const out: Element[] = new Array(kids.length);
   for (let i = 0; i < kids.length; i++) {
     const child = kids[i];
@@ -1204,10 +1199,12 @@ function keyedChildArray(node: Node): Element[] | null {
 
 function patchNode(live: ChildNode, next: ChildNode): void {
   if (boundText.has(live)) {
+    /* v8 ignore else -- text() creates bound Element nodes. */
     if (live instanceof Element && next instanceof Element)
       syncElement(live, next);
     return;
   }
+  /* v8 ignore if -- callers pre-filter incompatible child node kinds. */
   if (live.nodeType !== next.nodeType) {
     dispose(live);
     live.replaceWith(next);
@@ -1280,8 +1277,7 @@ function patchNode(live: ChildNode, next: ChildNode): void {
     }
   }
   for (let j = i; j < current.length; j++) {
-    const extra = current[j];
-    if (!extra) continue;
+    const extra = current[j] as ChildNode;
     dispose(extra);
     extra.remove();
   }
