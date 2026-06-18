@@ -1,0 +1,381 @@
+import { effect, type Read, type Stop, untrack } from "./loom.js";
+
+export type Child =
+  | Node
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly Child[];
+
+export interface ClassBinding {
+  readonly kind: "class";
+  readonly name: string;
+  readonly read: Read<unknown>;
+}
+
+export interface AttrBinding {
+  readonly kind: "attr";
+  readonly name: string;
+  readonly read: Read<unknown>;
+}
+
+export interface StyleBinding {
+  readonly kind: "style";
+  readonly name: string;
+  readonly read: Read<unknown>;
+}
+
+type ClassProp =
+  | string
+  | ClassBinding
+  | null
+  | undefined
+  | readonly ClassProp[];
+type StyleMap = Record<string, unknown>;
+type StyleProp =
+  | string
+  | StyleMap
+  | StyleBinding
+  | null
+  | undefined
+  | readonly StyleProp[];
+
+export type Props = Record<string, unknown> & {
+  class?: ClassProp;
+  className?: ClassProp;
+  key?: string | number;
+  style?: StyleProp;
+};
+
+export interface ListOptions<T> {
+  key(item: T): string | number;
+  render(item: T, key: string): Element;
+  animate?: Read<boolean>;
+}
+
+const ownedEffects = new WeakMap<Node, Stop[]>();
+
+export function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  props?: Props | null,
+  children?: Child,
+): HTMLElementTagNameMap[K];
+export function h(tag: string, props?: Props | null, children?: Child): Element;
+export function h(
+  tag: string,
+  props: Props | null = null,
+  children?: Child,
+): Element {
+  const node = document.createElement(tag);
+  if (props) applyProps(node, props);
+  appendChild(node, children);
+  return node;
+}
+
+export function text(read: Read<unknown>): Text {
+  const node = document.createTextNode("");
+  let previous = "";
+  const stop = untrack(() =>
+    effect(() => {
+      const next = stringValue(read());
+      if (next === previous) return;
+      previous = next;
+      node.data = next;
+    }),
+  );
+  own(node, stop);
+  return node;
+}
+
+export function attr(name: string, read: Read<unknown>): AttrBinding {
+  return { kind: "attr", name, read };
+}
+
+export function classed(name: string, read: Read<unknown>): ClassBinding {
+  return { kind: "class", name, read };
+}
+
+export function style(name: string, read: Read<unknown>): StyleBinding {
+  return { kind: "style", name, read };
+}
+
+export function list<T>(
+  container: Element,
+  read: Read<readonly T[]>,
+  options: ListOptions<T>,
+): Stop {
+  const nodes = new Map<string, Element>();
+  const stop = untrack(() =>
+    effect(() => {
+      const items = read();
+      const animate = options.animate?.() === true;
+      const before = animate ? snapshot(nodes) : undefined;
+      const seen = new Set<string>();
+      let cursor = container.firstChild;
+
+      for (const item of items) {
+        const itemKey = String(options.key(item));
+        if (seen.has(itemKey))
+          throw new Error(`Duplicate Loom key "${itemKey}".`);
+        seen.add(itemKey);
+
+        let node = nodes.get(itemKey);
+        if (!node) {
+          node = options.render(item, itemKey);
+          node.setAttribute("data-loom-key", itemKey);
+          nodes.set(itemKey, node);
+        }
+
+        if (node !== cursor) container.insertBefore(node, cursor);
+        cursor = node.nextSibling;
+      }
+
+      for (const [itemKey, node] of nodes) {
+        if (seen.has(itemKey)) continue;
+        remove(node);
+        nodes.delete(itemKey);
+      }
+
+      if (before) animateMoved(before, nodes);
+    }),
+  );
+
+  const stopList = (): void => {
+    stop();
+    for (const node of nodes.values()) remove(node);
+    nodes.clear();
+  };
+  own(container, stopList);
+  return stopList;
+}
+
+export function dispose(root: Node): void {
+  const stack: Node[] = [root];
+  for (let index = 0; index < stack.length; index++) {
+    const node = stack[index] as Node;
+    const stops = ownedEffects.get(node);
+    if (stops) {
+      ownedEffects.delete(node);
+      for (const stop of stops) stop();
+    }
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      stack.push(child);
+    }
+  }
+}
+
+export function remove(node: Node): void {
+  dispose(node);
+  node.parentNode?.removeChild(node);
+}
+
+function own(node: Node, stop: Stop): void {
+  const stops = ownedEffects.get(node);
+  if (stops) stops.push(stop);
+  else ownedEffects.set(node, [stop]);
+}
+
+function applyProps(node: Element, props: Props): void {
+  for (const name in props) {
+    if (!Object.hasOwn(props, name)) continue;
+    const value = props[name];
+    if (value == null || value === false) continue;
+    if (name === "key") {
+      node.setAttribute("data-loom-key", String(value));
+      continue;
+    }
+    if (name === "class" || name === "className") {
+      applyClassProp(node, value as ClassProp);
+      continue;
+    }
+    if (name === "style") {
+      applyStyleProp(node, value as StyleProp);
+      continue;
+    }
+    if (isAttrBinding(value)) {
+      bindAttr(node, value);
+      continue;
+    }
+    if (name.startsWith("on") && typeof value === "function") {
+      node.addEventListener(eventName(name), value as EventListener);
+      continue;
+    }
+    setAttr(node, name, value);
+  }
+}
+
+function appendChild(parent: Node, child: Child): void {
+  if (Array.isArray(child)) {
+    for (const item of child) appendChild(parent, item);
+    return;
+  }
+  if (child == null || child === true || child === false) return;
+  parent.appendChild(
+    child instanceof Node ? child : document.createTextNode(String(child)),
+  );
+}
+
+function applyClassProp(node: Element, value: ClassProp): void {
+  if (Array.isArray(value)) {
+    for (const item of value) applyClassProp(node, item);
+    return;
+  }
+  if (!value) return;
+  if (typeof value === "string") {
+    node.classList.add(...value.trim().split(/\s+/).filter(Boolean));
+    return;
+  }
+  if (isClassBinding(value)) bindClass(node, value);
+}
+
+function applyStyleProp(node: Element, value: StyleProp): void {
+  if (Array.isArray(value)) {
+    for (const item of value) applyStyleProp(node, item);
+    return;
+  }
+  if (!value) return;
+  if (typeof value === "string") {
+    node.setAttribute("style", value);
+    return;
+  }
+  if (isStyleBinding(value)) {
+    bindStyle(node, value);
+    return;
+  }
+  if (!isStyleMap(value)) return;
+  const styleDecl = (node as HTMLElement).style;
+  for (const name in value) {
+    if (!Object.hasOwn(value, name)) continue;
+    const styleValue = value[name];
+    if (styleValue != null) styleDecl.setProperty(name, String(styleValue));
+  }
+}
+
+function bindClass(node: Element, binding: ClassBinding): void {
+  let previous: boolean | undefined;
+  const stop = untrack(() =>
+    effect(() => {
+      const next = Boolean(binding.read());
+      if (next === previous) return;
+      previous = next;
+      node.classList.toggle(binding.name, next);
+    }),
+  );
+  own(node, stop);
+}
+
+function bindAttr(node: Element, binding: AttrBinding): void {
+  let previous: string | null | undefined;
+  const stop = untrack(() =>
+    effect(() => {
+      const next = attrValue(binding.read());
+      if (next === previous) return;
+      previous = next;
+      setAttrValue(node, binding.name, next);
+    }),
+  );
+  own(node, stop);
+}
+
+function bindStyle(node: Element, binding: StyleBinding): void {
+  let previous: string | null | undefined;
+  const styleDecl = (node as HTMLElement).style;
+  const stop = untrack(() =>
+    effect(() => {
+      const next = attrValue(binding.read());
+      if (next === previous) return;
+      previous = next;
+      if (next === null) styleDecl.removeProperty(binding.name);
+      else styleDecl.setProperty(binding.name, next);
+    }),
+  );
+  own(node, stop);
+}
+
+function setAttr(node: Element, name: string, value: unknown): void {
+  setAttrValue(node, name, attrValue(value));
+}
+
+function setAttrValue(node: Element, name: string, value: string | null): void {
+  if (value === null) node.removeAttribute(name);
+  else node.setAttribute(name, value);
+}
+
+function attrValue(value: unknown): string | null {
+  if (value == null || value === false) return null;
+  if (value === true) return "";
+  return String(value);
+}
+
+function stringValue(value: unknown): string {
+  if (value == null || value === false) return "";
+  return String(value);
+}
+
+function eventName(name: string): string {
+  return name.slice(2).toLowerCase();
+}
+
+function isAttrBinding(value: unknown): value is AttrBinding {
+  return isBinding(value, "attr");
+}
+
+function isClassBinding(value: unknown): value is ClassBinding {
+  return isBinding(value, "class");
+}
+
+function isStyleBinding(value: unknown): value is StyleBinding {
+  return isBinding(value, "style");
+}
+
+function isStyleMap(value: unknown): value is StyleMap {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isBinding<TKind extends "attr" | "class" | "style">(
+  value: unknown,
+  kind: TKind,
+): value is {
+  readonly kind: TKind;
+  readonly name: string;
+  readonly read: Read<unknown>;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { readonly kind?: unknown }).kind === kind &&
+    typeof (value as { readonly name?: unknown }).name === "string" &&
+    typeof (value as { readonly read?: unknown }).read === "function"
+  );
+}
+
+function snapshot(nodes: Map<string, Element>): Map<Element, DOMRectReadOnly> {
+  const rects = new Map<Element, DOMRectReadOnly>();
+  for (const node of nodes.values()) {
+    if (node.isConnected) rects.set(node, node.getBoundingClientRect());
+  }
+  return rects;
+}
+
+function animateMoved(
+  before: Map<Element, DOMRectReadOnly>,
+  nodes: Map<string, Element>,
+): void {
+  for (const node of nodes.values()) {
+    const first = before.get(node);
+    if (!first || typeof node.animate !== "function") continue;
+    const last = node.getBoundingClientRect();
+    const dx = first.left - last.left;
+    const dy = first.top - last.top;
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
+    node.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px)` },
+        { transform: "translate(0, 0)" },
+      ],
+      { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
+    );
+  }
+}

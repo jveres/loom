@@ -55,10 +55,10 @@ interface AiOp {
 }
 
 const FRAME_COUNT = 120;
-const TRAFFIC_WRITES_PER_FRAME = 400;
+const TRAFFIC_WRITES_PER_FRAME = 1_000;
 const INITIAL_CARDS = 12;
-const MAX_CARDS = 60;
-const EDIT_RATE = 30;
+const MAX_CARDS = 80;
+const EDIT_RATE = 180;
 const DT = 1 / 60;
 const TRAFFIC = makeTrafficPlan();
 const AI = makeAiPlan();
@@ -72,6 +72,10 @@ function consume(value: number): void {
 describe("loom vs alien-signals", () => {
   bench("loom: full chaos core", () => {
     runLoomChaos();
+  });
+
+  bench("loom manual: full chaos core", () => {
+    runLoomManualChaos();
   });
 
   bench("alien native: full chaos core", () => {
@@ -161,8 +165,71 @@ function runAlienChaos(): void {
   for (const card of cards) card.dispose();
 }
 
+function runLoomManualChaos(): void {
+  let nextId = INITIAL_CARDS;
+  let cards = Array.from({ length: INITIAL_CARDS }, (_, id) =>
+    makeLoomManualCard(baseCard(id)),
+  );
+  const structure = state(0);
+  const structureView = effect(() => {
+    structure();
+    consume(cards.length);
+  });
+  for (let frame = 0; frame < FRAME_COUNT; frame++) {
+    batch(() => {
+      for (const op of TRAFFIC[frame] as readonly TrafficOp[]) {
+        applyLoomTraffic(
+          cards[op.card % cards.length] as CardRef<LoomCard>,
+          op,
+        );
+      }
+      for (const op of AI[frame] as readonly AiOp[]) {
+        if (op.kind === 0) {
+          const card = cards[op.card % cards.length] as CardRef<LoomCard>;
+          card.model.headline(op.headline);
+          card.model.tone(nextTone(card.model.tone()));
+        } else if (op.kind === 1) {
+          cards = [makeLoomManualCard(baseCard(nextId++)), ...cards];
+          if (cards.length > MAX_CARDS) cards.pop()?.dispose();
+          structure(structure() + 1);
+        } else if (op.kind === 2) {
+          cards = shuffled(cards, op.card);
+          structure(structure() + 1);
+        } else {
+          const card = cards[op.card % cards.length] as CardRef<LoomCard>;
+          card.model.hot(!card.model.hot());
+        }
+      }
+    });
+  }
+  structureView();
+  for (const card of cards) card.dispose();
+}
+
 function makeLoomCard(initial: CardModel): CardRef<LoomCard> {
   const model = fields(initial);
+  const views = bindLoomCardViews(model);
+  return {
+    model,
+    dispose() {
+      for (const view of views) view();
+    },
+  };
+}
+
+function makeLoomManualCard(initial: CardModel): CardRef<LoomCard> {
+  const model: LoomCard = {
+    id: state(initial.id),
+    headline: state(initial.headline),
+    tone: state(initial.tone),
+    likes: state(initial.likes),
+    views: state(initial.views),
+    readers: state(initial.readers),
+    trend: state(initial.trend),
+    hot: state(initial.hot),
+    liked: state(initial.liked),
+    pending: state(initial.pending),
+  };
   const views = bindLoomCardViews(model);
   return {
     model,

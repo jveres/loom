@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   batch,
   computed,
+  type EffectFn,
   effect,
   fields,
   mutate,
@@ -59,6 +60,21 @@ describe("loom core", () => {
 
     stop();
     expect(cleanups).toBe(2);
+  });
+
+  it("accepts reusable void effect callbacks", () => {
+    const count = state(0);
+    let seen = -1;
+    const syncSeen: EffectFn = () => {
+      seen = count();
+    };
+
+    const stop = effect(syncSeen);
+
+    expect(seen).toBe(0);
+    count(1);
+    expect(seen).toBe(1);
+    stop();
   });
 
   it("supports untracked reads", () => {
@@ -134,6 +150,14 @@ describe("loom core", () => {
 
     stopLeft();
     stopRight();
+  });
+
+  it("creates fields from string keys only", () => {
+    const hidden = Symbol("hidden");
+    const model = fields({ visible: 1, [hidden]: 2 });
+
+    expect(model.visible()).toBe(1);
+    expect(Object.getOwnPropertySymbols(model)).toHaveLength(0);
   });
 
   it("rejects non-plain field sources", () => {

@@ -9,10 +9,12 @@
     "check": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "bench": "vitest bench bench/chaos.bench.ts --run"
+    "bench": "vitest bench bench/chaos.bench.ts --run",
+    "dev": "vite --host 127.0.0.1"
   },
   "exports": {
-    ".": "./src/loom.ts"
+    ".": "./src/loom.ts",
+    "./dom": "./src/dom.ts"
   },
   "dependencies": {
     "alien-signals": "3.2.1"
@@ -21,6 +23,7 @@
     "@biomejs/biome": "2.4.16",
     "@types/node": "^25.9.1",
     "typescript": "^6.0.3",
+    "vite": "8.0.16",
     "vitest": "^4.1.8"
   }
 }
