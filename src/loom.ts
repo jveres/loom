@@ -59,7 +59,8 @@ class Scheduler implements SchedulerHandle {
   flush(): void {
     this.pending = false;
     let batchSize = 0;
-    const start = now();
+    const shouldEmitFlush = observers.size > 0;
+    const start = shouldEmitFlush ? now() : 0;
     let passes = 0;
     while (this.queued.size) {
       if (passes++ > 100) {
@@ -82,7 +83,8 @@ class Scheduler implements SchedulerHandle {
         this.flushing.clear();
       }
     }
-    if (batchSize) emitFlush({ batchSize, durationMs: now() - start });
+    if (batchSize && shouldEmitFlush)
+      emitFlush({ batchSize, durationMs: now() - start });
     for (const slot of queuedSlots) slot.queued = false;
     queuedSlots.length = 0;
   }
@@ -126,18 +128,18 @@ export type Dependency =
       readonly proxy: object;
       readonly key: PropertyKey;
       readonly path: readonly PropertyKey[];
-      readonly label?: string;
-      readonly namespace?: string;
+      readonly label?: string | undefined;
+      readonly namespace?: string | undefined;
     }
   | {
       readonly kind: "signal";
-      readonly label?: string;
-      readonly namespace?: string;
+      readonly label?: string | undefined;
+      readonly namespace?: string | undefined;
     }
   | {
       readonly kind: "computed";
-      readonly label?: string;
-      readonly namespace?: string;
+      readonly label?: string | undefined;
+      readonly namespace?: string | undefined;
     };
 
 export interface MutationEvent {
@@ -148,8 +150,8 @@ export interface MutationEvent {
   readonly key: PropertyKey;
   readonly prev: unknown;
   readonly next: unknown;
-  readonly label?: string;
-  readonly namespace?: string;
+  readonly label?: string | undefined;
+  readonly namespace?: string | undefined;
 }
 
 export interface DependencyEvent {
@@ -159,7 +161,7 @@ export interface DependencyEvent {
 
 export interface EffectEvent {
   readonly effect: EffectHandle;
-  readonly label?: string;
+  readonly label?: string | undefined;
 }
 
 export interface FlushEvent {
@@ -185,11 +187,11 @@ const observers = new Set<Observer>();
 
 export function observe(observer: Observer): Disposable {
   observers.add(observer);
-  const handle: Disposable = {
+  const handle = {
     disposed: false,
     dispose() {
-      if (this.disposed) return;
-      (this as { disposed: boolean }).disposed = true;
+      if (handle.disposed) return;
+      handle.disposed = true;
       observers.delete(observer);
     },
   };
@@ -197,28 +199,37 @@ export function observe(observer: Observer): Disposable {
   return handle;
 }
 
-function emitMutation(event: MutationEvent): void {
+function emitMutation(
+  kind: MutationEvent["kind"],
+  proxy: object,
+  key: PropertyKey,
+  prev: unknown,
+  next: unknown,
+): void {
+  const event = mutationFor(kind, proxy, key, prev, next);
   for (const observer of observers) observer.mutation?.(event);
 }
 
 function emitDependency(effect: EffectRunner, slot: Slot<unknown>): void {
-  if (!observers.size) return;
-  const dependency = slot.info;
-  for (const observer of observers)
-    observer.dependency?.({ effect, dependency });
+  const event: DependencyEvent = { effect, dependency: slot.info };
+  for (const observer of observers) observer.dependency?.(event);
 }
 
 function emitEffect(effect: EffectRunner): void {
-  if (!observers.size) return;
-  for (const observer of observers)
-    observer.effect?.({ effect, label: effect.label });
+  const event: EffectEvent = { effect, label: effect.label };
+  for (const observer of observers) observer.effect?.(event);
 }
 
 function emitFlush(event: FlushEvent): void {
   for (const observer of observers) observer.flush?.(event);
 }
 
-function emitPatch(event: PatchEvent): void {
+function emitPatch(
+  kind: PatchEvent["kind"],
+  size: number,
+  container: Element,
+): void {
+  const event: PatchEvent = { kind, size, container };
   for (const observer of observers) observer.patch?.(event);
 }
 
@@ -238,9 +249,10 @@ class Slot<T> {
   }
 
   get(): T {
-    if (activeEffect) {
-      activeEffect.track(this);
-      emitDependency(activeEffect, this);
+    const effect = activeEffect;
+    if (effect) {
+      effect.track(this);
+      if (observers.size) emitDependency(effect, this);
     }
     return this.value;
   }
@@ -264,12 +276,12 @@ type Cleanup = () => void;
 type EffectFn = (onCleanup: (cleanup: Cleanup) => void) => undefined | Cleanup;
 
 export interface EffectOptions {
-  label?: string;
-  scheduler?: SchedulerHandle;
+  label?: string | undefined;
+  scheduler?: SchedulerHandle | undefined;
 }
 
 export interface EffectHandle extends Disposable {
-  readonly label?: string;
+  readonly label?: string | undefined;
 }
 
 const SOURCE_SLOT = Symbol("loom.sourceSlot");
@@ -279,13 +291,13 @@ interface InternalSource {
 }
 
 export interface Signal {
-  readonly label?: string;
+  readonly label?: string | undefined;
   read(): void;
   bump(): void;
 }
 
 export interface Computed<T> extends Disposable {
-  readonly label?: string;
+  readonly label?: string | undefined;
   readonly value: T;
 }
 
@@ -299,7 +311,7 @@ function sourceSlot(dep: EffectDep): Slot<unknown> {
 
 class EffectRunner implements EffectHandle {
   readonly fn: EffectFn;
-  readonly label?: string;
+  readonly label: string | undefined;
   readonly scheduler: Scheduler;
   readonly explicitDeps: readonly Slot<unknown>[] | null;
   readonly deps = new Set<Slot<unknown>>();
@@ -348,7 +360,7 @@ class EffectRunner implements EffectHandle {
     if (this.disposed) return;
     this.runCleanups();
     if (!this.explicitDeps) this.clearDeps();
-    emitEffect(this);
+    if (observers.size) emitEffect(this);
     const prev = activeEffect;
     activeEffect = this.explicitDeps ? null : this;
     try {
@@ -430,8 +442,8 @@ export function untrack<T>(fn: () => T): T {
 }
 
 export interface SignalOptions {
-  label?: string;
-  namespace?: string;
+  label?: string | undefined;
+  namespace?: string | undefined;
 }
 
 export function signal(options: SignalOptions = {}): Signal {
@@ -453,12 +465,12 @@ export function signal(options: SignalOptions = {}): Signal {
 }
 
 export interface ComputedOptions {
-  label?: string;
-  namespace?: string;
+  label?: string | undefined;
+  namespace?: string | undefined;
 }
 
 class ComputedImpl<T> implements Computed<T>, InternalSource {
-  readonly label?: string;
+  readonly label: string | undefined;
   readonly [SOURCE_SLOT]: Slot<unknown>;
   private readonly runner: EffectHandle;
 
@@ -500,16 +512,16 @@ export function computed<T>(
 /* ------------------------------------------------------------------- scopes */
 
 export interface ScopeOptions {
-  label?: string;
+  label?: string | undefined;
 }
 
 export interface ScopeHandle extends Disposable {
-  readonly label?: string;
+  readonly label?: string | undefined;
   run<T>(fn: () => T): T;
 }
 
 class Scope implements ScopeHandle {
-  readonly label?: string;
+  readonly label: string | undefined;
   private readonly handles = new Set<Disposable>();
   disposed = false;
 
@@ -551,15 +563,15 @@ export function scope(options?: ScopeOptions): ScopeHandle {
 /* ------------------------------------------------------------------- state */
 
 export interface StateOptions {
-  label?: string;
-  namespace?: string;
+  label?: string | undefined;
+  namespace?: string | undefined;
 }
 
 interface StateMeta {
   root: object;
   path: readonly PropertyKey[];
-  label?: string;
-  namespace?: string;
+  label?: string | undefined;
+  namespace?: string | undefined;
 }
 
 const stateMeta = new WeakMap<object, StateMeta>();
@@ -625,8 +637,8 @@ function wrapArrayMethod(
       return method.apply(this, args);
     } finally {
       arrayMutationDepth--;
-      if (arrayMutationDepth === 0)
-        emitMutation(mutationFor("array", proxy, name, before, target.length));
+      if (arrayMutationDepth === 0 && observers.size)
+        emitMutation("array", proxy, name, before, target.length);
     }
   };
 }
@@ -700,8 +712,8 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
       const next = Reflect.get(target, key);
       if (old !== null && typeof old === "object") kids.delete(key);
       slots.get(key)?.set(next);
-      if (arrayMutationDepth === 0)
-        emitMutation(mutationFor("set", proxy, key, old, next));
+      if (arrayMutationDepth === 0 && observers.size)
+        emitMutation("set", proxy, key, old, next);
       if (!isArray) return true;
       if (key === "length" && typeof old === "number") {
         const nextLength = Reflect.get(target, "length") as number;
@@ -724,8 +736,8 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
       if (!Reflect.deleteProperty(target, key)) return false;
       kids.delete(key);
       slot?.set(undefined);
-      if (arrayMutationDepth === 0)
-        emitMutation(mutationFor("delete", proxy, key, prev, undefined));
+      if (arrayMutationDepth === 0 && observers.size)
+        emitMutation("delete", proxy, key, prev, undefined);
       return true;
     },
   });
@@ -1142,7 +1154,7 @@ export function attr(
 
 export function patch(live: Element, next: Element | (() => Element)): Element {
   const built = typeof next === "function" ? next() : next;
-  emitPatch({ kind: "patch", size: 1, container: live });
+  if (observers.size) emitPatch("patch", 1, live);
   if (live.tagName !== built.tagName) {
     dispose(live);
     live.replaceWith(built);
@@ -1361,7 +1373,7 @@ function patchList<Model>(
   keyOf: (model: Model) => string,
   build: (model: Model, key: string) => Element,
 ): void {
-  emitPatch({ kind: "list", size: models.length, container });
+  if (observers.size) emitPatch("list", models.length, container);
   const keys = modelKeys(models, keyOf);
   if (!container.firstChild) {
     const fragment = document.createDocumentFragment();
@@ -1429,4 +1441,5 @@ export function list<Model>(
     return handle;
   }
   patchList(container, models, keyOf, build);
+  return undefined;
 }

@@ -1,8 +1,8 @@
 # Loom
 
 Loom is a tiny runtime reactive UI layer for static-first pages and small
-interactive surfaces. This package contains the core runtime, a full core
-coverage gate, and a core benchmark.
+interactive surfaces. This package contains the core runtime, strict TypeScript
+quality gates, a full core coverage gate, and a core benchmark.
 
 > **Note:** This is a preview package under active development.
 
@@ -200,6 +200,10 @@ const observer = observe({
 observer.dispose();
 ```
 
+Observation stays out of the normal UI hot path. When no observer is registered,
+Loom skips observer event construction for mutations, dependency reads, effect
+runs, structural patches, and flush timing.
+
 Use `depsOf(handle)` to inspect the current semantic dependencies for an effect.
 It returns state, signal, and computed dependencies without exposing internal
 slot objects.
@@ -237,12 +241,18 @@ Loom exports these core functions and types from `src/loom.ts`.
 | `configure(options)` | Set scheduler and duplicate-key options. |
 | `createScheduler(options?)` | Create an isolated scheduler. |
 | `Disposable` | Common disposable handle shape. |
+| `SchedulerHandle` | Isolated scheduler handle returned by `createScheduler()`. |
+| `EffectOptions` | Options for labels and custom schedulers on effects. |
 | `EffectHandle` | Disposable handle returned by `effect()` and bindings. |
 | `Signal` | Manual invalidation source returned by `signal()`. |
+| `SignalOptions` | Options for signal labels and namespaces. |
 | `Computed` | Cached derived value returned by `computed()`. |
+| `ComputedOptions` | Options for computed labels and namespaces. |
 | `ScopeHandle` | Disposable owner returned by `scope()`. |
+| `ScopeOptions` | Options for scope labels. |
 | `Observer` | Runtime event observer shape. |
 | `Dependency` | Semantic dependency returned by `depsOf()`. |
+| `EffectDep` | Explicit dependency source accepted by `effect(fn, deps)`. |
 | `MutationEvent` | Mutation event emitted by `observe()`. |
 | `DependencyEvent` | Dependency-read event emitted by `observe()`. |
 | `EffectEvent` | Effect-run event emitted by `observe()`. |
@@ -254,6 +264,7 @@ Loom exports these core functions and types from `src/loom.ts`.
 | `AttrBinding` | Type returned by `attr(name, read)`. |
 | `TextOptions` | Options for `text()`. |
 | `ListOptions` | Options for `list()`. |
+| `StateOptions` | Options for state labels and namespaces. |
 | `ConfigureOptions` | Options for scheduling and duplicate-key handling. |
 
 ## Development
@@ -272,6 +283,10 @@ pnpm run bench
 Coverage is enforced at 100% for statements, branches, functions, and lines in
 `src/loom.ts`. When behavior changes, update the focused tests in
 `src/loom.test.ts` with the implementation.
+
+TypeScript runs with strict module, optional-property, implicit-return, indexed
+access, side-effect import, and unchecked-index checks enabled in
+`tsconfig.json`.
 
 The benchmark in `bench/core.bench.ts` measures core behavior: state writes,
 effect scheduling, and keyed row reconciliation.

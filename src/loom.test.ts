@@ -352,6 +352,7 @@ describe("observe", () => {
         key: (row) => row.id,
         render: () => h("p"),
       });
+      patch(h("section"), h("section", { title: "next" }));
       model.count = 2;
       flush();
 
@@ -360,6 +361,7 @@ describe("observe", () => {
       expect(events).toContain("effect:view");
       expect(events.some((event) => event.startsWith("flush:"))).toBe(true);
       expect(events).toContain("patch:list");
+      expect(events).toContain("patch:patch");
     } finally {
       off.dispose();
       configure({ scheduler: "microtask" });
@@ -547,14 +549,25 @@ describe("scheduler", () => {
     try {
       const model = state({ count: 1 });
       let seen = 0;
-      effect(() => {
-        seen = model.count;
+      let flushes = 0;
+      const off = observe({
+        flush: () => {
+          flushes++;
+        },
       });
+      try {
+        effect(() => {
+          seen = model.count;
+        });
 
-      model.count = 2;
-      flush();
+        model.count = 2;
+        flush();
 
-      expect(seen).toBe(2);
+        expect(seen).toBe(2);
+        expect(flushes).toBe(1);
+      } finally {
+        off.dispose();
+      }
     } finally {
       Object.defineProperty(globalThis, "performance", {
         configurable: true,
@@ -841,8 +854,9 @@ describe("DOM bindings and structure", () => {
 
   it("applies keys, styles, nested children, and static attr values", () => {
     const style = Object.create({ color: "red" }) as Record<string, unknown>;
+    const opacity = "opacity";
     style["background-color"] = "blue";
-    style.opacity = "";
+    style[opacity] = "";
     style["border-color"] = null;
     const node = h(
       "div",
