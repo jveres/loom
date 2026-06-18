@@ -25,11 +25,14 @@ pnpm test
 pnpm run bench
 ```
 
-Run the demo:
+Run the dev server:
 
 ```sh
 pnpm run dev
 ```
+
+Open `/demo/` for the realtime UI demo, or `/bench/` for the browser
+benchmark.
 
 ## Core API
 
@@ -293,8 +296,12 @@ object fields, computed values, effects, keyed list reconciliation, direct JSX
 text and attribute bindings, class map bindings, cleanup through DOM disposal,
 and the browser JSX runtime.
 
-The benchmark compares Loom against native `alien-signals` primitives under a
-full-chaos workload. The benchmark intentionally includes:
+The browser benchmark is available from the dev server at `/bench/`. It uses a
+js-framework-benchmark style table workload and compares Loom DOM bindings
+against a hand-written vanilla DOM baseline on the same machine.
+
+The CLI benchmark compares Loom against native `alien-signals` primitives under
+a full-chaos workload. The benchmark intentionally includes:
 
 - `loom`, using `fields()`.
 - `loom manual`, using manually declared state cells.

@@ -58,7 +58,9 @@ export interface ListOptions<T> {
   animate?: Read<boolean>;
 }
 
-const ownedEffects = new WeakMap<Node, Stop[]>();
+type OwnedEffect = Stop | Stop[];
+
+const ownedEffects = new WeakMap<Node, OwnedEffect>();
 
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -161,7 +163,7 @@ export function dispose(root: Node): void {
     const stops = ownedEffects.get(node);
     if (stops) {
       ownedEffects.delete(node);
-      for (const stop of stops) stop();
+      stopOwned(stops);
     }
     for (let child = node.firstChild; child; child = child.nextSibling) {
       stack.push(child);
@@ -175,9 +177,18 @@ export function remove(node: Node): void {
 }
 
 function own(node: Node, stop: Stop): void {
-  const stops = ownedEffects.get(node);
-  if (stops) stops.push(stop);
-  else ownedEffects.set(node, [stop]);
+  const owned = ownedEffects.get(node);
+  if (!owned) ownedEffects.set(node, stop);
+  else if (Array.isArray(owned)) owned.push(stop);
+  else ownedEffects.set(node, [owned, stop]);
+}
+
+function stopOwned(owned: OwnedEffect): void {
+  if (Array.isArray(owned)) {
+    for (const stop of owned) stop();
+  } else {
+    owned();
+  }
 }
 
 function applyProps(node: Element, props: Props): void {
@@ -235,7 +246,7 @@ function applyClassProp(node: Element, value: ClassProp): void {
   }
   if (!value) return;
   if (typeof value === "string") {
-    node.classList.add(...value.trim().split(/\s+/).filter(Boolean));
+    appendClassName(node, value);
     return;
   }
   if (isClassBinding(value)) {
@@ -247,6 +258,19 @@ function applyClassProp(node: Element, value: ClassProp): void {
     if (!Object.hasOwn(value, name)) continue;
     applyClassMapValue(node, name, value[name]);
   }
+}
+
+function appendClassName(node: Element, value: string): void {
+  const next = value.trim();
+  if (!next) return;
+
+  const current = node.getAttribute("class");
+  node.setAttribute("class", current ? `${current} ${next}` : next);
+}
+
+function hasClassName(node: Element, name: string): boolean {
+  const current = node.getAttribute("class");
+  return current ? current.split(/\s+/).includes(name) : false;
 }
 
 function applyStyleProp(node: Element, value: StyleProp): void {
@@ -286,7 +310,7 @@ function applyClassMapValue(node: Element, name: string, value: unknown): void {
 }
 
 function bindClass(node: Element, binding: ClassBinding): void {
-  let previous: boolean | undefined;
+  let previous = hasClassName(node, binding.name);
   const stop = untrack(() =>
     effect(() => {
       const next = Boolean(binding.read());

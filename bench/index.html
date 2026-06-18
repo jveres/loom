@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loom browser benchmark</title>
+    <link rel="stylesheet" href="/bench/styles.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <b>Loom</b>
+        <span>js-framework-benchmark style browser bench</span>
+      </div>
+      <button id="run" class="primary" type="button">Run benchmark</button>
+      <button id="profile" class="ghost" type="button">Profile patch/layout</button>
+      <span class="status" id="status">idle</span>
+      <div class="spacer"></div>
+      <button id="c1k" class="ghost" type="button">create 1k</button>
+      <button id="c10k" class="ghost" type="button">create 10k</button>
+      <button id="upd" class="ghost" type="button">update 10th</button>
+      <button id="swp" class="ghost" type="button">swap</button>
+      <button id="clr" class="ghost" type="button">clear</button>
+      <span class="status" id="impl">Loom</span>
+    </header>
+
+    <main class="wrap">
+      <section class="tablebox" aria-label="Benchmark table">
+        <table class="bench">
+          <tbody id="tbody"></tbody>
+        </table>
+      </section>
+      <aside class="results" id="resultsbox">
+        <h1>Results - median ms</h1>
+        <table class="res">
+          <tbody id="res">
+            <tr>
+              <td>Run the benchmark to populate results.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="ref">
+          <table class="res">
+            <tbody id="refbody"></tbody>
+          </table>
+        </div>
+        <div class="note" id="note"></div>
+      </aside>
+    </main>
+
+    <script type="module" src="/bench/main.ts"></script>
+  </body>
+</html>
