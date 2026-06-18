@@ -318,6 +318,9 @@ class EffectRunner implements EffectHandle {
   private cleanups: Cleanup[] = [];
   private disposeCleanups: Cleanup[] = [];
   disposed = false;
+  private readonly addCleanup = (cleanup: Cleanup): void => {
+    this.cleanups.push(cleanup);
+  };
 
   constructor(
     fn: EffectFn,
@@ -364,10 +367,7 @@ class EffectRunner implements EffectHandle {
     const prev = activeEffect;
     activeEffect = this.explicitDeps ? null : this;
     try {
-      const addCleanup = (cleanup: Cleanup): void => {
-        this.cleanups.push(cleanup);
-      };
-      const returned = this.fn(addCleanup);
+      const returned = this.fn(this.addCleanup);
       if (typeof returned === "function") this.cleanups.push(returned);
     } finally {
       activeEffect = prev;
@@ -394,6 +394,7 @@ class EffectRunner implements EffectHandle {
   }
 
   private runCleanups(): void {
+    if (this.cleanups.length === 0) return;
     for (const cleanup of this.cleanups.splice(0)) {
       try {
         cleanup();
@@ -654,15 +655,17 @@ function arrayIndex(key: PropertyKey): number | null {
 export function state<T extends object>(obj: T, options: StateOptions = {}): T {
   const slots = new Map<PropertyKey, Slot<unknown>>();
   const kids = new Map<PropertyKey, object>();
+  const targetIsArray = Array.isArray(obj);
+  const view = obj as Record<PropertyKey, unknown>;
   let methodCache:
     | Map<PropertyKey, (...args: unknown[]) => unknown>
     | undefined;
   const proxy = new Proxy(obj, {
     get(target, key) {
-      const value = Reflect.get(target, key);
+      const value = view[key];
       if (typeof key === "symbol") return value;
       if (typeof value === "function") {
-        if (Array.isArray(target) && ARRAY_MUTATORS.has(key)) {
+        if (targetIsArray && ARRAY_MUTATORS.has(key)) {
           methodCache ??= new Map();
           let wrapped = methodCache.get(key);
           if (!wrapped) {
@@ -704,19 +707,18 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
       return value;
     },
     set(target, key, value) {
-      const old = Reflect.get(target, key);
+      const old = view[key];
       if (Object.is(value, old)) return true;
-      const isArray = Array.isArray(target);
-      const oldLength = isArray ? target.length : -1;
+      const oldLength = targetIsArray ? (target as unknown[]).length : -1;
       if (!Reflect.set(target, key, value)) return false;
-      const next = Reflect.get(target, key);
+      const next = view[key];
       if (old !== null && typeof old === "object") kids.delete(key);
       slots.get(key)?.set(next);
       if (arrayMutationDepth === 0 && observers.size)
         emitMutation("set", proxy, key, old, next);
-      if (!isArray) return true;
+      if (!targetIsArray) return true;
       if (key === "length" && typeof old === "number") {
-        const nextLength = Reflect.get(target, "length") as number;
+        const nextLength = (target as unknown[]).length;
         if (nextLength >= old) return true;
         for (const [slotKey, slot] of slots) {
           const index = arrayIndex(slotKey);
@@ -727,11 +729,11 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
       }
       const index = arrayIndex(key);
       if (index !== null && index >= oldLength)
-        slots.get("length")?.set(Reflect.get(target, "length"));
+        slots.get("length")?.set((target as unknown[]).length);
       return true;
     },
     deleteProperty(target, key) {
-      const prev = Reflect.get(target, key);
+      const prev = view[key];
       const slot = slots.get(key);
       if (!Reflect.deleteProperty(target, key)) return false;
       kids.delete(key);
