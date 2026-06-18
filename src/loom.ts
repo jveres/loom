@@ -656,7 +656,7 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
   const slots = new Map<PropertyKey, Slot<unknown>>();
   const kids = new Map<PropertyKey, object>();
   const targetIsArray = Array.isArray(obj);
-  const view = obj as Record<PropertyKey, unknown>;
+  const view = obj as Record<PropertyKey, unknown> & { length: number };
   let methodCache:
     | Map<PropertyKey, (...args: unknown[]) => unknown>
     | undefined;
@@ -709,7 +709,7 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
     set(target, key, value) {
       const old = view[key];
       if (Object.is(value, old)) return true;
-      const oldLength = targetIsArray ? (target as unknown[]).length : -1;
+      const oldLength = targetIsArray ? view.length : -1;
       if (!Reflect.set(target, key, value)) return false;
       const next = view[key];
       if (old !== null && typeof old === "object") kids.delete(key);
@@ -718,7 +718,7 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
         emitMutation("set", proxy, key, old, next);
       if (!targetIsArray) return true;
       if (key === "length" && typeof old === "number") {
-        const nextLength = (target as unknown[]).length;
+        const nextLength = view.length;
         if (nextLength >= old) return true;
         for (const [slotKey, slot] of slots) {
           const index = arrayIndex(slotKey);
@@ -729,7 +729,7 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
       }
       const index = arrayIndex(key);
       if (index !== null && index >= oldLength)
-        slots.get("length")?.set((target as unknown[]).length);
+        slots.get("length")?.set(view.length);
       return true;
     },
     deleteProperty(target, key) {
