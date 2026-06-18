@@ -6,23 +6,21 @@
   "description": "A tiny runtime reactive UI core.",
   "scripts": {
     "test": "vitest run",
-    "coverage": "vitest run --coverage",
     "check": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "bench": "vitest bench --run",
-    "dev": "vite --host 127.0.0.1"
+    "bench": "vitest bench bench/chaos.bench.ts --run"
   },
   "exports": {
     ".": "./src/loom.ts"
   },
+  "dependencies": {
+    "alien-signals": "3.2.1"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "@types/node": "^25.9.1",
-    "@vitest/coverage-v8": "^4.1.9",
-    "happy-dom": "^20.10.3",
     "typescript": "^6.0.3",
-    "vite": "8.0.16",
     "vitest": "^4.1.8"
   }
 }
