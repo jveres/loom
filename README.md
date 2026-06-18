@@ -6,8 +6,8 @@ quality gates, a full core coverage gate, and a core benchmark.
 
 > **Note:** This is a preview package under active development.
 
-The demo, browser benchmark page, and dev inspector are not part of this
-package yet. They will be added after the core API and behavior are stable.
+The package includes the core runtime and a realtime dogfooding demo. The
+browser benchmark and dev inspector come after the demo hardens the core API.
 
 ## Goals
 
@@ -43,6 +43,34 @@ pnpm run coverage
 pnpm run lint
 pnpm run bench
 ```
+
+Run the browser surfaces from the package root:
+
+```sh
+pnpm run dev
+```
+
+Open `http://127.0.0.1:5173/demo/` for the realtime demo.
+
+## Realtime demo
+
+The demo at `/demo/` dogfoods the core API under continuous updates. It uses
+the same realtime feed shape as the intended browser benchmark surface, but it
+stays focused on API coverage and live debugging rather than framework
+comparison.
+
+The demo intentionally exercises these core pieces:
+
+- `state()` for labelled feed, control, and diagnostics state.
+- `effect()` with both auto-tracked and explicit dependencies.
+- `signal()` and `computed()` for coarse invalidation and derived metrics.
+- `scope()` for session cleanup.
+- `observe()` and `depsOf()` for live runtime diagnostics.
+- `h()`, `text()`, `classed()`, and `attr()` for DOM bindings.
+- `list()`, `key()`, `patch()`, `remove()`, and `dispose()` for structural DOM
+  updates.
+- `flush()`, `configure()`, `createScheduler()`, `effectsOf()`, and `untrack()`
+  through the built-in core checks panel.
 
 ## Basic usage
 
@@ -314,6 +342,7 @@ pnpm run check
 pnpm run lint
 pnpm run format
 pnpm run bench
+pnpm run dev
 ```
 
 Coverage is enforced at 100% for statements, branches, functions, and lines in
@@ -324,11 +353,13 @@ TypeScript runs with strict module, optional-property, implicit-return, indexed
 access, side-effect import, and unchecked-index checks enabled in
 `tsconfig.json`.
 
-The benchmark in `bench/core.bench.ts` measures core behavior: state writes,
-effect scheduling, and keyed row reconciliation.
+The benchmark in `bench/core.bench.ts` measures core behavior in Vitest: state
+writes, effect scheduling, and keyed row reconciliation.
 
 ## Next steps
 
-The next implementation phase is to add a demo and browser benchmark that
-exercise the core under realistic DOM workloads. The inspector comes after that
-and uses `observe()` and `depsOf()` for runtime diagnostics.
+The next implementation phase is to use the demo to find API gaps under
+realistic realtime DOM workloads. The browser benchmark comes after that and
+will use a js-framework-benchmark-style setup for comparisons with other
+frameworks. The inspector follows and uses `observe()` and `depsOf()` for
+runtime diagnostics.

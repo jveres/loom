@@ -59,7 +59,7 @@ class Scheduler implements SchedulerHandle {
   flush(): void {
     this.pending = false;
     let batchSize = 0;
-    const shouldEmitFlush = observers.size > 0;
+    const shouldEmitFlush = observerCount.flush > 0;
     const start = shouldEmitFlush ? now() : 0;
     let passes = 0;
     while (this.queued.size) {
@@ -184,15 +184,32 @@ export interface Observer {
 }
 
 const observers = new Set<Observer>();
+const observerCount = {
+  mutation: 0,
+  dependency: 0,
+  effect: 0,
+  flush: 0,
+  patch: 0,
+};
+
+function addObserverCount(observer: Observer, delta: 1 | -1): void {
+  if (observer.mutation) observerCount.mutation += delta;
+  if (observer.dependency) observerCount.dependency += delta;
+  if (observer.effect) observerCount.effect += delta;
+  if (observer.flush) observerCount.flush += delta;
+  if (observer.patch) observerCount.patch += delta;
+}
 
 export function observe(observer: Observer): Disposable {
   observers.add(observer);
+  addObserverCount(observer, 1);
   const handle = {
     disposed: false,
     dispose() {
       if (handle.disposed) return;
       handle.disposed = true;
       observers.delete(observer);
+      addObserverCount(observer, -1);
     },
   };
   currentScope?.own(handle);
@@ -252,7 +269,7 @@ class Slot<T> {
     const effect = activeEffect;
     if (effect) {
       effect.track(this);
-      if (observers.size) emitDependency(effect, this);
+      if (observerCount.dependency > 0) emitDependency(effect, this);
     }
     return this.value;
   }
@@ -363,7 +380,7 @@ class EffectRunner implements EffectHandle {
     if (this.disposed) return;
     this.runCleanups();
     if (!this.explicitDeps) this.clearDeps();
-    if (observers.size) emitEffect(this);
+    if (observerCount.effect > 0) emitEffect(this);
     const prev = activeEffect;
     activeEffect = this.explicitDeps ? null : this;
     try {
@@ -638,7 +655,7 @@ function wrapArrayMethod(
       return method.apply(this, args);
     } finally {
       arrayMutationDepth--;
-      if (arrayMutationDepth === 0 && observers.size)
+      if (arrayMutationDepth === 0 && observerCount.mutation > 0)
         emitMutation("array", proxy, name, before, target.length);
     }
   };
@@ -714,7 +731,7 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
       const next = view[key];
       if (old !== null && typeof old === "object") kids.delete(key);
       slots.get(key)?.set(next);
-      if (arrayMutationDepth === 0 && observers.size)
+      if (arrayMutationDepth === 0 && observerCount.mutation > 0)
         emitMutation("set", proxy, key, old, next);
       if (!targetIsArray) return true;
       if (key === "length" && typeof old === "number") {
@@ -738,7 +755,7 @@ export function state<T extends object>(obj: T, options: StateOptions = {}): T {
       if (!Reflect.deleteProperty(target, key)) return false;
       kids.delete(key);
       slot?.set(undefined);
-      if (arrayMutationDepth === 0 && observers.size)
+      if (arrayMutationDepth === 0 && observerCount.mutation > 0)
         emitMutation("delete", proxy, key, prev, undefined);
       return true;
     },
@@ -1156,7 +1173,7 @@ export function attr(
 
 export function patch(live: Element, next: Element | (() => Element)): Element {
   const built = typeof next === "function" ? next() : next;
-  if (observers.size) emitPatch("patch", 1, live);
+  if (observerCount.patch > 0) emitPatch("patch", 1, live);
   if (live.tagName !== built.tagName) {
     dispose(live);
     live.replaceWith(built);
@@ -1375,7 +1392,7 @@ function patchList<Model>(
   keyOf: (model: Model) => string,
   build: (model: Model, key: string) => Element,
 ): void {
-  if (observers.size) emitPatch("list", models.length, container);
+  if (observerCount.patch > 0) emitPatch("list", models.length, container);
   const keys = modelKeys(models, keyOf);
   if (!container.firstChild) {
     const fragment = document.createDocumentFragment();

@@ -22,5 +22,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["*.ts", "src/**/*.ts", "bench/**/*.ts"]
+  "include": ["*.ts", "src/**/*.ts", "bench/**/*.ts", "demo/**/*.ts"]
 }
