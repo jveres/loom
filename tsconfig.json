@@ -4,6 +4,8 @@
     "useDefineForClassFields": true,
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "loom",
     "types": ["node"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
@@ -22,5 +24,12 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["*.ts", "src/**/*.ts", "bench/**/*.ts", "demo/**/*.ts"]
+  "include": [
+    "*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "bench/**/*.ts",
+    "demo/**/*.ts",
+    "demo/**/*.tsx"
+  ]
 }

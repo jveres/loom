@@ -270,6 +270,28 @@ button.ghost.on {
   line-height: 21px;
 }
 
+.card-title-button {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+}
+
+.card-title-button:hover {
+  border-color: transparent;
+}
+
+.card-title-button:focus-visible {
+  outline: 2px solid var(--tone, var(--tone-violet));
+  outline-offset: 2px;
+}
+
 .byline {
   margin-bottom: 12px;
   color: var(--dim);

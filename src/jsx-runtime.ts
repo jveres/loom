@@ -1,0 +1,81 @@
+import { type Child, h, type Props } from "./dom.js";
+
+export type { JSX } from "./jsx-types.js";
+
+type Component<P extends object> = (props: P) => Child;
+type JsxProps = (Props & { readonly children?: Child }) | null | undefined;
+type JsxType = string | Component<object>;
+
+export function jsx<K extends keyof HTMLElementTagNameMap>(
+  type: K,
+  props: JsxProps,
+  key?: string | number,
+): HTMLElementTagNameMap[K];
+export function jsx<P extends object>(
+  type: Component<P>,
+  props: P | null,
+  key?: string | number,
+): Child;
+export function jsx(
+  type: JsxType,
+  props: JsxProps,
+  _key?: string | number,
+): Child {
+  return createJsx(type, props);
+}
+
+export const jsxs: typeof jsx = jsx;
+
+export function Fragment(props: { readonly children?: Child } | null): Child {
+  return props?.children ?? [];
+}
+
+export function jsxDEV(
+  type: JsxType,
+  props: JsxProps,
+  _key?: string | number,
+  _isStaticChildren?: boolean,
+  _source?: unknown,
+  _self?: unknown,
+): Child {
+  return createJsx(type, props);
+}
+
+function createJsx(type: JsxType, props: JsxProps): Child {
+  if (typeof type === "function") {
+    return type(propsWithoutKey(props) as object);
+  }
+
+  return createIntrinsicElement(type, props);
+}
+
+function createIntrinsicElement(type: string, props: JsxProps): Element {
+  if (!props) return h(type);
+
+  const children = props.children;
+  const hasSpecialProps =
+    "children" in props || "htmlFor" in props || "key" in props;
+  if (!hasSpecialProps) return h(type, props);
+
+  const elementProps: Props & { for?: unknown } = {};
+  for (const name in props) {
+    if (!Object.hasOwn(props, name) || name === "children" || name === "key") {
+      continue;
+    }
+    if (name === "htmlFor") elementProps.for = props[name];
+    else elementProps[name] = props[name];
+  }
+
+  return h(type, elementProps, children);
+}
+
+function propsWithoutKey(props: JsxProps): Record<string, unknown> {
+  if (!props) return {};
+
+  const next: Record<string, unknown> = {};
+  for (const name in props) {
+    if (!Object.hasOwn(props, name) || name === "key") continue;
+    next[name] = props[name];
+  }
+  return next;
+}

@@ -1,4 +1,4 @@
-import { attr, classed, h, list, remove, text } from "../src/dom.js";
+import { attr, classed, list, remove, text } from "../src/dom.js";
 import {
   batch,
   computed,
@@ -112,78 +112,78 @@ metrics.cells(cardsValue.length * 10);
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root.");
 
-const board = h("section", {
-  class: ["grid", classed("xform", settings.transform)],
-}) as HTMLElement;
-const eventList = h("div", { class: "event-list" });
+const board = (
+  <section class={["grid", classed("xform", settings.transform)]} />
+);
+const eventList = <div class="event-list" />;
 const cardNodes = new Map<number, Element>();
 let boardLayoutQueued = false;
 let boardColumnWidth = -1;
 let boardRowHeight = 0;
+let checksFeedbackTimer = 0;
 
 app.replaceChildren(
-  h("div", { class: ["shell", classed("chaos", settings.running)] }, [
-    h("header", { class: "bar" }, [
-      h("div", { class: "brand" }, [
-        h("b", null, "Loom"),
-        h("span", null, "realtime state / patch / diagnostics"),
-      ]),
-      h(
-        "button",
-        {
-          class: ["primary", classed("on", settings.running)],
-          ariaPressed: attr("aria-pressed", settings.running),
-          onClick: () => settings.running(!settings.running()),
-        },
-        text(() => (settings.running() ? "Stop chaos" : "Start chaos")),
-      ),
-      rangeControl("viewers", settings.viewers, 0, 5_000, 50),
-      rangeControl("events / viewer s", settings.eventRate, 0, 12, 1),
-      rangeControl("AI edits / s", settings.aiEdits, 0, 180, 3),
-      h("span", { class: "break" }),
-      command("Edit", () => editRandom()),
-      command("Insert", () => insertCard()),
-      command("Shuffle", () => shuffleCards()),
-      command("Burst", () => burst()),
-      h("span", { class: "sep" }),
-      command(
+  <div class={["shell", classed("chaos", settings.running)]}>
+    <header class="bar">
+      <div class="brand">
+        <b>Loom</b>
+        <span>realtime state / patch / diagnostics</span>
+      </div>
+      <button
+        type="button"
+        class={["primary", classed("on", settings.running)]}
+        aria-pressed={attr("aria-pressed", settings.running)}
+        onClick={() => settings.running(!settings.running())}
+      >
+        {text(() => (settings.running() ? "Stop chaos" : "Start chaos"))}
+      </button>
+      {rangeControl("viewers", settings.viewers, 0, 5_000, 50)}
+      {rangeControl("events / viewer s", settings.eventRate, 0, 12, 1)}
+      {rangeControl("AI edits / s", settings.aiEdits, 0, 180, 3)}
+      <span class="break" />
+      {command("Edit", () => editRandom())}
+      {command("Insert", () => insertCard())}
+      {command("Shuffle", () => shuffleCards())}
+      {command("Burst", () => burst())}
+      <span class="sep" />
+      {command(
         () => `Layout: ${settings.transform() ? "transform" : "flow"}`,
         () => settings.transform(!settings.transform()),
         settings.transform,
-      ),
-      command(
+      )}
+      {command(
         () => `Theme: ${settings.theme()}`,
         cycleTheme,
         () => settings.theme() !== "auto",
-      ),
-      command("Run checks", runChecks),
-    ]),
-    h("div", { class: "workspace" }, [
-      board,
-      h("aside", { class: "side" }, [
-        runtimePanel(),
-        selectedPanel(),
-        h("section", { class: "panel events-panel" }, [
-          h("div", { class: "panel-head" }, [
-            h("h2", null, "Events"),
-            h("button", { class: "ghost", onClick: () => events([]) }, "Clear"),
-          ]),
-          eventList,
-        ]),
-      ]),
-    ]),
-    h(
-      "div",
-      {
-        class: [
-          "feedback",
-          classed("show", () => metrics.checks() !== "idle"),
-          classed("error", () => metrics.checks().startsWith("fail")),
-        ],
-      },
-      text(() => metrics.checks()),
-    ),
-  ]),
+      )}
+      {command("Run checks", runChecks)}
+    </header>
+    <div class="workspace">
+      {board}
+      <aside class="side">
+        {runtimePanel()}
+        {selectedPanel()}
+        <section class="panel events-panel">
+          <div class="panel-head">
+            <h2>Events</h2>
+            <button type="button" class="ghost" onClick={() => events([])}>
+              Clear
+            </button>
+          </div>
+          {eventList}
+        </section>
+      </aside>
+    </div>
+    <div
+      class={[
+        "feedback",
+        classed("show", () => metrics.checks() !== "idle"),
+        classed("error", () => metrics.checks().startsWith("fail")),
+      ]}
+    >
+      {text(() => metrics.checks())}
+    </div>
+  </div>,
 );
 
 effect(() => {
@@ -254,46 +254,45 @@ function tick(dt: number): void {
 
 function renderCard(card: Card): Element {
   const model = card.model;
-  return h(
-    "article",
-    {
-      class: [
+  return (
+    <article
+      class={[
         "card",
         classed("selected", () => selectedId() === card.id),
         classed("hot", model.hot),
-      ],
-      "data-tone": attr("data-tone", () => toneName(model.tone())),
-      onClick: () => selectedId(card.id),
-    },
-    [
-      h("div", { class: "kicker" }, [
-        h("span", { class: "dot" }),
-        text(() => `REPOST / ${model.section().toUpperCase()}`),
-      ]),
-      h("h2", { class: "headline" }, text(model.title)),
-      h(
-        "div",
-        { class: "byline" },
-        text(() => `By ${model.source()}`),
-      ),
-      h("div", { class: "foot" }, [
-        metricButton("likes", "♥", model.likes, () => model.liked()),
-        metricButton("views", "▣", () => compact(model.views())),
-        h(
-          "button",
-          { class: ["metric", "trend", classed("hidden", () => !model.hot())] },
-          [h("span", { class: "glyph" }, "🔥"), text(model.trend)],
-        ),
-        h("span", { class: "presence" }, [
-          h("span", { class: "live" }),
-          h(
-            "span",
-            null,
-            text(() => `${model.readers()} reading`),
-          ),
-        ]),
-      ]),
-    ],
+      ]}
+      data-tone={attr("data-tone", () => toneName(model.tone()))}
+    >
+      <div class="kicker">
+        <span class="dot" />
+        {text(() => `REPOST / ${model.section().toUpperCase()}`)}
+      </div>
+      <h2 class="headline">
+        <button
+          type="button"
+          class="card-title-button"
+          onClick={() => selectedId(card.id)}
+        >
+          {text(model.title)}
+        </button>
+      </h2>
+      <div class="byline">{text(() => `By ${model.source()}`)}</div>
+      <div class="foot">
+        {metricButton("likes", "♥", model.likes, () => model.liked())}
+        {metricButton("views", "▣", () => compact(model.views()))}
+        <button
+          type="button"
+          class={["metric", "trend", classed("hidden", () => !model.hot())]}
+        >
+          <span class="glyph">🔥</span>
+          {text(model.trend)}
+        </button>
+        <span class="presence">
+          <span class="live" />
+          <span>{text(() => `${model.readers()} reading`)}</span>
+        </span>
+      </div>
+    </article>
   );
 }
 
@@ -303,15 +302,14 @@ function metricButton(
   read: () => unknown,
   active?: () => boolean,
 ): Element {
-  return h(
-    "button",
-    {
-      class: ["metric", keyName, active ? classed("liked", active) : undefined],
-    },
-    [
-      h("span", { class: "glyph" }, glyph),
-      h("span", { class: "value" }, text(read)),
-    ],
+  return (
+    <button
+      type="button"
+      class={["metric", keyName, active ? classed("liked", active) : undefined]}
+    >
+      <span class="glyph">{glyph}</span>
+      <span class="value">{text(read)}</span>
+    </button>
   );
 }
 
@@ -417,59 +415,59 @@ function toneName(tone: Tone): string {
 }
 
 function runtimePanel(): Element {
-  return h("section", { class: "panel" }, [
-    h("div", { class: "panel-head" }, [
-      h("h2", null, "Live runtime"),
-      h("span", { class: "muted" }, "Core"),
-    ]),
-    h("div", { class: "metric-grid" }, [
-      metric("FPS", metrics.fps),
-      metric("OPS", () => compact(metrics.ops())),
-      metric("EDIT", metrics.edits),
-      metric("CELL", metrics.cells),
-      metric("EVENT", metrics.events),
-      metric("CARD", () => cards().length),
-    ]),
-  ]);
+  return (
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Live runtime</h2>
+        <span class="muted">Core</span>
+      </div>
+      <div class="metric-grid">
+        {metric("FPS", metrics.fps)}
+        {metric("OPS", () => compact(metrics.ops()))}
+        {metric("EDIT", metrics.edits)}
+        {metric("CELL", metrics.cells)}
+        {metric("EVENT", metrics.events)}
+        {metric("CARD", () => cards().length)}
+      </div>
+    </section>
+  );
 }
 
 function selectedPanel(): Element {
-  return h("section", { class: "panel selected-panel" }, [
-    h("div", { class: "selected-title" }, [
-      h(
-        "h2",
-        null,
-        text(() => selected()?.model.title() ?? ""),
-      ),
-      h(
-        "strong",
-        { class: classed("hidden", () => selected()?.model.hot() !== true) },
-        "🔥 HOT",
-      ),
-    ]),
-    h(
-      "p",
-      { class: "selected-meta" },
-      text(() => {
-        const card = selected();
-        if (!card) return "";
-        return `${card.model.section()} by ${card.model.source()}`;
-      }),
-    ),
-    h("div", { class: "button-row" }, [
-      command("Toggle hot", toggleSelectedHot),
-      command("Like", likeSelected),
-      command("Remove", removeSelected),
-    ]),
-  ]);
+  return (
+    <section class="panel selected-panel">
+      <div class="selected-title">
+        <h2>{text(() => selected()?.model.title() ?? "")}</h2>
+        <strong
+          class={classed("hidden", () => selected()?.model.hot() !== true)}
+        >
+          🔥 HOT
+        </strong>
+      </div>
+      <p class="selected-meta">
+        {text(() => {
+          const card = selected();
+          if (!card) return "";
+          return `${card.model.section()} by ${card.model.source()}`;
+        })}
+      </p>
+      <div class="button-row">
+        {command("Toggle hot", toggleSelectedHot)}
+        {command("Like", likeSelected)}
+        {command("Remove", removeSelected)}
+      </div>
+    </section>
+  );
 }
 
 function renderEvent(event: EventItem): Element {
-  return h("article", { class: "event" }, [
-    h("strong", null, event.kind),
-    h("span", null, event.title),
-    h("small", null, event.meta),
-  ]);
+  return (
+    <article class="event">
+      <strong>{event.kind}</strong>
+      <span>{event.title}</span>
+      <small>{event.meta}</small>
+    </article>
+  );
 }
 
 function rangeControl(
@@ -479,25 +477,23 @@ function rangeControl(
   max: number,
   step: number,
 ): Element {
-  return h("label", { class: "ctl" }, [
-    h("span", null, label),
-    h("input", {
-      type: "range",
-      min,
-      max,
-      step,
-      value: value(),
-      onInput: (event: Event) => {
-        const input = event.currentTarget as HTMLInputElement;
-        value(Number(input.value));
-      },
-    }),
-    h(
-      "strong",
-      null,
-      text(() => String(value())),
-    ),
-  ]);
+  return (
+    <label class="ctl">
+      <span>{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value()}
+        onInput={(event: Event) => {
+          const input = event.currentTarget as HTMLInputElement;
+          value(Number(input.value));
+        }}
+      />
+      <strong>{text(() => String(value()))}</strong>
+    </label>
+  );
 }
 
 function command(
@@ -505,21 +501,24 @@ function command(
   run: () => void,
   active?: () => boolean,
 ): Element {
-  return h(
-    "button",
-    {
-      class: ["ghost", active ? classed("on", active) : undefined],
-      onClick: run,
-    },
-    typeof label === "function" ? text(label) : label,
+  return (
+    <button
+      type="button"
+      class={["ghost", active ? classed("on", active) : undefined]}
+      onClick={run}
+    >
+      {typeof label === "function" ? text(label) : label}
+    </button>
   );
 }
 
 function metric(label: string, read: () => unknown): Element {
-  return h("div", { class: "metric" }, [
-    h("span", null, label),
-    h("strong", null, text(read)),
-  ]);
+  return (
+    <div class="metric">
+      <span>{label}</span>
+      <strong>{text(read)}</strong>
+    </div>
+  );
 }
 
 function makeCard(): Card {
@@ -648,12 +647,23 @@ function runChecks(): void {
     model.value(7);
     if (model.value() !== 7) throw new Error("fields failed");
 
-    metrics.checks("pass · state, batch, cleanup, fields");
+    showChecksFeedback("pass · state, batch, cleanup, fields");
     pushEvent("CHECK", "core", "pass");
   } catch (error) {
-    metrics.checks(error instanceof Error ? `fail · ${error.message}` : "fail");
+    showChecksFeedback(
+      error instanceof Error ? `fail · ${error.message}` : "fail",
+    );
     pushEvent("CHECK", "core", "fail");
   }
+}
+
+function showChecksFeedback(message: string): void {
+  if (checksFeedbackTimer !== 0) window.clearTimeout(checksFeedbackTimer);
+  metrics.checks(message);
+  checksFeedbackTimer = window.setTimeout(() => {
+    metrics.checks("idle");
+    checksFeedbackTimer = 0;
+  }, 2_400);
 }
 
 function setCards(next: readonly Card[]): void {

@@ -10,11 +10,18 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "bench": "vitest bench bench/chaos.bench.ts --run",
-    "dev": "vite --host 127.0.0.1"
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "build:loom": "vite build --config vite.loom.config.ts"
   },
   "exports": {
     ".": "./src/loom.ts",
-    "./dom": "./src/dom.ts"
+    "./dom": "./src/dom.ts",
+    "./jsx-runtime": "./src/jsx-runtime.ts",
+    "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
+    "./html": "./src/html.ts",
+    "./html/jsx-runtime": "./src/html-jsx-runtime.ts",
+    "./html/jsx-dev-runtime": "./src/html-jsx-dev-runtime.ts"
   },
   "dependencies": {
     "alien-signals": "3.2.1"
