@@ -349,9 +349,9 @@ export function polled<T>(
   ms: number,
   options?: StateOptions,
 ): Polled<T> {
-  const source = state(sample(), options);
-  const timer = setInterval(() => source(sample()), ms);
-  return { read: () => source(), stop: () => clearInterval(timer) };
+  const cell = state(sample(), options);
+  const timer = setInterval(() => cell(sample()), ms);
+  return { read: () => cell(), stop: () => clearInterval(timer) };
 }
 
 export function trigger(source: Read<unknown>): void {

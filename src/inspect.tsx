@@ -12,6 +12,7 @@ import {
   type Polled,
   polled,
   type Read,
+  type SourceConnect,
   type State,
   type Stop,
   source,
@@ -362,83 +363,85 @@ function vitalColor(v: number, good: number, ni: number): string {
 
 /* --- web-vitals as lazy sources: each wires a PerformanceObserver while observed --- */
 
+// Wraps the shared scaffolding (feature guard, try/catch, disconnect) around a PerformanceObserver
+// source. `build(set)` creates per-connection state, constructs the observer, calls observe(), and
+// returns it; a throw (e.g. unsupported entry type) degrades to a no-op source.
+function observerSource(
+  build: (set: (v: number) => void) => PerformanceObserver,
+): SourceConnect<number> {
+  return (set) => {
+    if (typeof PerformanceObserver !== "function") return () => {};
+    try {
+      const obs = build(set);
+      return () => obs.disconnect();
+    } catch {
+      return () => {};
+    }
+  };
+}
+
 // Cumulative layout shift — the worst session window (matches Chrome's CLS, not a running total).
-function connectCls(set: (v: number) => void): Stop {
-  if (typeof PerformanceObserver !== "function") return () => {};
+const connectCls = observerSource((set) => {
   let win = 0;
   let first = 0;
   let prev = 0;
   let max = 0;
-  try {
-    const obs = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        const ls = entry as PerformanceEntry & {
-          value?: number;
-          hadRecentInput?: boolean;
-        };
-        if (ls.hadRecentInput || typeof ls.value !== "number") continue;
-        const t = entry.startTime;
-        if (win > 0 && (t - prev > 1000 || t - first > 5000)) win = 0;
-        if (win === 0) first = t;
-        win += ls.value;
-        prev = t;
-        if (win > max) {
-          max = win;
-          set(max);
-        }
+  const obs = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      const ls = entry as PerformanceEntry & {
+        value?: number;
+        hadRecentInput?: boolean;
+      };
+      if (ls.hadRecentInput || typeof ls.value !== "number") continue;
+      const t = entry.startTime;
+      if (win > 0 && (t - prev > 1000 || t - first > 5000)) win = 0;
+      if (win === 0) first = t;
+      win += ls.value;
+      prev = t;
+      if (win > max) {
+        max = win;
+        set(max);
       }
-    });
-    obs.observe({ type: "layout-shift", buffered: true });
-    return () => obs.disconnect();
-  } catch {
-    return () => {};
-  }
-}
+    }
+  });
+  obs.observe({ type: "layout-shift", buffered: true });
+  return obs;
+});
 
 // Largest contentful paint (ms) — latest candidate.
-function connectLcp(set: (v: number) => void): Stop {
-  if (typeof PerformanceObserver !== "function") return () => {};
-  try {
-    const obs = new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) {
-        if (e.entryType === "largest-contentful-paint") set(e.startTime);
-      }
-    });
-    obs.observe({ type: "largest-contentful-paint", buffered: true });
-    return () => obs.disconnect();
-  } catch {
-    return () => {};
-  }
-}
+const connectLcp = observerSource((set) => {
+  const obs = new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      if (e.entryType === "largest-contentful-paint") set(e.startTime);
+    }
+  });
+  obs.observe({ type: "largest-contentful-paint", buffered: true });
+  return obs;
+});
 
 // Interaction to next paint (ms) — worst interaction latency so far.
-function connectInp(set: (v: number) => void): Stop {
-  if (typeof PerformanceObserver !== "function") return () => {};
+const connectInp = observerSource((set) => {
   let worst = 0;
-  try {
-    const obs = new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) {
-        if (
-          (e.entryType === "first-input" ||
-            (e as PerformanceEventTiming).interactionId) &&
-          e.duration > worst
-        ) {
-          worst = e.duration;
-          set(worst);
-        }
+  const obs = new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      if (
+        (e.entryType === "first-input" ||
+          (e as PerformanceEventTiming).interactionId) &&
+        e.duration > worst
+      ) {
+        worst = e.duration;
+        set(worst);
       }
-    });
-    obs.observe({
-      type: "event",
-      buffered: true,
-      durationThreshold: 40,
-    } as PerformanceObserverInit);
-    obs.observe({ type: "first-input", buffered: true });
-    return () => obs.disconnect();
-  } catch {
-    return () => {};
-  }
-}
+    }
+  });
+  obs.observe({
+    type: "event",
+    buffered: true,
+    durationThreshold: 40,
+  } as PerformanceObserverInit);
+  obs.observe({ type: "first-input", buffered: true });
+  return obs;
+});
 
 // Whether the Long Tasks API exists (Chrome/FF yes, Safari/WebKit no). Lets the "blocked" row
 // distinguish a genuine 0 ms (no blocking — good) from "unsupported" (—).
@@ -448,20 +451,15 @@ const LONGTASKS_SUPPORTED =
 
 // Total main-thread blocking time (sum of long-task durations) — the standardized cousin of the
 // `lag` probe. Unsupported in Safari/WebKit, where the row reads "—".
-function connectLongTasks(set: (v: number) => void): Stop {
-  if (typeof PerformanceObserver !== "function") return () => {};
+const connectLongTasks = observerSource((set) => {
   let total = 0;
-  try {
-    const obs = new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) total += e.duration;
-      set(total);
-    });
-    obs.observe({ type: "longtask", buffered: true });
-    return () => obs.disconnect();
-  } catch {
-    return () => {};
-  }
-}
+  const obs = new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) total += e.duration;
+    set(total);
+  });
+  obs.observe({ type: "longtask", buffered: true });
+  return obs;
+});
 
 function gaugeClass(base: string): string {
   return `${base} ${healthReady ? `h-${healthKey}` : "li-loading"}`;
@@ -1026,18 +1024,17 @@ function buildStatsPane(): HTMLElement {
   const clsValue = (): number => clsSource?.() ?? 0;
   const lcpValue = (): number => lcpSource?.() ?? 0;
   const inpValue = (): number => inpSource?.() ?? 0;
-  const clsRow = stat("CLS", () => clsValue().toFixed(2), "", TIP.cls);
-  const clsVal = clsRow.querySelector(".li-stat-v");
-  if (clsVal)
-    bindAttr(
-      clsVal,
-      "class",
-      pulse(() => {
+  side.append(
+    vitalStat(
+      "CLS",
+      () => clsValue().toFixed(2),
+      () => {
         const v = clsValue();
-        return `li-stat-v ${v < 0.1 ? "h-ok" : v < 0.25 ? "h-warn" : "h-bad"}`;
-      }),
-    );
-  side.append(clsRow);
+        return v < 0.1 ? "h-ok" : v < 0.25 ? "h-warn" : "h-bad";
+      },
+      TIP.cls,
+    ),
+  );
   side.append(
     vitalStat(
       "LCP",
