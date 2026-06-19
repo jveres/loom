@@ -66,9 +66,11 @@ The core exports these functions:
 - `effect(fn, options?)` runs `fn` immediately and again when its dependencies
   change.
 - `batch(fn)` groups writes and flushes effects once after the batch.
-- `scope(fn)` groups the effects created inside `fn` so they can be disposed
-  (`stop()`) or suspended (`pause()` / `resume()`) together. Scopes nest, and an
-  effect runs only while no scope in its parent chain is paused. Returns
+- `scope(fn, options?)` groups the effects (and `polled`/`source` resources)
+  created inside `fn` so they can be disposed (`stop()`) or suspended (`pause()`
+  / `resume()`) together. Scopes nest, and an effect runs only while no scope in
+  its parent chain is paused. `options` (`internal` / `namespace` / `label`)
+  become defaults for every node created in the scope. Returns
   `{ stop, pause, resume }`.
 - `untrack(fn)` reads state inside `fn` without subscribing the active effect.
 - `trigger(read)` notifies subscribers after in-place mutation.
@@ -227,6 +229,28 @@ a scope is suspended with it too. Pausing the scope clears a `polled()`'s timer
 though its paused subscribers stay linked (resuming reconnects it); stopping the
 scope tears them all down. So a hidden subtree stops not only re-rendering but
 also the timers and observers feeding it.
+
+A scope's second argument sets default options for everything created inside it —
+handy for marking an entire subsystem `internal` and giving it a `namespace`
+without repeating the options on every primitive. A node's own options win, and
+nested scopes inherit and can override:
+
+```ts
+import { effect, fields, scope, state } from "loom";
+
+scope(
+  () => {
+    const settings = fields({ theme: "dark", zoom: 1 }); // cells inherit the defaults
+    effect(() => apply(settings.theme())); // so does this effect
+  },
+  { internal: true, namespace: "panel" },
+);
+```
+
+The dev inspector relies on this: its panel scope is created with
+`{ internal: true, namespace: "loom-inspector" }`, so every binding, the
+heartbeat, the web-vital sources and the heap timer are filtered from the
+observability it reports — without passing options to each one.
 
 ## DOM API
 

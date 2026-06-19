@@ -658,3 +658,97 @@ describe("loom scope", () => {
     s.stop();
   });
 });
+
+describe("loom scope options", () => {
+  // Every observe event except `flush` carries id/label/namespace/internal.
+  type NamedEvent = Extract<ObserveEvent, { namespace: string }>;
+  const eventsOf = (
+    events: ObserveEvent[],
+    kind: ObserveEvent["kind"],
+  ): NamedEvent[] =>
+    events.filter((e): e is NamedEvent => "namespace" in e && e.kind === kind);
+
+  it("applies scope options as defaults to nodes created inside", () => {
+    const events: ObserveEvent[] = [];
+    const stop = observe((e) => events.push(e), {
+      includeInternal: true,
+      creates: true,
+    });
+    scope(
+      () => {
+        state(0);
+        effect(() => {});
+      },
+      { internal: true, namespace: "panel" },
+    );
+    stop();
+    const sc = eventsOf(events, "state:create")[0];
+    const ec = eventsOf(events, "effect:create")[0];
+    expect(sc?.internal).toBe(true);
+    expect(sc?.namespace).toBe("panel");
+    expect(ec?.internal).toBe(true);
+    expect(ec?.namespace).toBe("panel");
+  });
+
+  it("lets a node's own options override the scope defaults", () => {
+    const events: ObserveEvent[] = [];
+    const stop = observe((e) => events.push(e), {
+      includeInternal: true,
+      creates: true,
+    });
+    scope(
+      () => {
+        state(0, { namespace: "own" });
+      },
+      { internal: true, namespace: "panel" },
+    );
+    stop();
+    const sc = eventsOf(events, "state:create")[0];
+    expect(sc?.internal).toBe(true); // inherited from the scope
+    expect(sc?.namespace).toBe("own"); // overridden by the node
+  });
+
+  it("merges options through nested scopes", () => {
+    const events: ObserveEvent[] = [];
+    const stop = observe((e) => events.push(e), {
+      includeInternal: true,
+      creates: true,
+    });
+    scope(
+      () => {
+        scope(
+          () => {
+            state(0, { label: "inner" });
+          },
+          { namespace: "child" },
+        );
+      },
+      { internal: true, namespace: "parent" },
+    );
+    stop();
+    const sc = eventsOf(events, "state:create")[0];
+    expect(sc?.internal).toBe(true); // from the outer scope
+    expect(sc?.namespace).toBe("child"); // from the nested scope
+    expect(sc?.label).toBe("inner"); // from the node itself
+  });
+
+  it("applies scope options to fields() cells", () => {
+    const events: ObserveEvent[] = [];
+    const stop = observe((e) => events.push(e), {
+      includeInternal: true,
+      creates: true,
+    });
+    scope(
+      () => {
+        fields({ a: 1, b: 2 });
+      },
+      { internal: true, namespace: "form" },
+    );
+    stop();
+    const creates = eventsOf(events, "state:create");
+    expect(creates).toHaveLength(2);
+    expect(creates.every((e) => e.internal && e.namespace === "form")).toBe(
+      true,
+    );
+  });
+});

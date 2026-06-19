@@ -191,6 +191,9 @@ interface ScopeNode {
   readonly resources: ScopeResource[];
   readonly children: ScopeNode[];
   readonly parent: ScopeNode | undefined;
+  // Default node options (internal/namespace/label) applied to everything created in the scope,
+  // already merged with any ancestor scope's defaults.
+  readonly options: NodeOptions | undefined;
   paused: boolean;
   stopped: boolean;
 }
@@ -392,12 +395,14 @@ export function batch<T>(fn: () => T): T {
  * So pausing a parent freezes its whole subtree, and resuming it leaves an independently-paused
  * child suspended.
  */
-export function scope(fn: () => void): Scope {
+export function scope(fn: () => void, options?: NodeOptions): Scope {
   const node: ScopeNode = {
     effects: [],
     resources: [],
     children: [],
     parent: activeScope,
+    // Inherit the parent scope's defaults, letting this scope's own options override.
+    options: mergeOptions(activeScope?.options, options),
     paused: false,
     stopped: false,
   };
@@ -628,23 +633,35 @@ export function depsOf(source: Read<unknown> | Stop): readonly InspectNode[] {
   return deps;
 }
 
+// Merge two option sets, letting the second (more specific) win; either may be undefined.
+function mergeOptions<T extends NodeOptions>(
+  defaults: NodeOptions | undefined,
+  own: T | undefined,
+): T | NodeOptions | undefined {
+  if (defaults === undefined) return own;
+  if (own === undefined) return defaults;
+  return { ...defaults, ...own };
+}
+
 function registerNode(
   node: NodeBase,
   kind: NodeKind,
   options: StateOptions | ComputedOptions | EffectOptions | undefined,
 ): InspectMeta {
+  // Apply the active scope's ambient defaults (internal/namespace/label) under any explicit ones.
+  const opts = mergeOptions(activeScope?.options, options);
   const id = ++inspectId;
   const meta: InspectMeta = {
     id,
     disposed: false,
-    internal: options?.internal === true,
+    internal: opts?.internal === true,
     kind,
-    label: options?.label ?? `${kind} #${id}`,
-    namespace: options?.namespace ?? DEFAULT_NAMESPACE,
+    label: opts?.label ?? `${kind} #${id}`,
+    namespace: opts?.namespace ?? DEFAULT_NAMESPACE,
     runs: 0,
     target:
-      options && "target" in options && options.target
-        ? new WeakRef(options.target)
+      opts && "target" in opts && opts.target
+        ? new WeakRef(opts.target)
         : undefined,
   };
   node.meta = meta;

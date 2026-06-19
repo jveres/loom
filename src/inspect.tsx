@@ -24,6 +24,9 @@ import {
 /* ============================================================ palette + css ========= */
 
 const PANEL_ID = "loom-inspector";
+// Shared options for every Loom node the inspector creates: internal (filtered from the
+// observability it reports) and namespaced to the panel. Set once on the scope; nodes inherit it.
+const PANEL_OPTS = { internal: true, namespace: PANEL_ID } as const;
 // Namespace loom/dom tags its bindings with (see src/dom.ts DOM_NAMESPACE); effect runs in this
 // namespace are the pipeline's rendering output.
 const DOM_NS = "dom";
@@ -309,7 +312,7 @@ const LAG_MS = 200;
 // Run `fn` as an internal effect and remember it for disposal. Internal so its reads/runs are
 // excluded from the metrics the inspector reports (it must never observe itself).
 function bind(fn: () => void): void {
-  bindings.push(effect(fn, { internal: true, namespace: PANEL_ID }));
+  bindings.push(effect(fn, PANEL_OPTS));
 }
 
 function bindText(node: Element, read: () => string): void {
@@ -1273,7 +1276,7 @@ export function mountInspector(target: Element = document.body): void {
     document.head.append(style);
   }
 
-  ui = state<TabId>("stats", { internal: true, namespace: PANEL_ID });
+  ui = state<TabId>("stats", PANEL_OPTS);
 
   let theme = loadTheme();
   const themeVal = (<span class="li-menu-val" />) as HTMLElement;
@@ -1364,32 +1367,29 @@ export function mountInspector(target: Element = document.body): void {
   );
 
   // Build the reactive UI inside the inspector scope so minimizing can pause the whole panel; the
-  // stats pane gets its own nested scope so switching tabs pauses just it. Resources are created
-  // in the scope that owns them: the heartbeat in the panel scope (it drives the always-visible
-  // spark and pauses only on minimize), the vitals + heap timer in the stats scope (they feed only
-  // the stats tab, so their observers/timer suspend when it's hidden and reconnect — buffered — on
-  // return). The spark sits in the outer scope so it stays live across tab switches.
+  // stats pane gets its own nested scope so switching tabs pauses just it. The scope's options
+  // mark everything created inside as internal/PANEL_ID — so the heartbeat, vitals, heap timer and
+  // bindings inherit them without repeating the opts. Resources live in the scope that owns them:
+  // the heartbeat in the panel scope (it drives the always-visible spark and pauses only on
+  // minimize), the vitals + heap timer in the stats scope (they feed only the stats tab, so their
+  // observers/timer suspend when it's hidden and reconnect — buffered — on return). The spark sits
+  // in the outer scope so it stays live across tab switches.
   let statsPane!: HTMLElement;
   let sparkEl!: HTMLElement;
   inspectorScope = scope(() => {
-    heartbeat = polled(poll, POLL_MS, { internal: true, namespace: PANEL_ID });
+    heartbeat = polled(poll, POLL_MS);
     statsScope = scope(() => {
-      const vitalOpts = { internal: true, namespace: PANEL_ID };
-      clsSource = source(connectCls, 0, vitalOpts);
-      lcpSource = source(connectLcp, 0, vitalOpts);
-      inpSource = source(connectInp, 0, vitalOpts);
-      longTasksSource = source(connectLongTasks, 0, vitalOpts);
+      clsSource = source(connectCls, 0);
+      lcpSource = source(connectLcp, 0);
+      inpSource = source(connectInp, 0);
+      longTasksSource = source(connectLongTasks, 0);
       if (heapMem()) {
-        heapSource = polled(
-          () => heapMem()?.usedJSHeapSize ?? 0,
-          5000,
-          vitalOpts,
-        );
+        heapSource = polled(() => heapMem()?.usedJSHeapSize ?? 0, 5000);
       }
       statsPane = buildStatsPane();
     });
     sparkEl = buildSpark();
-  });
+  }, PANEL_OPTS);
   if (startMin) inspectorScope.pause();
 
   // Panes: Info (stats) is wired; the rest are placeholders for now.
