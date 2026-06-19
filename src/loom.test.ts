@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   batch,
   computed,
@@ -10,6 +10,7 @@ import {
   mutate,
   type ObserveEvent,
   observe,
+  polled,
   state,
   trigger,
   untrack,
@@ -289,6 +290,85 @@ describe("loom core", () => {
 
     stopInternal();
     stopApp();
+    stopObserve();
+  });
+});
+
+describe("loom polled", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("samples immediately and re-samples on the interval", () => {
+    vi.useFakeTimers();
+    let value = 0;
+    const p = polled(() => value, 100);
+    expect(p.read()).toBe(0);
+
+    value = 1;
+    vi.advanceTimersByTime(100);
+    expect(p.read()).toBe(1);
+
+    value = 2;
+    vi.advanceTimersByTime(250); // two ticks (100, 200), both read 2
+    expect(p.read()).toBe(2);
+
+    p.stop();
+  });
+
+  it("wakes a dependent effect only when the sampled value changes", () => {
+    vi.useFakeTimers();
+    let value = 0;
+    let runs = 0;
+    let seen: number | undefined;
+    const p = polled(() => value, 100);
+    const stop = effect(() => {
+      seen = p.read();
+      runs++;
+    });
+    expect(runs).toBe(1);
+    expect(seen).toBe(0);
+
+    // Unchanged sample -> value-dedup -> no re-run.
+    vi.advanceTimersByTime(100);
+    expect(runs).toBe(1);
+
+    // Changed sample -> re-run.
+    value = 5;
+    vi.advanceTimersByTime(100);
+    expect(runs).toBe(2);
+    expect(seen).toBe(5);
+
+    stop();
+    p.stop();
+  });
+
+  it("stops sampling after stop()", () => {
+    vi.useFakeTimers();
+    let value = 0;
+    const p = polled(() => value, 100);
+    p.stop();
+
+    value = 9;
+    vi.advanceTimersByTime(500);
+    expect(p.read()).toBe(0);
+  });
+
+  it("honours state options: an internal source is filtered from observe", () => {
+    vi.useFakeTimers();
+    const kinds: ObserveEvent["kind"][] = [];
+    const stopObserve = observe((event) => kinds.push(event.kind));
+
+    let value = 0;
+    // The timer resamples regardless of subscribers, so no effect is needed to drive it.
+    const internalSource = polled(() => value, 100, { internal: true });
+
+    value = 1;
+    vi.advanceTimersByTime(100);
+    expect(internalSource.read()).toBe(1); // value updated
+    expect(kinds).toEqual([]); // ...but the internal source emits nothing
+
+    internalSource.stop();
     stopObserve();
   });
 });
