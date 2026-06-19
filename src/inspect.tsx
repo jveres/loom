@@ -39,18 +39,16 @@ const CSS = `
 #${PANEL_ID}{${DARK_VARS};
   position:fixed;right:12px;bottom:12px;width:360px;height:440px;max-height:calc(100vh - 24px);
   z-index:2147483647;display:flex;flex-direction:column;font:12px/1.5 ${SANS};
-  color:var(--li-fg);background:color-mix(in srgb,var(--li-bg) 80%,transparent);
-  border:1px solid var(--li-border);border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);
-  -webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);overflow:hidden}
+  color:var(--li-fg);background:var(--li-bg);border:1px solid var(--li-border);
+  border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);overflow:hidden}
 /* Self-contained reset so host-page element styles (e.g. a global button{min-height})
    can't bleed into the panel (or its portalled menu) and break the chrome dimensions. */
 #${PANEL_ID} *,#${PANEL_ID}-menu *{box-sizing:border-box}
 #${PANEL_ID} button,#${PANEL_ID}-menu button{min-height:0;margin:0;line-height:1.5}
 #${PANEL_ID}-menu{${DARK_VARS};
   position:fixed;z-index:2147483647;min-width:150px;padding:5px;display:flex;flex-direction:column;gap:1px;
-  font:11px/1.45 ${SANS};color:var(--li-fg);background:color-mix(in srgb,var(--li-bg) 88%,transparent);
-  border:1px solid var(--li-border);border-radius:9px;box-shadow:0 8px 28px rgba(0,0,0,.45);
-  -webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3)}
+  font:11px/1.45 ${SANS};color:var(--li-fg);background:var(--li-bg);
+  border:1px solid var(--li-border);border-radius:9px;box-shadow:0 8px 28px rgba(0,0,0,.45)}
 #${PANEL_ID}-menu[hidden]{display:none}
 #${PANEL_ID}-menu svg{display:block;pointer-events:none}
 #${PANEL_ID}[data-theme=light],#${PANEL_ID}-menu[data-theme=light]{${LIGHT_VARS}}
@@ -425,6 +423,15 @@ let panelSize = loadSize();
 
 /* ============================================================ chrome helpers ======= */
 
+// Snap a CSS-pixel value to the device-pixel grid. The panel is positioned/sized via JS during
+// drag and resize; a fractional device-pixel origin makes the browser re-round the panel's
+// content (notably the SVG icons) frame to frame, so they shimmer/jitter left-right. Snapping
+// the panel to whole device pixels keeps every child pixel-aligned.
+function snapPx(v: number): number {
+  const dpr = window.devicePixelRatio || 1;
+  return Math.round(v * dpr) / dpr;
+}
+
 function clampPanel(
   target: HTMLElement,
   barH: number,
@@ -434,8 +441,8 @@ function clampPanel(
   const w = target.offsetWidth;
   const edge = Math.min(80, w);
   return {
-    left: Math.min(window.innerWidth - edge, Math.max(edge - w, left)),
-    top: Math.min(window.innerHeight - barH, Math.max(0, top)),
+    left: snapPx(Math.min(window.innerWidth - edge, Math.max(edge - w, left))),
+    top: snapPx(Math.min(window.innerHeight - barH, Math.max(0, top))),
   };
 }
 
@@ -447,8 +454,8 @@ function clampOnScreen(
   const maxLeft = Math.max(0, window.innerWidth - target.offsetWidth);
   const maxTop = Math.max(0, window.innerHeight - target.offsetHeight);
   return {
-    left: Math.max(0, Math.min(left, maxLeft)),
-    top: Math.max(0, Math.min(top, maxTop)),
+    left: snapPx(Math.max(0, Math.min(left, maxLeft))),
+    top: snapPx(Math.max(0, Math.min(top, maxTop))),
   };
 }
 
@@ -461,8 +468,8 @@ function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
     const startTop = rect.top;
     const startX = e.clientX;
     const startY = e.clientY;
-    target.style.left = `${startLeft}px`;
-    target.style.top = `${startTop}px`;
+    target.style.left = `${snapPx(startLeft)}px`;
+    target.style.top = `${snapPx(startTop)}px`;
     target.style.right = "auto";
     target.style.bottom = "auto";
     handle.setPointerCapture?.(e.pointerId);
@@ -500,8 +507,8 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
     e.preventDefault();
     e.stopPropagation();
     const rect = target.getBoundingClientRect();
-    target.style.left = `${rect.left}px`;
-    target.style.top = `${rect.top}px`;
+    target.style.left = `${snapPx(rect.left)}px`;
+    target.style.top = `${snapPx(rect.top)}px`;
     target.style.right = "auto";
     target.style.bottom = "auto";
     const startW = rect.width;
@@ -512,18 +519,22 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
     const prevUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
     const onMove = (ev: PointerEvent): void => {
-      const w = Math.max(
-        240,
-        Math.min(
-          window.innerWidth - rect.left - 8,
-          startW + ev.clientX - startX,
+      const w = snapPx(
+        Math.max(
+          240,
+          Math.min(
+            window.innerWidth - rect.left - 8,
+            startW + ev.clientX - startX,
+          ),
         ),
       );
-      const h = Math.max(
-        160,
-        Math.min(
-          window.innerHeight - rect.top - 8,
-          startH + ev.clientY - startY,
+      const h = snapPx(
+        Math.max(
+          160,
+          Math.min(
+            window.innerHeight - rect.top - 8,
+            startH + ev.clientY - startY,
+          ),
         ),
       );
       target.style.width = `${w}px`;
