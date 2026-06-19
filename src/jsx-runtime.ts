@@ -1,4 +1,5 @@
 import { type Child, h, type Props } from "./dom.js";
+import { propsWithoutKey } from "./jsx-props.js";
 
 export type { JSX } from "./jsx-types.js";
 
@@ -67,15 +68,4 @@ function createIntrinsicElement(type: string, props: JsxProps): Element {
   }
 
   return h(type, elementProps, children);
-}
-
-function propsWithoutKey(props: JsxProps): Record<string, unknown> {
-  if (!props) return {};
-
-  const next: Record<string, unknown> = {};
-  for (const name in props) {
-    if (!Object.hasOwn(props, name) || name === "key") continue;
-    next[name] = props[name];
-  }
-  return next;
 }

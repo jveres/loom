@@ -60,16 +60,21 @@ stop();
 
 The core exports these functions:
 
-- `state(initial)` creates a callable state cell.
+- `state(initial, options?)` creates a callable state cell.
 - `signal(initial)` is an alias for `state(initial)`.
-- `computed(getter)` creates a cached derived read.
-- `effect(fn)` runs `fn` immediately and again when its dependencies change.
+- `computed(getter, options?)` creates a cached derived read.
+- `effect(fn, options?)` runs `fn` immediately and again when its dependencies
+  change.
 - `batch(fn)` groups writes and flushes effects once after the batch.
 - `untrack(fn)` reads state inside `fn` without subscribing the active effect.
 - `trigger(read)` notifies subscribers after in-place mutation.
 - `update(source, fn)` writes `fn(source())` back to a state cell.
 - `mutate(source, fn)` mutates an object value and then triggers subscribers.
-- `fields(object)` creates one state cell per enumerable string key.
+- `fields(object, options?)` creates one state cell per enumerable string key.
+- `observe(observer, options?)` subscribes to lazy diagnostic events.
+- `inspect()` returns a snapshot of the current reactive graph.
+- `depsOf(source)` returns inspected dependencies for a state, computed read, or
+  effect stop handle.
 
 The core exports these types:
 
@@ -78,6 +83,12 @@ The core exports these types:
 - `Stop` is a disposer function.
 - `EffectFn` is a reusable effect callback type.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
+- `InspectNode` and `InspectSnapshot` describe graph snapshots.
+- `ObserveEvent` describes lazy diagnostic events.
+
+Pass `{ label, namespace }` to `state`, `computed`, `effect`, or `fields` when
+you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
+tooling state that must not appear in app-level event streams by default.
 
 ## Object fields
 
@@ -85,10 +96,13 @@ Use `fields()` when you want fine-grained updates for a plain object. Each
 enumerable string key becomes its own state cell.
 
 ```ts
-const model = fields({
-  title: "Hello",
-  likes: 0,
-});
+const model = fields(
+  {
+    title: "Hello",
+    likes: 0,
+  },
+  { label: "post", namespace: "demo" },
+);
 
 effect(() => {
   document.title = `${model.title()} (${model.likes()})`;
@@ -98,7 +112,8 @@ model.likes(1);
 ```
 
 `fields()` rejects non-plain objects such as arrays and dates. Symbol keys are
-not exposed because the runtime uses enumerable string keys.
+not exposed because the runtime uses enumerable string keys. When you pass a
+`label`, each field is labeled as `label.key`, for example `post.likes`.
 
 ## In-place mutation
 
@@ -157,6 +172,48 @@ The DOM entrypoint exports these functions:
 - `list(container, read, options)` reconciles a keyed list.
 - `dispose(root)` disposes effects owned by a node subtree.
 - `remove(node)` disposes a node subtree and removes it from the DOM.
+
+`list()` reorders keyed nodes by default. Pass `reorder: () => false` when an
+external layout system positions existing keyed nodes and only needs Loom to
+append new keys and remove missing keys.
+
+```ts
+list(container, rows, {
+  key: (row) => row.id,
+  render: (row) => h("article", null, row.title),
+  reorder: () => false,
+});
+```
+
+## Observability
+
+Loom exposes a lazy core observability surface for tools and tests. Event
+objects are created only when a matching observer is active.
+
+```ts
+import { depsOf, effect, inspect, observe, state } from "loom";
+
+const stopObserve = observe((event) => {
+  console.log(event.kind);
+});
+
+const count = state(0, { label: "counter.count", namespace: "demo" });
+const stop = effect(
+  () => {
+    document.title = String(count());
+  },
+  { label: "counter.title", namespace: "demo" },
+);
+
+console.log(depsOf(stop));
+console.log(inspect().nodes);
+
+stopObserve();
+stop();
+```
+
+Observers exclude internal nodes by default. Pass
+`{ includeInternal: true }` when a tool needs to inspect Loom-owned work.
 
 ## JSX
 
@@ -317,8 +374,4 @@ pnpm run bench
 
 Loom uses `alien-signals` as the reactive graph implementation detail. The
 public API stays small: callable state cells, computed reads, effects, batching,
-manual triggers, and object field cells.
-
-The core does not expose inspector or compatibility hooks yet. Those surfaces
-can be added on top of the current primitives once the reactive core and demo
-workload stay stable.
+manual triggers, object field cells, and a lazy observability surface.

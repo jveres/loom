@@ -56,10 +56,12 @@ export interface ListOptions<T> {
   key(item: T): string | number;
   render(item: T, key: string): Element;
   animate?: Read<boolean>;
+  reorder?: Read<boolean>;
 }
 
 type OwnedEffect = Stop | Stop[];
 
+const DOM_NAMESPACE = "dom";
 const ownedEffects = new WeakMap<Node, OwnedEffect>();
 
 export function h<K extends keyof HTMLElementTagNameMap>(
@@ -83,12 +85,15 @@ export function text(read: Read<unknown>): Text {
   const node = document.createTextNode("");
   let previous = "";
   const stop = untrack(() =>
-    effect(() => {
-      const next = stringValue(read());
-      if (next === previous) return;
-      previous = next;
-      node.data = next;
-    }),
+    effect(
+      () => {
+        const next = stringValue(read());
+        if (next === previous) return;
+        previous = next;
+        node.data = next;
+      },
+      { label: "dom.text", namespace: DOM_NAMESPACE, target: node },
+    ),
   );
   own(node, stop);
   return node;
@@ -113,38 +118,46 @@ export function list<T>(
 ): Stop {
   const nodes = new Map<string, Element>();
   const stop = untrack(() =>
-    effect(() => {
-      const items = read();
-      const animate = options.animate?.() === true;
-      const before = animate ? snapshot(nodes) : undefined;
-      const seen = new Set<string>();
-      let cursor = container.firstChild;
+    effect(
+      () => {
+        const items = read();
+        const shouldReorder = options.reorder?.() !== false;
+        const animate = shouldReorder && options.animate?.() === true;
+        const before = animate ? snapshot(nodes) : undefined;
+        const seen = new Set<string>();
+        let cursor = shouldReorder ? container.firstChild : undefined;
 
-      for (const item of items) {
-        const itemKey = String(options.key(item));
-        if (seen.has(itemKey))
-          throw new Error(`Duplicate Loom key "${itemKey}".`);
-        seen.add(itemKey);
+        for (const item of items) {
+          const itemKey = String(options.key(item));
+          if (seen.has(itemKey))
+            throw new Error(`Duplicate Loom key "${itemKey}".`);
+          seen.add(itemKey);
 
-        let node = nodes.get(itemKey);
-        if (!node) {
-          node = options.render(item, itemKey);
-          node.setAttribute("data-loom-key", itemKey);
-          nodes.set(itemKey, node);
+          let node = nodes.get(itemKey);
+          if (!node) {
+            node = options.render(item, itemKey);
+            node.setAttribute("data-loom-key", itemKey);
+            nodes.set(itemKey, node);
+          }
+
+          if (shouldReorder) {
+            if (node !== cursor) container.insertBefore(node, cursor ?? null);
+            cursor = node.nextSibling;
+          } else if (!node.parentNode) {
+            container.appendChild(node);
+          }
         }
 
-        if (node !== cursor) container.insertBefore(node, cursor);
-        cursor = node.nextSibling;
-      }
+        for (const [itemKey, node] of nodes) {
+          if (seen.has(itemKey)) continue;
+          remove(node);
+          nodes.delete(itemKey);
+        }
 
-      for (const [itemKey, node] of nodes) {
-        if (seen.has(itemKey)) continue;
-        remove(node);
-        nodes.delete(itemKey);
-      }
-
-      if (before) animateMoved(before, nodes);
-    }),
+        if (before) animateMoved(before, nodes);
+      },
+      { label: "dom.list", namespace: DOM_NAMESPACE, target: container },
+    ),
   );
 
   const stopList = (): void => {
@@ -253,7 +266,7 @@ function applyClassProp(node: Element, value: ClassProp): void {
     bindClass(node, value);
     return;
   }
-  if (!isClassMap(value)) return;
+  if (!isPlainRecord(value)) return;
   for (const name in value) {
     if (!Object.hasOwn(value, name)) continue;
     applyClassMapValue(node, name, value[name]);
@@ -287,7 +300,7 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     bindStyle(node, value);
     return;
   }
-  if (!isStyleMap(value)) return;
+  if (!isPlainRecord(value)) return;
   const styleDecl = (node as HTMLElement).style;
   for (const name in value) {
     if (!Object.hasOwn(value, name)) continue;
@@ -312,12 +325,19 @@ function applyClassMapValue(node: Element, name: string, value: unknown): void {
 function bindClass(node: Element, binding: ClassBinding): void {
   let previous = hasClassName(node, binding.name);
   const stop = untrack(() =>
-    effect(() => {
-      const next = Boolean(binding.read());
-      if (next === previous) return;
-      previous = next;
-      node.classList.toggle(binding.name, next);
-    }),
+    effect(
+      () => {
+        const next = Boolean(binding.read());
+        if (next === previous) return;
+        previous = next;
+        node.classList.toggle(binding.name, next);
+      },
+      {
+        label: `dom.class.${binding.name}`,
+        namespace: DOM_NAMESPACE,
+        target: node,
+      },
+    ),
   );
   own(node, stop);
 }
@@ -325,12 +345,19 @@ function bindClass(node: Element, binding: ClassBinding): void {
 function bindAttr(node: Element, binding: AttrBinding): void {
   let previous: string | null | undefined;
   const stop = untrack(() =>
-    effect(() => {
-      const next = attrValue(binding.name, binding.read());
-      if (next === previous) return;
-      previous = next;
-      setAttrValue(node, binding.name, next);
-    }),
+    effect(
+      () => {
+        const next = attrValue(binding.name, binding.read());
+        if (next === previous) return;
+        previous = next;
+        setAttrValue(node, binding.name, next);
+      },
+      {
+        label: `dom.attr.${binding.name}`,
+        namespace: DOM_NAMESPACE,
+        target: node,
+      },
+    ),
   );
   own(node, stop);
 }
@@ -339,13 +366,20 @@ function bindStyle(node: Element, binding: StyleBinding): void {
   let previous: string | null | undefined;
   const styleDecl = (node as HTMLElement).style;
   const stop = untrack(() =>
-    effect(() => {
-      const next = attrValue(binding.name, binding.read());
-      if (next === previous) return;
-      previous = next;
-      if (next === null) styleDecl.removeProperty(binding.name);
-      else styleDecl.setProperty(binding.name, next);
-    }),
+    effect(
+      () => {
+        const next = attrValue(binding.name, binding.read());
+        if (next === previous) return;
+        previous = next;
+        if (next === null) styleDecl.removeProperty(binding.name);
+        else styleDecl.setProperty(binding.name, next);
+      },
+      {
+        label: `dom.style.${binding.name}`,
+        namespace: DOM_NAMESPACE,
+        target: node,
+      },
+    ),
   );
   own(node, stop);
 }
@@ -391,11 +425,7 @@ function isStyleBinding(value: unknown): value is StyleBinding {
   return isBinding(value, "style");
 }
 
-function isStyleMap(value: unknown): value is StyleMap {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isClassMap(value: unknown): value is ClassMap {
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

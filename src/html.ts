@@ -58,6 +58,9 @@ export function escapeText(value: string): string {
   return value.replace(/[&<>"']/g, escapeChar);
 }
 
+// Quoted-attribute escaping needs the same entities as text content (escaping
+// `&"'<>` is a safe superset), so this is an intentional alias kept as distinct
+// public API to document call-site intent.
 export function escapeAttribute(value: string): string {
   return escapeText(value);
 }

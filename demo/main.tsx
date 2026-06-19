@@ -189,7 +189,7 @@ app.replaceChildren(
 list(board, cards, {
   key: (card) => card.id,
   render: renderCard,
-  animate: () => !settings.transform(),
+  reorder: () => !settings.transform(),
 });
 
 effect(() => {
@@ -358,8 +358,13 @@ function layoutBoard(): void {
   }
   const rowHeight = boardRowHeight || 168;
   const items = cards();
+  const nodesByKey = new Map(
+    nodes.map((node) => [node.getAttribute("data-loom-key"), node]),
+  );
   for (let index = 0; index < items.length; index++) {
-    const node = nodes[index] as HTMLElement | undefined;
+    const item = items[index];
+    const node =
+      item === undefined ? undefined : nodesByKey.get(String(item.id));
     if (!node) continue;
     const x = (index % columns) * (columnWidth + gap);
     const y = Math.floor(index / columns) * (rowHeight + gap);

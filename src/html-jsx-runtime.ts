@@ -5,6 +5,7 @@ import {
   raw,
   renderToString,
 } from "./html.js";
+import { propsWithoutKey } from "./jsx-props.js";
 
 export type { JSX } from "./html-jsx-types.js";
 
@@ -194,15 +195,4 @@ function isUrlAttr(name: string): boolean {
     urlAttrs.has(name) ||
     /:(href|src|action|formaction|cite|data|poster)$/.test(name)
   );
-}
-
-function propsWithoutKey(props: JsxProps): Record<string, unknown> {
-  const next: Record<string, unknown> = {};
-  if (props) {
-    for (const name in props) {
-      if (!Object.hasOwn(props, name) || name === "key") continue;
-      next[name] = props[name];
-    }
-  }
-  return next;
 }

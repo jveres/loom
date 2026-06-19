@@ -20,6 +20,108 @@ export interface State<T> {
 export type Read<T> = () => T;
 export type Stop = () => void;
 export type EffectFn = () => void;
+export type NodeKind = "state" | "computed" | "effect";
+
+export interface NodeOptions {
+  readonly internal?: boolean;
+  readonly label?: string;
+  readonly namespace?: string;
+}
+
+export type StateOptions = NodeOptions;
+export type ComputedOptions = NodeOptions;
+export type FieldsOptions = NodeOptions;
+
+export interface EffectOptions extends NodeOptions {
+  readonly target?: object;
+}
+
+export interface InspectNode {
+  readonly id: number;
+  readonly kind: NodeKind;
+  readonly label: string;
+  readonly namespace: string;
+  readonly internal: boolean;
+  readonly deps: readonly number[];
+  readonly subs: readonly number[];
+  readonly runs: number;
+  readonly disposed: boolean;
+  readonly target?: object;
+  readonly value?: unknown;
+  readonly source?: State<unknown>;
+}
+
+export interface InspectSnapshot {
+  readonly nodes: readonly InspectNode[];
+}
+
+export type ObserveEvent =
+  | {
+      readonly kind: "state:create";
+      readonly id: number;
+      readonly label: string;
+      readonly namespace: string;
+      readonly internal: boolean;
+      readonly value: unknown;
+    }
+  | {
+      readonly kind: "state:set";
+      readonly id: number;
+      readonly label: string;
+      readonly namespace: string;
+      readonly internal: boolean;
+      readonly previous: unknown;
+      readonly value: unknown;
+    }
+  | {
+      readonly kind: "state:read" | "computed:read";
+      readonly id: number;
+      readonly label: string;
+      readonly namespace: string;
+      readonly internal: boolean;
+    }
+  | {
+      readonly kind: "computed:create" | "effect:create" | "effect:dispose";
+      readonly id: number;
+      readonly label: string;
+      readonly namespace: string;
+      readonly internal: boolean;
+    }
+  | {
+      readonly kind: "computed:update";
+      readonly id: number;
+      readonly label: string;
+      readonly namespace: string;
+      readonly internal: boolean;
+      readonly previous: unknown;
+      readonly value: unknown;
+    }
+  | {
+      readonly kind: "effect:run";
+      readonly id: number;
+      readonly label: string;
+      readonly namespace: string;
+      readonly internal: boolean;
+      readonly runs: number;
+    }
+  | {
+      readonly kind: "flush";
+      readonly batchSize: number;
+      readonly durationMs: number;
+    };
+
+export type Observer = (event: ObserveEvent) => void;
+
+export interface ObserveOptions {
+  readonly computed?: boolean;
+  readonly creates?: boolean;
+  readonly effects?: boolean;
+  readonly flushes?: boolean;
+  readonly includeInternal?: boolean;
+  readonly reads?: boolean;
+  readonly writes?: boolean;
+}
+
 type CleanupEffectFn = () => Stop;
 type InternalEffectFn = EffectFn | CleanupEffectFn;
 
@@ -29,9 +131,12 @@ export type Fields<T extends object> = {
   readonly [K in FieldKey<T>]: State<T[K]>;
 };
 
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
 type NodeBase = ReactiveNode & {
   deps?: Link | undefined;
   depsTail?: Link | undefined;
+  meta?: InspectMeta | undefined;
   subs?: Link | undefined;
   subsTail?: Link | undefined;
 };
@@ -51,6 +156,34 @@ interface EffectNode extends NodeBase {
   cleanup: Stop | undefined;
 }
 
+interface InspectMeta {
+  readonly id: number;
+  readonly internal: boolean;
+  readonly kind: NodeKind;
+  readonly label: string;
+  readonly namespace: string;
+  readonly target: WeakRef<object> | undefined;
+  disposed: boolean;
+  runs: number;
+}
+
+interface InspectRecord {
+  readonly meta: InspectMeta;
+  readonly publicRef: WeakRef<object> | undefined;
+  readonly ref: WeakRef<NodeBase>;
+}
+
+interface ObserverRecord {
+  readonly computed: boolean;
+  readonly creates: boolean;
+  readonly effects: boolean;
+  readonly flushes: boolean;
+  readonly includeInternal: boolean;
+  readonly observer: Observer;
+  readonly reads: boolean;
+  readonly writes: boolean;
+}
+
 let cycle = 0;
 let runDepth = 0;
 let batchDepth = 0;
@@ -58,50 +191,84 @@ let notifyIndex = 0;
 let queuedLength = 0;
 let activeSub: NodeBase | undefined;
 const queued: Array<EffectNode | undefined> = [];
+const DEFAULT_NAMESPACE = "default";
+let inspectId = 0;
+let computedObservers = 0;
+let createObservers = 0;
+let effectObservers = 0;
+let flushObservers = 0;
+let readObservers = 0;
+let writeObservers = 0;
+const computedNodes = new WeakMap<object, ComputedNode<unknown>>();
+const effectNodes = new WeakMap<object, EffectNode>();
+const inspectRecords = new Map<number, InspectRecord>();
+const observers = new Set<ObserverRecord>();
+const stateNodes = new WeakMap<object, StateNode<unknown>>();
 
 const { link, unlink, propagate, checkDirty, shallowPropagate } =
   createReactiveSystem({
     update(node) {
-      if ("getter" in node)
-        return updateComputed(node as ComputedNode<unknown>);
-      if ("currentValue" in node)
-        return updateState(node as StateNode<unknown>);
-      node.flags = Mutable;
-      return true;
+      switch (kindOf(node)) {
+        case "computed":
+          return updateComputed(node as ComputedNode<unknown>);
+        case "state":
+          return updateState(node as StateNode<unknown>);
+        default:
+          node.flags = Mutable;
+          return true;
+      }
     },
     notify(node) {
       queueEffect(node as EffectNode);
     },
     unwatched(node) {
-      if ("getter" in node) {
-        if (node.depsTail !== undefined) {
-          node.flags = Mutable | Dirty;
-          disposeDeps(node as ComputedNode<unknown>);
-        }
-      } else if ("currentValue" in node) {
-        return;
-      } else if ("fn" in node) {
-        stopEffect.call(node as EffectNode);
-      } else {
-        disposeDeps(node as NodeBase);
+      switch (kindOf(node)) {
+        case "computed":
+          if (node.depsTail !== undefined) {
+            node.flags = Mutable | Dirty;
+            disposeDeps(node as ComputedNode<unknown>);
+          }
+          return;
+        case "state":
+          return;
+        case "effect":
+          stopEffect.call(node as EffectNode);
+          return;
+        default:
+          disposeDeps(node as NodeBase);
       }
     },
   });
 
-export function state<T>(initial: T): State<T> {
-  return stateOper.bind(createStateNode(initial)) as State<T>;
+export function state<T>(initial: T, options?: StateOptions): State<T> {
+  const node = createStateNode(initial);
+  const source = stateOper.bind(node) as State<T>;
+  const meta = registerNode(node, "state", options, source);
+  stateNodes.set(source, node as StateNode<unknown>);
+  if (createObservers > 0) emitStateCreate(meta, initial);
+  return source;
 }
 
 export const signal = state;
 
-export function computed<T>(getter: (previousValue?: T) => T): Read<T> {
-  return computedOper.bind(createComputedNode(getter)) as Read<T>;
+export function computed<T>(
+  getter: (previousValue?: T) => T,
+  options?: ComputedOptions,
+): Read<T> {
+  const node = createComputedNode(getter);
+  const read = computedOper.bind(node) as Read<T>;
+  const meta = registerNode(node, "computed", options, read);
+  computedNodes.set(read, node as ComputedNode<unknown>);
+  if (createObservers > 0) emitCreate(meta, "computed:create");
+  return read;
 }
 
-export function effect(fn: CleanupEffectFn): Stop;
-export function effect(fn: EffectFn): Stop;
-export function effect(fn: InternalEffectFn): Stop {
+export function effect(fn: CleanupEffectFn, options?: EffectOptions): Stop;
+export function effect(fn: EffectFn, options?: EffectOptions): Stop;
+export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   const node = createEffectNode(fn);
+  const meta = registerNode(node, "effect", options);
+  if (createObservers > 0) emitCreate(meta, "effect:create");
   const previous = setActiveSub(node);
   if (previous !== undefined) {
     link(node, previous, 0);
@@ -115,7 +282,10 @@ export function effect(fn: InternalEffectFn): Stop {
     activeSub = previous;
     node.flags &= ~RecursedCheck;
   }
-  return stopEffect.bind(node);
+  emitRun(node);
+  const stop = stopEffect.bind(node);
+  effectNodes.set(stop, node);
+  return stop;
 }
 
 export function batch<T>(fn: () => T): T {
@@ -170,7 +340,10 @@ export function mutate<T extends object>(
   trigger(source);
 }
 
-export function fields<T extends object>(initial: T): Fields<T> {
+export function fields<T extends object>(
+  initial: T,
+  options?: FieldsOptions,
+): Fields<T> {
   if (!isPlainObject(initial)) {
     throw new TypeError("fields() expects a plain object.");
   }
@@ -178,14 +351,363 @@ export function fields<T extends object>(initial: T): Fields<T> {
   const keys = Object.keys(initial) as Array<FieldKey<T>>;
   for (let index = 0; index < keys.length; index++) {
     const key = keys[index] as FieldKey<T>;
-    out[key] = state(initial[key]);
+    out[key] = state(initial[key], fieldOptions(options, key));
   }
   return out;
+}
+
+export function observe(observer: Observer, options?: ObserveOptions): Stop {
+  const record = observerRecord(observer, options);
+  observers.add(record);
+  addObserverCounters(record, 1);
+  return () => {
+    if (!observers.delete(record)) return;
+    addObserverCounters(record, -1);
+  };
+}
+
+export function inspect(): InspectSnapshot {
+  const nodes: InspectNode[] = [];
+  for (const [id, record] of inspectRecords) {
+    const node = record.ref.deref();
+    if (!node) {
+      inspectRecords.delete(id);
+      continue;
+    }
+    nodes.push(inspectNode(node, record));
+  }
+  return { nodes };
+}
+
+export function depsOf(source: Read<unknown> | Stop): readonly InspectNode[] {
+  const node = nodeForSource(source);
+  if (!node) return [];
+
+  const deps: InspectNode[] = [];
+  for (let item = node.deps; item !== undefined; item = item.nextDep) {
+    const record = recordForNode(item.dep as NodeBase);
+    if (record) deps.push(inspectNode(item.dep as NodeBase, record));
+  }
+  return deps;
+}
+
+function registerNode(
+  node: NodeBase,
+  kind: NodeKind,
+  options: StateOptions | ComputedOptions | EffectOptions | undefined,
+  publicRef?: object,
+): InspectMeta {
+  const id = ++inspectId;
+  const meta: InspectMeta = {
+    id,
+    disposed: false,
+    internal: options?.internal === true,
+    kind,
+    label: options?.label ?? `${kind} #${id}`,
+    namespace: options?.namespace ?? DEFAULT_NAMESPACE,
+    runs: 0,
+    target:
+      options && "target" in options && options.target
+        ? new WeakRef(options.target)
+        : undefined,
+  };
+  node.meta = meta;
+  inspectRecords.set(id, {
+    meta,
+    publicRef: publicRef ? new WeakRef(publicRef) : undefined,
+    ref: new WeakRef(node),
+  });
+  return meta;
+}
+
+function fieldOptions(
+  options: FieldsOptions | undefined,
+  key: string,
+): StateOptions | undefined {
+  if (!options) return undefined;
+  const out: StateOptions = {
+    label: options.label ? `${options.label}.${key}` : key,
+  };
+  if (options.internal !== undefined) {
+    return options.namespace === undefined
+      ? { ...out, internal: options.internal }
+      : { ...out, internal: options.internal, namespace: options.namespace };
+  }
+  return options.namespace === undefined
+    ? out
+    : { ...out, namespace: options.namespace };
+}
+
+function nodeForSource(source: Read<unknown> | Stop): NodeBase | undefined {
+  const key = source as object;
+  return stateNodes.get(key) ?? computedNodes.get(key) ?? effectNodes.get(key);
+}
+
+function recordForNode(node: NodeBase): InspectRecord | undefined {
+  const meta = node.meta;
+  return meta ? inspectRecords.get(meta.id) : undefined;
+}
+
+function inspectNode(node: NodeBase, record: InspectRecord): InspectNode {
+  const meta = record.meta;
+  const base = {
+    id: meta.id,
+    deps: idsFromDeps(node),
+    disposed: meta.disposed,
+    internal: meta.internal,
+    kind: meta.kind,
+    label: meta.label,
+    namespace: meta.namespace,
+    runs: meta.runs,
+    subs: idsFromSubs(node),
+  };
+  const source = sourceFromRecord(meta, record);
+  const target = meta.target?.deref();
+  const value = nodeValue(node);
+  return inspectNodeWithOptionals(base, source, target, value);
+}
+
+function inspectNodeWithOptionals(
+  base: Omit<InspectNode, "source" | "target" | "value">,
+  source: State<unknown> | undefined,
+  target: object | undefined,
+  value: unknown,
+): InspectNode {
+  const out: Mutable<InspectNode> = { ...base };
+  if (source !== undefined) out.source = source;
+  if (target !== undefined) out.target = target;
+  if (value !== undefined) out.value = value;
+  return out;
+}
+
+function sourceFromRecord(
+  meta: InspectMeta,
+  record: InspectRecord,
+): State<unknown> | undefined {
+  if (meta.kind !== "state") return undefined;
+  const source = record.publicRef?.deref();
+  return typeof source === "function" ? (source as State<unknown>) : undefined;
+}
+
+function idsFromDeps(node: NodeBase): number[] {
+  const ids: number[] = [];
+  for (let item = node.deps; item !== undefined; item = item.nextDep) {
+    const meta = (item.dep as NodeBase).meta;
+    if (meta) ids.push(meta.id);
+  }
+  return ids;
+}
+
+function idsFromSubs(node: NodeBase): number[] {
+  const ids: number[] = [];
+  for (let item = node.subs; item !== undefined; item = item.nextSub) {
+    const meta = (item.sub as NodeBase).meta;
+    if (meta) ids.push(meta.id);
+  }
+  return ids;
+}
+
+function kindOf(node: ReactiveNode): NodeKind | "watcher" {
+  if ("getter" in node) return "computed";
+  if ("currentValue" in node) return "state";
+  if ("fn" in node) return "effect";
+  return "watcher";
+}
+
+function nodeValue(node: NodeBase): unknown {
+  switch (kindOf(node)) {
+    case "state":
+      return (node as StateNode<unknown>).pendingValue;
+    case "computed":
+      return (node as ComputedNode<unknown>).value;
+    default:
+      return undefined;
+  }
+}
+
+function emitStateCreate(meta: InspectMeta, value: unknown): void {
+  emit(meta, {
+    kind: "state:create",
+    id: meta.id,
+    internal: meta.internal,
+    label: meta.label,
+    namespace: meta.namespace,
+    value,
+  });
+}
+
+function emitCreate(
+  meta: InspectMeta,
+  kind: "computed:create" | "effect:create",
+): void {
+  emit(meta, {
+    kind,
+    id: meta.id,
+    internal: meta.internal,
+    label: meta.label,
+    namespace: meta.namespace,
+  });
+}
+
+function emitStateSet<T>(node: StateNode<T>, previous: T, value: T): void {
+  if (writeObservers === 0) return;
+  const meta = node.meta;
+  if (!meta) return;
+  emit(meta, {
+    kind: "state:set",
+    id: meta.id,
+    internal: meta.internal,
+    label: meta.label,
+    namespace: meta.namespace,
+    previous,
+    value,
+  });
+}
+
+function emitComputedUpdate<T>(
+  node: ComputedNode<T>,
+  previous: T | undefined,
+  value: T | undefined,
+): void {
+  if (computedObservers === 0) return;
+  const meta = node.meta;
+  if (!meta) return;
+  emit(meta, {
+    kind: "computed:update",
+    id: meta.id,
+    internal: meta.internal,
+    label: meta.label,
+    namespace: meta.namespace,
+    previous,
+    value,
+  });
+}
+
+function emitRead(node: StateNode<unknown> | ComputedNode<unknown>): void {
+  if (readObservers === 0) return;
+  const meta = node.meta;
+  if (!meta) return;
+  emit(meta, {
+    kind: meta.kind === "computed" ? "computed:read" : "state:read",
+    id: meta.id,
+    internal: meta.internal,
+    label: meta.label,
+    namespace: meta.namespace,
+  });
+}
+
+function emitRun(node: EffectNode): void {
+  const meta = node.meta;
+  if (!meta) return;
+  meta.runs++;
+  if (effectObservers === 0) return;
+  emit(meta, {
+    kind: "effect:run",
+    id: meta.id,
+    internal: meta.internal,
+    label: meta.label,
+    namespace: meta.namespace,
+    runs: meta.runs,
+  });
+}
+
+function emitDispose(meta: InspectMeta): void {
+  if (effectObservers === 0) return;
+  emit(meta, {
+    kind: "effect:dispose",
+    id: meta.id,
+    internal: meta.internal,
+    label: meta.label,
+    namespace: meta.namespace,
+  });
+}
+
+function emitFlush(batchSize: number, durationMs: number): void {
+  if (flushObservers === 0) return;
+  emit(undefined, { kind: "flush", batchSize, durationMs });
+}
+
+function emit(meta: InspectMeta | undefined, event: ObserveEvent): void {
+  if (observers.size === 0) return;
+  for (const record of observers) {
+    if (!record.includeInternal && meta?.internal) continue;
+    if (observes(record, event)) record.observer(event);
+  }
+}
+
+function observerRecord(
+  observer: Observer,
+  options: ObserveOptions | undefined,
+): ObserverRecord {
+  if (!options) {
+    return {
+      computed: true,
+      creates: true,
+      effects: true,
+      flushes: true,
+      includeInternal: false,
+      observer,
+      reads: true,
+      writes: true,
+    };
+  }
+  const allKinds =
+    options.computed === undefined &&
+    options.creates === undefined &&
+    options.effects === undefined &&
+    options.flushes === undefined &&
+    options.reads === undefined &&
+    options.writes === undefined;
+  return {
+    computed: allKinds || options.computed === true,
+    creates: allKinds || options.creates === true,
+    effects: allKinds || options.effects === true,
+    flushes: allKinds || options.flushes === true,
+    includeInternal: options.includeInternal === true,
+    observer,
+    reads: allKinds || options.reads === true,
+    writes: allKinds || options.writes === true,
+  };
+}
+
+function addObserverCounters(record: ObserverRecord, direction: 1 | -1): void {
+  if (record.computed) computedObservers += direction;
+  if (record.creates) createObservers += direction;
+  if (record.effects) effectObservers += direction;
+  if (record.flushes) flushObservers += direction;
+  if (record.reads) readObservers += direction;
+  if (record.writes) writeObservers += direction;
+}
+
+function observes(record: ObserverRecord, event: ObserveEvent): boolean {
+  switch (event.kind) {
+    case "computed:create":
+    case "effect:create":
+    case "state:create":
+      return record.creates;
+    case "computed:read":
+    case "state:read":
+      return record.reads;
+    case "state:set":
+      return record.writes;
+    case "computed:update":
+      return record.computed;
+    case "effect:dispose":
+    case "effect:run":
+      return record.effects;
+    case "flush":
+      return record.flushes;
+  }
+}
+
+function now(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
 }
 
 function createStateNode<T>(initial: T): StateNode<T> {
   return nodeShape<StateNode<T>>({
     currentValue: initial,
+    meta: undefined,
     pendingValue: initial,
     subs: undefined,
     subsTail: undefined,
@@ -198,6 +720,7 @@ function createComputedNode<T>(
 ): ComputedNode<T> {
   return nodeShape<ComputedNode<T>>({
     value: undefined,
+    meta: undefined,
     subs: undefined,
     subsTail: undefined,
     deps: undefined,
@@ -211,6 +734,7 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
   return nodeShape<EffectNode>({
     fn,
     cleanup: undefined,
+    meta: undefined,
     subs: undefined,
     subsTail: undefined,
     deps: undefined,
@@ -223,10 +747,15 @@ function createWatcherNode(): NodeBase {
   return nodeShape<NodeBase>({
     deps: undefined,
     depsTail: undefined,
+    meta: undefined,
     flags: Watching,
   });
 }
 
+// Each node eagerly assigns every optional Link slot to `undefined` so all nodes
+// of a kind share one V8 hidden class (a hot-path perf win). Under
+// `exactOptionalPropertyTypes` those `undefined`s aren't assignable to the
+// upstream `deps?: Link` fields, so this localized cast bridges the shape.
 function nodeShape<TNode extends NodeBase>(node: object): TNode {
   return node as unknown as TNode;
 }
@@ -241,8 +770,10 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   if (value.length) {
     const next = value[0] as T;
     if (this.pendingValue !== next) {
+      const previous = this.pendingValue;
       this.pendingValue = next;
       this.flags = Mutable | Dirty;
+      emitStateSet(this, previous, next);
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);
@@ -260,7 +791,10 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   }
 
   const sub = activeSub;
-  if (sub !== undefined) link(this, sub, cycle);
+  if (sub !== undefined) {
+    link(this, sub, cycle);
+    if (readObservers > 0) emitRead(this as StateNode<unknown>);
+  }
   return this.currentValue;
 }
 
@@ -281,7 +815,9 @@ function computedOper<T>(this: ComputedNode<T>): T {
     this.flags = Mutable | RecursedCheck;
     const previous = setActiveSub(this);
     try {
+      const oldValue = this.value;
       this.value = this.getter();
+      emitComputedUpdate(this, oldValue, this.value);
     } finally {
       activeSub = previous;
       this.flags &= ~RecursedCheck;
@@ -289,7 +825,10 @@ function computedOper<T>(this: ComputedNode<T>): T {
   }
 
   const sub = activeSub;
-  if (sub !== undefined) link(this, sub, cycle);
+  if (sub !== undefined) {
+    link(this, sub, cycle);
+    if (readObservers > 0) emitRead(this as ComputedNode<unknown>);
+  }
   return this.value as T;
 }
 
@@ -303,6 +842,7 @@ function updateComputed<T>(node: ComputedNode<T>): boolean {
     const oldValue = node.value;
     const newValue = node.getter(oldValue);
     node.value = newValue;
+    if (oldValue !== newValue) emitComputedUpdate(node, oldValue, newValue);
     return oldValue !== newValue;
   } finally {
     activeSub = previous;
@@ -337,7 +877,7 @@ function queueEffect(effect: EffectNode): void {
   }
 }
 
-function runEffect(node: EffectNode): void {
+function runEffect(node: EffectNode): boolean {
   const flags = node.flags;
   if (
     flags & Dirty ||
@@ -346,7 +886,7 @@ function runEffect(node: EffectNode): void {
     if (flags & HasChildEffect) disposeChildDeps(node);
     if (node.cleanup) {
       runCleanup(node);
-      if (!node.flags) return;
+      if (!node.flags) return false;
     }
     clearDepsTail(node);
     node.flags = Watching | RecursedCheck;
@@ -361,17 +901,23 @@ function runEffect(node: EffectNode): void {
       node.flags &= ~RecursedCheck;
       purgeDeps(node);
     }
+    emitRun(node);
+    return node.meta?.internal !== true;
   } else if (node.deps !== undefined) {
     node.flags = Watching | (flags & HasChildEffect);
   }
+  return false;
 }
 
 function flush(): void {
+  const batchSize = queuedLength - notifyIndex;
+  const start = batchSize > 0 && flushObservers > 0 ? now() : 0;
+  let appBatchSize = 0;
   try {
     while (notifyIndex < queuedLength) {
       const node = queued[notifyIndex];
       queued[notifyIndex++] = undefined;
-      if (node) runEffect(node);
+      if (node && runEffect(node)) appBatchSize++;
     }
   } finally {
     while (notifyIndex < queuedLength) {
@@ -381,15 +927,23 @@ function flush(): void {
     }
     notifyIndex = 0;
     queuedLength = 0;
+    if (appBatchSize > 0) {
+      emitFlush(appBatchSize, start ? now() - start : 0);
+    }
   }
 }
 
 function stopEffect(this: EffectNode): void {
+  const meta = this.meta;
   this.flags = 0;
   disposeDeps(this);
   const sub = this.subs;
   if (sub !== undefined) unlink(sub);
   if (this.cleanup) runCleanup(this);
+  if (!meta || meta.disposed) return;
+  meta.disposed = true;
+  inspectRecords.delete(meta.id);
+  emitDispose(meta);
 }
 
 function runCleanup(node: EffectNode): void {
@@ -412,7 +966,8 @@ function disposeChildDeps(sub: NodeBase): void {
   while (dep !== undefined) {
     const previous = dep.prevDep;
     const node = dep.dep;
-    if (!("getter" in node) && !("currentValue" in node)) unlink(dep, sub);
+    const kind = kindOf(node);
+    if (kind === "effect" || kind === "watcher") unlink(dep, sub);
     dep = previous;
   }
 }

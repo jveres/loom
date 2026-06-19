@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   batch,
   computed,
+  depsOf,
   type EffectFn,
   effect,
   fields,
+  inspect,
   mutate,
+  type ObserveEvent,
+  observe,
   state,
   trigger,
   untrack,
@@ -163,5 +167,128 @@ describe("loom core", () => {
   it("rejects non-plain field sources", () => {
     expect(() => fields([])).toThrow(TypeError);
     expect(() => fields(new Date())).toThrow(TypeError);
+  });
+
+  it("labels inspectable nodes and reports dependencies", () => {
+    const count = state(1, { label: "inspect.count", namespace: "unit" });
+    const doubled = computed(() => count() * 2, {
+      label: "inspect.doubled",
+      namespace: "unit",
+    });
+    let seen = 0;
+
+    const stop = effect(
+      () => {
+        seen = doubled();
+      },
+      { label: "inspect.view", namespace: "unit" },
+    );
+
+    expect(seen).toBe(2);
+    expect(depsOf(doubled).map((node) => node.label)).toEqual([
+      "inspect.count",
+    ]);
+    expect(depsOf(stop).map((node) => node.label)).toEqual(["inspect.doubled"]);
+
+    count(2);
+
+    expect(seen).toBe(4);
+    expect(
+      inspect().nodes.find((node) => node.label === "inspect.view"),
+    ).toMatchObject({
+      kind: "effect",
+      namespace: "unit",
+      runs: 2,
+    });
+
+    stop();
+
+    expect(
+      inspect().nodes.find((node) => node.label === "inspect.view"),
+    ).toBeUndefined();
+  });
+
+  it("emits observer events while filtering internal nodes by default", () => {
+    const events: ObserveEvent[] = [];
+    const stopObserve = observe((event) => events.push(event));
+
+    const visible = state(0, { label: "visible", namespace: "unit" });
+    const hidden = state(0, {
+      internal: true,
+      label: "hidden",
+      namespace: "unit",
+    });
+
+    visible(1);
+    hidden(1);
+    stopObserve();
+    visible(2);
+
+    expect(events.map((event) => event.kind)).toEqual([
+      "state:create",
+      "state:set",
+    ]);
+    expect(events.map((event) => "label" in event && event.label)).toEqual([
+      "visible",
+      "visible",
+    ]);
+  });
+
+  it("can include internal observer events explicitly", () => {
+    const events: ObserveEvent[] = [];
+    const stopObserve = observe((event) => events.push(event), {
+      includeInternal: true,
+    });
+    const hidden = state(0, {
+      internal: true,
+      label: "hidden.write",
+      namespace: "unit",
+    });
+
+    hidden(1);
+    stopObserve();
+
+    expect(events.filter((event) => event.kind === "state:set")).toEqual([
+      expect.objectContaining({
+        internal: true,
+        kind: "state:set",
+        label: "hidden.write",
+      }),
+    ]);
+  });
+
+  it("does not emit flush events for internal-only effect work", () => {
+    const events: ObserveEvent[] = [];
+    const stopObserve = observe((event) => events.push(event), {
+      flushes: true,
+    });
+    const app = state(0, { label: "app", namespace: "unit" });
+    const internal = state(0, {
+      internal: true,
+      label: "internal",
+      namespace: "unit",
+    });
+    const stopApp = effect(() => {
+      app();
+    });
+    const stopInternal = effect(
+      () => {
+        internal();
+      },
+      { internal: true },
+    );
+
+    events.length = 0;
+    internal(1);
+    expect(events).toEqual([]);
+
+    app(1);
+    expect(events).toEqual([
+      expect.objectContaining({ batchSize: 1, kind: "flush" }),
+    ]);
+
+    stopInternal();
+    stopApp();
+    stopObserve();
   });
 });
