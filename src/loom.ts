@@ -322,6 +322,11 @@ export function source<T>(
   return read;
 }
 
+function connectSource<T>(node: SourceNode<T>): void {
+  node.active = true;
+  node.disconnect = node.connect((value) => sourceSet(node, value));
+}
+
 function disconnectSource(node: SourceNode<unknown>): void {
   if (!node.active) return;
   node.active = false;
@@ -333,8 +338,7 @@ function disconnectSource(node: SourceNode<unknown>): void {
 function reconnectSource(node: SourceNode<unknown>): void {
   // Reconnect only if it was observed (still has subscribers) but is currently disconnected.
   if (node.active || node.subs === undefined) return;
-  node.active = true;
-  node.disconnect = node.connect((value) => sourceSet(node, value));
+  connectSource(node);
 }
 
 export function computed<T>(
@@ -452,16 +456,7 @@ function pauseScope(node: ScopeNode): void {
   // Suspend resources only when this newly pauses the chain (an ancestor pause already did so).
   const newlySuspends = !scopePaused(node);
   node.paused = true;
-  if (newlySuspends) suspendResources(node);
-}
-
-// Pause resources across the subtree, skipping children that are independently paused (theirs are
-// already suspended).
-function suspendResources(node: ScopeNode): void {
-  for (const resource of node.resources) resource.pause();
-  for (const child of node.children) {
-    if (!child.paused) suspendResources(child);
-  }
+  if (newlySuspends) walkResources(node, (r) => r.pause());
 }
 
 function resumeScope(node: ScopeNode): void {
@@ -469,17 +464,22 @@ function resumeScope(node: ScopeNode): void {
   node.paused = false;
   // If an ancestor is still paused, the chain stays suspended — do nothing yet.
   if (scopePaused(node)) return;
-  awakenResources(node);
+  walkResources(node, (r) => r.resume());
   flushScope(node);
   // If we're resuming from inside an effect run (e.g. a tab switch), the re-queued effects ride
   // the in-progress flush; only drive a fresh flush when at the top level.
   if (batchDepth === 0 && runDepth === 0) flush();
 }
 
-function awakenResources(node: ScopeNode): void {
-  for (const resource of node.resources) resource.resume();
+// Apply `act` to every resource in the subtree, skipping independently-paused children (theirs are
+// already in the matching state).
+function walkResources(
+  node: ScopeNode,
+  act: (resource: ScopeResource) => void,
+): void {
+  for (const resource of node.resources) act(resource);
   for (const child of node.children) {
-    if (!child.paused) awakenResources(child);
+    if (!child.paused) walkResources(child, act);
   }
 }
 
@@ -1075,10 +1075,7 @@ function sourceOper<T>(this: SourceNode<T>): T {
   if (sub !== undefined) {
     const first = this.subs === undefined;
     link(this, sub, cycle);
-    if (first && !this.active) {
-      this.active = true;
-      this.disconnect = this.connect((value) => sourceSet(this, value));
-    }
+    if (first && !this.active) connectSource(this);
     if (readObservers > 0) emitRead(this as unknown as StateNode<unknown>);
   }
   return this.currentValue;
