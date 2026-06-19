@@ -191,35 +191,11 @@ let rng = 0x1eed;
 
 requestAnimationFrame(frame);
 
-// Mount the dev inspector unless ?noinspect is set. In ?noinspect mode (used to A/B the demo
-// with the inspector off — e.g. to isolate rendering cost in Safari, which has no built-in FPS
-// overlay) show a tiny independent FPS badge so both modes report comparable numbers.
-const noinspect = new URLSearchParams(location.search).has("noinspect");
-let fpsBadge: HTMLElement | null = null;
-let fpsAcc = 0;
-let fpsFrames = 0;
-if (noinspect) {
-  fpsBadge = document.createElement("div");
-  fpsBadge.className = "fps-badge";
-  fpsBadge.textContent = "— fps";
-  document.body.append(fpsBadge);
-} else {
-  mountInspector();
-}
+mountInspector();
 
 function frame(now: number): void {
-  const delta = now - lastFrame;
+  const dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
-  if (fpsBadge) {
-    fpsFrames++;
-    fpsAcc += delta;
-    if (fpsAcc >= 500) {
-      fpsBadge.textContent = `${Math.round((fpsFrames * 1000) / fpsAcc)} fps`;
-      fpsFrames = 0;
-      fpsAcc = 0;
-    }
-  }
-  const dt = Math.min(0.05, delta / 1000);
   if (settings.running()) tick(dt);
   requestAnimationFrame(frame);
 }
