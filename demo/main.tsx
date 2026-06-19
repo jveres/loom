@@ -187,6 +187,13 @@ effect(() => {
 
 let lastFrame = performance.now();
 let aiBudget = 0;
+// The chaos mutates the DOM every tick. Running a tick on *every* animation frame keeps the main
+// thread continuously busy, which on iOS Safari starves touch/click delivery — the page reads a
+// stable 60fps but the whole UI (even Stop chaos) stops responding. Throttling ticks below the
+// frame rate leaves idle frames for the browser to deliver input; the deferred time is folded into
+// the next tick's `dt`, so the simulated activity rate is unchanged.
+let chaosAccum = 0;
+const CHAOS_STEP = 1 / 30; // run the simulation at 30Hz, leaving ~half the frames free for input
 let rng = 0x1eed;
 
 requestAnimationFrame(frame);
@@ -203,7 +210,16 @@ window.addEventListener("keydown", (event) => {
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
-  if (settings.running()) tick(dt);
+  if (settings.running()) {
+    chaosAccum += dt;
+    // Run at most one tick per CHAOS_STEP; idle frames in between let iOS deliver input.
+    if (chaosAccum >= CHAOS_STEP) {
+      tick(chaosAccum);
+      chaosAccum = 0;
+    }
+  } else {
+    chaosAccum = 0;
+  }
   requestAnimationFrame(frame);
 }
 
