@@ -195,12 +195,17 @@ button.ghost.on {
   transition:
     border-color 180ms ease,
     transform 360ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  /* Root cause of the Safari full-chaos fps drop: every frame repaints all 80 cards even
+     though only ~25 are on-screen, and WebKit's paint is the bottleneck (Blink/Gecko absorb
+     it). content-visibility skips rendering of off-screen cards entirely, so paint scales
+     with what's visible — restoring 60fps in Safari (and helping Chrome/FF too). */
+  content-visibility: auto;
+  contain-intrinsic-size: 294px 168px;
 }
 
-/* WebKit reflows a card's whole subtree on every per-frame text update (likes/views/etc.),
-   which collapses full-chaos fps in Safari (~20) while Blink/Gecko cope. Layout containment
-   scopes each child's reflow to itself, restoring 60fps. (Verified with a Playwright/WebKit
-   harness; visually identical.) */
+/* And scope each updating child's reflow to itself with layout (not paint) containment: under
+   heavy text churn WebKit's paint-containment setup is a per-element cost, so layout containment
+   gives the scoping without it — worth the last few fps to a solid 60 on visible cards. */
 .card * {
   contain: layout;
 }
@@ -214,14 +219,6 @@ button.ghost.on {
 
 .shell.chaos .grid.xform .card {
   transition: border-color 180ms ease;
-}
-
-/* Flow layout: skip layout + paint for off-screen cards so per-card mutations don't repaint
-   the whole grid. (Safe in WebKit now that the card subtree avoids paint containment above —
-   the two together keep flow at 60fps in Safari/Chrome/Firefox.) */
-.grid:not(.xform) .card {
-  content-visibility: auto;
-  contain-intrinsic-size: 294px 168px;
 }
 
 .card::before {
@@ -325,8 +322,7 @@ button.ghost.on {
 .metric {
   display: inline-flex;
   align-items: center;
-  /* layout (not content/paint): paint containment is a per-card-subtree WebKit perf cliff
-     under heavy text churn; layout containment alone scopes reflow without it. */
+  /* layout, not content: avoid paint containment here (see .card * above). */
   contain: layout;
   gap: 6px;
   min-height: 24px;
