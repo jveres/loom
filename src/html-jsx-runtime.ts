@@ -122,7 +122,6 @@ function renderAttribute(name: string, value: unknown): string {
   if (
     value == null ||
     value === false ||
-    name === "children" ||
     name === "key" ||
     name === "__proto__" ||
     name === "constructor" ||

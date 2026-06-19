@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { h, text } from "./dom.js";
+import { type Child, h, text } from "./dom.js";
 import { Fragment, jsx, jsxDEV, jsxs } from "./jsx-runtime.js";
 import { state } from "./loom.js";
 
@@ -156,6 +156,39 @@ describe("loom DOM JSX runtime", () => {
     expect((node as HTMLButtonElement).textContent).toBe("0");
     count(2);
     expect((node as HTMLButtonElement).textContent).toBe("2");
+  });
+
+  it("builds intrinsic elements via jsx/jsxs and the null-props fast path", () => {
+    // The JSX transform uses jsxDEV in tests, so exercise jsx/jsxs directly.
+    const a = jsx("div", { id: "x" }) as unknown as FakeElement;
+    expect(a.getAttribute("id")).toBe("x");
+    const b = jsxs("section", { children: "hi" }) as unknown as FakeElement;
+    expect(b.textContent).toBe("hi");
+    const c = jsx("span", null) as unknown as FakeElement;
+    expect(c.tagName).toBe("SPAN");
+  });
+
+  it("Fragment falls back to an empty list without children", () => {
+    expect(Fragment(null)).toEqual([]);
+    expect(Fragment({})).toEqual([]);
+  });
+
+  it("function components drop key and inherited props", () => {
+    const seen: string[] = [];
+    const C = (props: object): Child => {
+      seen.push(...Object.keys(props));
+      return jsx("i", null);
+    };
+    const props = Object.assign(Object.create({ inherited: 1 }), {
+      own: 2,
+      key: "k",
+    });
+    jsx(C, props);
+    expect(seen).toEqual(["own"]); // key dropped, inherited not copied
+
+    seen.length = 0;
+    jsx(C, null); // null props path through propsWithoutKey
+    expect(seen).toEqual([]);
   });
 
   it("binds reactive JSX children, attributes, and class maps", () => {

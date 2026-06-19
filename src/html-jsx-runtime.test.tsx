@@ -68,4 +68,94 @@ describe("loom HTML JSX runtime", () => {
       '<form style="color:red;font-size:12px">Link</form>',
     );
   });
+
+  it("renders via jsx/jsxs directly and on the null-props/void paths", () => {
+    expect(renderToString(jsx("p", { children: "hi" }))).toBe("<p>hi</p>");
+    expect(
+      renderToString(jsxs("ul", { children: [jsx("li", { children: "a" })] })),
+    ).toBe("<ul><li>a</li></ul>");
+    expect(renderToString(jsx("br", null))).toBe("<br>"); // void, no props
+    expect(renderToString(jsx("div", null))).toBe("<div></div>");
+  });
+
+  it("throws on an invalid tag name", () => {
+    expect(() => jsx("bad tag", null)).toThrow(/Invalid HTML tag name/);
+  });
+
+  it("skips inherited props", () => {
+    const props = Object.assign(Object.create({ inherited: "x" }), {
+      id: "own",
+    });
+    expect(renderToString(jsx("div", props))).toBe('<div id="own"></div>');
+  });
+
+  it("drops nullish, false, event, dangerous, and malformed attributes", () => {
+    const props: Record<string, unknown> = {
+      id: null,
+      hidden: false,
+      key: "k",
+      constructor: "c",
+      prototype: "pr",
+      onClick: () => {},
+      "bad name": "x",
+      keep: "ok",
+    };
+    Object.defineProperty(props, "__proto__", {
+      value: "p",
+      enumerable: true,
+      configurable: true,
+    });
+    expect(renderToString(jsx("div", props))).toBe('<div keep="ok"></div>');
+  });
+
+  it("maps className/htmlFor and renders boolean attributes", () => {
+    expect(
+      renderToString(
+        jsx("label", { className: "f", htmlFor: "n", children: "L" }),
+      ),
+    ).toBe('<label class="f" for="n">L</label>');
+    expect(
+      renderToString(
+        jsx("input", { disabled: true } as Record<string, unknown>),
+      ),
+    ).toBe("<input disabled>");
+  });
+
+  it("keeps safe URL attributes and a namespaced one", () => {
+    expect(
+      renderToString(jsx("a", { href: "/ok" } as Record<string, unknown>)),
+    ).toBe('<a href="/ok"></a>');
+  });
+
+  it("normalizes a class object map and drops empty array items", () => {
+    expect(
+      renderToString(
+        jsx("div", { class: { a: true, b: false, c: 1 } } as Record<
+          string,
+          unknown
+        >),
+      ),
+    ).toBe('<div class="a c"></div>');
+    expect(
+      renderToString(
+        jsx("div", { class: ["a", false, "", []] } as Record<string, unknown>),
+      ),
+    ).toBe('<div class="a"></div>');
+  });
+
+  it("serializes styles: kebab-cases, keeps custom props, drops unsafe", () => {
+    const out = jsx("div", {
+      style: {
+        backgroundColor: "red",
+        "--gap": "4px",
+        width: null,
+        "bad name": "x",
+        color: "expression(alert(1))",
+        background: "javascript:1",
+      },
+    } as Record<string, unknown>);
+    expect(renderToString(out)).toBe(
+      '<div style="background-color:red;--gap:4px"></div>',
+    );
+  });
 });

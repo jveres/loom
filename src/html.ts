@@ -54,8 +54,17 @@ export function isHtml(value: unknown): value is Html {
   );
 }
 
+// Keep this map's keys in sync with the character class in escapeText's regex.
+const ENTITIES: Readonly<Record<string, string>> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
 export function escapeText(value: string): string {
-  return value.replace(/[&<>"']/g, escapeChar);
+  return value.replace(/[&<>"']/g, (char) => ENTITIES[char] as string);
 }
 
 // Quoted-attribute escaping needs the same entities as text content (escaping
@@ -63,21 +72,4 @@ export function escapeText(value: string): string {
 // public API to document call-site intent.
 export function escapeAttribute(value: string): string {
   return escapeText(value);
-}
-
-function escapeChar(char: string): string {
-  switch (char) {
-    case "&":
-      return "&amp;";
-    case "<":
-      return "&lt;";
-    case ">":
-      return "&gt;";
-    case '"':
-      return "&quot;";
-    case "'":
-      return "&#39;";
-    default:
-      return char;
-  }
 }
