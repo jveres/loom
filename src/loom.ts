@@ -144,6 +144,7 @@ type NodeBase = ReactiveNode & {
 interface StateNode<T> extends NodeBase {
   currentValue: T;
   pendingValue: T;
+  source?: State<unknown> | undefined;
 }
 
 interface ComputedNode<T> extends NodeBase {
@@ -165,12 +166,6 @@ interface InspectMeta {
   readonly target: WeakRef<object> | undefined;
   disposed: boolean;
   runs: number;
-}
-
-interface InspectRecord {
-  readonly meta: InspectMeta;
-  readonly publicRef: WeakRef<object> | undefined;
-  readonly ref: WeakRef<NodeBase>;
 }
 
 interface ObserverRecord {
@@ -201,7 +196,7 @@ let readObservers = 0;
 let writeObservers = 0;
 const computedNodes = new WeakMap<object, ComputedNode<unknown>>();
 const effectNodes = new WeakMap<object, EffectNode>();
-const inspectRecords = new Map<number, InspectRecord>();
+const inspectRefs = new Map<number, WeakRef<NodeBase>>();
 const observers = new Set<ObserverRecord>();
 const stateNodes = new WeakMap<object, StateNode<unknown>>();
 
@@ -243,7 +238,8 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
 export function state<T>(initial: T, options?: StateOptions): State<T> {
   const node = createStateNode(initial);
   const source = stateOper.bind(node) as State<T>;
-  const meta = registerNode(node, "state", options, source);
+  node.source = source as State<unknown>;
+  const meta = registerNode(node, "state", options);
   stateNodes.set(source, node as StateNode<unknown>);
   if (createObservers > 0) emitStateCreate(meta, initial);
   return source;
@@ -257,7 +253,7 @@ export function computed<T>(
 ): Read<T> {
   const node = createComputedNode(getter);
   const read = computedOper.bind(node) as Read<T>;
-  const meta = registerNode(node, "computed", options, read);
+  const meta = registerNode(node, "computed", options);
   computedNodes.set(read, node as ComputedNode<unknown>);
   if (createObservers > 0) emitCreate(meta, "computed:create");
   return read;
@@ -368,13 +364,14 @@ export function observe(observer: Observer, options?: ObserveOptions): Stop {
 
 export function inspect(): InspectSnapshot {
   const nodes: InspectNode[] = [];
-  for (const [id, record] of inspectRecords) {
-    const node = record.ref.deref();
+  for (const [id, ref] of inspectRefs) {
+    const node = ref.deref();
     if (!node) {
-      inspectRecords.delete(id);
+      inspectRefs.delete(id);
       continue;
     }
-    nodes.push(inspectNode(node, record));
+    const meta = node.meta;
+    if (meta) nodes.push(inspectNode(node, meta));
   }
   return { nodes };
 }
@@ -385,8 +382,9 @@ export function depsOf(source: Read<unknown> | Stop): readonly InspectNode[] {
 
   const deps: InspectNode[] = [];
   for (let item = node.deps; item !== undefined; item = item.nextDep) {
-    const record = recordForNode(item.dep as NodeBase);
-    if (record) deps.push(inspectNode(item.dep as NodeBase, record));
+    const dep = item.dep as NodeBase;
+    const meta = dep.meta;
+    if (meta && inspectRefs.has(meta.id)) deps.push(inspectNode(dep, meta));
   }
   return deps;
 }
@@ -395,7 +393,6 @@ function registerNode(
   node: NodeBase,
   kind: NodeKind,
   options: StateOptions | ComputedOptions | EffectOptions | undefined,
-  publicRef?: object,
 ): InspectMeta {
   const id = ++inspectId;
   const meta: InspectMeta = {
@@ -412,11 +409,7 @@ function registerNode(
         : undefined,
   };
   node.meta = meta;
-  inspectRecords.set(id, {
-    meta,
-    publicRef: publicRef ? new WeakRef(publicRef) : undefined,
-    ref: new WeakRef(node),
-  });
+  inspectRefs.set(id, new WeakRef(node));
   return meta;
 }
 
@@ -443,13 +436,7 @@ function nodeForSource(source: Read<unknown> | Stop): NodeBase | undefined {
   return stateNodes.get(key) ?? computedNodes.get(key) ?? effectNodes.get(key);
 }
 
-function recordForNode(node: NodeBase): InspectRecord | undefined {
-  const meta = node.meta;
-  return meta ? inspectRecords.get(meta.id) : undefined;
-}
-
-function inspectNode(node: NodeBase, record: InspectRecord): InspectNode {
-  const meta = record.meta;
+function inspectNode(node: NodeBase, meta: InspectMeta): InspectNode {
   const base = {
     id: meta.id,
     deps: idsFromDeps(node),
@@ -461,7 +448,7 @@ function inspectNode(node: NodeBase, record: InspectRecord): InspectNode {
     runs: meta.runs,
     subs: idsFromSubs(node),
   };
-  const source = sourceFromRecord(meta, record);
+  const source = sourceFromNode(node, meta);
   const target = meta.target?.deref();
   const value = nodeValue(node);
   return inspectNodeWithOptionals(base, source, target, value);
@@ -480,13 +467,12 @@ function inspectNodeWithOptionals(
   return out;
 }
 
-function sourceFromRecord(
+function sourceFromNode(
+  node: NodeBase,
   meta: InspectMeta,
-  record: InspectRecord,
 ): State<unknown> | undefined {
   if (meta.kind !== "state") return undefined;
-  const source = record.publicRef?.deref();
-  return typeof source === "function" ? (source as State<unknown>) : undefined;
+  return (node as StateNode<unknown>).source;
 }
 
 function idsFromDeps(node: NodeBase): number[] {
@@ -600,7 +586,10 @@ function emitRun(node: EffectNode): void {
   const meta = node.meta;
   if (!meta) return;
   meta.runs++;
-  if (effectObservers === 0) return;
+  if (effectObservers > 0) emitEffectRun(meta);
+}
+
+function emitEffectRun(meta: InspectMeta): void {
   emit(meta, {
     kind: "effect:run",
     id: meta.id,
@@ -709,6 +698,7 @@ function createStateNode<T>(initial: T): StateNode<T> {
     currentValue: initial,
     meta: undefined,
     pendingValue: initial,
+    source: undefined,
     subs: undefined,
     subsTail: undefined,
     flags: Mutable,
@@ -769,11 +759,11 @@ function setActiveSub(sub: NodeBase | undefined): NodeBase | undefined {
 function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   if (value.length) {
     const next = value[0] as T;
-    if (this.pendingValue !== next) {
-      const previous = this.pendingValue;
+    const previous = this.pendingValue;
+    if (previous !== next) {
       this.pendingValue = next;
       this.flags = Mutable | Dirty;
-      emitStateSet(this, previous, next);
+      if (writeObservers > 0) emitStateSet(this, previous, next);
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);
@@ -817,7 +807,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
     try {
       const oldValue = this.value;
       this.value = this.getter();
-      emitComputedUpdate(this, oldValue, this.value);
+      if (computedObservers > 0) emitComputedUpdate(this, oldValue, this.value);
     } finally {
       activeSub = previous;
       this.flags &= ~RecursedCheck;
@@ -842,8 +832,11 @@ function updateComputed<T>(node: ComputedNode<T>): boolean {
     const oldValue = node.value;
     const newValue = node.getter(oldValue);
     node.value = newValue;
-    if (oldValue !== newValue) emitComputedUpdate(node, oldValue, newValue);
-    return oldValue !== newValue;
+    const changed = oldValue !== newValue;
+    if (changed && computedObservers > 0) {
+      emitComputedUpdate(node, oldValue, newValue);
+    }
+    return changed;
   } finally {
     activeSub = previous;
     node.flags &= ~RecursedCheck;
@@ -901,8 +894,12 @@ function runEffect(node: EffectNode): boolean {
       node.flags &= ~RecursedCheck;
       purgeDeps(node);
     }
-    emitRun(node);
-    return node.meta?.internal !== true;
+    const meta = node.meta;
+    if (meta) {
+      meta.runs++;
+      if (effectObservers > 0) emitEffectRun(meta);
+    }
+    return meta === undefined || meta.internal !== true;
   } else if (node.deps !== undefined) {
     node.flags = Watching | (flags & HasChildEffect);
   }
@@ -942,7 +939,7 @@ function stopEffect(this: EffectNode): void {
   if (this.cleanup) runCleanup(this);
   if (!meta || meta.disposed) return;
   meta.disposed = true;
-  inspectRecords.delete(meta.id);
+  inspectRefs.delete(meta.id);
   emitDispose(meta);
 }
 

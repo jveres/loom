@@ -370,8 +370,20 @@ Run it with:
 pnpm run bench
 ```
 
+On the chaos workload Loom runs at roughly `1.2x` the time of native
+`alien-signals`. The residual gap is the always-on inspect layer (one metadata
+object plus a `WeakRef` per node); the per-operation read/write/effect hot paths
+carry only branch-predicted observer guards and otherwise match the native
+primitives.
+
 ## Design notes
 
 Loom uses `alien-signals` as the reactive graph implementation detail. The
 public API stays small: callable state cells, computed reads, effects, batching,
-manual triggers, object field cells, and a lazy observability surface.
+manual triggers, object field cells, and an observability surface.
+
+Observer event emission is gated by per-kind observer counters, so reads,
+writes, computed updates, and effect runs stay allocation-free and pay only a
+predicted-not-taken branch when no observer is attached. Every node still carries
+lightweight inspect metadata so `inspect()` and `depsOf()` work without prior
+arming.
