@@ -17,6 +17,9 @@ import {
 /* ============================================================ palette + css ========= */
 
 const PANEL_ID = "loom-inspector";
+// Namespace loom/dom tags its bindings with (see src/dom.ts DOM_NAMESPACE); effect runs in this
+// namespace are the pipeline's rendering output.
+const DOM_NS = "dom";
 const SANS =
   "ui-sans-serif,-apple-system,'SF Pro Text',Inter,system-ui,sans-serif";
 const MONO = "ui-monospace,'SF Mono','JetBrains Mono',Menlo,monospace";
@@ -224,22 +227,23 @@ const bindings: Stop[] = [];
 let ui: State<TabId> | null = null;
 let beat: State<number> | null = null;
 
-// Raw observed counters (incremented by onEvent) and their smoothed per-second rates.
-let readCount = 0;
-let writeCount = 0;
-let runTotal = 0;
+// Raw observed counters (incremented by onEvent) and their smoothed per-second rates. These map
+// 1:1 onto the loom-next pipeline stages: writes -> computed recompute -> flush -> DOM effect run.
+let readCount = 0; // tracked reads (state:read + computed:read)
+let writeCount = 0; // state:set (pipeline input)
+let computedCount = 0; // computed:update (derivations recomputed to a new value)
+let domWriteCount = 0; // effect:run in the "dom" namespace (DOM bindings = rendering output)
 let flushCount = 0;
-let patchCount = 0;
 let lastReadCount = 0;
 let lastWriteCount = 0;
-let lastRunCount = 0;
+let lastComputedCount = 0;
+let lastDomWriteCount = 0;
 let lastFlushCount = 0;
-let lastPatchCount = 0;
 let readRate = 0;
 let writeRate = 0;
-let runRate = 0;
+let computedRate = 0;
+let domWriteRate = 0;
 let flushRate = 0;
-let patchRate = 0;
 let lastFlushBatch = 0;
 let lastFlushMs = 0;
 
@@ -265,9 +269,9 @@ let healthReady = false;
 let fpsKey = "";
 let clsKey = "";
 
-// Reactive-activity sparkline series (read deltas vs write deltas per poll).
-const sparkR: number[] = [];
-const sparkW: number[] = [];
+// Rendering-pipeline sparkline series: writes in (top) vs DOM updates out (bottom), per poll.
+const sparkIn: number[] = [];
+const sparkOut: number[] = [];
 
 const POLL_MS = 120;
 const POLL_S = POLL_MS / 1000;
@@ -321,12 +325,6 @@ function fmtRate(n: number): string {
   return String(r);
 }
 
-function fmtCount(n: number): string {
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
-  return String(n);
-}
-
 function health(f: number): { key: string; label: string; score: number } {
   const s = Math.round(100 * Math.max(0, Math.min(1, f / 55)));
   if (s >= 70) return { key: "ok", label: "healthy", score: s };
@@ -348,17 +346,19 @@ function gaugeClass(base: string): string {
   return `${base} ${healthReady ? `h-${healthKey}` : "li-loading"}`;
 }
 
-// Live node census from a Loom snapshot — app states vs effects (views). Inspector-owned nodes
-// are `internal`, so they're skipped.
-function liveCounts(): { states: number; views: number } {
+// Live node census from a Loom snapshot, by the three node kinds. Inspector-owned nodes are
+// `internal`, so they're skipped.
+function liveCounts(): { states: number; computeds: number; effects: number } {
   let states = 0;
-  let views = 0;
+  let computeds = 0;
+  let effects = 0;
   for (const node of inspect().nodes) {
     if (node.internal) continue;
     if (node.kind === "state") states++;
-    else if (node.kind === "effect") views++;
+    else if (node.kind === "computed") computeds++;
+    else if (node.kind === "effect") effects++;
   }
-  return { states, views };
+  return { states, computeds, effects };
 }
 
 /* ============================================================ persistence ========== */
@@ -712,7 +712,7 @@ function buildSpark(): HTMLElement {
       ))}
     </linearGradient>
   );
-  const readLine = (
+  const inLine = (
     <polyline
       fill="none"
       stroke="#5fd39a"
@@ -721,7 +721,7 @@ function buildSpark(): HTMLElement {
       stroke-linecap="round"
     />
   );
-  const writeLine = (
+  const outLine = (
     <polyline
       fill="none"
       stroke="#ff6b81"
@@ -731,26 +731,26 @@ function buildSpark(): HTMLElement {
     />
   );
   bindAttr(
-    readLine,
+    inLine,
     "points",
-    pulse(() => plotPoints(sparkR, 0)),
+    pulse(() => plotPoints(sparkIn, 0)),
   );
   bindAttr(
-    writeLine,
+    outLine,
     "points",
-    pulse(() => plotPoints(sparkW, SPARK_LINE)),
+    pulse(() => plotPoints(sparkOut, SPARK_LINE)),
   );
   return (
     <span
       class="li-spark"
-      title="reactive activity — reads (green) vs writes (red)"
+      title="rendering pipeline — writes in (green) vs DOM updates out (red)"
     >
       <svg
         width={SPARK_W}
         height={SPARK_H}
         viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
         role="img"
-        aria-label="Reactive activity"
+        aria-label="Rendering pipeline utilization"
       >
         <defs>
           {grad(`${PANEL_ID}-spk-rg`, "li-spk-cr")}
@@ -770,8 +770,8 @@ function buildSpark(): HTMLElement {
           height={SPARK_LINE}
           fill={`url(#${PANEL_ID}-spk-wg)`}
         />
-        {readLine}
-        {writeLine}
+        {inLine}
+        {outLine}
       </svg>
     </span>
   );
@@ -860,20 +860,17 @@ function buildStatsPane(): HTMLElement {
         {side}
       </div>
       {stat("frame time", () => `${lastFrameMs.toFixed(1)} ms`)}
-      {stat("reads / s", () => fmtRate(readRate), "hi")}
       {stat("writes / s", () => fmtRate(writeRate), "hi")}
-      {stat("DOM writes / s", () => fmtRate(runRate), "lo")}
-      {stat("structure patches / s", () => fmtRate(patchRate))}
+      {stat("reads / s", () => fmtRate(readRate), "hi")}
+      {stat("computeds / s", () => fmtRate(computedRate))}
+      {stat("DOM updates / s", () => fmtRate(domWriteRate), "lo")}
       {stat("flushes / s", () => fmtRate(flushRate), "lo")}
-      {stat("watchers / flush", () => String(lastFlushBatch))}
-      {stat("last flush", () => `${lastFlushMs.toFixed(1)} ms`)}
-      {stat("states · views", () => {
+      {stat("effects / flush", () => String(lastFlushBatch))}
+      {stat("flush time", () => `${lastFlushMs.toFixed(1)} ms`)}
+      {stat("states · computeds · effects", () => {
         const c = liveCounts();
-        return `${c.states} · ${c.views}`;
+        return `${c.states} · ${c.computeds} · ${c.effects}`;
       })}
-      {stat("reads observed", () => fmtCount(readCount))}
-      {stat("writes observed", () => fmtCount(writeCount))}
-      {stat("DOM writes observed", () => fmtCount(runTotal))}
     </div>
   );
 }
@@ -928,19 +925,18 @@ function onEvent(e: ObserveEvent): void {
     case "state:set":
       writeCount++;
       break;
+    case "computed:update":
+      computedCount++;
+      break;
     case "effect:run":
-      runTotal++;
+      // DOM bindings (text/attr/class/style/list) run in the "dom" namespace — i.e. the
+      // rendering output of the pipeline. App effects in other namespaces aren't render work.
+      if (e.namespace === DOM_NS) domWriteCount++;
       break;
     case "flush":
       flushCount++;
       lastFlushBatch = e.batchSize;
       lastFlushMs = e.durationMs;
-      break;
-    case "state:create":
-    case "computed:create":
-    case "effect:create":
-    case "effect:dispose":
-      patchCount++;
       break;
     default:
       break;
@@ -950,24 +946,25 @@ function onEvent(e: ObserveEvent): void {
 function poll(): void {
   const dr = readCount - lastReadCount;
   const dw = writeCount - lastWriteCount;
+  const ddom = domWriteCount - lastDomWriteCount;
   lastReadCount = readCount;
   lastWriteCount = writeCount;
+  lastDomWriteCount = domWriteCount;
   readRate = ema(readRate, dr);
   writeRate = ema(writeRate, dw);
-  sparkR.push(dr);
-  sparkW.push(dw);
-  if (sparkR.length > SPARK_N) sparkR.shift();
-  if (sparkW.length > SPARK_N) sparkW.shift();
+  domWriteRate = ema(domWriteRate, ddom);
+  // Sparkline = rendering-pipeline utilization: writes entering vs DOM updates produced.
+  sparkIn.push(dw);
+  sparkOut.push(ddom);
+  if (sparkIn.length > SPARK_N) sparkIn.shift();
+  if (sparkOut.length > SPARK_N) sparkOut.shift();
 
-  const dru = runTotal - lastRunCount;
-  lastRunCount = runTotal;
-  runRate = ema(runRate, dru);
+  const dc = computedCount - lastComputedCount;
+  lastComputedCount = computedCount;
+  computedRate = ema(computedRate, dc);
   const df = flushCount - lastFlushCount;
   lastFlushCount = flushCount;
   flushRate = ema(flushRate, df);
-  const dp = patchCount - lastPatchCount;
-  lastPatchCount = patchCount;
-  patchRate = ema(patchRate, dp);
 
   if (!fpsReady) {
     healthReady = false;
@@ -1285,14 +1282,14 @@ export function unmountInspector(): void {
   beat = null;
 
   // Reset live metrics so the next mount starts clean.
-  readCount = writeCount = runTotal = flushCount = patchCount = 0;
+  readCount = writeCount = computedCount = domWriteCount = flushCount = 0;
   lastReadCount =
     lastWriteCount =
-    lastRunCount =
+    lastComputedCount =
+    lastDomWriteCount =
     lastFlushCount =
-    lastPatchCount =
       0;
-  readRate = writeRate = runRate = flushRate = patchRate = 0;
+  readRate = writeRate = computedRate = domWriteRate = flushRate = 0;
   lastFlushBatch = lastFlushMs = 0;
   fps = 0;
   fpsReady = false;
@@ -1301,8 +1298,8 @@ export function unmountInspector(): void {
   lag = lagPeak = 0;
   cls = lcp = inp = 0;
   healthReady = false;
-  sparkR.length = 0;
-  sparkW.length = 0;
+  sparkIn.length = 0;
+  sparkOut.length = 0;
 }
 
 /** Whether the inspector is currently mounted. */
