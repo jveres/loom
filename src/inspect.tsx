@@ -439,8 +439,14 @@ function connectInp(set: (v: number) => void): Stop {
   }
 }
 
+// Whether the Long Tasks API exists (Chrome/FF yes, Safari/WebKit no). Lets the "blocked" row
+// distinguish a genuine 0 ms (no blocking — good) from "unsupported" (—).
+const LONGTASKS_SUPPORTED =
+  typeof PerformanceObserver === "function" &&
+  PerformanceObserver.supportedEntryTypes?.includes("longtask") === true;
+
 // Total main-thread blocking time (sum of long-task durations) — the standardized cousin of the
-// `lag` probe. Unsupported in Safari/WebKit, where it stays 0 and the row reads "—".
+// `lag` probe. Unsupported in Safari/WebKit, where the row reads "—".
 function connectLongTasks(set: (v: number) => void): Stop {
   if (typeof PerformanceObserver !== "function") return () => {};
   let total = 0;
@@ -818,7 +824,7 @@ function buildHisto(): HTMLElement {
     }
   });
   return (
-    <div class="li-histo">
+    <div class="li-histo" title={TIP.frames}>
       <svg
         preserveAspectRatio="none"
         viewBox={`0 0 ${FRAME_N} 20`}
@@ -919,16 +925,49 @@ function buildSpark(): HTMLElement {
 
 /* ============================================================ Info (stats) tab ===== */
 
-function stat(label: string, get: () => string, cls = ""): HTMLElement {
+function stat(
+  label: string,
+  get: () => string,
+  cls = "",
+  title = "",
+): HTMLElement {
   const val = (<span class={`li-stat-v ${cls}`} />) as HTMLElement;
   bindText(val, pulse(get));
   return (
     <div class="li-stat">
-      <span class="li-stat-k">{label}</span>
+      <span class="li-stat-k" title={title}>
+        {label}
+      </span>
       {val}
     </div>
   );
 }
+
+// Hover descriptions for each stat label.
+const TIP = {
+  fps: "Frames per second, averaged over ~0.5s windows.",
+  health: "Overall health (0–100) derived from FPS against a 55fps target.",
+  frames: "Recent per-frame render times; taller/red bars are slower frames.",
+  lag: "Main-thread lag: how late a fixed 200ms timer fires (now · peak). High = jank.",
+  heap: "JS heap used (Chrome only), re-sampled every 5s via polled().",
+  cls: "Cumulative Layout Shift — unitless score (not pixels), worst session window (Core Web Vital).",
+  lcp: "Largest Contentful Paint — time to the largest paint (Core Web Vital).",
+  inp: "Interaction to Next Paint — worst interaction latency (Core Web Vital).",
+  blocked:
+    "Total main-thread blocking from long tasks >50ms (lazy source). Not supported in Safari.",
+  frameTime: "Render time of the most recent frame. ~16.7ms ≈ 60fps.",
+  writes: "State writes per second (state:set events).",
+  reads: "Tracked reads per second (reads inside effects/computeds).",
+  computedsRate: "Computed values recomputed to a new result per second.",
+  domUpdates:
+    "DOM-binding effect runs per second — text/attr/class/style/list (the rendering output).",
+  flushes: "Reactive flush cycles per second.",
+  effectsPerFlush: "Effects run in the most recent flush (its batch size).",
+  flushTime: "Wall-clock duration of the most recent flush.",
+  states: "Live state cells in the reactive graph.",
+  computeds: "Live computed values.",
+  effects: "Live effects — DOM bindings plus app effects.",
+} as const;
 
 function buildStatsPane(): HTMLElement {
   const fpsValue = (<span class="li-perfh-fps" />) as HTMLElement;
@@ -942,7 +981,7 @@ function buildStatsPane(): HTMLElement {
     pulse(() => `li-perfh-fps ${fpsKey}`),
   );
 
-  const hlabel = (<div class="li-hlabel" />) as HTMLElement;
+  const hlabel = (<div class="li-hlabel" title={TIP.health} />) as HTMLElement;
   bindText(
     hlabel,
     pulse(() => (fpsReady ? health(fps).label.toUpperCase() : "LOADING")),
@@ -960,15 +999,33 @@ function buildStatsPane(): HTMLElement {
         "lag",
         () => `${lag.toFixed(0)} · pk ${lagPeak.toFixed(0)} ms`,
         "lo",
+        TIP.lag,
       )}
     </div>
   );
-  if (heapMem()) side.append(buildHeapStat());
+  // Main-thread blocking (long tasks) sits with lag as a responsiveness signal; lazy source.
+  const blockedValue = (): number => longTasksSource?.() ?? 0;
+  side.append(
+    vitalStat(
+      "blocked",
+      () => {
+        if (!LONGTASKS_SUPPORTED) return "—";
+        const v = blockedValue();
+        return v < 1000 ? `${v.toFixed(0)} ms` : `${(v / 1000).toFixed(1)} s`;
+      },
+      () => {
+        if (!LONGTASKS_SUPPORTED) return "";
+        const v = blockedValue();
+        return v <= 200 ? "h-ok" : v <= 600 ? "h-warn" : "h-bad";
+      },
+      TIP.blocked,
+    ),
+  );
   // Reading these source values inside the bindings is what lazily wires their PerformanceObservers.
   const clsValue = (): number => clsSource?.() ?? 0;
   const lcpValue = (): number => lcpSource?.() ?? 0;
   const inpValue = (): number => inpSource?.() ?? 0;
-  const clsRow = stat("CLS", () => clsValue().toFixed(2));
+  const clsRow = stat("CLS", () => clsValue().toFixed(2), "", TIP.cls);
   const clsVal = clsRow.querySelector(".li-stat-v");
   if (clsVal)
     bindAttr(
@@ -985,6 +1042,7 @@ function buildStatsPane(): HTMLElement {
       "LCP",
       () => (lcpValue() ? `${(lcpValue() / 1000).toFixed(2)} s` : "—"),
       () => vitalColor(lcpValue(), 2500, 4000),
+      TIP.lcp,
     ),
   );
   side.append(
@@ -992,25 +1050,14 @@ function buildStatsPane(): HTMLElement {
       "INP",
       () => (inpValue() ? `${inpValue().toFixed(0)} ms` : "—"),
       () => vitalColor(inpValue(), 200, 500),
-    ),
-  );
-  const blockedValue = (): number => longTasksSource?.() ?? 0;
-  side.append(
-    vitalStat(
-      "blocked",
-      () => {
-        const v = blockedValue();
-        if (!v) return "—";
-        return v < 1000 ? `${v.toFixed(0)} ms` : `${(v / 1000).toFixed(1)} s`;
-      },
-      () => vitalColor(blockedValue(), 200, 600),
+      TIP.inp,
     ),
   );
 
   return (
     <div class="li-pane">
       <div class="li-perfh">
-        <span>Performance</span>
+        <span title={TIP.fps}>Performance</span>
         {fpsValue}
       </div>
       {buildHisto()}
@@ -1018,17 +1065,43 @@ function buildStatsPane(): HTMLElement {
         {buildGauge()}
         {side}
       </div>
-      {stat("frame time", () => `${lastFrameMs.toFixed(1)} ms`)}
-      {stat("writes / s", () => fmtRate(writeRate), "hi")}
-      {stat("reads / s", () => fmtRate(readRate), "hi")}
-      {stat("computeds / s", () => fmtRate(computedRate))}
-      {stat("DOM updates / s", () => fmtRate(domWriteRate), "lo")}
-      {stat("flushes / s", () => fmtRate(flushRate), "lo")}
-      {stat("effects / flush", () => String(lastFlushBatch))}
-      {stat("flush time", () => `${lastFlushMs.toFixed(1)} ms`)}
-      {stat("states", () => String(nodeStates))}
-      {stat("computeds", () => String(nodeComputeds))}
-      {stat("effects", () => String(nodeEffects))}
+      {stat(
+        "frame time",
+        () => `${lastFrameMs.toFixed(1)} ms`,
+        "",
+        TIP.frameTime,
+      )}
+      {heapMem() ? buildHeapStat() : null}
+      {stat("writes / s", () => fmtRate(writeRate), "hi", TIP.writes)}
+      {stat("reads / s", () => fmtRate(readRate), "hi", TIP.reads)}
+      {stat(
+        "computeds / s",
+        () => fmtRate(computedRate),
+        "",
+        TIP.computedsRate,
+      )}
+      {stat(
+        "DOM updates / s",
+        () => fmtRate(domWriteRate),
+        "lo",
+        TIP.domUpdates,
+      )}
+      {stat("flushes / s", () => fmtRate(flushRate), "lo", TIP.flushes)}
+      {stat(
+        "effects / flush",
+        () => String(lastFlushBatch),
+        "",
+        TIP.effectsPerFlush,
+      )}
+      {stat(
+        "flush time",
+        () => `${lastFlushMs.toFixed(1)} ms`,
+        "",
+        TIP.flushTime,
+      )}
+      {stat("states", () => String(nodeStates), "", TIP.states)}
+      {stat("computeds", () => String(nodeComputeds), "", TIP.computeds)}
+      {stat("effects", () => String(nodeEffects), "", TIP.effects)}
     </div>
   );
 }
@@ -1037,8 +1110,9 @@ function vitalStat(
   label: string,
   get: () => string,
   color: () => string,
+  title = "",
 ): HTMLElement {
-  const row = stat(label, get);
+  const row = stat(label, get, "", title);
   const val = row.querySelector(".li-stat-v");
   if (val)
     bindAttr(
@@ -1062,6 +1136,7 @@ function buildHeapStat(): HTMLElement {
       return bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "—";
     },
     "lo",
+    TIP.heap,
   );
 }
 
