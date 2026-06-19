@@ -68,7 +68,8 @@ const CSS = `
 #${PANEL_ID} .li-brand svg{color:var(--li-key)}
 #${PANEL_ID} .li-bar .li-sp{flex:1}
 #${PANEL_ID} .li-bar button{font:inherit;color:var(--li-fg);background:var(--li-fill);border:1px solid var(--li-border);
-  border-radius:6px;width:26px;height:26px;padding:0;position:relative;cursor:pointer;flex:0 0 auto}
+  border-radius:6px;width:26px;height:26px;padding:0;cursor:pointer;flex:0 0 auto;
+  display:inline-flex;align-items:center;justify-content:center}
 #${PANEL_ID} .li-bar button:hover{border-color:var(--li-accent)}
 #${PANEL_ID}-menu .li-menu-item{font:inherit;color:var(--li-fg);background:transparent;border:0;border-radius:6px;
   padding:6px 8px;text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;white-space:nowrap}
@@ -91,7 +92,7 @@ const CSS = `
 #${PANEL_ID}.li-min .li-body,#${PANEL_ID}.li-min .li-tabs{display:none}
 #${PANEL_ID} .li-stat-v,#${PANEL_ID} .li-perfh-fps{font-family:${MONO}}
 #${PANEL_ID} svg{display:block;margin:0 auto;pointer-events:none}
-#${PANEL_ID} .li-bar button svg{position:absolute;inset:0;margin:auto}
+#${PANEL_ID} .li-bar button svg{display:block;margin:0}
 #${PANEL_ID} .li-tabs{display:flex;align-items:flex-end;gap:8px;padding:0 8px;flex:0 0 auto;min-height:28px;
   background:transparent;border-bottom:2px solid var(--li-accent-soft)}
 #${PANEL_ID} .li-perfh{display:flex;justify-content:space-between;align-items:baseline;
