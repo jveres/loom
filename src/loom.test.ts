@@ -854,3 +854,184 @@ describe("loom scope edge cases", () => {
     expect(runs).toBe(2);
   });
 });
+
+describe("loom coverage", () => {
+  it("emits every observe event kind and filters internal nodes", () => {
+    const all: ObserveEvent["kind"][] = [];
+    const stopAll = observe((e) => all.push(e.kind), { includeInternal: true });
+    const visible: ObserveEvent["kind"][] = [];
+    const stopVis = observe((e) => visible.push(e.kind), { creates: true });
+
+    const a = state(1);
+    const c = computed(() => a() * 2);
+    const e = effect(() => c());
+    a(5);
+
+    const hidden = state(0, { internal: true });
+    hidden(1);
+
+    e(); // effect:dispose
+    stopAll();
+    stopVis();
+
+    const kinds = new Set(all);
+    for (const k of [
+      "state:create",
+      "computed:create",
+      "effect:create",
+      "computed:read",
+      "state:read",
+      "computed:update",
+      "state:set",
+      "effect:run",
+      "effect:dispose",
+      "flush",
+    ] as const) {
+      expect(kinds.has(k)).toBe(true);
+    }
+    // The non-includeInternal observer never sees the internal state's create.
+    expect(visible.filter((k) => k === "state:create")).toHaveLength(1);
+  });
+
+  it("disposes child effects when the parent re-runs", () => {
+    const outer = state(0);
+    const inner = state(0);
+    let childRuns = 0;
+    let childCleanups = 0;
+    const stop = effect(() => {
+      outer();
+      effect(() => {
+        inner();
+        childRuns++;
+        return () => {
+          childCleanups++;
+        };
+      });
+    });
+    expect(childRuns).toBe(1);
+
+    inner(1); // child re-runs
+    expect(childRuns).toBe(2);
+
+    outer(1); // parent re-runs -> previous child disposed, a fresh one created
+    expect(childCleanups).toBeGreaterThan(0);
+    const before = childRuns;
+    inner(2); // only the current child reacts (old one disposed)
+    expect(childRuns).toBe(before + 1);
+    stop();
+  });
+
+  it("covers fields() option combinations", () => {
+    const events: ObserveEvent[] = [];
+    const stop = observe((e) => events.push(e), {
+      includeInternal: true,
+      creates: true,
+    });
+    fields({ a: 1 }); // no options
+    fields({ b: 2 }, { label: "f" }); // label only
+    fields({ c: 3 }, { internal: true }); // internal, no namespace
+    fields({ d: 4 }, { internal: false, namespace: "ns" }); // internal + namespace
+    stop();
+    const creates = events.filter(
+      (e): e is Extract<ObserveEvent, { kind: "state:create" }> =>
+        e.kind === "state:create",
+    );
+    const byValue = (v: number) => creates.find((e) => e.value === v);
+    expect(byValue(1)?.namespace).toBe("default"); // no options -> defaults
+    expect(byValue(2)?.label).toBe("f.b"); // label prefixes the key
+    expect(byValue(3)?.internal).toBe(true); // internal, default namespace
+    expect(byValue(4)?.namespace).toBe("ns"); // internal flag + namespace
+  });
+
+  it("now() falls back to Date.now when performance is missing", () => {
+    const original = globalThis.performance;
+    // @ts-expect-error force the fallback branch in now()
+    globalThis.performance = undefined;
+    try {
+      const flushes: ObserveEvent[] = [];
+      const stop = observe((e) => flushes.push(e), { flushes: true });
+      const a = state(0);
+      const e = effect(() => a());
+      a(1); // flush with timing -> now() called while performance is undefined
+      e();
+      stop();
+      expect(flushes.length).toBeGreaterThan(0);
+    } finally {
+      globalThis.performance = original;
+    }
+  });
+
+  it("trigger re-runs subscribers after an in-place mutation", () => {
+    const list = state<number[]>([]);
+    let seen = 0;
+    const stop = effect(() => {
+      seen = list().length;
+    });
+    expect(seen).toBe(0);
+    list().push(1);
+    trigger(list);
+    expect(seen).toBe(1);
+    stop();
+  });
+
+  it("recomputes computeds lazily through a conditional dependency", () => {
+    const toggle = state(true);
+    const a = state(1);
+    const b = state(2);
+    let runs = 0;
+    const c = computed(() => {
+      runs++;
+      return toggle() ? a() : b();
+    });
+    const d = computed(() => c() + 1);
+    let out = 0;
+    const stop = effect(() => {
+      out = d();
+    });
+    expect(out).toBe(2);
+    a(10);
+    expect(out).toBe(11);
+    toggle(false); // now depends on b, not a
+    expect(out).toBe(3);
+    a(20); // a no longer a dependency -> no recompute of the value
+    expect(out).toBe(3);
+    b(5);
+    expect(out).toBe(6);
+    stop();
+  });
+
+  it("orders multiple queued effects deterministically", () => {
+    const a = state(0);
+    const order: number[] = [];
+    const s1 = effect(() => {
+      a();
+      order.push(1);
+    });
+    const s2 = effect(() => {
+      a();
+      order.push(2);
+    });
+    const s3 = effect(() => {
+      a();
+      order.push(3);
+    });
+    order.length = 0;
+    a(1); // all three re-run in a single flush
+    expect(order).toEqual([1, 2, 3]);
+    s1();
+    s2();
+    s3();
+  });
+
+  it("inspect and depsOf expose the graph", () => {
+    const a = state(1, { label: "a" });
+    const c = computed(() => a() + 1);
+    const stop = effect(() => c());
+    const snap = inspect();
+    expect(snap.nodes.some((n) => n.label === "a")).toBe(true);
+    expect(depsOf(c).some((n) => n.label === "a")).toBe(true);
+    expect(depsOf(stop).length).toBeGreaterThan(0);
+    expect(depsOf((() => 0) as never)).toEqual([]); // unknown source
+    stop();
+  });
+});

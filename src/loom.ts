@@ -370,7 +370,7 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   }
   try {
     runDepth++;
-    node.cleanup = node.fn() as Stop | undefined;
+    node.cleanup = asCleanup(node.fn());
   } finally {
     runDepth--;
     activeSub = previous;
@@ -1193,7 +1193,7 @@ function runEffect(node: EffectNode): boolean {
     try {
       cycle++;
       runDepth++;
-      node.cleanup = node.fn() as Stop | undefined;
+      node.cleanup = asCleanup(node.fn());
     } finally {
       runDepth--;
       activeSub = previous;
@@ -1247,6 +1247,12 @@ function stopEffect(this: EffectNode): void {
   meta.disposed = true;
   inspectRefs.delete(meta.id);
   emitDispose(meta);
+}
+
+// Only a returned function is a cleanup; any other return (e.g. an expression-body effect like
+// `effect(() => count())`) is ignored rather than crashing on the next run.
+function asCleanup(result: unknown): Stop | undefined {
+  return typeof result === "function" ? (result as Stop) : undefined;
 }
 
 function runCleanup(node: EffectNode): void {
