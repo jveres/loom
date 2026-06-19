@@ -113,7 +113,6 @@ app.replaceChildren(
     <header class="bar">
       <div class="brand">
         <b>Loom</b>
-        <span>realtime state / patch / diagnostics</span>
       </div>
       <button
         type="button"
@@ -142,13 +141,11 @@ app.replaceChildren(
         cycleTheme,
         () => settings.theme() !== "auto",
       )}
+      {command("Core checks", runChecks)}
     </header>
     <div class="workspace">
       {board}
-      <aside class="side">
-        {checksPanel()}
-        {selectedPanel()}
-      </aside>
+      <aside class="side">{selectedPanel()}</aside>
     </div>
     <div
       class={{
@@ -349,27 +346,6 @@ function cycleTheme(): void {
 
 function toneName(tone: Tone): string {
   return ["violet", "blue", "amber", "rose", "green"][tone] as string;
-}
-
-function checksPanel(): Element {
-  return (
-    <section class="panel checks-panel">
-      <div class="panel-head">
-        <h2>Core checks</h2>
-        <button type="button" class="ghost" onClick={runChecks}>
-          Run
-        </button>
-      </div>
-      <p
-        class={{
-          "checks-status": true,
-          error: () => metrics.checks().startsWith("fail"),
-        }}
-      >
-        {() => (metrics.checks() === "idle" ? "Idle" : metrics.checks())}
-      </p>
-    </section>
-  );
 }
 
 function selectedPanel(): Element {
