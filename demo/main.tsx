@@ -12,7 +12,7 @@ import {
   update,
 } from "loom";
 import { dispose, list } from "loom/dom";
-import { mountInspector } from "loom/inspect";
+import { mountInspector, toggleInspector } from "loom/inspect";
 import "./styles.css";
 
 type Tone = 0 | 1 | 2 | 3 | 4;
@@ -192,6 +192,13 @@ let rng = 0x1eed;
 requestAnimationFrame(frame);
 
 mountInspector();
+// Ctrl+Cmd+L shows/hides the inspector (KeyL is layout-independent).
+window.addEventListener("keydown", (event) => {
+  if (event.ctrlKey && event.metaKey && event.code === "KeyL") {
+    event.preventDefault();
+    toggleInspector();
+  }
+});
 
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - lastFrame) / 1000);

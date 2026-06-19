@@ -62,7 +62,7 @@ const CSS = `
 #${PANEL_ID} .li-resize{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;
   background:repeating-linear-gradient(-45deg,transparent 0 2px,var(--li-muted) 2px 3px);opacity:.5;
   border-bottom-right-radius:9px}
-#${PANEL_ID} .li-bar{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:move;
+#${PANEL_ID} .li-bar{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:move;
   user-select:none;touch-action:none;
   background:var(--li-bar-bg);border-bottom:1px solid var(--li-border-soft)}
 #${PANEL_ID} .li-bar b{font-size:12px}
@@ -79,6 +79,7 @@ const CSS = `
 #${PANEL_ID}-menu .li-menu-item>span:first-child{flex:1 1 auto}
 #${PANEL_ID}-menu .li-menu-val{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;color:var(--li-muted);text-transform:capitalize}
 #${PANEL_ID}-menu .li-menu-val svg{color:var(--li-accent)}
+#${PANEL_ID}-menu .li-kbd{flex:0 0 auto;font:10px ${MONO};color:var(--li-muted);background:var(--li-fill);border:1px solid var(--li-border-soft);border-radius:4px;padding:1px 5px}
 #${PANEL_ID} .li-body{flex:1;min-height:0;overflow:auto;padding:8px 4px;background:transparent;
   scrollbar-width:thin;scrollbar-color:var(--li-scroll) transparent;
   --li-fade-a:0px;--li-fade-b:0px;
@@ -1308,6 +1309,21 @@ export function mountInspector(target: Element = document.body): void {
   const closeMenu = (): void => {
     menu.hidden = true;
   };
+  const hideItem = (
+    <button
+      type="button"
+      class="li-menu-item"
+      title="Hide the inspector (⌃⌘L toggles)"
+    >
+      <span>Hide</span>
+      <span class="li-kbd">⌃⌘L</span>
+    </button>
+  ) as HTMLButtonElement;
+  hideItem.onclick = (): void => {
+    closeMenu();
+    unmountInspector();
+  };
+  menu.append(hideItem);
 
   const gear = (<button type="button" title="Settings" />) as HTMLButtonElement;
   gear.append(barIcon(ICON_SETTINGS));
@@ -1502,4 +1518,10 @@ export function unmountInspector(): void {
 /** Whether the inspector is currently mounted. */
 export function inspectorMounted(): boolean {
   return panel !== null;
+}
+
+/** Show the inspector if hidden, hide it if shown. */
+export function toggleInspector(target: Element = document.body): void {
+  if (panel) unmountInspector();
+  else mountInspector(target);
 }
