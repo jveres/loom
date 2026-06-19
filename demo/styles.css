@@ -208,6 +208,14 @@ button.ghost.on {
   transition: border-color 180ms ease;
 }
 
+/* Flow layout: skip layout + paint for off-screen cards and fully contain
+   on-screen ones, so per-card mutations and DOM reorders can't reflow or
+   repaint the whole grid. */
+.grid:not(.xform) .card {
+  content-visibility: auto;
+  contain-intrinsic-size: 294px 168px;
+}
+
 .card::before {
   position: absolute;
   inset: 0 auto 0 0;
@@ -339,8 +347,10 @@ button.ghost.on {
   color: var(--tone-amber);
 }
 
+/* Reserve the slot instead of removing it, so toggling never changes the
+   card's metric row layout. */
 .metric.hidden {
-  display: none;
+  visibility: hidden;
 }
 
 .presence {
