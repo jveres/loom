@@ -11,6 +11,8 @@ import {
   type ObserveEvent,
   observe,
   polled,
+  type Scope,
+  scope,
   source,
   state,
   trigger,
@@ -458,5 +460,131 @@ describe("loom source", () => {
     expect(disconnects).toBe(0); // still observed by b
     b();
     expect(disconnects).toBe(1); // last subscriber gone
+  });
+});
+
+describe("loom scope", () => {
+  it("stop() disposes every effect created in the scope", () => {
+    const a = state(0);
+    let runs = 0;
+    const s = scope(() => {
+      effect(() => {
+        a();
+        runs++;
+      });
+    });
+    expect(runs).toBe(1); // initial run
+    a(1);
+    expect(runs).toBe(2);
+
+    s.stop();
+    a(2);
+    expect(runs).toBe(2); // disposed: no more runs
+  });
+
+  it("pause() suspends runs; resume() re-runs once with the latest value", () => {
+    const a = state(0);
+    let seen = -1;
+    let runs = 0;
+    const s = scope(() => {
+      effect(() => {
+        seen = a();
+        runs++;
+      });
+    });
+    expect(runs).toBe(1);
+    expect(seen).toBe(0);
+
+    s.pause();
+    a(1);
+    a(2);
+    a(3);
+    expect(runs).toBe(1); // suspended
+    expect(seen).toBe(0); // stale while paused
+
+    s.resume();
+    expect(runs).toBe(2); // a single coalesced catch-up run
+    expect(seen).toBe(3); // latest value
+  });
+
+  it("resume() does not re-run effects that stayed clean", () => {
+    const a = state(0);
+    let runs = 0;
+    const s = scope(() => {
+      effect(() => {
+        a();
+        runs++;
+      });
+    });
+    expect(runs).toBe(1);
+
+    s.pause();
+    s.resume(); // nothing changed while paused
+    expect(runs).toBe(1);
+  });
+
+  it("pausing a parent scope freezes nested child effects", () => {
+    const a = state(0);
+    let runs = 0;
+    const parent = scope(() => {
+      scope(() => {
+        effect(() => {
+          a();
+          runs++;
+        });
+      });
+    });
+    expect(runs).toBe(1);
+
+    parent.pause();
+    a(1);
+    expect(runs).toBe(1); // child frozen by the parent
+
+    parent.resume();
+    expect(runs).toBe(2); // catches up
+  });
+
+  it("resuming a parent leaves an independently-paused child suspended", () => {
+    const a = state(0);
+    let runs = 0;
+    let child!: Scope;
+    const parent = scope(() => {
+      child = scope(() => {
+        effect(() => {
+          a();
+          runs++;
+        });
+      });
+    });
+    expect(runs).toBe(1);
+
+    child.pause();
+    parent.pause();
+    a(1);
+    expect(runs).toBe(1);
+
+    parent.resume(); // parent unpaused, but child is still paused
+    expect(runs).toBe(1); // child stays suspended
+
+    child.resume();
+    expect(runs).toBe(2); // now it catches up
+  });
+
+  it("stop() cascades to nested scopes", () => {
+    const a = state(0);
+    let runs = 0;
+    const parent = scope(() => {
+      scope(() => {
+        effect(() => {
+          a();
+          runs++;
+        });
+      });
+    });
+    expect(runs).toBe(1);
+
+    parent.stop();
+    a(1);
+    expect(runs).toBe(1); // nested effect disposed too
   });
 });

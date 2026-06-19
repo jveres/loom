@@ -12,9 +12,11 @@ import {
   type Polled,
   polled,
   type Read,
+  type Scope,
   type SourceConnect,
   type State,
   type Stop,
+  scope,
   source,
   state,
 } from "loom";
@@ -229,6 +231,10 @@ let rafHandle: number | null = null;
 const scrollFades: { refresh: () => void; dispose: () => void }[] = [];
 // Every reactive binding + the tab effect; all `internal`, all disposed on unmount.
 const bindings: Stop[] = [];
+// Scopes for collective pause: the whole panel (paused when minimized) and, nested inside it, the
+// stats tab (paused when it isn't the active tab) — so a hidden subtree does no reactive work.
+let inspectorScope: Scope | null = null;
+let statsScope: Scope | null = null;
 
 // Inspector-owned UI state (internal: filtered from observation). Lazily created on first mount.
 let ui: State<TabId> | null = null;
@@ -1206,8 +1212,10 @@ function poll(): number {
     fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
   }
 
-  // Recompute the census + advance the sequence (waking the Info bindings) only while visible.
-  if (ui?.() !== "stats") return metricSeq;
+  // Recompute the census + advance the sequence (waking the Info bindings) only while the stats
+  // tab is actually visible — skip it when another tab is up or the panel is minimized.
+  if (ui?.() !== "stats" || panel?.classList.contains("li-min"))
+    return metricSeq;
   const c = liveCounts();
   nodeStates = c.states;
   nodeComputeds = c.computeds;
@@ -1350,6 +1358,9 @@ export function mountInspector(target: Element = document.body): void {
     const isMin = !!panel?.classList.toggle("li-min");
     paintMin(isMin);
     lsSet(MIN_KEY, isMin ? "1" : "0");
+    // Freeze (or thaw) the panel's reactivity while collapsed.
+    if (isMin) inspectorScope?.pause();
+    else inspectorScope?.resume();
   };
 
   const brand = (
@@ -1367,6 +1378,19 @@ export function mountInspector(target: Element = document.body): void {
     </div>
   );
 
+  // Build the reactive UI inside the inspector scope so minimizing can pause the whole panel; the
+  // stats pane gets its own nested scope so switching tabs pauses just it. The spark sits in the
+  // outer scope (it stays live across tab switches, only pausing when minimized).
+  let statsPane!: HTMLElement;
+  let sparkEl!: HTMLElement;
+  inspectorScope = scope(() => {
+    statsScope = scope(() => {
+      statsPane = buildStatsPane();
+    });
+    sparkEl = buildSpark();
+  });
+  if (startMin) inspectorScope.pause();
+
   // Panes: Info (stats) is wired; the rest are placeholders for now.
   const panes = new Map<TabId, HTMLElement>();
   const tabBtns = new Map<TabId, HTMLElement>();
@@ -1374,7 +1398,7 @@ export function mountInspector(target: Element = document.body): void {
   for (const t of TABS) {
     const pane =
       t.id === "stats" ? (
-        buildStatsPane()
+        statsPane
       ) : (
         <div class="li-pane">
           <div class="li-empty">Not wired yet.</div>
@@ -1398,7 +1422,7 @@ export function mountInspector(target: Element = document.body): void {
   const tabs = (
     <div class="li-tabs">
       {tabscroll}
-      {buildSpark()}
+      {sparkEl}
     </div>
   );
 
@@ -1447,6 +1471,9 @@ export function mountInspector(target: Element = document.body): void {
   // Reactive tab switching (dogfood: ui -> pane visibility + active styling).
   bind(() => {
     const tab = ui?.();
+    // Suspend the stats pane's bindings whenever its tab isn't the visible one.
+    if (tab === "stats") statsScope?.resume();
+    else statsScope?.pause();
     for (const t of TABS) {
       const on = t.id === tab;
       const pane = panes.get(t.id);
@@ -1488,6 +1515,7 @@ export function unmountInspector(): void {
   // their PerformanceObservers (no manual teardown needed).
   for (const stop of bindings) stop();
   bindings.length = 0;
+  inspectorScope = statsScope = null;
   clsSource = lcpSource = inpSource = longTasksSource = null;
   if (closeMenuOnOutside)
     document.removeEventListener("pointerdown", closeMenuOnOutside);

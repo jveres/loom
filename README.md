@@ -66,6 +66,10 @@ The core exports these functions:
 - `effect(fn, options?)` runs `fn` immediately and again when its dependencies
   change.
 - `batch(fn)` groups writes and flushes effects once after the batch.
+- `scope(fn)` groups the effects created inside `fn` so they can be disposed
+  (`stop()`) or suspended (`pause()` / `resume()`) together. Scopes nest, and an
+  effect runs only while no scope in its parent chain is paused. Returns
+  `{ stop, pause, resume }`.
 - `untrack(fn)` reads state inside `fn` without subscribing the active effect.
 - `trigger(read)` notifies subscribers after in-place mutation.
 - `update(source, fn)` writes `fn(source())` back to a state cell.
@@ -90,6 +94,7 @@ The core exports these types:
 - `State<T>` is a callable read/write cell.
 - `Read<T>` is a read function.
 - `Stop` is a disposer function.
+- `Scope` is a scope handle: `{ stop, pause, resume }`.
 - `Polled<T>` is a polled source: `{ read, stop }`.
 - `SourceConnect<T>` is a lazy source's `(set) => teardown` wiring function.
 - `EffectFn` is a reusable effect callback type.
@@ -175,6 +180,50 @@ stop(); // last subscriber gone -> the listener is removed automatically
 The dev inspector uses both: a `polled()` heartbeat drives its per-tick metric
 math, and the CLS/LCP/INP web vitals are `source()`s whose `PerformanceObserver`s
 connect and disconnect with the panel — no manual teardown.
+
+## Scopes
+
+`scope(fn)` groups the effects created in `fn` so a whole subtree can be torn
+down or suspended at once. `stop()` disposes; `pause()` suspends runs (changes
+just mark effects dirty) and `resume()` re-runs the ones that went dirty — so a
+hidden panel does no reactive work without losing its state or DOM.
+
+```ts
+import { effect, scope, state } from "loom";
+
+const active = state(true);
+
+const panel = scope(() => {
+  effect(() => render(active())); // bindings owned by this scope
+});
+
+panel.pause(); // hidden: changes to `active` are recorded but don't re-render
+panel.resume(); // shown again: re-renders once with the latest value
+panel.stop(); // gone for good: every effect in the scope is disposed
+```
+
+Scopes nest, and an effect runs only while no scope in its parent chain is
+paused. The dev inspector uses this: one scope wraps the whole panel (paused when
+minimized) with a nested scope around the stats tab (paused when it isn't the
+active tab). Pausing the outer scope freezes everything; resuming it leaves the
+stats scope suspended if its tab is still hidden — no manual coordination.
+
+```ts
+let stats: Scope;
+const inspector = scope(() => {
+  buildHeader();
+  stats = scope(() => buildStatsTab()); // nested child scope
+  buildOtherTabs();
+});
+
+inspector.pause(); // minimized: freezes the whole panel, stats included
+inspector.resume(); // restored: stats stays suspended if its tab is hidden
+stats!.pause(); // leaving the stats tab on its own
+```
+
+Because stopping a scope drops its effects' subscriptions, it composes with lazy
+`source()`s: tear down a scope and the observers/timers feeding it disconnect on
+their own.
 
 ## DOM API
 

@@ -19,6 +19,12 @@ export interface State<T> {
 
 export type Read<T> = () => T;
 export type Stop = () => void;
+// A scope handle: dispose all owned effects, or suspend/resume their runs as a group.
+export interface Scope {
+  readonly stop: Stop;
+  readonly pause: () => void;
+  readonly resume: () => void;
+}
 export type EffectFn = () => void;
 // Wire an external producer to `set`; return a teardown run when the source goes unobserved.
 export type SourceConnect<T> = (set: (value: T) => void) => Stop;
@@ -165,6 +171,19 @@ interface ComputedNode<T> extends NodeBase {
 interface EffectNode extends NodeBase {
   fn: InternalEffectFn;
   cleanup: Stop | undefined;
+  // The scope that owns this effect (for collective stop/pause/resume), if any.
+  scope: ScopeNode | undefined;
+}
+
+// An ownership group for effects (and nested scopes). Effects created while a scope is active
+// register here; the scope can stop them, or pause/resume their runs collectively. An effect runs
+// only while no scope in its parent chain is paused.
+interface ScopeNode {
+  readonly effects: EffectNode[];
+  readonly children: ScopeNode[];
+  readonly parent: ScopeNode | undefined;
+  paused: boolean;
+  stopped: boolean;
 }
 
 interface InspectMeta {
@@ -195,6 +214,7 @@ let batchDepth = 0;
 let notifyIndex = 0;
 let queuedLength = 0;
 let activeSub: NodeBase | undefined;
+let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
 const DEFAULT_NAMESPACE = "default";
 let inspectId = 0;
@@ -224,7 +244,11 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
       }
     },
     notify(node) {
-      queueEffect(node as EffectNode);
+      const effectNode = node as EffectNode;
+      // Effects in a paused scope chain stay dirty and re-run on resume instead of queueing now.
+      if (effectNode.scope !== undefined && scopePaused(effectNode.scope))
+        return;
+      queueEffect(effectNode);
     },
     unwatched(node) {
       switch (kindOf(node)) {
@@ -302,6 +326,10 @@ export function effect(fn: CleanupEffectFn, options?: EffectOptions): Stop;
 export function effect(fn: EffectFn, options?: EffectOptions): Stop;
 export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   const node = createEffectNode(fn);
+  if (activeScope !== undefined) {
+    node.scope = activeScope;
+    activeScope.effects.push(node);
+  }
   const meta = registerNode(node, "effect", options);
   if (createObservers > 0) emitCreate(meta, "effect:create");
   const previous = setActiveSub(node);
@@ -330,6 +358,82 @@ export function batch<T>(fn: () => T): T {
   } finally {
     if (--batchDepth === 0) flush();
   }
+}
+
+/**
+ * Group the effects created inside `fn` so they can be torn down or suspended together: `stop()`
+ * disposes them, `pause()` suspends their runs (intervening changes just mark them dirty), and
+ * `resume()` re-runs the ones that went dirty while paused. Scopes nest — a scope created inside
+ * another becomes its child, and an effect runs only while no scope in its parent chain is paused.
+ * So pausing a parent freezes its whole subtree, and resuming it leaves an independently-paused
+ * child suspended.
+ */
+export function scope(fn: () => void): Scope {
+  const node: ScopeNode = {
+    effects: [],
+    children: [],
+    parent: activeScope,
+    paused: false,
+    stopped: false,
+  };
+  activeScope?.children.push(node);
+  const previous = activeScope;
+  activeScope = node;
+  try {
+    fn();
+  } finally {
+    activeScope = previous;
+  }
+  return {
+    stop: () => stopScope(node),
+    pause: () => {
+      node.paused = true;
+    },
+    resume: () => resumeScope(node),
+  };
+}
+
+function scopePaused(node: ScopeNode): boolean {
+  for (let s: ScopeNode | undefined = node; s !== undefined; s = s.parent) {
+    if (s.paused) return true;
+  }
+  return false;
+}
+
+function stopScope(node: ScopeNode): void {
+  if (node.stopped) return;
+  node.stopped = true;
+  for (const child of node.children) stopScope(child);
+  node.children.length = 0;
+  for (const effectNode of node.effects) {
+    if (effectNode.flags !== 0) stopEffect.call(effectNode);
+  }
+  node.effects.length = 0;
+  const parent = node.parent;
+  // When the parent is tearing us down it clears its own list, so only self-detach otherwise.
+  if (parent !== undefined && !parent.stopped) {
+    const index = parent.children.indexOf(node);
+    if (index >= 0) parent.children.splice(index, 1);
+  }
+}
+
+function resumeScope(node: ScopeNode): void {
+  if (!node.paused) return;
+  node.paused = false;
+  flushScope(node);
+  // If we're resuming from inside an effect run (e.g. a tab switch), the re-queued effects ride
+  // the in-progress flush; only drive a fresh flush when at the top level.
+  if (batchDepth === 0 && runDepth === 0) flush();
+}
+
+// Queue every dirty effect in the subtree whose chain is now unpaused; independently-paused
+// children stay deferred. The caller flushes the queued effects.
+function flushScope(node: ScopeNode): void {
+  if (scopePaused(node)) return;
+  for (const effectNode of node.effects) {
+    if (effectNode.flags & (Dirty | Pending)) queueEffect(effectNode);
+  }
+  for (const child of node.children) flushScope(child);
 }
 
 export interface Polled<T> {
@@ -803,6 +907,7 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
   return nodeShape<EffectNode>({
     fn,
     cleanup: undefined,
+    scope: undefined,
     meta: undefined,
     subs: undefined,
     subsTail: undefined,
@@ -982,6 +1087,8 @@ function queueEffect(effect: EffectNode): void {
 }
 
 function runEffect(node: EffectNode): boolean {
+  // A scope paused after this effect was already queued: leave it dirty for resume.
+  if (node.scope !== undefined && scopePaused(node.scope)) return false;
   const flags = node.flags;
   if (
     flags & Dirty ||
