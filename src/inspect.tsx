@@ -9,6 +9,8 @@ import {
   inspect,
   type ObserveEvent,
   observe,
+  type Polled,
+  polled,
   type State,
   type Stop,
   state,
@@ -215,7 +217,7 @@ let menuEl: HTMLElement | null = null;
 let bodyEl: HTMLElement | null = null;
 let closeMenuOnOutside: ((e: Event) => void) | null = null;
 let observeStop: Stop | null = null;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let heartbeat: Polled<number> | null = null;
 let lagTimer: ReturnType<typeof setInterval> | null = null;
 let rafHandle: number | null = null;
 let clsObserver: PerformanceObserver | null = null;
@@ -226,7 +228,8 @@ const bindings: Stop[] = [];
 
 // Inspector-owned UI state (internal: filtered from observation). Lazily created on first mount.
 let ui: State<TabId> | null = null;
-let beat: State<number> | null = null;
+// Wakes the Info-tab bindings each poll while that tab is visible (see startMetrics()).
+let metricSeq = 0;
 
 // Raw observed counters (incremented by onEvent) and their smoothed per-second rates. These map
 // 1:1 onto the loom-next pipeline stages: writes -> computed recompute -> flush -> DOM effect run.
@@ -315,7 +318,7 @@ function bindAttr(node: Element, name: string, read: () => string): void {
 // Read the heartbeat (so the binding re-runs each poll) then return the current value.
 function pulse<T>(read: () => T): () => T {
   return () => {
-    beat?.();
+    heartbeat?.read();
     return read();
   };
 }
@@ -698,7 +701,7 @@ function buildHisto(): HTMLElement {
     bars.push(<rect x={i + 0.1} width={0.8} y={20} height={0} />);
   }
   bind(() => {
-    beat?.();
+    heartbeat?.read();
     const off = bars.length - frameMs.length;
     for (let i = 0; i < bars.length; i++) {
       const bar = bars[i];
@@ -975,7 +978,10 @@ function onEvent(e: ObserveEvent): void {
   }
 }
 
-function poll(): void {
+// The heartbeat sample (see startMetrics): recompute rates each tick and return a sequence that
+// only advances while the Info tab is visible, so the polled signal's value-dedup leaves the
+// (display:none-hidden) Info bindings asleep until that tab is shown.
+function poll(): number {
   const dr = readCount - lastReadCount;
   const dw = writeCount - lastWriteCount;
   const ddom = domWriteCount - lastDomWriteCount;
@@ -1010,14 +1016,13 @@ function poll(): void {
   }
   clsKey = cls < 0.1 ? "h-ok" : cls < 0.25 ? "h-warn" : "h-bad";
 
-  // Recompute the census + wake the (display:none-gated) Info bindings only while visible.
-  if (ui?.() === "stats") {
-    const c = liveCounts();
-    nodeStates = c.states;
-    nodeComputeds = c.computeds;
-    nodeEffects = c.effects;
-    beat?.(beat() + 1);
-  }
+  // Recompute the census + advance the sequence (waking the Info bindings) only while visible.
+  if (ui?.() !== "stats") return metricSeq;
+  const c = liveCounts();
+  nodeStates = c.states;
+  nodeComputeds = c.computeds;
+  nodeEffects = c.effects;
+  return ++metricSeq;
 }
 
 function startMetrics(): void {
@@ -1104,7 +1109,6 @@ function startMetrics(): void {
   };
   rafHandle = requestAnimationFrame(onFrame);
 
-  pollTimer = setInterval(poll, POLL_MS);
 }
 
 /* ============================================================ mount / unmount ====== */
@@ -1121,7 +1125,11 @@ export function mountInspector(target: Element = document.body): void {
   }
 
   ui = state<TabId>("stats", { internal: true, namespace: PANEL_ID });
-  beat = state(0, { internal: true, namespace: PANEL_ID });
+  // Create the heartbeat before the panes so their bindings subscribe to it on first run. One
+  // polled source drives the per-tick metric math and wakes the Info bindings (replacing a
+  // hand-rolled signal + setInterval): poll() resamples every POLL_MS, and its value-deduped
+  // result only advances while the Info tab is visible.
+  heartbeat = polled(poll, POLL_MS, { internal: true, namespace: PANEL_ID });
 
   let theme = loadTheme();
   const themeVal = (<span class="li-menu-val" />) as HTMLElement;
@@ -1282,7 +1290,6 @@ export function mountInspector(target: Element = document.body): void {
           });
       }
     }
-    if (tab === "stats") beat?.(beat() + 1);
     for (const f of scrollFades) f.refresh();
   });
 
@@ -1294,8 +1301,8 @@ export function mountInspector(target: Element = document.body): void {
 export function unmountInspector(): void {
   observeStop?.();
   observeStop = null;
-  if (pollTimer != null) clearInterval(pollTimer);
-  pollTimer = null;
+  heartbeat?.stop();
+  heartbeat = null;
   if (lagTimer != null) clearInterval(lagTimer);
   lagTimer = null;
   if (rafHandle != null) cancelAnimationFrame(rafHandle);
@@ -1317,7 +1324,7 @@ export function unmountInspector(): void {
   panel = null;
   bodyEl = null;
   ui = null;
-  beat = null;
+  metricSeq = 0;
 
   // Reset live metrics so the next mount starts clean.
   readCount = writeCount = computedCount = domWriteCount = flushCount = 0;

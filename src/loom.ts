@@ -293,6 +293,28 @@ export function batch<T>(fn: () => T): T {
   }
 }
 
+export interface Polled<T> {
+  readonly read: Read<T>;
+  readonly stop: Stop;
+}
+
+/**
+ * A reactive source that re-samples `sample()` every `ms` milliseconds into a value-deduped
+ * signal. Bindings reading `.read()` re-run only when the sampled value actually changes — so
+ * it bridges imperative or external data (clocks, `performance` counters, polled APIs, media
+ * state) into the reactive graph without a hand-rolled heartbeat. Call `.stop()` to clear the
+ * timer. The backing state honours `options` (e.g. `{ internal: true }`).
+ */
+export function polled<T>(
+  sample: () => T,
+  ms: number,
+  options?: StateOptions,
+): Polled<T> {
+  const source = state(sample(), options);
+  const timer = setInterval(() => source(sample()), ms);
+  return { read: () => source(), stop: () => clearInterval(timer) };
+}
+
 export function trigger(source: Read<unknown>): void {
   const sub = createWatcherNode();
   const previous = setActiveSub(sub);

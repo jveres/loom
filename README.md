@@ -70,6 +70,10 @@ The core exports these functions:
 - `trigger(read)` notifies subscribers after in-place mutation.
 - `update(source, fn)` writes `fn(source())` back to a state cell.
 - `mutate(source, fn)` mutates an object value and then triggers subscribers.
+- `polled(sample, ms, options?)` re-samples `sample()` every `ms` ms into a
+  value-deduped reactive source; bindings re-run only when the value changes.
+  Bridges imperative/external data (clocks, counters, polled APIs) into the
+  graph. Returns `{ read, stop }`.
 - `fields(object, options?)` creates one state cell per enumerable string key.
 - `observe(observer, options?)` subscribes to lazy diagnostic events.
 - `inspect()` returns a snapshot of the current reactive graph.
@@ -81,6 +85,7 @@ The core exports these types:
 - `State<T>` is a callable read/write cell.
 - `Read<T>` is a read function.
 - `Stop` is a disposer function.
+- `Polled<T>` is a polled source: `{ read, stop }`.
 - `EffectFn` is a reusable effect callback type.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
 - `InspectNode` and `InspectSnapshot` describe graph snapshots.
