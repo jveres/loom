@@ -90,7 +90,7 @@ const CSS = `
 #${PANEL_ID}.li-min .li-body,#${PANEL_ID}.li-min .li-tabs{display:none}
 #${PANEL_ID} .li-stat-v,#${PANEL_ID} .li-perfh-fps{font-family:${MONO}}
 #${PANEL_ID} svg{display:block;margin:0 auto;pointer-events:none}
-#${PANEL_ID} .li-bar button svg{display:block;margin:0}
+#${PANEL_ID} .li-bar button svg{display:block;width:100%;height:100%}
 #${PANEL_ID} .li-tabs{display:flex;align-items:flex-end;gap:8px;padding:0 8px;flex:0 0 auto;min-height:28px;
   background:transparent;border-bottom:2px solid var(--li-accent-soft)}
 #${PANEL_ID} .li-perfh{display:flex;justify-content:space-between;align-items:baseline;
@@ -604,6 +604,19 @@ function wireScrollFade(
 function icon(inner: string, size: number): Element {
   const tmp = document.createElement("div");
   tmp.innerHTML = svgMarkup(inner, size);
+  const svg = tmp.firstElementChild;
+  if (!svg) throw new Error("icon markup produced no element");
+  return svg;
+}
+
+// Bar-button icon: the <svg> fills the button's content box and the 24-unit glyph is inset via
+// the viewBox to ~14px visual. A small centered svg *box* leaves margins that round to
+// sub-device-pixels on scaled displays (fractional DPR), making the icon's gap shimmer in
+// Safari; filling the box removes the gap and centers the glyph in resolution-independent SVG
+// space instead. (24px content box · 24/14 ⇒ viewBox side 41.143, inset 8.571.)
+function barIcon(inner: string): Element {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="-8.571 -8.571 41.143 41.143" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
   const svg = tmp.firstElementChild;
   if (!svg) throw new Error("icon markup produced no element");
   return svg;
@@ -1138,7 +1151,7 @@ export function mountInspector(target: Element = document.body): void {
   };
 
   const gear = (<button type="button" title="Settings" />) as HTMLButtonElement;
-  gear.append(icon(ICON_SETTINGS, 14));
+  gear.append(barIcon(ICON_SETTINGS));
   gear.onclick = (e): void => {
     e.stopPropagation();
     if (!menu.hidden) {
@@ -1154,7 +1167,7 @@ export function mountInspector(target: Element = document.body): void {
   const min = (<button type="button" />) as HTMLButtonElement;
   const paintMin = (isMin: boolean): void => {
     min.title = isMin ? "Expand" : "Collapse";
-    min.replaceChildren(icon(isMin ? ICON_MAXIMIZE : ICON_MINIMIZE, 14));
+    min.replaceChildren(barIcon(isMin ? ICON_MAXIMIZE : ICON_MINIMIZE));
   };
   const startMin = lsGet(MIN_KEY) === "1";
   paintMin(startMin);
