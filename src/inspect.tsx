@@ -1330,9 +1330,17 @@ export function mountInspector(target: Element = document.body): void {
       return;
     }
     menu.hidden = false;
+    // Anchor below-left of the gear, then keep the menu on screen: right-align to the gear if it
+    // would overflow the right edge, and flip above if it would overflow the bottom.
     const r = gear.getBoundingClientRect();
-    menu.style.left = `${r.left}px`;
-    menu.style.top = `${r.bottom}px`;
+    const m = menu.getBoundingClientRect();
+    const margin = 8;
+    let left = r.left;
+    if (left + m.width > window.innerWidth - margin) left = r.right - m.width;
+    let top = r.bottom;
+    if (top + m.height > window.innerHeight - margin) top = r.top - m.height;
+    menu.style.left = `${Math.max(margin, left)}px`;
+    menu.style.top = `${Math.max(margin, top)}px`;
   };
 
   const min = (<button type="button" />) as HTMLButtonElement;
