@@ -39,16 +39,18 @@ const CSS = `
 #${PANEL_ID}{${DARK_VARS};
   position:fixed;right:12px;bottom:12px;width:360px;height:440px;max-height:calc(100vh - 24px);
   z-index:2147483647;display:flex;flex-direction:column;font:12px/1.5 ${SANS};
-  color:var(--li-fg);background:var(--li-bg);border:1px solid var(--li-border);
-  border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);overflow:hidden}
+  color:var(--li-fg);background:color-mix(in srgb,var(--li-bg) 80%,transparent);
+  border:1px solid var(--li-border);border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);
+  -webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);overflow:hidden}
 /* Self-contained reset so host-page element styles (e.g. a global button{min-height})
    can't bleed into the panel (or its portalled menu) and break the chrome dimensions. */
 #${PANEL_ID} *,#${PANEL_ID}-menu *{box-sizing:border-box}
 #${PANEL_ID} button,#${PANEL_ID}-menu button{min-height:0;margin:0;line-height:1.5}
 #${PANEL_ID}-menu{${DARK_VARS};
   position:fixed;z-index:2147483647;min-width:150px;padding:5px;display:flex;flex-direction:column;gap:1px;
-  font:11px/1.45 ${SANS};color:var(--li-fg);background:var(--li-bg);
-  border:1px solid var(--li-border);border-radius:9px;box-shadow:0 8px 28px rgba(0,0,0,.45)}
+  font:11px/1.45 ${SANS};color:var(--li-fg);background:color-mix(in srgb,var(--li-bg) 88%,transparent);
+  border:1px solid var(--li-border);border-radius:9px;box-shadow:0 8px 28px rgba(0,0,0,.45);
+  -webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3)}
 #${PANEL_ID}-menu[hidden]{display:none}
 #${PANEL_ID}-menu svg{display:block;pointer-events:none}
 #${PANEL_ID}[data-theme=light],#${PANEL_ID}-menu[data-theme=light]{${LIGHT_VARS}}
@@ -268,6 +270,12 @@ let healthKey = "";
 let healthReady = false;
 let fpsKey = "";
 let clsKey = "";
+
+// Live node census, recomputed once per poll (while the Info tab is visible) so the three
+// count rows share a single inspect() snapshot.
+let nodeStates = 0;
+let nodeComputeds = 0;
+let nodeEffects = 0;
 
 // Rendering-pipeline sparkline series: writes in (top) vs DOM updates out (bottom), per poll.
 const sparkIn: number[] = [];
@@ -867,10 +875,9 @@ function buildStatsPane(): HTMLElement {
       {stat("flushes / s", () => fmtRate(flushRate), "lo")}
       {stat("effects / flush", () => String(lastFlushBatch))}
       {stat("flush time", () => `${lastFlushMs.toFixed(1)} ms`)}
-      {stat("states · computeds · effects", () => {
-        const c = liveCounts();
-        return `${c.states} · ${c.computeds} · ${c.effects}`;
-      })}
+      {stat("states", () => String(nodeStates))}
+      {stat("computeds", () => String(nodeComputeds))}
+      {stat("effects", () => String(nodeEffects))}
     </div>
   );
 }
@@ -978,8 +985,14 @@ function poll(): void {
   }
   clsKey = cls < 0.1 ? "h-ok" : cls < 0.25 ? "h-warn" : "h-bad";
 
-  // Wake the (display:none-gated) Info bindings only while that tab is visible.
-  if (ui?.() === "stats") beat?.(beat() + 1);
+  // Recompute the census + wake the (display:none-gated) Info bindings only while visible.
+  if (ui?.() === "stats") {
+    const c = liveCounts();
+    nodeStates = c.states;
+    nodeComputeds = c.computeds;
+    nodeEffects = c.effects;
+    beat?.(beat() + 1);
+  }
 }
 
 function startMetrics(): void {
@@ -1298,6 +1311,7 @@ export function unmountInspector(): void {
   lag = lagPeak = 0;
   cls = lcp = inp = 0;
   healthReady = false;
+  nodeStates = nodeComputeds = nodeEffects = 0;
   sparkIn.length = 0;
   sparkOut.length = 0;
 }
