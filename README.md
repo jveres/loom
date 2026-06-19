@@ -74,6 +74,11 @@ The core exports these functions:
   value-deduped reactive source; bindings re-run only when the value changes.
   Bridges imperative/external data (clocks, counters, polled APIs) into the
   graph. Returns `{ read, stop }`.
+- `source(connect, initial, options?)` creates a **lazy** external source:
+  `connect(set)` runs when the source gains its first subscriber and the
+  returned teardown runs when it loses its last, so the producer (event
+  listener, timer, `PerformanceObserver`, socket) is only live while observed.
+  Returns a read function.
 - `fields(object, options?)` creates one state cell per enumerable string key.
 - `observe(observer, options?)` subscribes to lazy diagnostic events.
 - `inspect()` returns a snapshot of the current reactive graph.
@@ -86,6 +91,7 @@ The core exports these types:
 - `Read<T>` is a read function.
 - `Stop` is a disposer function.
 - `Polled<T>` is a polled source: `{ read, stop }`.
+- `SourceConnect<T>` is a lazy source's `(set) => teardown` wiring function.
 - `EffectFn` is a reusable effect callback type.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
 - `InspectNode` and `InspectSnapshot` describe graph snapshots.
@@ -139,6 +145,36 @@ mutate(rows, (value) => {
   value.push("second");
 });
 ```
+
+## External sources
+
+Bridge imperative or external data into the graph. `polled()` re-samples on an
+interval (eager, deduped); `source()` is lazy — it connects on first subscriber
+and disconnects on last, so the producer only runs while observed.
+
+```ts
+import { effect, polled, source } from "loom";
+
+// Eager: sample performance.now() every 250ms (unchanged samples don't re-run readers).
+const clock = polled(() => Date.now(), 250);
+const stopClock = effect(() => console.log(clock.read()));
+// ... later: stopClock(); clock.stop();
+
+// Lazy: a media query that only listens while something reads it.
+const darkMode = source<boolean>((set) => {
+  const mq = matchMedia("(prefers-color-scheme: dark)");
+  const onChange = () => set(mq.matches);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange); // runs when unobserved
+}, matchMedia("(prefers-color-scheme: dark)").matches);
+
+const stop = effect(() => console.log("dark:", darkMode()));
+stop(); // last subscriber gone -> the listener is removed automatically
+```
+
+The dev inspector uses both: a `polled()` heartbeat drives its per-tick metric
+math, and the CLS/LCP/INP web vitals are `source()`s whose `PerformanceObserver`s
+connect and disconnect with the panel — no manual teardown.
 
 ## DOM API
 

@@ -11,6 +11,7 @@ import {
   type ObserveEvent,
   observe,
   polled,
+  source,
   state,
   trigger,
   untrack,
@@ -370,5 +371,92 @@ describe("loom polled", () => {
 
     internalSource.stop();
     stopObserve();
+  });
+});
+
+describe("loom source", () => {
+  it("connects on first observe and disconnects on last unobserve", () => {
+    let connects = 0;
+    let disconnects = 0;
+    let push: ((v: number) => void) | undefined;
+    const reading = source<number>((set) => {
+      connects++;
+      push = set;
+      return () => {
+        disconnects++;
+        push = undefined;
+      };
+    }, 0);
+
+    // Untracked read: not observed -> not connected, returns the initial value.
+    expect(reading()).toBe(0);
+    expect(connects).toBe(0);
+
+    let seen: number | undefined;
+    const stop = effect(() => {
+      seen = reading();
+    });
+    expect(connects).toBe(1);
+    expect(seen).toBe(0);
+
+    // The producer pushes a new value -> the subscriber re-runs.
+    push?.(5);
+    expect(seen).toBe(5);
+
+    // Last subscriber gone -> disconnect runs.
+    stop();
+    expect(disconnects).toBe(1);
+    expect(push).toBeUndefined();
+  });
+
+  it("retains the last value while unobserved and reconnects when observed again", () => {
+    let connects = 0;
+    let push: ((v: number) => void) | undefined;
+    const reading = source<number>((set) => {
+      connects++;
+      push = set;
+      return () => {};
+    }, 1);
+
+    const first = effect(() => {
+      reading();
+    });
+    expect(connects).toBe(1);
+    push?.(9);
+    first();
+
+    // Unobserved: keeps the last value.
+    expect(reading()).toBe(9);
+
+    // Observed again: connect runs a second time.
+    const second = effect(() => {
+      reading();
+    });
+    expect(connects).toBe(2);
+    second();
+  });
+
+  it("shares one connection across multiple subscribers", () => {
+    let connects = 0;
+    let disconnects = 0;
+    const reading = source<number>(() => {
+      connects++;
+      return () => {
+        disconnects++;
+      };
+    }, 0);
+
+    const a = effect(() => {
+      reading();
+    });
+    const b = effect(() => {
+      reading();
+    });
+    expect(connects).toBe(1); // one connection for both
+
+    a();
+    expect(disconnects).toBe(0); // still observed by b
+    b();
+    expect(disconnects).toBe(1); // last subscriber gone
   });
 });

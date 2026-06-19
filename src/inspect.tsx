@@ -11,8 +11,10 @@ import {
   observe,
   type Polled,
   polled,
+  type Read,
   type State,
   type Stop,
+  source,
   state,
 } from "loom";
 
@@ -220,8 +222,6 @@ let observeStop: Stop | null = null;
 let heartbeat: Polled<number> | null = null;
 let lagTimer: ReturnType<typeof setInterval> | null = null;
 let rafHandle: number | null = null;
-let clsObserver: PerformanceObserver | null = null;
-let vitalsObserver: PerformanceObserver | null = null;
 const scrollFades: { refresh: () => void; dispose: () => void }[] = [];
 // Every reactive binding + the tab effect; all `internal`, all disposed on unmount.
 const bindings: Stop[] = [];
@@ -262,16 +262,19 @@ const frameMs: number[] = [];
 let lag = 0;
 let lagPeak = 0;
 let lagExpected = 0;
-let cls = 0;
-let lcp = 0;
-let inp = 0;
+
+// Web vitals are lazy external sources (PerformanceObserver): they connect when their Info-tab
+// readouts first subscribe (panel mount) and auto-disconnect when those bindings dispose
+// (unmount) — no manual observer teardown. Created in mountInspector().
+let clsSource: Read<number> | null = null;
+let lcpSource: Read<number> | null = null;
+let inpSource: Read<number> | null = null;
 
 // Derived health, recomputed each poll; the gauge / FPS / label bindings read these.
 let score = 100;
 let healthKey = "";
 let healthReady = false;
 let fpsKey = "";
-let clsKey = "";
 
 // Live node census, recomputed once per poll (while the Info tab is visible) so the three
 // count rows share a single inspect() snapshot.
@@ -350,6 +353,86 @@ function frameColor(ms: number): string {
 function vitalColor(v: number, good: number, ni: number): string {
   if (!v) return "";
   return v <= good ? "h-ok" : v <= ni ? "h-warn" : "h-bad";
+}
+
+/* --- web-vitals as lazy sources: each wires a PerformanceObserver while observed --- */
+
+// Cumulative layout shift — the worst session window (matches Chrome's CLS, not a running total).
+function connectCls(set: (v: number) => void): Stop {
+  if (typeof PerformanceObserver !== "function") return () => {};
+  let win = 0;
+  let first = 0;
+  let prev = 0;
+  let max = 0;
+  try {
+    const obs = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        const ls = entry as PerformanceEntry & {
+          value?: number;
+          hadRecentInput?: boolean;
+        };
+        if (ls.hadRecentInput || typeof ls.value !== "number") continue;
+        const t = entry.startTime;
+        if (win > 0 && (t - prev > 1000 || t - first > 5000)) win = 0;
+        if (win === 0) first = t;
+        win += ls.value;
+        prev = t;
+        if (win > max) {
+          max = win;
+          set(max);
+        }
+      }
+    });
+    obs.observe({ type: "layout-shift", buffered: true });
+    return () => obs.disconnect();
+  } catch {
+    return () => {};
+  }
+}
+
+// Largest contentful paint (ms) — latest candidate.
+function connectLcp(set: (v: number) => void): Stop {
+  if (typeof PerformanceObserver !== "function") return () => {};
+  try {
+    const obs = new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        if (e.entryType === "largest-contentful-paint") set(e.startTime);
+      }
+    });
+    obs.observe({ type: "largest-contentful-paint", buffered: true });
+    return () => obs.disconnect();
+  } catch {
+    return () => {};
+  }
+}
+
+// Interaction to next paint (ms) — worst interaction latency so far.
+function connectInp(set: (v: number) => void): Stop {
+  if (typeof PerformanceObserver !== "function") return () => {};
+  let worst = 0;
+  try {
+    const obs = new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        if (
+          (e.entryType === "first-input" ||
+            (e as PerformanceEventTiming).interactionId) &&
+          e.duration > worst
+        ) {
+          worst = e.duration;
+          set(worst);
+        }
+      }
+    });
+    obs.observe({
+      type: "event",
+      buffered: true,
+      durationThreshold: 40,
+    } as PerformanceObserverInit);
+    obs.observe({ type: "first-input", buffered: true });
+    return () => obs.disconnect();
+  } catch {
+    return () => {};
+  }
 }
 
 function gaugeClass(base: string): string {
@@ -860,27 +943,34 @@ function buildStatsPane(): HTMLElement {
     </div>
   );
   if (heapMem()) side.append(buildHeapStat());
-  const clsRow = stat("CLS", () => cls.toFixed(2));
+  // Reading these source values inside the bindings is what lazily wires their PerformanceObservers.
+  const clsValue = (): number => clsSource?.() ?? 0;
+  const lcpValue = (): number => lcpSource?.() ?? 0;
+  const inpValue = (): number => inpSource?.() ?? 0;
+  const clsRow = stat("CLS", () => clsValue().toFixed(2));
   const clsVal = clsRow.querySelector(".li-stat-v");
   if (clsVal)
     bindAttr(
       clsVal,
       "class",
-      pulse(() => `li-stat-v ${clsKey}`),
+      pulse(() => {
+        const v = clsValue();
+        return `li-stat-v ${v < 0.1 ? "h-ok" : v < 0.25 ? "h-warn" : "h-bad"}`;
+      }),
     );
   side.append(clsRow);
   side.append(
     vitalStat(
       "LCP",
-      () => (lcp ? `${(lcp / 1000).toFixed(2)} s` : "—"),
-      () => vitalColor(lcp, 2500, 4000),
+      () => (lcpValue() ? `${(lcpValue() / 1000).toFixed(2)} s` : "—"),
+      () => vitalColor(lcpValue(), 2500, 4000),
     ),
   );
   side.append(
     vitalStat(
       "INP",
-      () => (inp ? `${inp.toFixed(0)} ms` : "—"),
-      () => vitalColor(inp, 200, 500),
+      () => (inpValue() ? `${inpValue().toFixed(0)} ms` : "—"),
+      () => vitalColor(inpValue(), 200, 500),
     ),
   );
 
@@ -1014,7 +1104,6 @@ function poll(): number {
     healthReady = true;
     fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
   }
-  clsKey = cls < 0.1 ? "h-ok" : cls < 0.25 ? "h-warn" : "h-bad";
 
   // Recompute the census + advance the sequence (waking the Info bindings) only while visible.
   if (ui?.() !== "stats") return metricSeq;
@@ -1027,57 +1116,8 @@ function poll(): number {
 
 function startMetrics(): void {
   observeStop = observe(onEvent, { includeInternal: false });
-
-  if (typeof PerformanceObserver === "function") {
-    let win = 0;
-    let first = 0;
-    let prev = 0;
-    try {
-      clsObserver = new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) {
-          const ls = entry as PerformanceEntry & {
-            value?: number;
-            hadRecentInput?: boolean;
-          };
-          if (ls.hadRecentInput || typeof ls.value !== "number") continue;
-          const t = entry.startTime;
-          if (win > 0 && (t - prev > 1000 || t - first > 5000)) win = 0;
-          if (win === 0) first = t;
-          win += ls.value;
-          prev = t;
-          if (win > cls) cls = win;
-        }
-      });
-      clsObserver.observe({ type: "layout-shift", buffered: true });
-    } catch {
-      clsObserver = null;
-    }
-    try {
-      vitalsObserver = new PerformanceObserver((list) => {
-        for (const e of list.getEntries()) {
-          if (e.entryType === "largest-contentful-paint") lcp = e.startTime;
-          else if (
-            (e.entryType === "first-input" ||
-              (e as PerformanceEventTiming).interactionId) &&
-            e.duration > inp
-          )
-            inp = e.duration;
-        }
-      });
-      vitalsObserver.observe({
-        type: "largest-contentful-paint",
-        buffered: true,
-      });
-      vitalsObserver.observe({
-        type: "event",
-        buffered: true,
-        durationThreshold: 40,
-      } as PerformanceObserverInit);
-      vitalsObserver.observe({ type: "first-input", buffered: true });
-    } catch {
-      vitalsObserver = null;
-    }
-  }
+  // Web vitals (CLS/LCP/INP) are lazy sources created in mountInspector(); their
+  // PerformanceObservers connect/disconnect automatically with their readouts' subscriptions.
 
   lagExpected = performance.now() + LAG_MS;
   lagTimer = setInterval(() => {
@@ -1108,7 +1148,6 @@ function startMetrics(): void {
     lastFrameT = t;
   };
   rafHandle = requestAnimationFrame(onFrame);
-
 }
 
 /* ============================================================ mount / unmount ====== */
@@ -1130,6 +1169,12 @@ export function mountInspector(target: Element = document.body): void {
   // hand-rolled signal + setInterval): poll() resamples every POLL_MS, and its value-deduped
   // result only advances while the Info tab is visible.
   heartbeat = polled(poll, POLL_MS, { internal: true, namespace: PANEL_ID });
+  // Web-vitals sources, created before the panes so their readouts subscribe (and connect the
+  // observers) on first run; they auto-disconnect when those bindings dispose on unmount.
+  const vitalOpts = { internal: true, namespace: PANEL_ID };
+  clsSource = source(connectCls, 0, vitalOpts);
+  lcpSource = source(connectLcp, 0, vitalOpts);
+  inpSource = source(connectInp, 0, vitalOpts);
 
   let theme = loadTheme();
   const themeVal = (<span class="li-menu-val" />) as HTMLElement;
@@ -1307,14 +1352,13 @@ export function unmountInspector(): void {
   lagTimer = null;
   if (rafHandle != null) cancelAnimationFrame(rafHandle);
   rafHandle = null;
-  clsObserver?.disconnect();
-  clsObserver = null;
-  vitalsObserver?.disconnect();
-  vitalsObserver = null;
   for (const f of scrollFades) f.dispose();
   scrollFades.length = 0;
+  // Stopping the bindings drops the vital sources' last subscribers, which auto-disconnects
+  // their PerformanceObservers (no manual teardown needed).
   for (const stop of bindings) stop();
   bindings.length = 0;
+  clsSource = lcpSource = inpSource = null;
   if (closeMenuOnOutside)
     document.removeEventListener("pointerdown", closeMenuOnOutside);
   closeMenuOnOutside = null;
@@ -1341,7 +1385,6 @@ export function unmountInspector(): void {
   fpsAcc = fpsFrames = lastFrameT = lastFrameMs = 0;
   frameMs.length = 0;
   lag = lagPeak = 0;
-  cls = lcp = inp = 0;
   healthReady = false;
   nodeStates = nodeComputeds = nodeEffects = 0;
   sparkIn.length = 0;

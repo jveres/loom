@@ -20,6 +20,8 @@ export interface State<T> {
 export type Read<T> = () => T;
 export type Stop = () => void;
 export type EffectFn = () => void;
+// Wire an external producer to `set`; return a teardown run when the source goes unobserved.
+export type SourceConnect<T> = (set: (value: T) => void) => Stop;
 export type NodeKind = "state" | "computed" | "effect";
 
 export interface NodeOptions {
@@ -147,6 +149,14 @@ interface StateNode<T> extends NodeBase {
   source?: State<unknown> | undefined;
 }
 
+// A lazy external source: a state-shaped value cell that runs `connect` when it gains its first
+// subscriber and the returned `disconnect` when it loses its last (see sourceOper / unwatched).
+interface SourceNode<T> extends StateNode<T> {
+  connect: SourceConnect<T>;
+  disconnect: Stop | undefined;
+  active: boolean;
+}
+
 interface ComputedNode<T> extends NodeBase {
   value: T | undefined;
   getter(previousValue?: T): T;
@@ -225,6 +235,15 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
           }
           return;
         case "state":
+          if ("connect" in node) {
+            const src = node as SourceNode<unknown>;
+            if (src.active) {
+              src.active = false;
+              const off = src.disconnect;
+              src.disconnect = undefined;
+              off?.();
+            }
+          }
           return;
         case "effect":
           stopEffect.call(node as EffectNode);
@@ -246,6 +265,26 @@ export function state<T>(initial: T, options?: StateOptions): State<T> {
 }
 
 export const signal = state;
+
+/**
+ * A lazy reactive source backed by an external producer. `connect(set)` is invoked the first
+ * time the source is read inside a live effect/computed (its first subscriber); it wires up the
+ * producer — a timer, event listener, `PerformanceObserver`, socket — and returns a teardown
+ * run automatically when the last subscriber goes away. Reads while unobserved return the last
+ * value (or `initial`). `connect` should push values via `set` asynchronously.
+ */
+export function source<T>(
+  connect: SourceConnect<T>,
+  initial: T,
+  options?: StateOptions,
+): Read<T> {
+  const node = createSourceNode(connect, initial);
+  const read = sourceOper.bind(node) as Read<T>;
+  const meta = registerNode(node, "state", options);
+  stateNodes.set(read, node);
+  if (createObservers > 0) emitStateCreate(meta, initial);
+  return read;
+}
 
 export function computed<T>(
   getter: (previousValue?: T) => T,
@@ -727,6 +766,24 @@ function createStateNode<T>(initial: T): StateNode<T> {
   });
 }
 
+function createSourceNode<T>(
+  connect: SourceConnect<T>,
+  initial: T,
+): SourceNode<T> {
+  return nodeShape<SourceNode<T>>({
+    currentValue: initial,
+    pendingValue: initial,
+    source: undefined,
+    connect,
+    disconnect: undefined,
+    active: false,
+    meta: undefined,
+    subs: undefined,
+    subsTail: undefined,
+    flags: Mutable,
+  });
+}
+
 function createComputedNode<T>(
   getter: (previousValue?: T) => T,
 ): ComputedNode<T> {
@@ -808,6 +865,38 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
     if (readObservers > 0) emitRead(this as StateNode<unknown>);
   }
   return this.currentValue;
+}
+
+function sourceOper<T>(this: SourceNode<T>): T {
+  if (this.flags & Dirty) {
+    if (updateState(this)) {
+      const subs = this.subs;
+      if (subs !== undefined) shallowPropagate(subs);
+    }
+  }
+
+  const sub = activeSub;
+  if (sub !== undefined) {
+    const first = this.subs === undefined;
+    link(this, sub, cycle);
+    if (first && !this.active) {
+      this.active = true;
+      this.disconnect = this.connect((value) => sourceSet(this, value));
+    }
+    if (readObservers > 0) emitRead(this as unknown as StateNode<unknown>);
+  }
+  return this.currentValue;
+}
+
+function sourceSet<T>(node: SourceNode<T>, value: T): void {
+  if (node.pendingValue === value) return;
+  node.pendingValue = value;
+  node.flags = Mutable | Dirty;
+  const subs = node.subs;
+  if (subs !== undefined) {
+    propagate(subs, runDepth > 0);
+    if (batchDepth === 0) flush();
+  }
 }
 
 function computedOper<T>(this: ComputedNode<T>): T {
