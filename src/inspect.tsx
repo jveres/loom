@@ -269,6 +269,10 @@ let lagExpected = 0;
 let clsSource: Read<number> | null = null;
 let lcpSource: Read<number> | null = null;
 let inpSource: Read<number> | null = null;
+// Long-task blocking time — another lazy PerformanceObserver source (unsupported in Safari).
+let longTasksSource: Read<number> | null = null;
+// Heap (Chrome-only) is a slow imperative value, so it's a polled source rather than a lazy one.
+let heapSource: Polled<number> | null = null;
 
 // Derived health, recomputed each poll; the gauge / FPS / label bindings read these.
 let score = 100;
@@ -429,6 +433,23 @@ function connectInp(set: (v: number) => void): Stop {
       durationThreshold: 40,
     } as PerformanceObserverInit);
     obs.observe({ type: "first-input", buffered: true });
+    return () => obs.disconnect();
+  } catch {
+    return () => {};
+  }
+}
+
+// Total main-thread blocking time (sum of long-task durations) — the standardized cousin of the
+// `lag` probe. Unsupported in Safari/WebKit, where it stays 0 and the row reads "—".
+function connectLongTasks(set: (v: number) => void): Stop {
+  if (typeof PerformanceObserver !== "function") return () => {};
+  let total = 0;
+  try {
+    const obs = new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) total += e.duration;
+      set(total);
+    });
+    obs.observe({ type: "longtask", buffered: true });
     return () => obs.disconnect();
   } catch {
     return () => {};
@@ -973,6 +994,18 @@ function buildStatsPane(): HTMLElement {
       () => vitalColor(inpValue(), 200, 500),
     ),
   );
+  const blockedValue = (): number => longTasksSource?.() ?? 0;
+  side.append(
+    vitalStat(
+      "blocked",
+      () => {
+        const v = blockedValue();
+        if (!v) return "—";
+        return v < 1000 ? `${v.toFixed(0)} ms` : `${(v / 1000).toFixed(1)} s`;
+      },
+      () => vitalColor(blockedValue(), 200, 600),
+    ),
+  );
 
   return (
     <div class="li-pane">
@@ -1021,19 +1054,12 @@ function heapMem(): { usedJSHeapSize: number } | undefined {
 }
 
 function buildHeapStat(): HTMLElement {
-  // Heap drifts slowly; recompute at most every 5s and cache the string.
-  let text = "—";
-  let next = 0;
+  // Heap drifts slowly, so it's a polled() source (created in mountInspector) sampled every 5s.
   return stat(
     "heap",
     () => {
-      const now = performance.now();
-      if (now >= next) {
-        const m = heapMem();
-        text = m ? `${(m.usedJSHeapSize / 1048576).toFixed(1)} MB` : "n/a";
-        next = now + 5000;
-      }
-      return text;
+      const bytes = heapSource?.read() ?? 0;
+      return bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "—";
     },
     "lo",
   );
@@ -1175,6 +1201,11 @@ export function mountInspector(target: Element = document.body): void {
   clsSource = source(connectCls, 0, vitalOpts);
   lcpSource = source(connectLcp, 0, vitalOpts);
   inpSource = source(connectInp, 0, vitalOpts);
+  longTasksSource = source(connectLongTasks, 0, vitalOpts);
+  // Heap is a slow imperative value -> polled (eager), stopped on unmount.
+  if (heapMem()) {
+    heapSource = polled(() => heapMem()?.usedJSHeapSize ?? 0, 5000, vitalOpts);
+  }
 
   let theme = loadTheme();
   const themeVal = (<span class="li-menu-val" />) as HTMLElement;
@@ -1348,6 +1379,8 @@ export function unmountInspector(): void {
   observeStop = null;
   heartbeat?.stop();
   heartbeat = null;
+  heapSource?.stop();
+  heapSource = null;
   if (lagTimer != null) clearInterval(lagTimer);
   lagTimer = null;
   if (rafHandle != null) cancelAnimationFrame(rafHandle);
@@ -1358,7 +1391,7 @@ export function unmountInspector(): void {
   // their PerformanceObservers (no manual teardown needed).
   for (const stop of bindings) stop();
   bindings.length = 0;
-  clsSource = lcpSource = inpSource = null;
+  clsSource = lcpSource = inpSource = longTasksSource = null;
   if (closeMenuOnOutside)
     document.removeEventListener("pointerdown", closeMenuOnOutside);
   closeMenuOnOutside = null;
