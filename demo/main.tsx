@@ -191,7 +191,8 @@ let rng = 0x1eed;
 
 requestAnimationFrame(frame);
 
-mountInspector();
+// Mount the dev inspector unless ?noinspect is set (lets you A/B the demo with the inspector off).
+if (!new URLSearchParams(location.search).has("noinspect")) mountInspector();
 
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
