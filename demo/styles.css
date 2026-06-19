@@ -602,3 +602,23 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Standalone FPS badge for ?noinspect A/B testing (independent of the inspector). */
+.fps-badge {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 9999;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  color: var(--tone-green);
+  font:
+    600 12px / 1 ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
