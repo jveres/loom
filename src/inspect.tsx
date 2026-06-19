@@ -60,9 +60,11 @@ const CSS = `
 @media (prefers-color-scheme:light){#${PANEL_ID}[data-theme=system],#${PANEL_ID}-menu[data-theme=system]{${LIGHT_VARS}}}
 #${PANEL_ID}.li-min{height:auto!important}
 #${PANEL_ID}.li-min .li-resize{display:none}
-#${PANEL_ID} .li-resize{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;
-  background:repeating-linear-gradient(-45deg,transparent 0 2px,var(--li-muted) 2px 3px);opacity:.5;
-  border-bottom-right-radius:9px}
+#${PANEL_ID} .li-resize{position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:nwse-resize}
+#${PANEL_ID} .li-resize svg{width:100%;height:100%}
+#${PANEL_ID} .li-resize path{fill:none;stroke:var(--li-muted);stroke-width:1.6;stroke-linecap:round;
+  opacity:.55;transition:stroke .15s,opacity .15s}
+#${PANEL_ID} .li-resize:hover path{stroke:var(--li-accent);opacity:1}
 #${PANEL_ID} .li-bar{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:move;
   user-select:none;touch-action:none;
   background:var(--li-bar-bg);border-bottom:1px solid var(--li-border-soft)}
@@ -1400,7 +1402,13 @@ export function mountInspector(target: Element = document.body): void {
     </div>
   );
 
-  const resize = (<div class="li-resize" />) as HTMLElement;
+  const resize = (
+    <div class="li-resize" title="Drag to resize">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M18 10 A8 8 0 0 1 10 18" />
+      </svg>
+    </div>
+  ) as HTMLElement;
   panel = (
     <div>
       {bar}
