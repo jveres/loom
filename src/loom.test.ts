@@ -752,3 +752,105 @@ describe("loom scope options", () => {
     );
   });
 });
+
+describe("loom scope edge cases", () => {
+  it("pause/resume/stop are idempotent", () => {
+    const a = state(0);
+    let runs = 0;
+    const s = scope(() => {
+      effect(() => {
+        a();
+        runs++;
+      });
+    });
+    expect(runs).toBe(1);
+
+    s.pause();
+    s.pause(); // second pause is a no-op
+    a(1);
+    expect(runs).toBe(1);
+
+    s.resume();
+    s.resume(); // second resume is a no-op (already running)
+    expect(runs).toBe(2);
+
+    s.stop();
+    s.stop(); // second stop is a no-op
+    a(2);
+    expect(runs).toBe(2);
+  });
+
+  it("does not connect a source that nothing observes when resumed", () => {
+    let connects = 0;
+    const s = scope(() => {
+      source<number>(
+        () => {
+          connects++;
+          return () => {};
+        },
+        0,
+        { internal: true },
+      );
+    });
+    expect(connects).toBe(0); // never observed -> never connected
+
+    s.pause();
+    s.resume();
+    expect(connects).toBe(0); // resume must not connect an unobserved source
+    s.stop();
+  });
+
+  it("stopping a child scope directly detaches it from its parent", () => {
+    const a = state(0);
+    let parentRuns = 0;
+    let childRuns = 0;
+    let child!: Scope;
+    const parent = scope(() => {
+      effect(() => {
+        a();
+        parentRuns++;
+      });
+      child = scope(() => {
+        effect(() => {
+          a();
+          childRuns++;
+        });
+      });
+    });
+    expect(parentRuns).toBe(1);
+    expect(childRuns).toBe(1);
+
+    child.stop(); // dispose + detach the child only
+    a(1);
+    expect(childRuns).toBe(1); // child disposed
+    expect(parentRuns).toBe(2); // parent still live
+
+    parent.stop();
+    a(2);
+    expect(parentRuns).toBe(2); // parent now disposed too (no double-free on the child)
+  });
+
+  it("resuming a child while its parent is paused keeps it suspended", () => {
+    const a = state(0);
+    let runs = 0;
+    let child!: Scope;
+    const parent = scope(() => {
+      child = scope(() => {
+        effect(() => {
+          a();
+          runs++;
+        });
+      });
+    });
+    expect(runs).toBe(1);
+
+    parent.pause();
+    child.pause();
+    a(1);
+    child.resume(); // parent still paused -> the chain stays suspended
+    expect(runs).toBe(1);
+
+    parent.resume(); // chain now fully unpaused -> the child catches up
+    expect(runs).toBe(2);
+  });
+});
