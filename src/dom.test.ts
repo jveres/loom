@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { list } from "./dom.js";
+import { h, list } from "./dom.js";
 import { state } from "./loom.js";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const HTML_NS = "http://www.w3.org/1999/xhtml";
 
 interface Row {
   readonly id: string;
@@ -57,5 +60,42 @@ describe("loom DOM list", () => {
     rows([{ id: "b" }, { id: "c" }]);
     expect(keys(root)).toEqual(["b", "c"]);
     stop();
+  });
+});
+
+describe("loom DOM SVG", () => {
+  it("creates SVG elements in the SVG namespace", () => {
+    const svg = h("svg", { viewBox: "0 0 10 10" }, [
+      h("defs", null, h("linearGradient", { id: "g" })),
+      h("circle", { cx: 5, cy: 5, r: 4 }),
+    ]);
+
+    expect(svg.namespaceURI).toBe(SVG_NS);
+    expect(svg.getAttribute("viewBox")).toBe("0 0 10 10");
+    const circle = svg.querySelector("circle");
+    expect(circle?.namespaceURI).toBe(SVG_NS);
+    expect(circle?.getAttribute("r")).toBe("4");
+    expect(svg.querySelector("linearGradient")?.namespaceURI).toBe(SVG_NS);
+  });
+
+  it("keeps HTML elements in the HTML namespace", () => {
+    const div = h("div", null, "hi");
+    expect(div.namespaceURI).toBe(HTML_NS);
+  });
+
+  it("binds reactive SVG attributes", () => {
+    const r = state(4);
+    const circle = h("circle", { cx: 5, cy: 5, r: () => r() });
+    expect(circle.getAttribute("r")).toBe("4");
+    r(7);
+    expect(circle.getAttribute("r")).toBe("7");
+  });
+
+  it("toggles reactive classes on SVG elements", () => {
+    const on = state(false);
+    const arc = h("circle", { class: { active: () => on() } });
+    expect(arc.classList.contains("active")).toBe(false);
+    on(true);
+    expect(arc.classList.contains("active")).toBe(true);
   });
 });

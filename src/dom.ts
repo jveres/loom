@@ -64,18 +64,72 @@ type OwnedEffect = Stop | Stop[];
 const DOM_NAMESPACE = "dom";
 const ownedEffects = new WeakMap<Node, OwnedEffect>();
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+// SVG-only tag names — elements that must be created in the SVG namespace. Tags shared with
+// HTML (a, title, script, style) are intentionally omitted so they keep rendering as HTML;
+// the descendants of an <svg> are created namespaced because each SVG tag is listed here.
+const SVG_TAGS = new Set<string>([
+  "svg",
+  "g",
+  "defs",
+  "symbol",
+  "use",
+  "switch",
+  "foreignObject",
+  "image",
+  "path",
+  "rect",
+  "circle",
+  "ellipse",
+  "line",
+  "polyline",
+  "polygon",
+  "text",
+  "tspan",
+  "textPath",
+  "linearGradient",
+  "radialGradient",
+  "stop",
+  "clipPath",
+  "mask",
+  "pattern",
+  "marker",
+  "filter",
+  "feGaussianBlur",
+  "feOffset",
+  "feBlend",
+  "feColorMatrix",
+  "feComposite",
+  "feFlood",
+  "feMerge",
+  "feMergeNode",
+  "feMorphology",
+  "feDropShadow",
+  "feImage",
+  "feTile",
+  "feTurbulence",
+  "feDisplacementMap",
+]);
+
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   props?: Props | null,
   children?: Child,
 ): HTMLElementTagNameMap[K];
+export function h<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  props?: Props | null,
+  children?: Child,
+): SVGElementTagNameMap[K];
 export function h(tag: string, props?: Props | null, children?: Child): Element;
 export function h(
   tag: string,
   props: Props | null = null,
   children?: Child,
 ): Element {
-  const node = document.createElement(tag);
+  const node = SVG_TAGS.has(tag)
+    ? document.createElementNS(SVG_NS, tag)
+    : document.createElement(tag);
   if (props) applyProps(node, props);
   appendChild(node, children);
   return node;

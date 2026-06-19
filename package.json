@@ -17,6 +17,7 @@
   "exports": {
     ".": "./src/loom.ts",
     "./dom": "./src/dom.ts",
+    "./inspect": "./src/inspect.tsx",
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
     "./html": "./src/html.ts",

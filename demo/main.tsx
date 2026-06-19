@@ -12,6 +12,7 @@ import {
   update,
 } from "loom";
 import { dispose, list } from "loom/dom";
+import { mountInspector } from "loom/inspect";
 import "./styles.css";
 
 type Tone = 0 | 1 | 2 | 3 | 4;
@@ -33,13 +34,6 @@ interface CardModel {
 interface Card {
   readonly id: number;
   readonly model: Fields<CardModel>;
-}
-
-interface EventItem {
-  readonly id: number;
-  readonly kind: string;
-  readonly title: string;
-  readonly meta: string;
 }
 
 const titles = [
@@ -92,31 +86,23 @@ const settings = fields({
   theme: "auto" as ThemeMode,
 });
 const metrics = fields({
-  fps: 0,
-  ops: 0,
-  edits: 0,
-  events: 0,
   checks: "idle",
 });
 
 let nextCardId = 0;
-let nextEventId = 0;
 const initialCards = Array.from({ length: 12 }, () => makeCard());
 const cards = state<readonly Card[]>(initialCards);
-const events = state<readonly EventItem[]>([]);
 const selectedId = state(pick(initialCards, 0).id);
 const selected = computed(() => {
   const items = cards();
   const id = selectedId();
   return items.find((card) => card.id === id) ?? items[0];
 });
-const cellCount = computed(() => cards().length * 10);
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root.");
 
 const board = <section class={["grid", { xform: settings.transform }]} />;
-const eventList = <div class="event-list" />;
 let boardLayoutQueued = false;
 let boardColumnWidth = -1;
 let boardRowHeight = 0;
@@ -160,18 +146,8 @@ app.replaceChildren(
     <div class="workspace">
       {board}
       <aside class="side">
-        {runtimePanel()}
         {checksPanel()}
         {selectedPanel()}
-        <section class="panel events-panel">
-          <div class="panel-head">
-            <h2>Events</h2>
-            <button type="button" class="ghost" onClick={() => events([])}>
-              Clear
-            </button>
-          </div>
-          {eventList}
-        </section>
       </aside>
     </div>
     <div
@@ -206,11 +182,6 @@ effect(() => {
 
 window.addEventListener("resize", queueBoardLayout);
 
-list(eventList, events, {
-  key: (event) => event.id,
-  render: renderEvent,
-});
-
 effect(() => {
   if (!cards().some((card) => card.id === selectedId())) {
     selectedId(cards()[0]?.id ?? 0);
@@ -218,20 +189,14 @@ effect(() => {
 });
 
 let lastFrame = performance.now();
-let fpsStart = lastFrame;
-let frameCount = 0;
 let aiBudget = 0;
 let rng = 0x1eed;
 
 requestAnimationFrame(frame);
 
+mountInspector();
+
 function frame(now: number): void {
-  frameCount++;
-  if (now - fpsStart >= 500) {
-    metrics.fps(Math.round((frameCount * 1000) / (now - fpsStart)));
-    frameCount = 0;
-    fpsStart = now;
-  }
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
   if (settings.running()) tick(dt);
@@ -250,7 +215,6 @@ function tick(dt: number): void {
       aiBudget--;
       applyAiEdit();
     }
-    update(metrics.ops, (value) => value + trafficOps);
   });
 }
 
@@ -387,25 +351,6 @@ function toneName(tone: Tone): string {
   return ["violet", "blue", "amber", "rose", "green"][tone] as string;
 }
 
-function runtimePanel(): Element {
-  return (
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Live runtime</h2>
-        <span class="muted">Core</span>
-      </div>
-      <div class="metric-grid">
-        {metric("FPS", metrics.fps)}
-        {metric("OPS", () => compact(metrics.ops()))}
-        {metric("EDIT", metrics.edits)}
-        {metric("CELL", cellCount)}
-        {metric("EVENT", metrics.events)}
-        {metric("CARD", () => cards().length)}
-      </div>
-    </section>
-  );
-}
-
 function checksPanel(): Element {
   return (
     <section class="panel checks-panel">
@@ -452,16 +397,6 @@ function selectedPanel(): Element {
   );
 }
 
-function renderEvent(event: EventItem): Element {
-  return (
-    <article class="event">
-      <strong>{event.kind}</strong>
-      <span>{event.title}</span>
-      <small>{event.meta}</small>
-    </article>
-  );
-}
-
 function rangeControl(
   label: string,
   value: State<number>,
@@ -500,15 +435,6 @@ function command(
     >
       {label}
     </button>
-  );
-}
-
-function metric(label: string, read: () => unknown): Element {
-  return (
-    <div class="metric">
-      <span>{label}</span>
-      <strong>{read}</strong>
-    </div>
   );
 }
 
@@ -559,8 +485,6 @@ function editRandom(): void {
   const title = titles[Math.floor(random() * titles.length)] as string;
   model.title(title);
   model.tone(((model.tone() + 1) % 5) as Tone);
-  pushEvent("EDIT", title, "headline + tone");
-  update(metrics.edits, (value) => value + 1);
 }
 
 function insertCard(): void {
@@ -568,23 +492,17 @@ function insertCard(): void {
   const next = [card, ...cards()].slice(0, 80);
   setCards(next);
   selectedId(card.id);
-  pushEvent("PATCH", card.model.title(), `${next.length} cards`);
-  update(metrics.edits, (value) => value + 1);
 }
 
 function shuffleCards(): void {
   const next = shuffled(cards());
   setCards(next);
-  pushEvent("PATCH", "list", `${next.length} nodes`);
-  update(metrics.edits, (value) => value + 1);
 }
 
 function burst(): void {
   batch(() => {
     for (let index = 0; index < 1_000; index++) applyTraffic(randomCard());
-    update(metrics.ops, (value) => value + 1_000);
   });
-  pushEvent("BURST", "traffic", "1k mutations");
 }
 
 function toggleSelectedHot(): void {
@@ -597,7 +515,6 @@ function likeSelected(): void {
   if (!card) return;
   update(card.model.likes, (value) => value + 1);
   card.model.liked(true);
-  pushEvent("LIKE", card.model.title(), "manual");
 }
 
 function removeSelected(): void {
@@ -607,12 +524,10 @@ function removeSelected(): void {
   const next = current.filter((item) => item.id !== card.id);
   setCards(next);
   selectedId(next[0]?.id ?? 0);
-  pushEvent("PATCH", card.model.title(), "removed");
 }
 
 function toggleCardHot(card: Card): void {
   card.model.hot(!card.model.hot());
-  pushEvent("HOT", card.model.title(), card.model.hot() ? "on" : "off");
 }
 
 function runChecks(): void {
@@ -705,12 +620,10 @@ function runChecks(): void {
     showChecksFeedback(
       "pass · state, computed, batch, cleanup, fields, trigger, mutate, untrack, list, jsx",
     );
-    pushEvent("CHECK", "core", "pass");
   } catch (error) {
     showChecksFeedback(
       error instanceof Error ? `fail · ${error.message}` : "fail",
     );
-    pushEvent("CHECK", "core", "fail");
   }
 }
 
@@ -733,12 +646,6 @@ function showChecksFeedback(message: string): void {
 
 function setCards(next: readonly Card[]): void {
   cards([...next]);
-}
-
-function pushEvent(kind: string, title: string, meta: string): void {
-  const item = { id: nextEventId++, kind, title, meta };
-  events([item, ...events()].slice(0, 8));
-  update(metrics.events, (value) => value + 1);
 }
 
 function randomCard(): Card {

@@ -12,6 +12,11 @@ export function jsx<K extends keyof HTMLElementTagNameMap>(
   props: JsxProps,
   key?: string | number,
 ): HTMLElementTagNameMap[K];
+export function jsx<K extends keyof SVGElementTagNameMap>(
+  type: K,
+  props: JsxProps,
+  key?: string | number,
+): SVGElementTagNameMap[K];
 export function jsx<P extends object>(
   type: Component<P>,
   props: P | null,
