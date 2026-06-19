@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
-import { h, list } from "./dom.js";
+import { describe, expect, it, vi } from "vitest";
+import { attr, classed, dispose, h, list, remove, style, text } from "./dom.js";
 import { state } from "./loom.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -97,5 +97,293 @@ describe("loom DOM SVG", () => {
     expect(arc.classList.contains("active")).toBe(false);
     on(true);
     expect(arc.classList.contains("active")).toBe(true);
+  });
+});
+
+describe("loom DOM props and bindings", () => {
+  it("applies key, static, false/aria, event, and reactive props", () => {
+    let clicks = 0;
+    const title = state("hi");
+    const pressed = state(false);
+    const el = h("button", {
+      id: "b",
+      type: "button",
+      key: "k",
+      disabled: false, // non-aria false -> skipped
+      "aria-hidden": false, // aria false -> rendered as "false"
+      "aria-pressed": () => pressed(), // reactive aria boolean
+      onClick: () => {
+        clicks++;
+      },
+      title: attr("title", () => title()), // explicit attr binding
+      "data-x": () => title(), // function attr
+      tabindex: 3, // static number
+    });
+
+    expect(el.id).toBe("b");
+    expect(el.getAttribute("data-loom-key")).toBe("k");
+    expect(el.hasAttribute("disabled")).toBe(false);
+    expect(el.getAttribute("aria-hidden")).toBe("false");
+    expect(el.getAttribute("aria-pressed")).toBe("false");
+    expect(el.getAttribute("title")).toBe("hi");
+    expect(el.getAttribute("data-x")).toBe("hi");
+    expect(el.getAttribute("tabindex")).toBe("3");
+
+    el.dispatchEvent(new Event("click"));
+    expect(clicks).toBe(1);
+
+    title("bye");
+    pressed(true);
+    expect(el.getAttribute("title")).toBe("bye");
+    expect(el.getAttribute("data-x")).toBe("bye");
+    expect(el.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("renders boolean-true and removes null attributes", () => {
+    const flag = state<boolean | null>(true);
+    const el = h("input", { required: () => flag() });
+    expect(el.getAttribute("required")).toBe(""); // true -> ""
+    flag(null);
+    expect(el.hasAttribute("required")).toBe(false); // null -> removed
+  });
+
+  it("dedupes reactive text updates that stringify the same", () => {
+    const value = state<unknown>(false);
+    const node = text(() => value());
+    expect(node.data).toBe(""); // false -> "" (stringValue false branch)
+    value(null); // re-runs, null -> "" -> next === previous early return
+    expect(node.data).toBe("");
+    value("b");
+    expect(node.data).toBe("b");
+  });
+
+  it("applies class as string, array, binding, and map", () => {
+    const on = state(false);
+    const live = state(true);
+    const el = h("div", {
+      class: ["base", { dyn: () => on() }, "  "], // string + map + blank
+    });
+    el.setAttribute("class", el.getAttribute("class") ?? "");
+    expect(el.classList.contains("base")).toBe(true);
+    expect(el.classList.contains("dyn")).toBe(false);
+    on(true);
+    expect(el.classList.contains("dyn")).toBe(true);
+
+    const el2 = h("div", {
+      class: classed("live", () => live()),
+    });
+    expect(el2.classList.contains("live")).toBe(true);
+    live(false);
+    expect(el2.classList.contains("live")).toBe(false);
+
+    // static truthy map value -> classList.add; non-record class -> ignored
+    const el3 = h("div", { class: { kept: 1 } as unknown as string });
+    expect(el3.classList.contains("kept")).toBe(true);
+    const el4 = h("div", { class: 7 as unknown as string });
+    expect(el4.getAttribute("class")).toBeNull();
+  });
+
+  it("applies style as string, array, map, binding, and function", () => {
+    const size = state(12);
+    const op = state<string | null>("1");
+    const el = h("div", {
+      style: {
+        color: "red",
+        fontSize: () => `${size()}px`,
+        "--gap": "4px",
+        width: null, // skipped
+      },
+    });
+    expect(el.style.color).toBe("red");
+    expect(el.style.getPropertyValue("--gap")).toBe("4px");
+    expect(el.style.fontSize).toBe("12px");
+    size(20);
+    expect(el.style.fontSize).toBe("20px");
+
+    const el2 = h("div", { style: "color: blue" });
+    expect(el2.getAttribute("style")).toContain("blue");
+
+    const el3 = h("div", { style: ["color:green", { fontWeight: "bold" }] });
+    expect(el3.style.color).toBe("green");
+    expect(el3.style.fontWeight).toBe("bold");
+
+    const el4 = h("div", { style: style("opacity", () => op()) });
+    expect(el4.style.opacity).toBe("1");
+    op(null); // null -> removeProperty
+    expect(el4.style.opacity).toBe("");
+
+    const el5 = h("div", { style: 5 as unknown as string }); // non-record -> ignored
+    expect(el5.getAttribute("style")).toBeNull();
+  });
+});
+
+describe("loom DOM dispose and remove", () => {
+  it("stops all owned effects of a subtree and detaches on remove", () => {
+    const a = state("x");
+    const b = state(false);
+    const parent = document.createElement("div");
+    const child = h("span", {
+      title: () => a(),
+      class: { on: () => b() },
+    });
+    parent.appendChild(child);
+    document.body.appendChild(parent);
+
+    expect(child.getAttribute("title")).toBe("x");
+    dispose(parent); // stops the two owned effects on the child
+    a("y");
+    b(true);
+    expect(child.getAttribute("title")).toBe("x"); // no longer reactive
+    expect(child.classList.contains("on")).toBe(false);
+
+    remove(parent);
+    expect(parent.parentNode).toBeNull();
+  });
+});
+
+describe("loom DOM list edge cases", () => {
+  it("throws on duplicate keys", () => {
+    const root = document.createElement("section");
+    const rows = state<readonly Row[]>([{ id: "a" }, { id: "a" }]);
+    expect(() =>
+      list(root, rows, { key: (row) => row.id, render: renderRow }),
+    ).toThrow(/Duplicate Loom key/);
+  });
+
+  it("runs FLIP animations for moved nodes when enabled", () => {
+    const animate = vi.fn();
+    const root = document.createElement("section");
+    document.body.appendChild(root);
+    const makeRow = (row: Row): Element => {
+      const node = document.createElement("div");
+      node.textContent = row.id;
+      // Position derived from current index so before/after rects differ on reorder.
+      node.getBoundingClientRect = () => {
+        const idx = node.parentNode
+          ? [...(node.parentNode as Element).children].indexOf(node)
+          : 0;
+        return { left: idx * 100, top: 0 } as DOMRect;
+      };
+      (node as unknown as { animate: typeof animate }).animate = animate;
+      return node;
+    };
+    const rows = state<readonly Row[]>([{ id: "a" }, { id: "b" }]);
+    const stop = list(root, rows, {
+      key: (row) => row.id,
+      render: makeRow,
+      animate: () => true,
+    });
+
+    rows([{ id: "b" }, { id: "a" }]); // both move -> animate called
+    expect(animate).toHaveBeenCalled();
+    stop();
+  });
+});
+
+describe("loom DOM branch coverage", () => {
+  it("disposes a node owning a single effect", () => {
+    const a = state("x");
+    const node = text(() => a());
+    const host = document.createElement("div");
+    host.appendChild(node);
+    dispose(host); // single (non-array) owned effect path
+    a("y");
+    expect(node.data).toBe("x");
+  });
+
+  it("skips inherited props and renders function children", () => {
+    const props = Object.assign(Object.create({ inherited: "no" }), {
+      id: "yes",
+    });
+    const v = state("c");
+    const el = h("div", props, () => v()); // function child -> text node
+    expect(el.id).toBe("yes");
+    expect(el.hasAttribute("inherited")).toBe(false);
+    expect(el.textContent).toBe("c");
+    v("d");
+    expect(el.textContent).toBe("d");
+  });
+
+  it("handles falsy and inherited entries in class maps/arrays", () => {
+    const el = h("div", { class: ["a", "b", null, undefined] });
+    expect(el.getAttribute("class")).toBe("a b"); // two strings -> append branch
+    const map = Object.assign(Object.create({ inh: true }), {
+      own: true,
+      off: 0,
+    });
+    const el2 = h("div", { class: map as unknown as string });
+    expect(el2.classList.contains("own")).toBe(true);
+    expect(el2.classList.contains("off")).toBe(false); // falsy static value
+    expect(el2.classList.contains("inh")).toBe(false); // inherited skipped
+  });
+
+  it("handles falsy and inherited entries in style maps/arrays", () => {
+    const el = h("div", { style: ["color:green", null] });
+    expect(el.style.color).toBe("green");
+    const map = Object.assign(Object.create({ inh: "1px" }), { margin: "2px" });
+    const el2 = h("div", { style: map as unknown as string });
+    expect(el2.style.margin).toBe("2px");
+    expect(el2.style.getPropertyValue("inh")).toBe(""); // inherited skipped
+  });
+
+  it("dedupes attr and style bindings that resolve the same", () => {
+    const av = state<unknown>(false);
+    const el = h("div", { "data-x": () => av() });
+    expect(el.hasAttribute("data-x")).toBe(false); // false -> null -> removed
+    av(null); // re-runs, null -> null -> early return
+    expect(el.hasAttribute("data-x")).toBe(false);
+    av("y");
+    expect(el.getAttribute("data-x")).toBe("y");
+
+    const sv = state<unknown>(false);
+    const el2 = h("div", { style: style("opacity", () => sv()) });
+    expect(el2.style.opacity).toBe(""); // false -> null -> removeProperty
+    sv(null); // re-runs, null -> null -> early return
+    expect(el2.style.opacity).toBe("");
+    sv("0.5");
+    expect(el2.style.opacity).toBe("0.5");
+  });
+
+  it("FLIP skips unmoved nodes and a disconnected snapshot", () => {
+    const animate = vi.fn();
+    const mk = (row: Row): Element => {
+      const node = document.createElement("div");
+      node.textContent = row.id;
+      node.getBoundingClientRect = () => {
+        const idx = node.parentNode
+          ? [...(node.parentNode as Element).children].indexOf(node)
+          : 0;
+        return { left: idx * 100, top: 0 } as DOMRect;
+      };
+      (node as unknown as { animate: typeof animate }).animate = animate;
+      return node;
+    };
+
+    // Connected: [a,b,c] -> [a,c,b] keeps `a` put (no move -> skip) while b,c move.
+    const root = document.createElement("section");
+    document.body.appendChild(root);
+    const rows = state<readonly Row[]>([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    const stop = list(root, rows, {
+      key: (r) => r.id,
+      render: mk,
+      animate: () => true,
+    });
+    animate.mockClear();
+    rows([{ id: "a" }, { id: "c" }, { id: "b" }]);
+    expect(animate).toHaveBeenCalledTimes(2); // b and c, not a
+    stop();
+
+    // Disconnected container: snapshot finds no connected nodes -> no animation.
+    const off = document.createElement("section");
+    const offRows = state<readonly Row[]>([{ id: "a" }, { id: "b" }]);
+    const stopOff = list(off, offRows, {
+      key: (r) => r.id,
+      render: mk,
+      animate: () => true,
+    });
+    animate.mockClear();
+    offRows([{ id: "b" }, { id: "a" }]);
+    expect(animate).not.toHaveBeenCalled();
+    stopOff();
   });
 });
