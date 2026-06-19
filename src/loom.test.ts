@@ -1035,3 +1035,90 @@ describe("loom coverage", () => {
     stop();
   });
 });
+
+describe("loom coverage — operators and edges", () => {
+  it("creates and updates a source under observation", () => {
+    const events: ObserveEvent["kind"][] = [];
+    const stopObs = observe((e) => events.push(e.kind), { creates: true });
+    let push: ((v: number) => void) | undefined;
+    const s = source<number>((set) => {
+      push = set;
+      return () => {};
+    }, 0);
+    expect(events).toContain("state:create"); // source create emitted
+    stopObs();
+
+    let seen = -1;
+    const stop = effect(() => {
+      seen = s();
+    });
+    expect(seen).toBe(0);
+    push?.(1); // producer pushes -> propagate + flush
+    expect(seen).toBe(1);
+    push?.(1); // same value -> sourceSet dedupe
+    expect(seen).toBe(1);
+
+    stop(); // unobserved
+    push?.(2); // no subscribers -> set value without propagation
+    expect(s()).toBe(2); // unobserved dirty read returns the latest value
+  });
+
+  it("flushes once after a nested batch", () => {
+    const a = state(0);
+    let runs = 0;
+    const stop = effect(() => {
+      a();
+      runs++;
+    });
+    runs = 0;
+    batch(() => {
+      a(1);
+      batch(() => {
+        a(2); // inner batch decrement !== 0 -> no flush yet
+      });
+      a(3);
+    });
+    expect(runs).toBe(1); // single flush for the whole nested batch
+    stop();
+  });
+
+  it("ignores a second observe stop and reports node metadata", () => {
+    const stop = observe(() => {});
+    stop();
+    stop(); // second delete returns false -> early return
+
+    const target = { tag: "host" };
+    const s = effect(() => {}, { label: "with-target", target });
+    const node = inspect().nodes.find((n) => n.label === "with-target");
+    expect(node?.target).toBe(target);
+    s();
+  });
+
+  it("covers fields() namespace-only options", () => {
+    const events: ObserveEvent[] = [];
+    const stop = observe((e) => events.push(e), {
+      includeInternal: true,
+      creates: true,
+    });
+    fields({ z: 9 }, { namespace: "only-ns" }); // namespace, no internal
+    stop();
+    const create = events.find(
+      (e): e is Extract<ObserveEvent, { kind: "state:create" }> =>
+        e.kind === "state:create" && e.value === 9,
+    );
+    expect(create?.namespace).toBe("only-ns");
+    expect(create?.internal).toBe(false);
+  });
+
+  it("exposes deps and subs ids in inspect snapshots", () => {
+    const a = state(1, { label: "dep-a" });
+    const c = computed(() => a() + 1, { label: "dep-c" });
+    const stop = effect(() => c(), { label: "dep-e" });
+    const snap = inspect();
+    const computedNode = snap.nodes.find((n) => n.label === "dep-c");
+    // computed has a as a dep and the effect as a sub
+    expect(computedNode?.deps.length).toBeGreaterThan(0);
+    expect(computedNode?.subs.length).toBeGreaterThan(0);
+    stop();
+  });
+});
