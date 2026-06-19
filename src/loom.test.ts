@@ -10,6 +10,7 @@ import {
   mutate,
   type ObserveEvent,
   observe,
+  type Polled,
   polled,
   type Scope,
   scope,
@@ -586,5 +587,74 @@ describe("loom scope", () => {
     parent.stop();
     a(1);
     expect(runs).toBe(1); // nested effect disposed too
+  });
+
+  it("suspends a polled() created inside the scope while paused", () => {
+    vi.useFakeTimers();
+    let samples = 0;
+    let p!: Polled<number>;
+    const s = scope(() => {
+      p = polled(() => ++samples, 100, { internal: true });
+    });
+    expect(samples).toBe(1); // initial sample at creation
+    vi.advanceTimersByTime(200);
+    expect(samples).toBe(3); // two ticks
+
+    s.pause();
+    vi.advanceTimersByTime(300);
+    expect(samples).toBe(3); // timer cleared while paused
+
+    s.resume();
+    expect(samples).toBe(4); // immediate catch-up sample on resume
+    vi.advanceTimersByTime(100);
+    expect(samples).toBe(5); // timer restarted
+
+    p.stop();
+    vi.useRealTimers();
+  });
+
+  it("stop() clears a polled() timer created inside the scope", () => {
+    vi.useFakeTimers();
+    let samples = 0;
+    scope(() => {
+      polled(() => ++samples, 100, { internal: true });
+    }).stop();
+    vi.advanceTimersByTime(300);
+    expect(samples).toBe(1); // only the creation-time sample; timer cleared by stop()
+    vi.useRealTimers();
+  });
+
+  it("disconnects a source() inside the scope while paused, reconnecting on resume", () => {
+    let connects = 0;
+    let disconnects = 0;
+    let read!: () => number;
+    const s = scope(() => {
+      read = source<number>(
+        () => {
+          connects++;
+          return () => {
+            disconnects++;
+          };
+        },
+        0,
+        { internal: true },
+      );
+    });
+    // Observe from outside the scope so the source connects.
+    const stop = effect(() => {
+      read();
+    });
+    expect(connects).toBe(1);
+    expect(disconnects).toBe(0);
+
+    s.pause();
+    expect(disconnects).toBe(1); // disconnected even though still observed
+
+    s.resume();
+    expect(connects).toBe(2); // reconnected because it is still observed
+
+    stop();
+    expect(disconnects).toBe(2); // last subscriber gone
+    s.stop();
   });
 });

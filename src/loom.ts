@@ -175,11 +175,20 @@ interface EffectNode extends NodeBase {
   scope: ScopeNode | undefined;
 }
 
-// An ownership group for effects (and nested scopes). Effects created while a scope is active
-// register here; the scope can stop them, or pause/resume their runs collectively. An effect runs
-// only while no scope in its parent chain is paused.
+// A non-effect resource owned by a scope (a polled timer, a lazy source's connection): suspended
+// and resumed with the scope's effects, and torn down when it stops.
+interface ScopeResource {
+  pause(): void;
+  resume(): void;
+  stop(): void;
+}
+
+// An ownership group for effects, resources, and nested scopes. Effects/resources created while a
+// scope is active register here; the scope can stop them, or pause/resume them collectively. An
+// effect runs (and a resource stays live) only while no scope in its parent chain is paused.
 interface ScopeNode {
   readonly effects: EffectNode[];
+  readonly resources: ScopeResource[];
   readonly children: ScopeNode[];
   readonly parent: ScopeNode | undefined;
   paused: boolean;
@@ -259,15 +268,7 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
           }
           return;
         case "state":
-          if ("connect" in node) {
-            const src = node as SourceNode<unknown>;
-            if (src.active) {
-              src.active = false;
-              const off = src.disconnect;
-              src.disconnect = undefined;
-              off?.();
-            }
-          }
+          if ("connect" in node) disconnectSource(node as SourceNode<unknown>);
           return;
         case "effect":
           stopEffect.call(node as EffectNode);
@@ -306,8 +307,31 @@ export function source<T>(
   const read = sourceOper.bind(node) as Read<T>;
   const meta = registerNode(node, "state", options);
   stateNodes.set(read, node);
+  // When created inside a scope, pausing the scope disconnects the producer even though paused
+  // subscribers stay linked; resuming reconnects it if anything is still observing.
+  const erased = node as SourceNode<unknown>;
+  activeScope?.resources.push({
+    pause: () => disconnectSource(erased),
+    resume: () => reconnectSource(erased),
+    stop: () => disconnectSource(erased),
+  });
   if (createObservers > 0) emitStateCreate(meta, initial);
   return read;
+}
+
+function disconnectSource(node: SourceNode<unknown>): void {
+  if (!node.active) return;
+  node.active = false;
+  const off = node.disconnect;
+  node.disconnect = undefined;
+  off?.();
+}
+
+function reconnectSource(node: SourceNode<unknown>): void {
+  // Reconnect only if it was observed (still has subscribers) but is currently disconnected.
+  if (node.active || node.subs === undefined) return;
+  node.active = true;
+  node.disconnect = node.connect((value) => sourceSet(node, value));
 }
 
 export function computed<T>(
@@ -371,6 +395,7 @@ export function batch<T>(fn: () => T): T {
 export function scope(fn: () => void): Scope {
   const node: ScopeNode = {
     effects: [],
+    resources: [],
     children: [],
     parent: activeScope,
     paused: false,
@@ -386,9 +411,7 @@ export function scope(fn: () => void): Scope {
   }
   return {
     stop: () => stopScope(node),
-    pause: () => {
-      node.paused = true;
-    },
+    pause: () => pauseScope(node),
     resume: () => resumeScope(node),
   };
 }
@@ -409,6 +432,8 @@ function stopScope(node: ScopeNode): void {
     if (effectNode.flags !== 0) stopEffect.call(effectNode);
   }
   node.effects.length = 0;
+  for (const resource of node.resources) resource.stop();
+  node.resources.length = 0;
   const parent = node.parent;
   // When the parent is tearing us down it clears its own list, so only self-detach otherwise.
   if (parent !== undefined && !parent.stopped) {
@@ -417,13 +442,40 @@ function stopScope(node: ScopeNode): void {
   }
 }
 
+function pauseScope(node: ScopeNode): void {
+  if (node.paused) return;
+  // Suspend resources only when this newly pauses the chain (an ancestor pause already did so).
+  const newlySuspends = !scopePaused(node);
+  node.paused = true;
+  if (newlySuspends) suspendResources(node);
+}
+
+// Pause resources across the subtree, skipping children that are independently paused (theirs are
+// already suspended).
+function suspendResources(node: ScopeNode): void {
+  for (const resource of node.resources) resource.pause();
+  for (const child of node.children) {
+    if (!child.paused) suspendResources(child);
+  }
+}
+
 function resumeScope(node: ScopeNode): void {
   if (!node.paused) return;
   node.paused = false;
+  // If an ancestor is still paused, the chain stays suspended — do nothing yet.
+  if (scopePaused(node)) return;
+  awakenResources(node);
   flushScope(node);
   // If we're resuming from inside an effect run (e.g. a tab switch), the re-queued effects ride
   // the in-progress flush; only drive a fresh flush when at the top level.
   if (batchDepth === 0 && runDepth === 0) flush();
+}
+
+function awakenResources(node: ScopeNode): void {
+  for (const resource of node.resources) resource.resume();
+  for (const child of node.children) {
+    if (!child.paused) awakenResources(child);
+  }
 }
 
 // Queue every dirty effect in the subtree whose chain is now unpaused; independently-paused
@@ -454,8 +506,30 @@ export function polled<T>(
   options?: StateOptions,
 ): Polled<T> {
   const cell = state(sample(), options);
-  const timer = setInterval(() => cell(sample()), ms);
-  return { read: () => cell(), stop: () => clearInterval(timer) };
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const start = (): void => {
+    timer = setInterval(() => cell(sample()), ms);
+  };
+  const clear = (): void => {
+    if (timer !== undefined) {
+      clearInterval(timer);
+      timer = undefined;
+    }
+  };
+  start();
+  // When created inside a scope, the timer suspends while the scope is paused (resuming with an
+  // immediate catch-up sample) and clears when the scope stops.
+  activeScope?.resources.push({
+    pause: clear,
+    resume: () => {
+      if (timer === undefined) {
+        cell(sample());
+        start();
+      }
+    },
+    stop: clear,
+  });
+  return { read: () => cell(), stop: clear };
 }
 
 export function trigger(source: Read<unknown>): void {

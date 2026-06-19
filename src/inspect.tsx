@@ -1212,14 +1212,15 @@ function poll(): number {
     fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
   }
 
-  // Recompute the census + advance the sequence (waking the Info bindings) only while the stats
-  // tab is actually visible — skip it when another tab is up or the panel is minimized.
-  if (ui?.() !== "stats" || panel?.classList.contains("li-min"))
-    return metricSeq;
-  const c = liveCounts();
-  nodeStates = c.states;
-  nodeComputeds = c.computeds;
-  nodeEffects = c.effects;
+  // The graph census is expensive, so recompute it only while the stats tab is actually visible.
+  // The sequence advances every tick regardless, so the always-visible spark keeps moving across
+  // tab switches; the hidden stats bindings stay asleep via their own paused scope.
+  if (ui?.() === "stats" && !panel?.classList.contains("li-min")) {
+    const c = liveCounts();
+    nodeStates = c.states;
+    nodeComputeds = c.computeds;
+    nodeEffects = c.effects;
+  }
   return ++metricSeq;
 }
 
@@ -1273,22 +1274,6 @@ export function mountInspector(target: Element = document.body): void {
   }
 
   ui = state<TabId>("stats", { internal: true, namespace: PANEL_ID });
-  // Create the heartbeat before the panes so their bindings subscribe to it on first run. One
-  // polled source drives the per-tick metric math and wakes the Info bindings (replacing a
-  // hand-rolled signal + setInterval): poll() resamples every POLL_MS, and its value-deduped
-  // result only advances while the Info tab is visible.
-  heartbeat = polled(poll, POLL_MS, { internal: true, namespace: PANEL_ID });
-  // Web-vitals sources, created before the panes so their readouts subscribe (and connect the
-  // observers) on first run; they auto-disconnect when those bindings dispose on unmount.
-  const vitalOpts = { internal: true, namespace: PANEL_ID };
-  clsSource = source(connectCls, 0, vitalOpts);
-  lcpSource = source(connectLcp, 0, vitalOpts);
-  inpSource = source(connectInp, 0, vitalOpts);
-  longTasksSource = source(connectLongTasks, 0, vitalOpts);
-  // Heap is a slow imperative value -> polled (eager), stopped on unmount.
-  if (heapMem()) {
-    heapSource = polled(() => heapMem()?.usedJSHeapSize ?? 0, 5000, vitalOpts);
-  }
 
   let theme = loadTheme();
   const themeVal = (<span class="li-menu-val" />) as HTMLElement;
@@ -1379,12 +1364,28 @@ export function mountInspector(target: Element = document.body): void {
   );
 
   // Build the reactive UI inside the inspector scope so minimizing can pause the whole panel; the
-  // stats pane gets its own nested scope so switching tabs pauses just it. The spark sits in the
-  // outer scope (it stays live across tab switches, only pausing when minimized).
+  // stats pane gets its own nested scope so switching tabs pauses just it. Resources are created
+  // in the scope that owns them: the heartbeat in the panel scope (it drives the always-visible
+  // spark and pauses only on minimize), the vitals + heap timer in the stats scope (they feed only
+  // the stats tab, so their observers/timer suspend when it's hidden and reconnect — buffered — on
+  // return). The spark sits in the outer scope so it stays live across tab switches.
   let statsPane!: HTMLElement;
   let sparkEl!: HTMLElement;
   inspectorScope = scope(() => {
+    heartbeat = polled(poll, POLL_MS, { internal: true, namespace: PANEL_ID });
     statsScope = scope(() => {
+      const vitalOpts = { internal: true, namespace: PANEL_ID };
+      clsSource = source(connectCls, 0, vitalOpts);
+      lcpSource = source(connectLcp, 0, vitalOpts);
+      inpSource = source(connectInp, 0, vitalOpts);
+      longTasksSource = source(connectLongTasks, 0, vitalOpts);
+      if (heapMem()) {
+        heapSource = polled(
+          () => heapMem()?.usedJSHeapSize ?? 0,
+          5000,
+          vitalOpts,
+        );
+      }
       statsPane = buildStatsPane();
     });
     sparkEl = buildSpark();

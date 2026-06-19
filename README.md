@@ -221,9 +221,12 @@ inspector.resume(); // restored: stats stays suspended if its tab is hidden
 stats!.pause(); // leaving the stats tab on its own
 ```
 
-Because stopping a scope drops its effects' subscriptions, it composes with lazy
-`source()`s: tear down a scope and the observers/timers feeding it disconnect on
-their own.
+Scopes own resources, not just effects: a `polled()` or `source()` created inside
+a scope is suspended with it too. Pausing the scope clears a `polled()`'s timer
+(resuming takes a fresh sample) and disconnects a `source()`'s producer even
+though its paused subscribers stay linked (resuming reconnects it); stopping the
+scope tears them all down. So a hidden subtree stops not only re-rendering but
+also the timers and observers feeding it.
 
 ## DOM API
 
