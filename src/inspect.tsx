@@ -1288,7 +1288,8 @@ export function mountInspector(target: Element = document.body): void {
   const applyTheme = (): void => {
     panel?.setAttribute("data-theme", theme);
     menuEl?.setAttribute("data-theme", theme);
-    themeVal.innerHTML = `${svgMarkup(THEME_ICONS[theme], 13)}${theme}`;
+    themeVal.innerHTML = svgMarkup(THEME_ICONS[theme], 13);
+    themeItem.title = `Theme: ${theme} (click to cycle)`;
   };
   const themeItem = (
     <button type="button" class="li-menu-item" title="Click to change theme">
