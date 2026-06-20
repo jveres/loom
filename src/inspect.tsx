@@ -173,6 +173,16 @@ const CSS = `
   border-radius:3px;padding:0 4px;text-transform:uppercase;letter-spacing:.03em}
 #${PANEL_ID} .li-gval{font-family:${MONO};color:var(--li-muted);white-space:nowrap;
   font-variant-numeric:tabular-nums;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#${PANEL_ID} .li-gv-num{color:var(--li-num)}
+#${PANEL_ID} .li-gv-str{color:var(--li-str)}
+#${PANEL_ID} .li-gv-bool{color:var(--li-bool)}
+#${PANEL_ID} .li-gv-nul{color:var(--li-nul)}
+#${PANEL_ID} .li-gval.li-edit{cursor:text;border-bottom:1px dotted transparent}
+#${PANEL_ID} .li-gval.li-edit:hover{border-bottom-color:var(--li-uline)}
+#${PANEL_ID} .li-gval.li-edit.li-gv-bool{cursor:pointer}
+#${PANEL_ID} .li-gedit{font:inherit;font-family:${MONO};color:var(--li-input-fg);
+  background:var(--li-input-bg);border:0;border-radius:3px;padding:0 4px;min-width:0;width:9ch;
+  outline:1px solid var(--li-accent)}
 #${PANEL_ID} .li-flash{animation:li-insp-flash .6s ease-out}
 @keyframes li-insp-flash{from{background:var(--li-accent-soft)}to{background:transparent}}
 #${PANEL_ID} .li-tabscroll{display:flex;align-items:flex-end;gap:1px;flex:1 1 auto;margin-top:6px;
@@ -348,6 +358,7 @@ interface GraphGroup {
 let graphEl: HTMLElement | null = null;
 let graphById = new Map<number, InspectNode>();
 let gOverlays: HTMLElement[] = []; // active hover-highlight overlay boxes
+let gEditing: HTMLInputElement | null = null; // the open in-place value editor, if any
 const graphRows = new Map<number, GraphRow>();
 const graphGroups = new Map<number, GraphGroup>(); // keyed by fields() group id
 const graphCollapsed = new Set<number>();
@@ -1063,6 +1074,71 @@ function gFormat(v: unknown): string {
   if (typeof v === "object") return "{…}";
   return String(v);
 }
+// Type colour for a value (see the --li-num/str/bool/nul palette).
+function gValueClass(v: unknown): string {
+  if (typeof v === "number") return "li-gv-num";
+  if (typeof v === "string") return "li-gv-str";
+  if (typeof v === "boolean") return "li-gv-bool";
+  if (v === null || v === undefined) return "li-gv-nul";
+  return "";
+}
+// Parse an edited string back toward the previous value's type (the rest stay strings).
+function gCoerce(input: string, prev: unknown): unknown {
+  if (typeof prev === "number") {
+    const n = Number(input);
+    return Number.isNaN(n) ? prev : n;
+  }
+  return input;
+}
+// Editable = a state cell (has a writable source) holding a primitive.
+function gEditable(n: InspectNode): boolean {
+  if (n.kind !== "state" || !n.source) return false;
+  const v = n.value;
+  return (
+    v === null ||
+    typeof v === "number" ||
+    typeof v === "string" ||
+    typeof v === "boolean"
+  );
+}
+// Open the in-place editor for a state cell: booleans toggle, others get an <input> that commits
+// on Enter/blur and writes straight back to the live cell.
+function gBeginEdit(cell: State<unknown>, val: HTMLElement, r: GraphRow): void {
+  const prev = cell();
+  if (typeof prev === "boolean") {
+    cell(!prev);
+    gShowVal(r, cell());
+    return;
+  }
+  const input = document.createElement("input");
+  input.className = "li-gedit";
+  input.value = typeof prev === "string" ? prev : String(prev);
+  val.replaceWith(input);
+  gEditing = input;
+  input.focus();
+  input.select();
+  const restore = (): void => {
+    gEditing = null;
+    if (input.parentNode) input.replaceWith(val);
+  };
+  const commit = (): void => {
+    if (gEditing !== input) return;
+    cell(gCoerce(input.value, prev));
+    restore();
+    gShowVal(r, cell());
+  };
+  input.onblur = commit;
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") commit();
+    else if (e.key === "Escape") restore();
+  };
+}
+// Paint a row's value cell (text + type colour), preserving the edit affordance class.
+function gShowVal(r: GraphRow, v: unknown): void {
+  r.val.textContent = gFormat(v);
+  r.val.className = `li-gval${r.val.classList.contains("li-edit") ? " li-edit" : ""} ${gValueClass(v)}`;
+  r.prevVal = gFormat(v);
+}
 
 // Views aren't listed; instead, hovering a state/computed outlines every view downstream of it
 // (walk subscribers through computeds to the effects that actually write DOM).
@@ -1181,14 +1257,21 @@ function gUpdateRow(n: InspectNode, parent: HTMLElement, child: boolean): void {
     row.onmouseenter = () => gPaint(gTargetsFor(n.id), true);
     row.onmouseleave = () => gPaint(gTargetsFor(n.id), false);
     parent.append(row);
-    r = { row, val, prevVal: " " };
-    graphRows.set(n.id, r);
+    const created: GraphRow = { row, val, prevVal: " " };
+    graphRows.set(n.id, created);
+    r = created;
+    if (gEditable(n) && n.source) {
+      val.classList.add("li-edit");
+      const cell = n.source;
+      val.onclick = () => gBeginEdit(cell, val, created);
+    }
   }
+  // Skip the row currently being edited (its value cell is detached into an <input>).
+  if (!r.val.isConnected) return;
   const v = gFormat(n.value);
   if (v !== r.prevVal) {
-    r.val.textContent = v;
     if (r.prevVal !== " ") gFlash(r.row);
-    r.prevVal = v;
+    gShowVal(r, n.value);
   }
 }
 
