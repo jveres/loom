@@ -6,6 +6,7 @@
 // observability filters them out: the inspector measures the app, never itself.
 import {
   channels,
+  configure,
   effect,
   inspectResources,
   type Meter,
@@ -1240,6 +1241,11 @@ function startMetrics(): void {
 /** Mount the floating inspector panel (dev only). Idempotent; a no-op until called. */
 export function mountInspector(target: Element = document.body): void {
   if (panel || typeof document === "undefined") return;
+
+  // Inspection is opt-in and off by default; mounting the panel is the explicit request for it, so
+  // turn it on. Only nodes created from here on carry metadata — enable earlier (configure({ inspect:
+  // true }) at startup) if you want pre-existing nodes in the census too.
+  configure({ inspect: true });
 
   if (!document.getElementById(`${PANEL_ID}-css`)) {
     const style = document.createElement("style");

@@ -1,6 +1,7 @@
 import {
   batch,
   computed,
+  configure,
   effect,
   type Fields,
   fields,
@@ -14,6 +15,11 @@ import {
 import { dispose, list } from "loom/dom";
 import { mountInspector, toggleInspector } from "loom/inspect";
 import "./styles.css";
+
+// Inspection is opt-in (off by default = zero cost). Enable it before creating any nodes — when the
+// inspector is wanted — so even the initial cards show up in its census. ?noinspect leaves it off.
+const inspectorEnabled = !location.search.includes("noinspect");
+configure({ inspect: inspectorEnabled });
 
 type Tone = 0 | 1 | 2 | 3 | 4;
 type ThemeMode = "auto" | "dark" | "light";
@@ -194,7 +200,7 @@ let rng = 0x1eed;
 requestAnimationFrame(frame);
 
 // Diagnostic: load with ?noinspect to run the demo without the dev inspector.
-if (!location.search.includes("noinspect")) mountInspector();
+if (inspectorEnabled) mountInspector();
 // Ctrl+Cmd+L shows/hides the inspector (KeyL is layout-independent).
 window.addEventListener("keydown", (event) => {
   if (event.ctrlKey && event.metaKey && event.code === "KeyL") {

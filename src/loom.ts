@@ -151,6 +151,10 @@ const queued: Array<EffectNode | undefined> = [];
 const DEFAULT_NAMESPACE = "default";
 let inspectId = 0;
 let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off the reactive path)
+// Inspection is opt-in: off by default so node creation allocates no metadata (zero cost). Turn it
+// on with configure({ inspect: true }) BEFORE creating the nodes you want visible to inspect()/the
+// inspector — nodes created while it's off carry no metadata and never appear.
+let inspectEnabled = false;
 const computedNodes = new WeakMap<object, ComputedNode<unknown>>();
 const effectNodes = new WeakMap<object, EffectNode>();
 const inspectRefs = new Map<number, WeakRef<NodeBase>>();
@@ -202,7 +206,7 @@ export function state<T>(initial: T, options?: NodeOptions): State<T> {
   node.source = source as State<unknown>;
   const meta = registerNode(node, "state", options);
   stateNodes.set(source, node as StateNode<unknown>);
-  if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
+  if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return source;
 }
 
@@ -230,7 +234,7 @@ export function source<T>(
     resume: () => reconnectSource(erased),
     stop: () => disconnectSource(erased),
   });
-  if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
+  if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return read;
 }
 
@@ -261,7 +265,7 @@ export function computed<T>(
   const read = computedOper.bind(node) as Read<T>;
   const meta = registerNode(node, "computed", options);
   computedNodes.set(read, node as ComputedNode<unknown>);
-  if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
+  if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return read;
 }
 
@@ -274,7 +278,7 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     activeScope.effects.push(node);
   }
   const meta = registerNode(node, "effect", options);
-  if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
+  if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   const previous = setActiveSub(node);
   if (previous !== undefined) {
     link(node, previous, 0);
@@ -288,8 +292,8 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     activeSub = previous;
     node.flags &= ~RecursedCheck;
   }
-  meta.runs++;
-  if (effectCh.meters !== 0 && meta.internal !== true) effectCh.seq++;
+  if (meta) meta.runs++;
+  if (effectCh.meters !== 0 && meta?.internal !== true) effectCh.seq++;
   const stop = stopEffect.bind(node);
   effectNodes.set(stop, node);
   return stop;
@@ -737,6 +741,16 @@ export const channels = {
   dispose: /* @__PURE__ */ channelOf(disposeCh),
 } as const;
 
+/**
+ * Configure the runtime. `inspect` toggles the always-off-by-default inspection layer: while it is
+ * off, node creation allocates no metadata and `inspect()`/`depsOf()`/`inspectResources()` and the
+ * inspector see nothing — true zero cost. Turn it on (typically once at startup, before creating
+ * the nodes you want visible) when you need tooling; nodes created while it was off stay invisible.
+ */
+export function configure(options: { readonly inspect?: boolean }): void {
+  if (options.inspect !== undefined) inspectEnabled = options.inspect;
+}
+
 export function inspect(): InspectSnapshot {
   const nodes: InspectNode[] = [];
   for (const [id, ref] of inspectRefs) {
@@ -819,7 +833,10 @@ function registerNode(
   node: NodeBase,
   kind: NodeKind,
   options: NodeOptions | EffectOptions | undefined,
-): InspectMeta {
+): InspectMeta | undefined {
+  // Opt-in: when inspection is off, skip all metadata work — this is the per-node allocation
+  // (InspectMeta + WeakRef + Map insert) that dominates create-heavy workloads.
+  if (!inspectEnabled) return undefined;
   // Apply the active scope's ambient defaults (internal/namespace/label) under any explicit ones.
   const opts = mergeOptions(activeScope?.options, options);
   const id = ++inspectId;

@@ -92,7 +92,11 @@ The core exports these functions:
 - `meter(channels)` attaches a pull-based meter; `read()` returns a Frame per
   channel (`{ count, dropped, samples }`) since the last read. A meter is a scope
   resource, so it detaches on `scope.pause()`.
-- `inspect()` returns a snapshot of the current reactive graph.
+- `configure({ inspect })` toggles the inspection layer. It is **off by default**
+  — node creation then allocates no metadata (zero cost). Turn it on once at
+  startup, before creating the nodes you want visible, when you need tooling.
+- `inspect()` returns a snapshot of the current reactive graph (empty unless
+  inspection is enabled).
 - `inspectResources()` returns a live census `{ states, computeds, effects,
   sources, scopes, channels }` — one cheap walk, no per-node allocation; nothing
   runs on the reactive hot path.
@@ -347,12 +351,11 @@ list(container, rows, {
 ## Observability
 
 Loom's runtime is instrumented with **channels** — gated, overwriting ring
-buffers that a consumer **drains on its own clock** rather than receiving a
-synchronous callback per event. A channel records nothing (and allocates
-nothing) until a meter attaches, and under load it drops oldest samples instead
-of stalling the producer — so no event rate and no consumer can freeze a UI
-loop. The core's reactive events are the built-in `channels`; you can declare
-your own for app telemetry the same way.
+buffers that a consumer **drains on its own clock**. A channel records nothing
+(and allocates nothing) until a meter attaches; under load it keeps only its most
+recent samples, so it stays bounded and the producer runs at full speed
+regardless of how fast the consumer reads. The core's reactive events are the
+built-in `channels`; you can declare your own for app telemetry the same way.
 
 ```ts
 import { channels, inspect, meter, state, effect } from "loom";
@@ -531,11 +534,12 @@ Run it with:
 pnpm run bench
 ```
 
-On the chaos workload Loom runs at roughly `1.2x` the time of native
-`alien-signals`. The residual gap is the always-on inspect layer (one metadata
-object plus a `WeakRef` per node); the per-operation read/write/effect hot paths
-carry only branch-predicted observer guards and otherwise match the native
-primitives.
+On the chaos workload, with inspection off (the default), Loom runs within
+`~1.02x` (manual cells) to `~1.07x` (`fields()`) of native `alien-signals` — the
+per-operation read/write/effect hot paths carry only branch-predicted channel
+guards and otherwise match the native primitives. Enabling inspection
+(`configure({ inspect: true })`) adds one metadata object plus a `WeakRef` per
+node created, which is what widens the gap to ~`1.2x` on create-heavy work.
 
 ## Design notes
 
@@ -545,7 +549,8 @@ manual triggers, object field cells, and an observability surface.
 
 The built-in observability channels are gated by a per-channel meter count, so
 reads, writes, computed updates, and effect runs stay allocation-free and pay
-only a predicted-not-taken branch when nothing is metering them — and the records
-themselves are written into a pre-allocated ring, never an event object. Every
-node still carries lightweight inspect metadata so `inspect()` and `depsOf()`
-work without prior arming.
+only a predicted-not-taken branch when nothing is metering them; records are
+written into a pre-allocated ring. Inspection is opt-in
+(`configure({ inspect: true })`): while it is off, nodes carry no metadata at
+all; while it is on, each node carries a lightweight metadata record so
+`inspect()` and `depsOf()` work without any further setup.

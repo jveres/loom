@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   batch,
   channel,
   channels,
   computed,
+  configure,
   depsOf,
   type EffectFn,
   effect,
@@ -23,6 +24,13 @@ import {
   untrack,
   update,
 } from "./loom.js";
+
+// Inspection is opt-in (off by default). Most tests assert on inspect()/depsOf()/channel internal
+// filtering, so default it on per-test; the dedicated test below flips it off and relies on this
+// to restore it for the next test.
+beforeEach(() => {
+  configure({ inspect: true });
+});
 
 describe("loom core", () => {
   it("creates callable state cells", () => {
@@ -278,6 +286,29 @@ describe("loom core", () => {
     stopApp();
     stopInternal();
     m.stop();
+  });
+
+  it("allocates no inspect metadata while inspection is disabled", () => {
+    configure({ inspect: false });
+    const before = inspectResources();
+
+    const off = state(0); // created while disabled -> no metadata
+    let seen = -1;
+    const stop = effect(() => {
+      seen = off();
+    });
+    off(7);
+    expect(seen).toBe(7); // fully reactive without any inspect metadata
+
+    const after = inspectResources();
+    expect(after.states).toBe(before.states); // invisible to the census
+    expect(after.effects).toBe(before.effects);
+    stop();
+
+    configure({ inspect: true });
+    const node = state(0, { label: "re-enabled" });
+    expect(inspect().nodes.find((n) => n.label === "re-enabled")).toBeDefined(); // visible again once re-enabled
+    void node;
   });
 });
 
