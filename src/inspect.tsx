@@ -156,7 +156,7 @@ const CSS = `
 #${PANEL_ID} .li-gns-h{display:flex;align-items:center;gap:6px;padding:4px 10px 3px;cursor:pointer;
   color:var(--li-muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;user-select:none}
 #${PANEL_ID} .li-gns-h:hover{background:var(--li-hover)}
-#${PANEL_ID} .li-gns-c{margin-left:auto;font-variant-numeric:tabular-nums}
+#${PANEL_ID} .li-gns-c{font-variant-numeric:tabular-nums;opacity:.7}
 #${PANEL_ID} .li-chev{flex:0 0 auto;margin:0;color:var(--li-muted);transition:transform .12s ease}
 #${PANEL_ID} .li-gns.collapsed .li-chev{transform:rotate(-90deg)}
 #${PANEL_ID} .li-gns.collapsed .li-gns-body{display:none}
@@ -1216,7 +1216,7 @@ function renderGraph(): void {
     seenGroups.add(gid);
     cells.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
     const g = gEnsureGroup(gid, gGroupLabel(gid, cells));
-    g.count.textContent = String(cells.length);
+    g.count.textContent = `(${cells.length})`;
     for (const n of cells) {
       seenRows.add(n.id);
       gUpdateRow(n, g.body, true);
