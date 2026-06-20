@@ -171,8 +171,8 @@ const CSS = `
 #${PANEL_ID} .li-glabel{color:var(--li-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #${PANEL_ID} .li-gns-tag{flex:0 0 auto;font-size:9px;color:var(--li-muted);background:var(--li-fill);
   border-radius:3px;padding:0 4px;text-transform:uppercase;letter-spacing:.03em}
-#${PANEL_ID} .li-gval{margin-left:auto;font-family:${MONO};color:var(--li-muted);white-space:nowrap;
-  font-variant-numeric:tabular-nums;max-width:45%;overflow:hidden;text-overflow:ellipsis}
+#${PANEL_ID} .li-gval{font-family:${MONO};color:var(--li-muted);white-space:nowrap;
+  font-variant-numeric:tabular-nums;min-width:0;overflow:hidden;text-overflow:ellipsis}
 #${PANEL_ID} .li-flash{animation:li-insp-flash .6s ease-out}
 @keyframes li-insp-flash{from{background:var(--li-accent-soft)}to{background:transparent}}
 #${PANEL_ID} .li-tabscroll{display:flex;align-items:flex-end;gap:1px;flex:1 1 auto;margin-top:6px;
@@ -213,8 +213,8 @@ const ICON_MONITOR =
   '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>';
 const ICON_SETTINGS =
   '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>';
-// State markers: a filled dot when the cell is read by something (bound), a hollow ring when
-// nothing reads it (unbound). Computed = sigma (derived). chevron-down toggles a group.
+// State markers: a filled dot when the cell drives a DOM element downstream (bound — the hover
+// highlight can outline it), a hollow ring otherwise (text-only or unread). Computed = sigma.
 const ICON_BOUND =
   '<circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>';
 const ICON_UNBOUND = '<circle cx="12" cy="12" r="5"/>';
@@ -1037,10 +1037,11 @@ function buildGraphPane(): HTMLElement {
   return graphEl;
 }
 
-// A cell is "bound" when something reactively reads it (≥1 subscriber); unbound cells are dead
-// weight, shown dim with an eye-off icon.
+// A cell is "bound" when it drives a DOM element somewhere downstream — i.e. the hover highlight
+// has something to outline. Cells read only into text nodes, or read by nothing, are unbound
+// (a filled dot promises a highlight, so it must mean a real element target exists).
 function gBound(n: InspectNode): boolean {
-  return n.subs.length > 0;
+  return gTargetsFor(n.id).length > 0;
 }
 function gIcon(n: InspectNode): string {
   if (n.kind === "computed") return ICON_COMPUTED;
