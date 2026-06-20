@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   batch,
+  channels,
   computed,
   depsOf,
   type EffectFn,
   effect,
   fields,
   inspect,
+  meter,
   mutate,
-  type ObserveEvent,
-  observe,
   type Polled,
   polled,
   type Scope,
@@ -213,66 +213,44 @@ describe("loom core", () => {
     ).toBeUndefined();
   });
 
-  it("emits observer events while filtering internal nodes by default", () => {
-    const events: ObserveEvent[] = [];
-    const stopObserve = observe((event) => events.push(event));
-
-    const visible = state(0, { label: "visible", namespace: "unit" });
-    const hidden = state(0, {
-      internal: true,
-      label: "hidden",
-      namespace: "unit",
+  it("counts non-internal reactive ops on the built-in channels", () => {
+    const m = meter([
+      channels.read,
+      channels.write,
+      channels.compute,
+      channels.effect,
+    ]);
+    const a = state(0);
+    const c = computed(() => a() * 2);
+    const stop = effect(() => {
+      c();
     });
+    a(1);
 
+    const f = m.read();
+    expect(f["loom:write"]?.count).toBe(1); // a(1)
+    expect(f["loom:read"]?.count ?? 0).toBeGreaterThan(0);
+    expect(f["loom:compute"]?.count ?? 0).toBeGreaterThan(0);
+    expect(f["loom:effect"]?.count ?? 0).toBeGreaterThan(0);
+
+    stop();
+    m.stop();
+  });
+
+  it("excludes internal nodes from the built-in channels", () => {
+    const m = meter([channels.write]);
+    const visible = state(0);
+    const hidden = state(0, { internal: true });
     visible(1);
-    hidden(1);
-    stopObserve();
-    visible(2);
-
-    expect(events.map((event) => event.kind)).toEqual([
-      "state:create",
-      "state:set",
-    ]);
-    expect(events.map((event) => "label" in event && event.label)).toEqual([
-      "visible",
-      "visible",
-    ]);
+    hidden(1); // internal -> not counted
+    expect(m.read()["loom:write"]?.count).toBe(1);
+    m.stop();
   });
 
-  it("can include internal observer events explicitly", () => {
-    const events: ObserveEvent[] = [];
-    const stopObserve = observe((event) => events.push(event), {
-      includeInternal: true,
-    });
-    const hidden = state(0, {
-      internal: true,
-      label: "hidden.write",
-      namespace: "unit",
-    });
-
-    hidden(1);
-    stopObserve();
-
-    expect(events.filter((event) => event.kind === "state:set")).toEqual([
-      expect.objectContaining({
-        internal: true,
-        kind: "state:set",
-        label: "hidden.write",
-      }),
-    ]);
-  });
-
-  it("does not emit flush events for internal-only effect work", () => {
-    const events: ObserveEvent[] = [];
-    const stopObserve = observe((event) => events.push(event), {
-      flushes: true,
-    });
-    const app = state(0, { label: "app", namespace: "unit" });
-    const internal = state(0, {
-      internal: true,
-      label: "internal",
-      namespace: "unit",
-    });
+  it("records flush batch size + duration, for app work only", () => {
+    const m = meter([channels.flush]);
+    const app = state(0);
+    const internal = state(0, { internal: true });
     const stopApp = effect(() => {
       app();
     });
@@ -282,19 +260,19 @@ describe("loom core", () => {
       },
       { internal: true },
     );
+    m.read(); // drain anything from setup
 
-    events.length = 0;
-    internal(1);
-    expect(events).toEqual([]);
+    internal(1); // internal-only flush -> no record
+    expect(m.read()["loom:flush"]?.count).toBe(0);
 
-    app(1);
-    expect(events).toEqual([
-      expect.objectContaining({ batchSize: 1, kind: "flush" }),
-    ]);
+    app(1); // app flush -> batchSize 1
+    const last = m.read()["loom:flush"]?.samples.at(-1);
+    expect(last?.["batchSize"]).toBe(1);
+    expect(typeof last?.["durationMs"]).toBe("number");
 
-    stopInternal();
     stopApp();
-    stopObserve();
+    stopInternal();
+    m.stop();
   });
 });
 
@@ -358,10 +336,9 @@ describe("loom polled", () => {
     expect(p.read()).toBe(0);
   });
 
-  it("honours state options: an internal source is filtered from observe", () => {
+  it("honours state options: an internal polled is excluded from the channels", () => {
     vi.useFakeTimers();
-    const kinds: ObserveEvent["kind"][] = [];
-    const stopObserve = observe((event) => kinds.push(event.kind));
+    const m = meter([channels.write]);
 
     let value = 0;
     // The timer resamples regardless of subscribers, so no effect is needed to drive it.
@@ -370,10 +347,10 @@ describe("loom polled", () => {
     value = 1;
     vi.advanceTimersByTime(100);
     expect(internalSource.read()).toBe(1); // value updated
-    expect(kinds).toEqual([]); // ...but the internal source emits nothing
+    expect(m.read()["loom:write"]?.count).toBe(0); // ...but the internal write is not counted
 
     internalSource.stop();
-    stopObserve();
+    m.stop();
   });
 });
 
@@ -660,96 +637,72 @@ describe("loom scope", () => {
 });
 
 describe("loom scope options", () => {
-  // Every observe event except `flush` carries id/label/namespace/internal.
-  type NamedEvent = Extract<ObserveEvent, { namespace: string }>;
-  const eventsOf = (
-    events: ObserveEvent[],
-    kind: ObserveEvent["kind"],
-  ): NamedEvent[] =>
-    events.filter((e): e is NamedEvent => "namespace" in e && e.kind === kind);
+  // Verify the inherited options through inspect() (the snapshot carries each node's metadata).
+  const node = (
+    predicate: (n: ReturnType<typeof inspect>["nodes"][number]) => boolean,
+  ) => inspect().nodes.find(predicate);
 
   it("applies scope options as defaults to nodes created inside", () => {
-    const events: ObserveEvent[] = [];
-    const stop = observe((e) => events.push(e), {
-      includeInternal: true,
-      creates: true,
-    });
+    const keep: unknown[] = [];
     scope(
       () => {
-        state(0);
-        effect(() => {});
+        keep.push(state(0));
+        keep.push(effect(() => {}));
       },
-      { internal: true, namespace: "panel" },
+      { internal: true, namespace: "opts-a" },
     );
-    stop();
-    const sc = eventsOf(events, "state:create")[0];
-    const ec = eventsOf(events, "effect:create")[0];
-    expect(sc?.internal).toBe(true);
-    expect(sc?.namespace).toBe("panel");
-    expect(ec?.internal).toBe(true);
-    expect(ec?.namespace).toBe("panel");
+    const sn = node((n) => n.kind === "state" && n.namespace === "opts-a");
+    const en = node((n) => n.kind === "effect" && n.namespace === "opts-a");
+    expect(sn?.internal).toBe(true);
+    expect(en?.internal).toBe(true);
+    expect(en?.namespace).toBe("opts-a");
+    expect(keep).toHaveLength(2);
   });
 
   it("lets a node's own options override the scope defaults", () => {
-    const events: ObserveEvent[] = [];
-    const stop = observe((e) => events.push(e), {
-      includeInternal: true,
-      creates: true,
-    });
+    const keep: unknown[] = [];
     scope(
       () => {
-        state(0, { namespace: "own" });
+        keep.push(state(0, { namespace: "own-ns" }));
       },
-      { internal: true, namespace: "panel" },
+      { internal: true, namespace: "opts-b" },
     );
-    stop();
-    const sc = eventsOf(events, "state:create")[0];
-    expect(sc?.internal).toBe(true); // inherited from the scope
-    expect(sc?.namespace).toBe("own"); // overridden by the node
+    const sn = node((n) => n.namespace === "own-ns");
+    expect(sn?.internal).toBe(true); // inherited from the scope
+    expect(sn?.namespace).toBe("own-ns"); // overridden by the node
+    expect(keep).toHaveLength(1);
   });
 
   it("merges options through nested scopes", () => {
-    const events: ObserveEvent[] = [];
-    const stop = observe((e) => events.push(e), {
-      includeInternal: true,
-      creates: true,
-    });
+    const keep: unknown[] = [];
     scope(
       () => {
         scope(
           () => {
-            state(0, { label: "inner" });
+            keep.push(state(0, { label: "inner-x" }));
           },
-          { namespace: "child" },
+          { namespace: "child-ns" },
         );
       },
-      { internal: true, namespace: "parent" },
+      { internal: true, namespace: "parent-ns" },
     );
-    stop();
-    const sc = eventsOf(events, "state:create")[0];
-    expect(sc?.internal).toBe(true); // from the outer scope
-    expect(sc?.namespace).toBe("child"); // from the nested scope
-    expect(sc?.label).toBe("inner"); // from the node itself
+    const sn = node((n) => n.label === "inner-x");
+    expect(sn?.internal).toBe(true); // from the outer scope
+    expect(sn?.namespace).toBe("child-ns"); // from the nested scope
+    expect(keep).toHaveLength(1);
   });
 
   it("applies scope options to fields() cells", () => {
-    const events: ObserveEvent[] = [];
-    const stop = observe((e) => events.push(e), {
-      includeInternal: true,
-      creates: true,
-    });
+    const keep: unknown[] = [];
     scope(
       () => {
-        fields({ a: 1, b: 2 });
+        keep.push(fields({ a: 1, b: 2 }));
       },
-      { internal: true, namespace: "form" },
+      { internal: true, namespace: "form-ns" },
     );
-    stop();
-    const creates = eventsOf(events, "state:create");
-    expect(creates).toHaveLength(2);
-    expect(creates.every((e) => e.internal && e.namespace === "form")).toBe(
-      true,
-    );
+    const cells = inspect().nodes.filter((n) => n.namespace === "form-ns");
+    expect(cells).toHaveLength(2);
+    expect(cells.every((n) => n.internal)).toBe(true);
   });
 });
 
@@ -856,41 +809,38 @@ describe("loom scope edge cases", () => {
 });
 
 describe("loom coverage", () => {
-  it("emits every observe event kind and filters internal nodes", () => {
-    const all: ObserveEvent["kind"][] = [];
-    const stopAll = observe((e) => all.push(e.kind), { includeInternal: true });
-    const visible: ObserveEvent["kind"][] = [];
-    const stopVis = observe((e) => visible.push(e.kind), { creates: true });
+  it("records every built-in channel and excludes internal nodes", () => {
+    const m = meter([
+      channels.read,
+      channels.write,
+      channels.compute,
+      channels.effect,
+      channels.flush,
+      channels.create,
+      channels.dispose,
+    ]);
 
-    const a = state(1);
-    const c = computed(() => a() * 2);
-    const e = effect(() => c());
-    a(5);
+    const a = state(1); // create
+    const c = computed(() => a() * 2); // create
+    const e = effect(() => {
+      c();
+    }); // create + run -> read + compute
+    a(5); // write -> flush -> effect run
 
-    const hidden = state(0, { internal: true });
-    hidden(1);
+    const hidden = state(0, { internal: true }); // internal create (not counted)
+    hidden(1); // internal write (not counted)
 
-    e(); // effect:dispose
-    stopAll();
-    stopVis();
+    e(); // dispose
 
-    const kinds = new Set(all);
-    for (const k of [
-      "state:create",
-      "computed:create",
-      "effect:create",
-      "computed:read",
-      "state:read",
-      "computed:update",
-      "state:set",
-      "effect:run",
-      "effect:dispose",
-      "flush",
-    ] as const) {
-      expect(kinds.has(k)).toBe(true);
-    }
-    // The non-includeInternal observer never sees the internal state's create.
-    expect(visible.filter((k) => k === "state:create")).toHaveLength(1);
+    const f = m.read();
+    expect(f["loom:create"]?.count).toBe(3); // a, c, e (hidden excluded)
+    expect(f["loom:write"]?.count).toBe(1); // a(5) (hidden's write excluded)
+    expect(f["loom:read"]?.count ?? 0).toBeGreaterThan(0);
+    expect(f["loom:compute"]?.count ?? 0).toBeGreaterThan(0);
+    expect(f["loom:effect"]?.count ?? 0).toBeGreaterThan(0);
+    expect(f["loom:flush"]?.count ?? 0).toBeGreaterThan(0);
+    expect(f["loom:dispose"]?.count).toBe(1); // e disposed
+    m.stop();
   });
 
   it("disposes child effects when the parent re-runs", () => {
@@ -922,25 +872,17 @@ describe("loom coverage", () => {
   });
 
   it("covers fields() option combinations", () => {
-    const events: ObserveEvent[] = [];
-    const stop = observe((e) => events.push(e), {
-      includeInternal: true,
-      creates: true,
-    });
-    fields({ a: 1 }); // no options
-    fields({ b: 2 }, { label: "f" }); // label only
-    fields({ c: 3 }, { internal: true }); // internal, no namespace
-    fields({ d: 4 }, { internal: false, namespace: "ns" }); // internal + namespace
-    stop();
-    const creates = events.filter(
-      (e): e is Extract<ObserveEvent, { kind: "state:create" }> =>
-        e.kind === "state:create",
-    );
-    const byValue = (v: number) => creates.find((e) => e.value === v);
-    expect(byValue(1)?.namespace).toBe("default"); // no options -> defaults
-    expect(byValue(2)?.label).toBe("f.b"); // label prefixes the key
-    expect(byValue(3)?.internal).toBe(true); // internal, default namespace
-    expect(byValue(4)?.namespace).toBe("ns"); // internal flag + namespace
+    const keep: unknown[] = [];
+    keep.push(fields({ a: 9001 })); // no options
+    keep.push(fields({ b: 9002 }, { label: "fcomb" })); // label only
+    keep.push(fields({ c: 9003 }, { internal: true })); // internal, no namespace
+    keep.push(fields({ d: 9004 }, { internal: false, namespace: "fc-ns" })); // internal + namespace
+    const byVal = (v: number) => inspect().nodes.find((n) => n.value === v);
+    expect(byVal(9001)?.namespace).toBe("default"); // no options -> defaults
+    expect(byVal(9002)?.label).toBe("fcomb.b"); // label prefixes the key
+    expect(byVal(9003)?.internal).toBe(true); // internal, default namespace
+    expect(byVal(9004)?.namespace).toBe("fc-ns"); // internal flag + namespace
+    expect(keep).toHaveLength(4);
   });
 
   it("now() falls back to Date.now when performance is missing", () => {
@@ -948,14 +890,15 @@ describe("loom coverage", () => {
     // @ts-expect-error force the fallback branch in now()
     globalThis.performance = undefined;
     try {
-      const flushes: ObserveEvent[] = [];
-      const stop = observe((e) => flushes.push(e), { flushes: true });
+      const m = meter([channels.flush]); // a flush meter makes now() run for the timing
       const a = state(0);
-      const e = effect(() => a());
+      const e = effect(() => {
+        a();
+      });
       a(1); // flush with timing -> now() called while performance is undefined
       e();
-      stop();
-      expect(flushes.length).toBeGreaterThan(0);
+      expect(m.read()["loom:flush"]?.count ?? 0).toBeGreaterThan(0);
+      m.stop();
     } finally {
       globalThis.performance = original;
     }
@@ -1033,16 +976,15 @@ describe("loom coverage", () => {
 });
 
 describe("loom coverage — operators and edges", () => {
-  it("creates and updates a source under observation", () => {
-    const events: ObserveEvent["kind"][] = [];
-    const stopObs = observe((e) => events.push(e.kind), { creates: true });
+  it("creates and updates a source under a meter", () => {
+    const m = meter([channels.create]);
     let push: ((v: number) => void) | undefined;
     const s = source<number>((set) => {
       push = set;
       return () => {};
     }, 0);
-    expect(events).toContain("state:create"); // source create emitted
-    stopObs();
+    expect(m.read()["loom:create"]?.count).toBe(1); // source create counted
+    m.stop();
 
     let seen = -1;
     const stop = effect(() => {
@@ -1078,10 +1020,10 @@ describe("loom coverage — operators and edges", () => {
     stop();
   });
 
-  it("ignores a second observe stop and reports node metadata", () => {
-    const stop = observe(() => {});
-    stop();
-    stop(); // second delete returns false -> early return
+  it("ignores a second meter stop and reports node metadata", () => {
+    const m = meter([channels.write]);
+    m.stop();
+    m.stop(); // idempotent
 
     const target = { tag: "host" };
     const s = effect(() => {}, { label: "with-target", target });
@@ -1091,19 +1033,11 @@ describe("loom coverage — operators and edges", () => {
   });
 
   it("covers fields() namespace-only options", () => {
-    const events: ObserveEvent[] = [];
-    const stop = observe((e) => events.push(e), {
-      includeInternal: true,
-      creates: true,
-    });
-    fields({ z: 9 }, { namespace: "only-ns" }); // namespace, no internal
-    stop();
-    const create = events.find(
-      (e): e is Extract<ObserveEvent, { kind: "state:create" }> =>
-        e.kind === "state:create" && e.value === 9,
-    );
+    const keep = fields({ z: 9009 }, { namespace: "only-ns" }); // namespace, no internal
+    const create = inspect().nodes.find((n) => n.value === 9009);
     expect(create?.namespace).toBe("only-ns");
     expect(create?.internal).toBe(false);
+    expect(keep.z()).toBe(9009);
   });
 
   it("exposes deps and subs ids in inspect snapshots", () => {

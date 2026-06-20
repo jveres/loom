@@ -86,7 +86,13 @@ The core exports these functions:
   listener, timer, `PerformanceObserver`, socket) is only live while observed.
   Returns a read function.
 - `fields(object, options?)` creates one state cell per enumerable string key.
-- `observe(observer, options?)` subscribes to lazy diagnostic events.
+- `channel(name, options?)` declares a named observability channel — a gated,
+  overwriting ring buffer that records cheaply (no allocation until metered) and
+  is drained, not pushed. The core's own reactive events are built-in channels
+  (`channels.read/write/compute/effect/flush/create/dispose`).
+- `meter(channels)` attaches a pull-based meter; `read()` returns a Frame per
+  channel (`{ count, dropped, samples }`) since the last read. A meter is a scope
+  resource, so it detaches on `scope.pause()`.
 - `inspect()` returns a snapshot of the current reactive graph.
 - `depsOf(source)` returns inspected dependencies for a state, computed read, or
   effect stop handle.
@@ -102,7 +108,9 @@ The core exports these types:
 - `EffectFn` is a reusable effect callback type.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
 - `InspectNode` and `InspectSnapshot` describe graph snapshots.
-- `ObserveEvent` describes lazy diagnostic events.
+- `Channel` is a named observability channel; `Meter` drains channels;
+  `Frame` is a per-channel `{ count, dropped, samples }`; `ChannelOptions`
+  configures `{ capacity, fields }`.
 
 Pass `{ label, namespace }` to `state`, `computed`, `effect`, or `fields` when
 you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
@@ -304,33 +312,35 @@ list(container, rows, {
 
 ## Observability
 
-Loom exposes a lazy core observability surface for tools and tests. Event
-objects are created only when a matching observer is active.
+Loom's runtime is instrumented with **channels** — gated, overwriting ring
+buffers that a consumer **drains on its own clock** rather than receiving a
+synchronous callback per event. A channel records nothing (and allocates
+nothing) until a meter attaches, and under load it drops oldest samples instead
+of stalling the producer — so no event rate and no consumer can freeze a UI
+loop. The core's reactive events are the built-in `channels`; you can declare
+your own for app telemetry the same way.
 
 ```ts
-import { depsOf, effect, inspect, observe, state } from "loom";
+import { channels, inspect, meter, state, effect } from "loom";
 
-const stopObserve = observe((event) => {
-  console.log(event.kind);
-});
+// Drain the reactive pipeline on your own cadence (here, every 250ms):
+const m = meter([channels.write, channels.effect, channels.flush]);
+setInterval(() => {
+  const f = m.read();
+  console.log("writes/s≈", f["loom:write"].count * 4);
+  const lastFlush = f["loom:flush"].samples.at(-1);
+  if (lastFlush) console.log("last flush", lastFlush.batchSize, lastFlush.durationMs);
+}, 250);
 
-const count = state(0, { label: "counter.count", namespace: "demo" });
-const stop = effect(
-  () => {
-    document.title = String(count());
-  },
-  { label: "counter.title", namespace: "demo" },
-);
-
-console.log(depsOf(stop));
-console.log(inspect().nodes);
-
-stopObserve();
-stop();
+// Your own channel — counter-only or with a bounded detail ring:
+import { channel } from "loom";
+const paint = channel("app:paint", { capacity: 256, fields: ["ms"] });
+paint.emit(16.7); // no-op and zero-alloc unless someone is metering it
 ```
 
-Observers exclude internal nodes by default. Pass
-`{ includeInternal: true }` when a tool needs to inspect Loom-owned work.
+The built-in channels record **non-internal** nodes only, so the idle baseline is
+zero. `inspect()` still returns a pull snapshot of the whole graph, and
+`depsOf(read | stop)` returns a node's dependencies.
 
 ## JSX
 

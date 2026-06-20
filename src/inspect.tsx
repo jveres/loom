@@ -5,10 +5,11 @@
 // All of the inspector's own reactive bindings and UI state are created `internal`, so Loom's
 // observability filters them out: the inspector measures the app, never itself.
 import {
+  channels,
   effect,
   inspect,
-  type ObserveEvent,
-  observe,
+  type Meter,
+  meter,
   type Polled,
   polled,
   type Read,
@@ -27,9 +28,6 @@ const PANEL_ID = "loom-inspector";
 // Shared options for every Loom node the inspector creates: internal (filtered from the
 // observability it reports) and namespaced to the panel. Set once on the scope; nodes inherit it.
 const PANEL_OPTS = { internal: true, namespace: PANEL_ID } as const;
-// Namespace loom/dom tags its bindings with (see src/dom.ts DOM_NAMESPACE); effect runs in this
-// namespace are the pipeline's rendering output.
-const DOM_NS = "dom";
 const SANS =
   "ui-sans-serif,-apple-system,'SF Pro Text',Inter,system-ui,sans-serif";
 const MONO = "ui-monospace,'SF Mono','JetBrains Mono',Menlo,monospace";
@@ -227,7 +225,6 @@ let panel: HTMLElement | null = null;
 let menuEl: HTMLElement | null = null;
 let bodyEl: HTMLElement | null = null;
 let closeMenuOnOutside: ((e: Event) => void) | null = null;
-let observeStop: Stop | null = null;
 let heartbeat: Polled<number> | null = null;
 let lagTimer: ReturnType<typeof setInterval> | null = null;
 let rafHandle: number | null = null;
@@ -244,22 +241,15 @@ let ui: State<TabId> | null = null;
 // Wakes the Info-tab bindings each poll while that tab is visible (see startMetrics()).
 let metricSeq = 0;
 
-// Raw observed counters (incremented by onEvent) and their smoothed per-second rates. These map
-// 1:1 onto the loom-next pipeline stages: writes -> computed recompute -> flush -> DOM effect run.
-let readCount = 0; // tracked reads (state:read + computed:read)
-let writeCount = 0; // state:set (pipeline input)
-let computedCount = 0; // computed:update (derivations recomputed to a new value)
-let domWriteCount = 0; // effect:run in the "dom" namespace (DOM bindings = rendering output)
-let flushCount = 0;
-let lastReadCount = 0;
-let lastWriteCount = 0;
-let lastComputedCount = 0;
-let lastDomWriteCount = 0;
-let lastFlushCount = 0;
+// A pull-based meter on the core's built-in reactive channels; poll() drains it every tick for
+// the smoothed per-second rates. These map 1:1 onto the loom-next pipeline stages:
+// writes -> computed recompute -> flush -> effect run. The meter is a scope resource, so minimizing
+// the panel detaches it and the core's emit sites go fully dormant.
+let metricsMeter: Meter | null = null;
 let readRate = 0;
 let writeRate = 0;
 let computedRate = 0;
-let domWriteRate = 0;
+let effectRate = 0;
 let flushRate = 0;
 let lastFlushBatch = 0;
 let lastFlushMs = 0;
@@ -969,8 +959,8 @@ const TIP = {
   writes: "State writes per second (state:set events).",
   reads: "Tracked reads per second (reads inside effects/computeds).",
   computedsRate: "Computed values recomputed to a new result per second.",
-  domUpdates:
-    "DOM-binding effect runs per second — text/attr/class/style/list (the rendering output).",
+  effectRuns:
+    "Effect runs per second — DOM bindings + app effects (the rendering output of the pipeline).",
   flushes: "Reactive flush cycles per second.",
   effectsPerFlush: "Effects run in the most recent flush (its batch size).",
   flushTime: "Wall-clock duration of the most recent flush.",
@@ -1089,12 +1079,7 @@ function buildStatsPane(): HTMLElement {
         "",
         TIP.computedsRate,
       )}
-      {stat(
-        "DOM updates / s",
-        () => fmtRate(domWriteRate),
-        "lo",
-        TIP.domUpdates,
-      )}
+      {stat("effect runs / s", () => fmtRate(effectRate), "lo", TIP.effectRuns)}
       {stat("flushes / s", () => fmtRate(flushRate), "lo", TIP.flushes)}
       {stat(
         "effects / flush",
@@ -1151,58 +1136,31 @@ function buildHeapStat(): HTMLElement {
 
 /* ============================================================ metrics loop ========= */
 
-function onEvent(e: ObserveEvent): void {
-  switch (e.kind) {
-    case "state:read":
-    case "computed:read":
-      readCount++;
-      break;
-    case "state:set":
-      writeCount++;
-      break;
-    case "computed:update":
-      computedCount++;
-      break;
-    case "effect:run":
-      // DOM bindings (text/attr/class/style/list) run in the "dom" namespace — i.e. the
-      // rendering output of the pipeline. App effects in other namespaces aren't render work.
-      if (e.namespace === DOM_NS) domWriteCount++;
-      break;
-    case "flush":
-      flushCount++;
-      lastFlushBatch = e.batchSize;
-      lastFlushMs = e.durationMs;
-      break;
-    default:
-      break;
-  }
-}
-
-// The heartbeat sample (see startMetrics): recompute rates each tick and return a sequence that
-// only advances while the Info tab is visible, so the polled signal's value-dedup leaves the
-// (display:none-hidden) Info bindings asleep until that tab is shown.
+// The heartbeat sample (see startMetrics): drain the meter into smoothed rates and return a
+// sequence that only advances while the Info tab is visible, so the polled signal's value-dedup
+// leaves the (display:none-hidden) Info bindings asleep until that tab is shown.
 function poll(): number {
-  const dr = readCount - lastReadCount;
-  const dw = writeCount - lastWriteCount;
-  const ddom = domWriteCount - lastDomWriteCount;
-  lastReadCount = readCount;
-  lastWriteCount = writeCount;
-  lastDomWriteCount = domWriteCount;
+  const frame = metricsMeter?.read();
+  const dr = frame?.["loom:read"]?.count ?? 0;
+  const dw = frame?.["loom:write"]?.count ?? 0;
+  const deff = frame?.["loom:effect"]?.count ?? 0;
+  const dc = frame?.["loom:compute"]?.count ?? 0;
+  const flushFrame = frame?.["loom:flush"];
   readRate = ema(readRate, dr);
   writeRate = ema(writeRate, dw);
-  domWriteRate = ema(domWriteRate, ddom);
-  // Sparkline = rendering-pipeline utilization: writes entering vs DOM updates produced.
+  effectRate = ema(effectRate, deff);
+  computedRate = ema(computedRate, dc);
+  flushRate = ema(flushRate, flushFrame?.count ?? 0);
+  const lastFlush = flushFrame?.samples.at(-1);
+  if (lastFlush !== undefined) {
+    lastFlushBatch = lastFlush["batchSize"] as number;
+    lastFlushMs = lastFlush["durationMs"] as number;
+  }
+  // Sparkline = rendering-pipeline utilization: writes entering vs effect runs produced.
   sparkIn.push(dw);
-  sparkOut.push(ddom);
+  sparkOut.push(deff);
   if (sparkIn.length > SPARK_N) sparkIn.shift();
   if (sparkOut.length > SPARK_N) sparkOut.shift();
-
-  const dc = computedCount - lastComputedCount;
-  lastComputedCount = computedCount;
-  computedRate = ema(computedRate, dc);
-  const df = flushCount - lastFlushCount;
-  lastFlushCount = flushCount;
-  flushRate = ema(flushRate, df);
 
   if (!fpsReady) {
     healthReady = false;
@@ -1228,10 +1186,9 @@ function poll(): number {
 }
 
 function startMetrics(): void {
-  observeStop = observe(onEvent, { includeInternal: false });
-  // Web vitals (CLS/LCP/INP) are lazy sources created in mountInspector(); their
-  // PerformanceObservers connect/disconnect automatically with their readouts' subscriptions.
-
+  // The reactive-pipeline rates come from a pull-based meter on the core's built-in channels,
+  // created in the panel scope (see mountInspector) so minimizing detaches it. Web vitals
+  // (CLS/LCP/INP) are lazy sources whose PerformanceObservers connect with their readouts.
   lagExpected = performance.now() + LAG_MS;
   lagTimer = setInterval(() => {
     const t = performance.now();
@@ -1385,6 +1342,15 @@ export function mountInspector(target: Element = document.body): void {
   let statsPane!: HTMLElement;
   let sparkEl!: HTMLElement;
   inspectorScope = scope(() => {
+    // Meter the core's reactive channels; as a scope resource it detaches on minimize, leaving the
+    // core's emit sites fully dormant. Created before the heartbeat so poll() can drain it.
+    metricsMeter = meter([
+      channels.read,
+      channels.write,
+      channels.compute,
+      channels.effect,
+      channels.flush,
+    ]);
     heartbeat = polled(poll, POLL_MS);
     statsScope = scope(() => {
       clsSource = source(connectCls, 0);
@@ -1508,8 +1474,8 @@ export function mountInspector(target: Element = document.body): void {
 
 /** Remove the panel and stop all observation/timers. Safe to call when not mounted. */
 export function unmountInspector(): void {
-  observeStop?.();
-  observeStop = null;
+  metricsMeter?.stop();
+  metricsMeter = null;
   heartbeat?.stop();
   heartbeat = null;
   heapSource?.stop();
@@ -1538,14 +1504,7 @@ export function unmountInspector(): void {
   metricSeq = 0;
 
   // Reset live metrics so the next mount starts clean.
-  readCount = writeCount = computedCount = domWriteCount = flushCount = 0;
-  lastReadCount =
-    lastWriteCount =
-    lastComputedCount =
-    lastDomWriteCount =
-    lastFlushCount =
-      0;
-  readRate = writeRate = computedRate = domWriteRate = flushRate = 0;
+  readRate = writeRate = computedRate = effectRate = flushRate = 0;
   lastFlushBatch = lastFlushMs = 0;
   fps = 0;
   fpsReady = false;

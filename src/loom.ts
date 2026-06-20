@@ -63,73 +63,6 @@ export interface InspectSnapshot {
   readonly nodes: readonly InspectNode[];
 }
 
-export type ObserveEvent =
-  | {
-      readonly kind: "state:create";
-      readonly id: number;
-      readonly label: string;
-      readonly namespace: string;
-      readonly internal: boolean;
-      readonly value: unknown;
-    }
-  | {
-      readonly kind: "state:set";
-      readonly id: number;
-      readonly label: string;
-      readonly namespace: string;
-      readonly internal: boolean;
-      readonly previous: unknown;
-      readonly value: unknown;
-    }
-  | {
-      readonly kind: "state:read" | "computed:read";
-      readonly id: number;
-      readonly label: string;
-      readonly namespace: string;
-      readonly internal: boolean;
-    }
-  | {
-      readonly kind: "computed:create" | "effect:create" | "effect:dispose";
-      readonly id: number;
-      readonly label: string;
-      readonly namespace: string;
-      readonly internal: boolean;
-    }
-  | {
-      readonly kind: "computed:update";
-      readonly id: number;
-      readonly label: string;
-      readonly namespace: string;
-      readonly internal: boolean;
-      readonly previous: unknown;
-      readonly value: unknown;
-    }
-  | {
-      readonly kind: "effect:run";
-      readonly id: number;
-      readonly label: string;
-      readonly namespace: string;
-      readonly internal: boolean;
-      readonly runs: number;
-    }
-  | {
-      readonly kind: "flush";
-      readonly batchSize: number;
-      readonly durationMs: number;
-    };
-
-export type Observer = (event: ObserveEvent) => void;
-
-export interface ObserveOptions {
-  readonly computed?: boolean;
-  readonly creates?: boolean;
-  readonly effects?: boolean;
-  readonly flushes?: boolean;
-  readonly includeInternal?: boolean;
-  readonly reads?: boolean;
-  readonly writes?: boolean;
-}
-
 type CleanupEffectFn = () => Stop;
 type InternalEffectFn = EffectFn | CleanupEffectFn;
 
@@ -209,17 +142,6 @@ interface InspectMeta {
   runs: number;
 }
 
-interface ObserverRecord {
-  readonly computed: boolean;
-  readonly creates: boolean;
-  readonly effects: boolean;
-  readonly flushes: boolean;
-  readonly includeInternal: boolean;
-  readonly observer: Observer;
-  readonly reads: boolean;
-  readonly writes: boolean;
-}
-
 let cycle = 0;
 let runDepth = 0;
 let batchDepth = 0;
@@ -230,16 +152,9 @@ let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
 const DEFAULT_NAMESPACE = "default";
 let inspectId = 0;
-let computedObservers = 0;
-let createObservers = 0;
-let effectObservers = 0;
-let flushObservers = 0;
-let readObservers = 0;
-let writeObservers = 0;
 const computedNodes = new WeakMap<object, ComputedNode<unknown>>();
 const effectNodes = new WeakMap<object, EffectNode>();
 const inspectRefs = new Map<number, WeakRef<NodeBase>>();
-const observers = new Set<ObserverRecord>();
 const stateNodes = new WeakMap<object, StateNode<unknown>>();
 
 const { link, unlink, propagate, checkDirty, shallowPropagate } =
@@ -288,7 +203,7 @@ export function state<T>(initial: T, options?: StateOptions): State<T> {
   node.source = source as State<unknown>;
   const meta = registerNode(node, "state", options);
   stateNodes.set(source, node as StateNode<unknown>);
-  if (createObservers > 0) emitStateCreate(meta, initial);
+  if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
   return source;
 }
 
@@ -318,7 +233,7 @@ export function source<T>(
     resume: () => reconnectSource(erased),
     stop: () => disconnectSource(erased),
   });
-  if (createObservers > 0) emitStateCreate(meta, initial);
+  if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
   return read;
 }
 
@@ -349,7 +264,7 @@ export function computed<T>(
   const read = computedOper.bind(node) as Read<T>;
   const meta = registerNode(node, "computed", options);
   computedNodes.set(read, node as ComputedNode<unknown>);
-  if (createObservers > 0) emitCreate(meta, "computed:create");
+  if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
   return read;
 }
 
@@ -362,7 +277,7 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     activeScope.effects.push(node);
   }
   const meta = registerNode(node, "effect", options);
-  if (createObservers > 0) emitCreate(meta, "effect:create");
+  if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
   const previous = setActiveSub(node);
   if (previous !== undefined) {
     link(node, previous, 0);
@@ -376,7 +291,8 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     activeSub = previous;
     node.flags &= ~RecursedCheck;
   }
-  emitRun(node);
+  meta.runs++;
+  if (effectCh.meters !== 0 && meta.internal !== true) effectCh.seq++;
   const stop = stopEffect.bind(node);
   effectNodes.set(stop, node);
   return stop;
@@ -596,15 +512,215 @@ export function fields<T extends object>(
   return out;
 }
 
-export function observe(observer: Observer, options?: ObserveOptions): Stop {
-  const record = observerRecord(observer, options);
-  observers.add(record);
-  addObserverCounters(record, 1);
-  return () => {
-    if (!observers.delete(record)) return;
-    addObserverCounters(record, -1);
+/* ===== Observability channels: gated overwriting ring buffers, drained by a pull-based meter.
+   A channel is a process-global, name-addressed singleton (the producer/consumer rendezvous). It
+   stays a no-op — and allocation-free — until a meter attaches. Counts are exact; detail is a
+   bounded, most-recent sample that drops oldest under overflow, so no event rate and no consumer
+   can stall the producer. ===== */
+
+export interface ChannelOptions {
+  /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */
+  readonly capacity?: number;
+  /** Field names recorded per event on a detail channel; emit() takes one value per field. */
+  readonly fields?: readonly string[];
+}
+
+export interface Channel {
+  readonly name: string;
+  /** True while ≥1 meter is attached — gate expensive argument prep behind it. */
+  readonly active: boolean;
+  /** Record one event. No-op and zero-allocation when inactive. One value per declared field. */
+  emit(a?: unknown, b?: unknown, c?: unknown, d?: unknown): void;
+}
+
+export interface Frame {
+  /** Exact events on this channel since the last read(). */
+  readonly count: number;
+  /** Events lost to ring overwrite since the last read() (detail channels only). */
+  readonly dropped: number;
+  /** Most-recent records, oldest→newest, at most `capacity`; keyed by the channel's fields. */
+  readonly samples: ReadonlyArray<Readonly<Record<string, unknown>>>;
+}
+
+export interface Meter {
+  /** Pull one Frame per metered channel, keyed by channel name. Call on your own clock. */
+  read(): Readonly<Record<string, Frame>>;
+  /** Detach from every channel (drops their gate). */
+  stop(): void;
+}
+
+interface ChannelNode {
+  readonly name: string;
+  readonly cap: number;
+  readonly mask: number;
+  readonly fields: readonly string[];
+  readonly cols: unknown[][];
+  meters: number;
+  seq: number; // monotonic count (double; exact to 2^53)
+  head: number; // ring write index (0..cap-1)
+}
+
+const channelRegistry = new Map<string, ChannelNode>();
+
+function toPow2(n: number): number {
+  if (n <= 0) return 0;
+  let p = 1;
+  while (p < n) p <<= 1;
+  return p;
+}
+
+function createChannelNode(
+  name: string,
+  options?: ChannelOptions,
+): ChannelNode {
+  const cap = toPow2(options?.capacity ?? 0);
+  const fields = options?.fields ?? [];
+  const cols: unknown[][] = [];
+  if (cap > 0)
+    for (let i = 0; i < fields.length; i++) cols.push(new Array(cap));
+  return {
+    name,
+    cap,
+    mask: cap > 0 ? cap - 1 : 0,
+    fields,
+    cols,
+    meters: 0,
+    seq: 0,
+    head: 0,
   };
 }
+
+// Record one event (caller has checked node.meters !== 0). Zero-allocation: columnar ring write.
+function recordChannel(node: ChannelNode, a: unknown, b: unknown): void {
+  if (node.cap !== 0) {
+    const h = node.head;
+    const cols = node.cols;
+    if (cols.length > 0) cols[0]![h] = a;
+    if (cols.length > 1) cols[1]![h] = b;
+    node.head = (h + 1) & node.mask;
+  }
+  node.seq++;
+}
+
+function channelOf(node: ChannelNode): Channel {
+  return {
+    name: node.name,
+    get active() {
+      return node.meters !== 0;
+    },
+    emit(a, b) {
+      if (node.meters !== 0) recordChannel(node, a, b);
+    },
+  };
+}
+
+export function channel(name: string, options?: ChannelOptions): Channel {
+  let node = channelRegistry.get(name);
+  if (node === undefined) {
+    node = createChannelNode(name, options);
+    channelRegistry.set(name, node);
+  } else if (options !== undefined) {
+    const cap = toPow2(options.capacity ?? 0);
+    if (
+      cap !== node.cap ||
+      (options.fields ?? []).length !== node.fields.length
+    ) {
+      throw new Error(
+        `Channel "${name}" already declared with different options.`,
+      );
+    }
+  }
+  return channelOf(node);
+}
+
+export function meter(sources: ReadonlyArray<Channel>): Meter {
+  const members: Array<{ readonly node: ChannelNode; cursor: number }> = [];
+  for (const ch of sources) {
+    const node = channelRegistry.get(ch.name);
+    if (node !== undefined) members.push({ node, cursor: node.seq });
+  }
+  let attached = false;
+  const attach = (): void => {
+    if (attached) return;
+    attached = true;
+    for (const m of members) {
+      m.node.meters++;
+      m.cursor = m.node.seq;
+    }
+  };
+  const detach = (): void => {
+    if (!attached) return;
+    attached = false;
+    for (const m of members) m.node.meters--;
+  };
+  attach();
+  // A meter is a scope resource: pause() detaches (the channels can go inactive → the core's emit
+  // sites become no-ops again), resume() re-attaches fresh, stop()/scope teardown detaches.
+  activeScope?.resources.push({ pause: detach, resume: attach, stop: detach });
+  return {
+    read() {
+      const frame: Record<string, Frame> = {};
+      for (const m of members) {
+        const node = m.node;
+        const seq = node.seq;
+        const count = seq - m.cursor;
+        let dropped = 0;
+        const samples: Array<Record<string, unknown>> = [];
+        if (node.cap !== 0 && count > 0) {
+          const avail = count < node.cap ? count : node.cap;
+          dropped = count - avail;
+          const { cols, fields, mask, head, cap } = node;
+          for (let k = 0; k < avail; k++) {
+            const idx = (head + cap - avail + k) & mask;
+            const rec: Record<string, unknown> = {};
+            for (let f = 0; f < fields.length; f++) {
+              rec[fields[f] as string] = cols[f]?.[idx];
+            }
+            samples.push(rec);
+          }
+        }
+        m.cursor = seq;
+        frame[node.name] = { count, dropped, samples };
+      }
+      return frame;
+    },
+    stop: detach,
+  };
+}
+
+// Built-in reactive channels. The core records to these inline at the hot-path sites; they stay
+// no-ops until a meter attaches. Non-internal nodes only, so the idle baseline is zero.
+const readCh = createChannelNode("loom:read");
+const writeCh = createChannelNode("loom:write");
+const computeCh = createChannelNode("loom:compute");
+const effectCh = createChannelNode("loom:effect");
+const flushCh = createChannelNode("loom:flush", {
+  capacity: 8,
+  fields: ["batchSize", "durationMs"],
+});
+const createCh = createChannelNode("loom:create");
+const disposeCh = createChannelNode("loom:dispose");
+for (const node of [
+  readCh,
+  writeCh,
+  computeCh,
+  effectCh,
+  flushCh,
+  createCh,
+  disposeCh,
+]) {
+  channelRegistry.set(node.name, node);
+}
+
+export const channels = {
+  read: channelOf(readCh),
+  write: channelOf(writeCh),
+  compute: channelOf(computeCh),
+  effect: channelOf(effectCh),
+  flush: channelOf(flushCh),
+  create: channelOf(createCh),
+  dispose: channelOf(disposeCh),
+} as const;
 
 export function inspect(): InspectSnapshot {
   const nodes: InspectNode[] = [];
@@ -767,184 +883,6 @@ function nodeValue(node: NodeBase): unknown {
   }
 }
 
-function emitStateCreate(meta: InspectMeta, value: unknown): void {
-  emit(meta, {
-    kind: "state:create",
-    id: meta.id,
-    internal: meta.internal,
-    label: meta.label,
-    namespace: meta.namespace,
-    value,
-  });
-}
-
-function emitCreate(
-  meta: InspectMeta,
-  kind: "computed:create" | "effect:create",
-): void {
-  emit(meta, {
-    kind,
-    id: meta.id,
-    internal: meta.internal,
-    label: meta.label,
-    namespace: meta.namespace,
-  });
-}
-
-function emitStateSet<T>(node: StateNode<T>, previous: T, value: T): void {
-  if (writeObservers === 0) return;
-  const meta = node.meta;
-  if (!meta) return;
-  emit(meta, {
-    kind: "state:set",
-    id: meta.id,
-    internal: meta.internal,
-    label: meta.label,
-    namespace: meta.namespace,
-    previous,
-    value,
-  });
-}
-
-function emitComputedUpdate<T>(
-  node: ComputedNode<T>,
-  previous: T | undefined,
-  value: T | undefined,
-): void {
-  if (computedObservers === 0) return;
-  const meta = node.meta;
-  if (!meta) return;
-  emit(meta, {
-    kind: "computed:update",
-    id: meta.id,
-    internal: meta.internal,
-    label: meta.label,
-    namespace: meta.namespace,
-    previous,
-    value,
-  });
-}
-
-function emitRead(node: StateNode<unknown> | ComputedNode<unknown>): void {
-  if (readObservers === 0) return;
-  const meta = node.meta;
-  if (!meta) return;
-  emit(meta, {
-    kind: meta.kind === "computed" ? "computed:read" : "state:read",
-    id: meta.id,
-    internal: meta.internal,
-    label: meta.label,
-    namespace: meta.namespace,
-  });
-}
-
-function emitRun(node: EffectNode): void {
-  const meta = node.meta;
-  if (!meta) return;
-  meta.runs++;
-  if (effectObservers > 0) emitEffectRun(meta);
-}
-
-function emitEffectRun(meta: InspectMeta): void {
-  emit(meta, {
-    kind: "effect:run",
-    id: meta.id,
-    internal: meta.internal,
-    label: meta.label,
-    namespace: meta.namespace,
-    runs: meta.runs,
-  });
-}
-
-function emitDispose(meta: InspectMeta): void {
-  if (effectObservers === 0) return;
-  emit(meta, {
-    kind: "effect:dispose",
-    id: meta.id,
-    internal: meta.internal,
-    label: meta.label,
-    namespace: meta.namespace,
-  });
-}
-
-function emitFlush(batchSize: number, durationMs: number): void {
-  if (flushObservers === 0) return;
-  emit(undefined, { kind: "flush", batchSize, durationMs });
-}
-
-function emit(meta: InspectMeta | undefined, event: ObserveEvent): void {
-  if (observers.size === 0) return;
-  for (const record of observers) {
-    if (!record.includeInternal && meta?.internal) continue;
-    if (observes(record, event)) record.observer(event);
-  }
-}
-
-function observerRecord(
-  observer: Observer,
-  options: ObserveOptions | undefined,
-): ObserverRecord {
-  if (!options) {
-    return {
-      computed: true,
-      creates: true,
-      effects: true,
-      flushes: true,
-      includeInternal: false,
-      observer,
-      reads: true,
-      writes: true,
-    };
-  }
-  const allKinds =
-    options.computed === undefined &&
-    options.creates === undefined &&
-    options.effects === undefined &&
-    options.flushes === undefined &&
-    options.reads === undefined &&
-    options.writes === undefined;
-  return {
-    computed: allKinds || options.computed === true,
-    creates: allKinds || options.creates === true,
-    effects: allKinds || options.effects === true,
-    flushes: allKinds || options.flushes === true,
-    includeInternal: options.includeInternal === true,
-    observer,
-    reads: allKinds || options.reads === true,
-    writes: allKinds || options.writes === true,
-  };
-}
-
-function addObserverCounters(record: ObserverRecord, direction: 1 | -1): void {
-  if (record.computed) computedObservers += direction;
-  if (record.creates) createObservers += direction;
-  if (record.effects) effectObservers += direction;
-  if (record.flushes) flushObservers += direction;
-  if (record.reads) readObservers += direction;
-  if (record.writes) writeObservers += direction;
-}
-
-function observes(record: ObserverRecord, event: ObserveEvent): boolean {
-  switch (event.kind) {
-    case "computed:create":
-    case "effect:create":
-    case "state:create":
-      return record.creates;
-    case "computed:read":
-    case "state:read":
-      return record.reads;
-    case "state:set":
-      return record.writes;
-    case "computed:update":
-      return record.computed;
-    case "effect:dispose":
-    case "effect:run":
-      return record.effects;
-    case "flush":
-      return record.flushes;
-  }
-}
-
 function now(): number {
   return typeof performance === "undefined" ? Date.now() : performance.now();
 }
@@ -1038,7 +976,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
     if (previous !== next) {
       this.pendingValue = next;
       this.flags = Mutable | Dirty;
-      if (writeObservers > 0) emitStateSet(this, previous, next);
+      if (writeCh.meters !== 0 && this.meta?.internal !== true) writeCh.seq++;
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);
@@ -1058,7 +996,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   const sub = activeSub;
   if (sub !== undefined) {
     link(this, sub, cycle);
-    if (readObservers > 0) emitRead(this as StateNode<unknown>);
+    if (readCh.meters !== 0 && this.meta?.internal !== true) readCh.seq++;
   }
   return this.currentValue;
 }
@@ -1076,7 +1014,7 @@ function sourceOper<T>(this: SourceNode<T>): T {
     const first = this.subs === undefined;
     link(this, sub, cycle);
     if (first && !this.active) connectSource(this);
-    if (readObservers > 0) emitRead(this as unknown as StateNode<unknown>);
+    if (readCh.meters !== 0 && this.meta?.internal !== true) readCh.seq++;
   }
   return this.currentValue;
 }
@@ -1109,9 +1047,9 @@ function computedOper<T>(this: ComputedNode<T>): T {
     this.flags = Mutable | RecursedCheck;
     const previous = setActiveSub(this);
     try {
-      const oldValue = this.value;
       this.value = this.getter();
-      if (computedObservers > 0) emitComputedUpdate(this, oldValue, this.value);
+      if (computeCh.meters !== 0 && this.meta?.internal !== true)
+        computeCh.seq++;
     } finally {
       activeSub = previous;
       this.flags &= ~RecursedCheck;
@@ -1121,7 +1059,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
   const sub = activeSub;
   if (sub !== undefined) {
     link(this, sub, cycle);
-    if (readObservers > 0) emitRead(this as ComputedNode<unknown>);
+    if (readCh.meters !== 0 && this.meta?.internal !== true) readCh.seq++;
   }
   return this.value as T;
 }
@@ -1137,8 +1075,8 @@ function updateComputed<T>(node: ComputedNode<T>): boolean {
     const newValue = node.getter(oldValue);
     node.value = newValue;
     const changed = oldValue !== newValue;
-    if (changed && computedObservers > 0) {
-      emitComputedUpdate(node, oldValue, newValue);
+    if (changed && computeCh.meters !== 0 && node.meta?.internal !== true) {
+      computeCh.seq++;
     }
     return changed;
   } finally {
@@ -1203,7 +1141,7 @@ function runEffect(node: EffectNode): boolean {
     const meta = node.meta;
     if (meta) {
       meta.runs++;
-      if (effectObservers > 0) emitEffectRun(meta);
+      if (effectCh.meters !== 0 && meta.internal !== true) effectCh.seq++;
     }
     return meta === undefined || meta.internal !== true;
   } else if (node.deps !== undefined) {
@@ -1214,7 +1152,7 @@ function runEffect(node: EffectNode): boolean {
 
 function flush(): void {
   const batchSize = queuedLength - notifyIndex;
-  const start = batchSize > 0 && flushObservers > 0 ? now() : 0;
+  const start = batchSize > 0 && flushCh.meters !== 0 ? now() : 0;
   let appBatchSize = 0;
   try {
     while (notifyIndex < queuedLength) {
@@ -1230,8 +1168,8 @@ function flush(): void {
     }
     notifyIndex = 0;
     queuedLength = 0;
-    if (appBatchSize > 0) {
-      emitFlush(appBatchSize, start ? now() - start : 0);
+    if (appBatchSize > 0 && flushCh.meters !== 0) {
+      recordChannel(flushCh, appBatchSize, start ? now() - start : 0);
     }
   }
 }
@@ -1246,7 +1184,7 @@ function stopEffect(this: EffectNode): void {
   if (!meta || meta.disposed) return;
   meta.disposed = true;
   inspectRefs.delete(meta.id);
-  emitDispose(meta);
+  if (disposeCh.meters !== 0 && meta.internal !== true) disposeCh.seq++;
 }
 
 // Only a returned function is a cleanup; any other return (e.g. an expression-body effect like
