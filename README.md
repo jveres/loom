@@ -93,6 +93,9 @@ The core exports these functions:
   channel (`{ count, dropped, samples }`) since the last read. A meter is a scope
   resource, so it detaches on `scope.pause()`.
 - `inspect()` returns a snapshot of the current reactive graph.
+- `inspectResources()` returns a live census `{ states, computeds, effects,
+  sources, scopes, channels }` — one cheap walk, no per-node allocation; nothing
+  runs on the reactive hot path.
 - `depsOf(source)` returns inspected dependencies for a state, computed read, or
   effect stop handle.
 
@@ -107,6 +110,7 @@ The core exports these types:
 - `EffectFn` is a reusable effect callback type.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
 - `InspectNode` and `InspectSnapshot` describe graph snapshots.
+- `ResourceCounts` is the `inspectResources()` census result.
 - `Channel` is a named observability channel; `Meter` drains channels;
   `Frame` is a per-channel `{ count, dropped, samples }`; `ChannelOptions`
   configures `{ capacity, fields }`.

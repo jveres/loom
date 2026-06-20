@@ -9,6 +9,7 @@ import {
   effect,
   fields,
   inspect,
+  inspectResources,
   type Meter,
   meter,
   mutate,
@@ -348,6 +349,30 @@ describe("loom channels", () => {
 
     s.stop();
     expect(ch.active).toBe(false); // scope teardown detaches too
+  });
+
+  it("inspectResources censuses live reactive resources off the hot path", () => {
+    const before = inspectResources();
+    expect(before.channels).toBeGreaterThanOrEqual(7); // the 7 built-in channels
+
+    const keep: unknown[] = [];
+    const s = scope(() => {
+      keep.push(state(0));
+      keep.push(computed(() => 1));
+      keep.push(effect(() => {}));
+      keep.push(source(() => () => {}, 0)); // a lazy source
+    });
+
+    const after = inspectResources();
+    expect(after.states - before.states).toBe(1);
+    expect(after.computeds - before.computeds).toBe(1);
+    expect(after.effects - before.effects).toBe(1);
+    expect(after.sources - before.sources).toBe(1); // counted apart from plain states
+    expect(after.scopes - before.scopes).toBe(1);
+
+    s.stop();
+    expect(inspectResources().scopes).toBe(before.scopes); // scope teardown decrements
+    expect(keep).toHaveLength(4);
   });
 
   it("ignores channels it doesn't know", () => {

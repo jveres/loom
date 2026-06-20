@@ -7,7 +7,7 @@
 import {
   channels,
   effect,
-  inspect,
+  inspectResources,
   type Meter,
   meter,
   type Polled,
@@ -252,6 +252,8 @@ let writeRate = 0;
 let computedRate = 0;
 let effectRate = 0;
 let flushRate = 0;
+let createRate = 0;
+let disposeRate = 0;
 let lastFlushBatch = 0;
 let lastFlushMs = 0;
 
@@ -284,11 +286,14 @@ let healthKey = "";
 let healthReady = false;
 let fpsKey = "";
 
-// Live node census, recomputed once per poll (while the Info tab is visible) so the three
-// count rows share a single inspect() snapshot.
+// Live resource census, recomputed once per poll (while the Info tab is visible) via a single
+// inspectResources() walk shared by all the count rows.
 let nodeStates = 0;
 let nodeComputeds = 0;
 let nodeEffects = 0;
+let nodeSources = 0;
+let nodeScopes = 0;
+let nodeChannels = 0;
 
 // Rendering-pipeline sparkline series: writes in (top) vs DOM updates out (bottom), per poll.
 const sparkIn: number[] = [];
@@ -469,19 +474,6 @@ function gaugeClass(base: string): string {
 
 // Live node census from a Loom snapshot, by the three node kinds. Inspector-owned nodes are
 // `internal`, so they're skipped.
-function liveCounts(): { states: number; computeds: number; effects: number } {
-  let states = 0;
-  let computeds = 0;
-  let effects = 0;
-  for (const node of inspect().nodes) {
-    if (node.internal) continue;
-    if (node.kind === "state") states++;
-    else if (node.kind === "computed") computeds++;
-    else if (node.kind === "effect") effects++;
-  }
-  return { states, computeds, effects };
-}
-
 /* ============================================================ persistence ========== */
 
 function lsGet(key: string): string | null {
@@ -965,9 +957,17 @@ const TIP = {
   flushes: "Reactive flush cycles per second.",
   effectsPerFlush: "Effects run in the most recent flush (its batch size).",
   flushTime: "Wall-clock duration of the most recent flush.",
+  creates:
+    "Reactive nodes (state/computed/effect) created per second — graph allocation rate.",
+  disposes: "Reactive nodes disposed per second — graph teardown rate.",
   states: "Live state cells in the reactive graph.",
   computeds: "Live computed values.",
   effects: "Live effects — DOM bindings plus app effects.",
+  sources:
+    "Live lazy sources (source/polled) — external producers wired into the graph.",
+  scopes: "Live scopes grouping effects and resources.",
+  channels:
+    "Registered observability channels (7 built-in + any app-declared).",
 } as const;
 
 function buildStatsPane(): HTMLElement {
@@ -1094,9 +1094,14 @@ function buildStatsPane(): HTMLElement {
         "",
         TIP.flushTime,
       )}
+      {stat("creates / s", () => fmtRate(createRate), "lo", TIP.creates)}
+      {stat("disposes / s", () => fmtRate(disposeRate), "lo", TIP.disposes)}
       {stat("states", () => String(nodeStates), "", TIP.states)}
       {stat("computeds", () => String(nodeComputeds), "", TIP.computeds)}
       {stat("effects", () => String(nodeEffects), "", TIP.effects)}
+      {stat("sources", () => String(nodeSources), "", TIP.sources)}
+      {stat("scopes", () => String(nodeScopes), "", TIP.scopes)}
+      {stat("channels", () => String(nodeChannels), "", TIP.channels)}
     </div>
   );
 }
@@ -1146,11 +1151,15 @@ function poll(): number {
   const dw = frame?.["loom:write"]?.count ?? 0;
   const deff = frame?.["loom:effect"]?.count ?? 0;
   const dc = frame?.["loom:compute"]?.count ?? 0;
+  const dcr = frame?.["loom:create"]?.count ?? 0;
+  const ddi = frame?.["loom:dispose"]?.count ?? 0;
   const flushFrame = frame?.["loom:flush"];
   readRate = ema(readRate, dr);
   writeRate = ema(writeRate, dw);
   effectRate = ema(effectRate, deff);
   computedRate = ema(computedRate, dc);
+  createRate = ema(createRate, dcr);
+  disposeRate = ema(disposeRate, ddi);
   flushRate = ema(flushRate, flushFrame?.count ?? 0);
   const lastFlush = flushFrame?.samples.at(-1) as
     | { batchSize: number; durationMs: number }
@@ -1176,14 +1185,17 @@ function poll(): number {
     fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
   }
 
-  // The graph census is expensive, so recompute it only while the stats tab is actually visible.
-  // The sequence advances every tick regardless, so the always-visible spark keeps moving across
-  // tab switches; the hidden stats bindings stay asleep via their own paused scope.
+  // The graph census walks every node, so recompute it only while the stats tab is actually
+  // visible. The sequence advances every tick regardless, so the always-visible spark keeps moving
+  // across tab switches; the hidden stats bindings stay asleep via their own paused scope.
   if (ui?.() === "stats" && !panel?.classList.contains("li-min")) {
-    const c = liveCounts();
+    const c = inspectResources();
     nodeStates = c.states;
     nodeComputeds = c.computeds;
     nodeEffects = c.effects;
+    nodeSources = c.sources;
+    nodeScopes = c.scopes;
+    nodeChannels = c.channels;
   }
   return ++metricSeq;
 }
@@ -1353,6 +1365,8 @@ export function mountInspector(target: Element = document.body): void {
       channels.compute,
       channels.effect,
       channels.flush,
+      channels.create,
+      channels.dispose,
     ]);
     heartbeat = polled(poll, POLL_MS);
     statsScope = scope(() => {
@@ -1508,6 +1522,7 @@ export function unmountInspector(): void {
 
   // Reset live metrics so the next mount starts clean.
   readRate = writeRate = computedRate = effectRate = flushRate = 0;
+  createRate = disposeRate = 0;
   lastFlushBatch = lastFlushMs = 0;
   fps = 0;
   fpsReady = false;
@@ -1516,6 +1531,7 @@ export function unmountInspector(): void {
   lag = lagPeak = 0;
   healthReady = false;
   nodeStates = nodeComputeds = nodeEffects = 0;
+  nodeSources = nodeScopes = nodeChannels = 0;
   sparkIn.length = 0;
   sparkOut.length = 0;
 }

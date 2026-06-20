@@ -150,6 +150,7 @@ let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
 const DEFAULT_NAMESPACE = "default";
 let inspectId = 0;
+let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off the reactive path)
 const computedNodes = new WeakMap<object, ComputedNode<unknown>>();
 const effectNodes = new WeakMap<object, EffectNode>();
 const inspectRefs = new Map<number, WeakRef<NodeBase>>();
@@ -322,6 +323,7 @@ export function scope(fn: () => void, options?: NodeOptions): Scope {
     paused: false,
     stopped: false,
   };
+  if (node.options?.internal !== true) liveScopes++;
   activeScope?.children.push(node);
   const previous = activeScope;
   activeScope = node;
@@ -347,6 +349,7 @@ function scopePaused(node: ScopeNode): boolean {
 function stopScope(node: ScopeNode): void {
   if (node.stopped) return;
   node.stopped = true;
+  if (node.options?.internal !== true) liveScopes--;
   for (const child of node.children) stopScope(child);
   node.children.length = 0;
   for (const effectNode of node.effects) {
@@ -746,6 +749,47 @@ export function inspect(): InspectSnapshot {
     if (meta) nodes.push(inspectNode(node, meta));
   }
   return { nodes };
+}
+
+// A live census of the reactive resources, for tooling. Computed by one pull-time walk of the
+// node registry (no per-node allocation, unlike inspect()), plus O(1) reads of the scope counter
+// and channel registry — nothing here runs on the reactive hot path.
+export interface ResourceCounts {
+  readonly states: number;
+  readonly computeds: number;
+  readonly effects: number;
+  readonly sources: number;
+  readonly scopes: number;
+  readonly channels: number;
+}
+
+export function inspectResources(): ResourceCounts {
+  let states = 0;
+  let computeds = 0;
+  let effects = 0;
+  let sources = 0;
+  for (const [id, ref] of inspectRefs) {
+    const node = ref.deref();
+    if (node === undefined) {
+      inspectRefs.delete(id);
+      continue;
+    }
+    const meta = node.meta;
+    if (!meta || meta.internal) continue;
+    if (meta.kind === "computed") computeds++;
+    else if (meta.kind === "effect") effects++;
+    else if ("connect" in node)
+      sources++; // a state-kind node backed by an external producer
+    else states++;
+  }
+  return {
+    states,
+    computeds,
+    effects,
+    sources,
+    scopes: liveScopes,
+    channels: channelRegistry.size,
+  };
 }
 
 export function depsOf(source: Read<unknown> | Stop): readonly InspectNode[] {
