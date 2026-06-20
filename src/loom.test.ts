@@ -446,6 +446,29 @@ describe("loom channels", () => {
     expect(keep).toHaveLength(5);
   });
 
+  it("inspect({ active }) skips subscriber-less cells but keeps effects", () => {
+    const watched = state(0, { label: "act-watched" });
+    const idle = state(0, { label: "act-idle" }); // nothing ever reads it
+    const stop = effect(
+      () => {
+        watched();
+      },
+      { label: "act-effect" },
+    );
+
+    const active = inspect({ active: true }).nodes;
+    const has = (label: string) => active.some((n) => n.label === label);
+    expect(has("act-watched")).toBe(true); // has a subscriber (the effect)
+    expect(has("act-effect")).toBe(true); // effects are always kept
+    expect(has("act-idle")).toBe(false); // no subscribers -> skipped
+
+    // the full snapshot still includes the idle cell
+    expect(inspect().nodes.some((n) => n.label === "act-idle")).toBe(true);
+
+    stop();
+    expect(idle()).toBe(0);
+  });
+
   it("ignores channels it doesn't know", () => {
     const ghost = { name: "test:ghost", active: false, emit: () => {} };
     const m = meter([ghost]);

@@ -98,7 +98,9 @@ The core exports these functions:
   visible, when you need tooling. `onError` installs a global effect error
   boundary (see below).
 - `inspect()` returns a snapshot of the current reactive graph (empty unless
-  inspection is enabled).
+  inspection is enabled). Pass `{ active: true }` to skip state/computed cells
+  with no subscribers — idle cells and "ghosts" (cells of a removed object that
+  are unreachable but not yet GC'd); effects are always kept.
 - `inspectResources()` returns a live census `{ states, computeds, effects,
   views, sources, scopes, channels }` — one cheap walk, no per-node allocation;
   nothing runs on the reactive hot path. `views` are the DOM bindings (effects in

@@ -1288,7 +1288,9 @@ function gUpdateRow(n: InspectNode, parent: HTMLElement, child: boolean): void {
 
 function renderGraph(): void {
   if (!graphEl) return;
-  const all = inspect().nodes;
+  // active:true drops subscriber-less cells before they're even built — excluding the ghost cells
+  // of removed objects (alive until GC) that would otherwise balloon the tree under churn.
+  const all = inspect({ active: true }).nodes;
   graphById = new Map(all.map((n) => [n.id, n]));
 
   // The tree holds state + computed cells only; views (effects) are reached by hover, not listed.
@@ -1307,9 +1309,6 @@ function renderGraph(): void {
   const seenRows = new Set<number>();
   const seenGroups = new Set<number>();
   for (const [gid, cells] of groups) {
-    // Skip ghost groups: a removed object's cells linger in inspect() until GC, but their bindings
-    // are already disposed, so none has a subscriber. Showing them balloons the tree under churn.
-    if (!cells.some((c) => c.subs.length > 0)) continue;
     seenGroups.add(gid);
     cells.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
     const g = gEnsureGroup(gid, gGroupLabel(gid, cells));
