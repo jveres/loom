@@ -61,7 +61,6 @@ stop();
 The core exports these functions:
 
 - `state(initial, options?)` creates a callable state cell.
-- `signal(initial)` is an alias for `state(initial)`.
 - `computed(getter, options?)` creates a cached derived read.
 - `effect(fn, options?)` runs `fn` immediately and again when its dependencies
   change.

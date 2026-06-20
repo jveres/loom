@@ -30,15 +30,13 @@ export type EffectFn = () => void;
 export type SourceConnect<T> = (set: (value: T) => void) => Stop;
 export type NodeKind = "state" | "computed" | "effect";
 
+// Shared creation options for every primitive. `effect` adds `target` (see EffectOptions); the
+// others (state/computed/fields/source/polled/scope) take NodeOptions directly.
 export interface NodeOptions {
   readonly internal?: boolean;
   readonly label?: string;
   readonly namespace?: string;
 }
-
-export type StateOptions = NodeOptions;
-export type ComputedOptions = NodeOptions;
-export type FieldsOptions = NodeOptions;
 
 export interface EffectOptions extends NodeOptions {
   readonly target?: object;
@@ -197,7 +195,7 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
     },
   });
 
-export function state<T>(initial: T, options?: StateOptions): State<T> {
+export function state<T>(initial: T, options?: NodeOptions): State<T> {
   const node = createStateNode(initial);
   const source = stateOper.bind(node) as State<T>;
   node.source = source as State<unknown>;
@@ -206,8 +204,6 @@ export function state<T>(initial: T, options?: StateOptions): State<T> {
   if (createCh.meters !== 0 && meta.internal !== true) createCh.seq++;
   return source;
 }
-
-export const signal = state;
 
 /**
  * A lazy reactive source backed by an external producer. `connect(set)` is invoked the first
@@ -219,7 +215,7 @@ export const signal = state;
 export function source<T>(
   connect: SourceConnect<T>,
   initial: T,
-  options?: StateOptions,
+  options?: NodeOptions,
 ): Read<T> {
   const node = createSourceNode(connect, initial);
   const read = sourceOper.bind(node) as Read<T>;
@@ -258,7 +254,7 @@ function reconnectSource(node: SourceNode<unknown>): void {
 
 export function computed<T>(
   getter: (previousValue?: T) => T,
-  options?: ComputedOptions,
+  options?: NodeOptions,
 ): Read<T> {
   const node = createComputedNode(getter);
   const read = computedOper.bind(node) as Read<T>;
@@ -424,7 +420,7 @@ export interface Polled<T> {
 export function polled<T>(
   sample: () => T,
   ms: number,
-  options?: StateOptions,
+  options?: NodeOptions,
 ): Polled<T> {
   const cell = state(sample(), options);
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -498,7 +494,7 @@ export function mutate<T extends object>(
 
 export function fields<T extends object>(
   initial: T,
-  options?: FieldsOptions,
+  options?: NodeOptions,
 ): Fields<T> {
   if (!isPlainObject(initial)) {
     throw new TypeError("fields() expects a plain object.");
@@ -646,9 +642,9 @@ export function channel(name: string, options?: ChannelOptions): Channel {
   return channelOf(node);
 }
 
-export function meter(sources: ReadonlyArray<Channel>): Meter {
+export function meter(channels: ReadonlyArray<Channel>): Meter {
   const members: Array<{ readonly node: ChannelNode; cursor: number }> = [];
-  for (const ch of sources) {
+  for (const ch of channels) {
     const node = channelRegistry.get(ch.name);
     if (node !== undefined) members.push({ node, cursor: node.seq });
   }
@@ -725,14 +721,17 @@ for (const node of [
   channelRegistry.set(node.name, node);
 }
 
+// /* @__PURE__ */ lets a bundler drop this whole collection (and channelOf) when an app never
+// meters — the built-in channel *nodes* stay (the core's emit gates reference them), but the
+// public wrappers tree-shake away.
 export const channels = {
-  read: channelOf(readCh),
-  write: channelOf(writeCh),
-  compute: channelOf(computeCh),
-  effect: channelOf(effectCh),
-  flush: channelOf(flushCh),
-  create: channelOf(createCh),
-  dispose: channelOf(disposeCh),
+  read: /* @__PURE__ */ channelOf(readCh),
+  write: /* @__PURE__ */ channelOf(writeCh),
+  compute: /* @__PURE__ */ channelOf(computeCh),
+  effect: /* @__PURE__ */ channelOf(effectCh),
+  flush: /* @__PURE__ */ channelOf(flushCh),
+  create: /* @__PURE__ */ channelOf(createCh),
+  dispose: /* @__PURE__ */ channelOf(disposeCh),
 } as const;
 
 export function inspect(): InspectSnapshot {
@@ -775,7 +774,7 @@ function mergeOptions<T extends NodeOptions>(
 function registerNode(
   node: NodeBase,
   kind: NodeKind,
-  options: StateOptions | ComputedOptions | EffectOptions | undefined,
+  options: NodeOptions | EffectOptions | undefined,
 ): InspectMeta {
   // Apply the active scope's ambient defaults (internal/namespace/label) under any explicit ones.
   const opts = mergeOptions(activeScope?.options, options);
@@ -799,11 +798,11 @@ function registerNode(
 }
 
 function fieldOptions(
-  options: FieldsOptions | undefined,
+  options: NodeOptions | undefined,
   key: string,
-): StateOptions | undefined {
+): NodeOptions | undefined {
   if (!options) return undefined;
-  const out: StateOptions = {
+  const out: NodeOptions = {
     label: options.label ? `${options.label}.${key}` : key,
   };
   if (options.internal !== undefined) {
