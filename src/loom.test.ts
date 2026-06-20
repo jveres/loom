@@ -978,11 +978,7 @@ describe("loom coverage", () => {
     const toggle = state(true);
     const a = state(1);
     const b = state(2);
-    let runs = 0;
-    const c = computed(() => {
-      runs++;
-      return toggle() ? a() : b();
-    });
+    const c = computed(() => (toggle() ? a() : b()));
     const d = computed(() => c() + 1);
     let out = 0;
     const stop = effect(() => {
