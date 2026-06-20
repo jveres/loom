@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   batch,
+  channel,
   channels,
   computed,
   depsOf,
@@ -275,6 +276,69 @@ describe("loom core", () => {
     stopApp();
     stopInternal();
     m.stop();
+  });
+});
+
+describe("loom channels", () => {
+  it("is zero-cost until metered, then records multi-field detail", () => {
+    const ch = channel("test:multi", {
+      capacity: 4,
+      fields: ["x", "y", "p"],
+    });
+
+    ch.emit(1, 2, 3); // no meter yet -> gated no-op
+    expect(ch.active).toBe(false);
+
+    const m = meter([ch]);
+    expect(ch.active).toBe(true);
+    ch.emit(10, 20, 30);
+    ch.emit(11, 21, 31);
+
+    const f = m.read()["test:multi"];
+    expect(f?.count).toBe(2); // the pre-meter emit is not counted
+    expect(f?.dropped).toBe(0);
+    expect(f?.samples).toEqual([
+      { x: 10, y: 20, p: 30 },
+      { x: 11, y: 21, p: 31 },
+    ]);
+    m.stop();
+    expect(ch.active).toBe(false);
+  });
+
+  it("counts everything but drops oldest detail past capacity", () => {
+    const ch = channel("test:overflow", { capacity: 2, fields: ["n"] });
+    const m = meter([ch]);
+    for (let i = 0; i < 5; i++) ch.emit(i);
+
+    const f = m.read()["test:overflow"];
+    expect(f?.count).toBe(5); // exact count survives overflow
+    expect(f?.dropped).toBe(3); // 5 - capacity(2)
+    expect(f?.samples).toEqual([{ n: 3 }, { n: 4 }]); // newest two, oldest→newest
+    m.stop();
+  });
+
+  it("supports count-only channels (capacity 0, no samples)", () => {
+    const ch = channel("test:count");
+    const m = meter([ch]);
+    ch.emit();
+    ch.emit();
+    const f = m.read()["test:count"];
+    expect(f?.count).toBe(2);
+    expect(f?.samples).toEqual([]);
+    m.stop();
+  });
+
+  it("returns the same channel on redeclare, throws on conflicting options", () => {
+    const a = channel("test:redeclare", { capacity: 4, fields: ["v"] });
+    const b = channel("test:redeclare", { capacity: 4, fields: ["v"] });
+    expect(b.name).toBe(a.name);
+    expect(() => channel("test:redeclare")).not.toThrow(); // no options -> just a handle
+    expect(() => channel("test:redeclare", { capacity: 8 })).toThrow(
+      /different options/,
+    );
+    expect(() =>
+      channel("test:redeclare", { capacity: 4, fields: ["w"] }),
+    ).toThrow(/different options/);
   });
 });
 

@@ -521,7 +521,7 @@ export function fields<T extends object>(
 export interface ChannelOptions {
   /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */
   readonly capacity?: number;
-  /** Field names recorded per event on a detail channel; emit() takes one value per field. */
+  /** Field names recorded per event on a detail channel (up to 4); emit() takes one value each. */
   readonly fields?: readonly string[];
 }
 
@@ -590,8 +590,15 @@ function createChannelNode(
   };
 }
 
-// Record one event (caller has checked node.meters !== 0). Zero-allocation: columnar ring write.
-function recordChannel(node: ChannelNode, a: unknown, b: unknown): void {
+// Record one event (caller has checked node.meters !== 0). Zero-allocation: columnar ring write,
+// one fixed positional value per field (up to 4) so nothing is allocated on the producer path.
+function recordChannel(
+  node: ChannelNode,
+  a: unknown,
+  b: unknown,
+  c: unknown,
+  d: unknown,
+): void {
   if (node.cap !== 0) {
     const h = node.head;
     const { cols } = node;
@@ -599,6 +606,10 @@ function recordChannel(node: ChannelNode, a: unknown, b: unknown): void {
     if (c0 !== undefined) c0[h] = a;
     const c1 = cols[1];
     if (c1 !== undefined) c1[h] = b;
+    const c2 = cols[2];
+    if (c2 !== undefined) c2[h] = c;
+    const c3 = cols[3];
+    if (c3 !== undefined) c3[h] = d;
     node.head = (h + 1) & node.mask;
   }
   node.seq++;
@@ -610,8 +621,8 @@ function channelOf(node: ChannelNode): Channel {
     get active() {
       return node.meters !== 0;
     },
-    emit(a, b) {
-      if (node.meters !== 0) recordChannel(node, a, b);
+    emit(a, b, c, d) {
+      if (node.meters !== 0) recordChannel(node, a, b, c, d);
     },
   };
 }
@@ -625,7 +636,7 @@ export function channel(name: string, options?: ChannelOptions): Channel {
     const cap = toPow2(options.capacity ?? 0);
     if (
       cap !== node.cap ||
-      (options.fields ?? []).length !== node.fields.length
+      (options.fields ?? []).join() !== node.fields.join()
     ) {
       throw new Error(
         `Channel "${name}" already declared with different options.`,
@@ -1171,7 +1182,13 @@ function flush(): void {
     notifyIndex = 0;
     queuedLength = 0;
     if (appBatchSize > 0 && flushCh.meters !== 0) {
-      recordChannel(flushCh, appBatchSize, start ? now() - start : 0);
+      recordChannel(
+        flushCh,
+        appBatchSize,
+        start ? now() - start : 0,
+        undefined,
+        undefined,
+      );
     }
   }
 }
