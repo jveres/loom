@@ -161,7 +161,8 @@ const CSS = `
 #${PANEL_ID} .li-gns.collapsed .li-chev{transform:rotate(-90deg)}
 #${PANEL_ID} .li-gns.collapsed .li-gns-body{display:none}
 #${PANEL_ID} .li-grow{display:flex;align-items:center;gap:7px;padding:2px 10px 2px 22px;
-  font-size:11.5px;border-radius:4px;cursor:default}
+  font-size:11.5px;border-radius:4px;cursor:default;
+  content-visibility:auto;contain-intrinsic-size:auto 21px}
 #${PANEL_ID} .li-gns-body .li-grow{padding-left:30px}
 #${PANEL_ID} .li-grow:hover{background:var(--li-hover)}
 #${PANEL_ID} .li-gicon{flex:0 0 auto;margin:0}
@@ -359,6 +360,7 @@ let graphEl: HTMLElement | null = null;
 let graphById = new Map<number, InspectNode>();
 let gOverlays: HTMLElement[] = []; // active hover-highlight overlay boxes
 let gEditing: HTMLInputElement | null = null; // the open in-place value editor, if any
+let lastGraphRender = 0; // performance.now() of the last graph reconcile (see GRAPH_RENDER_MS)
 const graphRows = new Map<number, GraphRow>();
 const graphGroups = new Map<number, GraphGroup>(); // keyed by fields() group id
 const graphCollapsed = new Set<number>();
@@ -369,6 +371,7 @@ const sparkOut: number[] = [];
 
 const POLL_MS = 120;
 const POLL_S = POLL_MS / 1000;
+const GRAPH_RENDER_MS = 300; // throttle the (heavy) graph reconcile below the 120ms heartbeat
 const LAG_MS = 200;
 
 /* ============================================================ binding helpers ====== */
@@ -1304,6 +1307,9 @@ function renderGraph(): void {
   const seenRows = new Set<number>();
   const seenGroups = new Set<number>();
   for (const [gid, cells] of groups) {
+    // Skip ghost groups: a removed object's cells linger in inspect() until GC, but their bindings
+    // are already disposed, so none has a subscriber. Showing them balloons the tree under churn.
+    if (!cells.some((c) => c.subs.length > 0)) continue;
     seenGroups.add(gid);
     cells.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
     const g = gEnsureGroup(gid, gGroupLabel(gid, cells));
@@ -1560,7 +1566,13 @@ function poll(): number {
     nodeScopes = c.scopes;
     nodeChannels = c.channels;
   } else if (ui?.() === "graph" && visible) {
-    renderGraph();
+    // The graph walk (inspect() builds every node) is the heavy part, so refresh it at ~3/s rather
+    // than every 120ms tick — plenty for reading values, and it halves the cost under churn.
+    const now = performance.now();
+    if (now - lastGraphRender >= GRAPH_RENDER_MS) {
+      lastGraphRender = now;
+      renderGraph();
+    }
   }
   return ++metricSeq;
 }
