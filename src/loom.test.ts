@@ -29,7 +29,7 @@ import {
 // filtering, so default it on per-test; the dedicated test below flips it off and relies on this
 // to restore it for the next test.
 beforeEach(() => {
-  configure({ inspect: true });
+  configure({ inspect: true, onError: undefined });
 });
 
 describe("loom core", () => {
@@ -286,6 +286,44 @@ describe("loom core", () => {
     stopApp();
     stopInternal();
     m.stop();
+  });
+
+  it("propagates an effect throw without an error handler", () => {
+    const a = state(0);
+    const stop = effect(() => {
+      if (a() === 1) throw new Error("boom");
+    });
+    expect(() => a(1)).toThrow("boom"); // surfaces at the setter that triggered the flush
+    stop();
+  });
+
+  it("routes effect errors to configure({ onError }) and continues the flush", () => {
+    const errors: unknown[] = [];
+    configure({
+      onError: (error, node) => errors.push({ error, label: node?.label }),
+    });
+    const a = state(0);
+    let otherRuns = 0;
+    const stopBad = effect(
+      () => {
+        if (a() === 1) throw new Error("boom");
+      },
+      { label: "bad-effect" },
+    );
+    const stopOther = effect(() => {
+      a();
+      otherRuns++;
+    });
+    otherRuns = 0;
+
+    expect(() => a(1)).not.toThrow(); // isolated, not propagated to the setter
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as { error: Error }).error.message).toBe("boom");
+    expect((errors[0] as { label?: string }).label).toBe("bad-effect"); // node context
+    expect(otherRuns).toBe(1); // the other effect still ran in the same flush
+
+    stopBad();
+    stopOther();
   });
 
   it("allocates no inspect metadata while inspection is disabled", () => {

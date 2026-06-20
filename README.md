@@ -92,9 +92,11 @@ The core exports these functions:
 - `meter(channels)` attaches a pull-based meter; `read()` returns a Frame per
   channel (`{ count, dropped, samples }`) since the last read. A meter is a scope
   resource, so it detaches on `scope.pause()`.
-- `configure({ inspect })` toggles the inspection layer. It is **off by default**
-  — node creation then allocates no metadata (zero cost). Turn it on once at
-  startup, before creating the nodes you want visible, when you need tooling.
+- `configure({ inspect, onError })` sets runtime options. `inspect` toggles the
+  inspection layer — **off by default**, so node creation allocates no metadata
+  (zero cost); turn it on once at startup, before creating the nodes you want
+  visible, when you need tooling. `onError` installs a global effect error
+  boundary (see below).
 - `inspect()` returns a snapshot of the current reactive graph (empty unless
   inspection is enabled).
 - `inspectResources()` returns a live census `{ states, computeds, effects,
@@ -112,6 +114,7 @@ The core exports these types:
 - `Polled<T>` is a polled source: `{ read, stop }`.
 - `SourceConnect<T>` is a lazy source's `(set) => teardown` wiring function.
 - `EffectFn` is a reusable effect callback type.
+- `ErrorHandler` is the `configure({ onError })` boundary signature.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
 - `InspectNode` and `InspectSnapshot` describe graph snapshots.
 - `ResourceCounts` is the `inspectResources()` census result.
@@ -266,6 +269,37 @@ The dev inspector relies on this: its panel scope is created with
 `{ internal: true, namespace: "loom-inspector" }`, so every binding, the
 heartbeat, the web-vital sources and the heap timer are filtered from the
 observability it reports — without passing options to each one.
+
+## Error handling
+
+By default an effect that throws propagates the error to whatever triggered the
+run — a `state` write or `batch` — and aborts the rest of that flush. Install a
+global boundary with `configure({ onError })` to contain it: the throw is routed
+to your handler and the flush continues running the other effects.
+
+```ts
+import { configure, state, effect } from "loom";
+
+configure({
+  onError: (error, node) => {
+    // `node` is the offending effect's inspect record (when inspection is on),
+    // otherwise undefined.
+    console.error(`effect ${node?.label ?? "?"} failed:`, error);
+  },
+});
+
+const count = state(0);
+effect(() => {
+  if (count() === 1) throw new Error("boom"); // caught by onError, not rethrown
+});
+const seen = effect(() => document.title = String(count()));
+
+count(1); // does not throw here; onError fires and `seen` still runs
+```
+
+The handler is a single global boundary; pass `configure({ onError: undefined })`
+to remove it. Errors raised while *reading* a `computed` still surface at the
+reader — `onError` covers effect runs, the push side of the graph.
 
 ## DOM API
 

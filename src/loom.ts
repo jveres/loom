@@ -26,6 +26,9 @@ export interface Scope {
   readonly resume: () => void;
 }
 export type EffectFn = () => void;
+// Global effect error boundary (see configure). Receives the throw and, when inspection is on, the
+// offending node. Without one set, a throwing effect propagates to whatever triggered the run.
+export type ErrorHandler = (error: unknown, node?: InspectNode) => void;
 // Wire an external producer to `set`; return a teardown run when the source goes unobserved.
 export type SourceConnect<T> = (set: (value: T) => void) => Stop;
 export type NodeKind = "state" | "computed" | "effect";
@@ -155,6 +158,7 @@ let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off 
 // on with configure({ inspect: true }) BEFORE creating the nodes you want visible to inspect()/the
 // inspector — nodes created while it's off carry no metadata and never appear.
 let inspectEnabled = false;
+let onError: ErrorHandler | undefined;
 const computedNodes = new WeakMap<object, ComputedNode<unknown>>();
 const effectNodes = new WeakMap<object, EffectNode>();
 const inspectRefs = new Map<number, WeakRef<NodeBase>>();
@@ -287,6 +291,8 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   try {
     runDepth++;
     node.cleanup = asCleanup(node.fn());
+  } catch (error) {
+    reportEffectError(error, node);
   } finally {
     runDepth--;
     activeSub = previous;
@@ -742,13 +748,24 @@ export const channels = {
 } as const;
 
 /**
- * Configure the runtime. `inspect` toggles the always-off-by-default inspection layer: while it is
- * off, node creation allocates no metadata and `inspect()`/`depsOf()`/`inspectResources()` and the
- * inspector see nothing — true zero cost. Turn it on (typically once at startup, before creating
- * the nodes you want visible) when you need tooling; nodes created while it was off stay invisible.
+ * Configure the runtime.
+ *
+ * `inspect` toggles the always-off-by-default inspection layer: while it is off, node creation
+ * allocates no metadata and `inspect()`/`depsOf()`/`inspectResources()` and the inspector see
+ * nothing — true zero cost. Turn it on (typically once at startup, before creating the nodes you
+ * want visible) when you need tooling; nodes created while it was off stay invisible.
+ *
+ * `onError` installs a global effect error boundary. Without one, an effect that throws propagates
+ * to whatever triggered the run (a `state` write or `batch`) and aborts the rest of that flush.
+ * With one, the throw is routed to the handler and the flush continues with the other effects. Pass
+ * `undefined` to remove it.
  */
-export function configure(options: { readonly inspect?: boolean }): void {
+export function configure(options: {
+  readonly inspect?: boolean;
+  readonly onError?: ErrorHandler | undefined;
+}): void {
   if (options.inspect !== undefined) inspectEnabled = options.inspect;
+  if ("onError" in options) onError = options.onError;
 }
 
 export function inspect(): InspectSnapshot {
@@ -1205,6 +1222,8 @@ function runEffect(node: EffectNode): boolean {
       cycle++;
       runDepth++;
       node.cleanup = asCleanup(node.fn());
+    } catch (error) {
+      reportEffectError(error, node);
     } finally {
       runDepth--;
       activeSub = previous;
@@ -1270,6 +1289,13 @@ function stopEffect(this: EffectNode): void {
 // `effect(() => count())`) is ignored rather than crashing on the next run.
 function asCleanup(result: unknown): Stop | undefined {
   return typeof result === "function" ? (result as Stop) : undefined;
+}
+
+// An effect threw. With a handler installed, route it there (and let the flush continue with the
+// other effects); without one, rethrow so it surfaces at whatever triggered the run.
+function reportEffectError(error: unknown, node: EffectNode): void {
+  if (onError === undefined) throw error;
+  onError(error, node.meta ? inspectNode(node, node.meta) : undefined);
 }
 
 function runCleanup(node: EffectNode): void {
