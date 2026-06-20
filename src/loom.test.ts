@@ -9,6 +9,7 @@ import {
   effect,
   fields,
   inspect,
+  type Meter,
   meter,
   mutate,
   type Polled,
@@ -280,26 +281,26 @@ describe("loom core", () => {
 });
 
 describe("loom channels", () => {
-  it("is zero-cost until metered, then records multi-field detail", () => {
+  it("is zero-cost until metered, then records up to four detail fields", () => {
     const ch = channel("test:multi", {
       capacity: 4,
-      fields: ["x", "y", "p"],
+      fields: ["x", "y", "p", "t"],
     });
 
-    ch.emit(1, 2, 3); // no meter yet -> gated no-op
+    ch.emit(1, 2, 3, 4); // no meter yet -> gated no-op
     expect(ch.active).toBe(false);
 
     const m = meter([ch]);
     expect(ch.active).toBe(true);
-    ch.emit(10, 20, 30);
-    ch.emit(11, 21, 31);
+    ch.emit(10, 20, 30, 40);
+    ch.emit(11, 21, 31, 41);
 
     const f = m.read()["test:multi"];
     expect(f?.count).toBe(2); // the pre-meter emit is not counted
     expect(f?.dropped).toBe(0);
     expect(f?.samples).toEqual([
-      { x: 10, y: 20, p: 30 },
-      { x: 11, y: 21, p: 31 },
+      { x: 10, y: 20, p: 30, t: 40 },
+      { x: 11, y: 21, p: 31, t: 41 },
     ]);
     m.stop();
     expect(ch.active).toBe(false);
@@ -325,6 +326,34 @@ describe("loom channels", () => {
     const f = m.read()["test:count"];
     expect(f?.count).toBe(2);
     expect(f?.samples).toEqual([]);
+    m.stop();
+  });
+
+  it("detaches as a scope resource on pause and re-attaches on resume", () => {
+    const ch = channel("test:scoped", { capacity: 2, fields: ["n"] });
+    let m!: Meter;
+    const s = scope(() => {
+      m = meter([ch]);
+    });
+    expect(ch.active).toBe(true); // metered while the scope runs
+
+    s.pause();
+    expect(ch.active).toBe(false); // detached -> core emit sites go inactive
+    ch.emit(1); // dropped on the floor while detached
+
+    s.resume();
+    expect(ch.active).toBe(true); // re-attached fresh
+    ch.emit(2);
+    expect(m.read()["test:scoped"]?.count).toBe(1); // only the post-resume emit
+
+    s.stop();
+    expect(ch.active).toBe(false); // scope teardown detaches too
+  });
+
+  it("ignores channels it doesn't know", () => {
+    const ghost = { name: "test:ghost", active: false, emit: () => {} };
+    const m = meter([ghost]);
+    expect(m.read()["test:ghost"]).toBeUndefined();
     m.stop();
   });
 
