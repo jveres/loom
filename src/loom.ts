@@ -789,6 +789,7 @@ export interface ResourceCounts {
   readonly states: number;
   readonly computeds: number;
   readonly effects: number;
+  readonly views: number;
   readonly sources: number;
   readonly scopes: number;
   readonly channels: number;
@@ -798,6 +799,7 @@ export function inspectResources(): ResourceCounts {
   let states = 0;
   let computeds = 0;
   let effects = 0;
+  let views = 0;
   let sources = 0;
   for (const [id, ref] of inspectRefs) {
     const node = ref.deref();
@@ -808,8 +810,12 @@ export function inspectResources(): ResourceCounts {
     const meta = node.meta;
     if (!meta || meta.internal) continue;
     if (meta.kind === "computed") computeds++;
-    else if (meta.kind === "effect") effects++;
-    else if ("connect" in node)
+    else if (meta.kind === "effect") {
+      // loom/dom tags its bindings (text/attr/class/style/list) with the "dom" namespace; those are
+      // views — the rendering output — counted apart from app effects.
+      if (meta.namespace === "dom") views++;
+      else effects++;
+    } else if ("connect" in node)
       sources++; // a state-kind node backed by an external producer
     else states++;
   }
@@ -817,6 +823,7 @@ export function inspectResources(): ResourceCounts {
     states,
     computeds,
     effects,
+    views,
     sources,
     scopes: liveScopes,
     channels: channelRegistry.size,

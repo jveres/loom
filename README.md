@@ -100,8 +100,9 @@ The core exports these functions:
 - `inspect()` returns a snapshot of the current reactive graph (empty unless
   inspection is enabled).
 - `inspectResources()` returns a live census `{ states, computeds, effects,
-  sources, scopes, channels }` — one cheap walk, no per-node allocation; nothing
-  runs on the reactive hot path.
+  views, sources, scopes, channels }` — one cheap walk, no per-node allocation;
+  nothing runs on the reactive hot path. `views` are the DOM bindings (effects in
+  the `"dom"` namespace); `effects` are your app effects.
 - `depsOf(source)` returns inspected dependencies for a state, computed read, or
   effect stop handle.
 

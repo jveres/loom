@@ -292,6 +292,7 @@ let fpsKey = "";
 let nodeStates = 0;
 let nodeComputeds = 0;
 let nodeEffects = 0;
+let nodeViews = 0;
 let nodeSources = 0;
 let nodeScopes = 0;
 let nodeChannels = 0;
@@ -963,7 +964,10 @@ const TIP = {
   disposes: "Reactive nodes disposed per second — graph teardown rate.",
   states: "Live state cells in the reactive graph.",
   computeds: "Live computed values.",
-  effects: "Live effects — DOM bindings plus app effects.",
+  effects:
+    "Live app effects (your effect() calls), excluding DOM-binding views.",
+  views:
+    "Live DOM bindings (text/attr/class/style/list) — the rendering output.",
   sources:
     "Live lazy sources (source/polled) — external producers wired into the graph.",
   scopes: "Live scopes grouping effects and resources.",
@@ -1100,6 +1104,7 @@ function buildStatsPane(): HTMLElement {
       {stat("states", () => String(nodeStates), "", TIP.states)}
       {stat("computeds", () => String(nodeComputeds), "", TIP.computeds)}
       {stat("effects", () => String(nodeEffects), "", TIP.effects)}
+      {stat("views", () => String(nodeViews), "", TIP.views)}
       {stat("sources", () => String(nodeSources), "", TIP.sources)}
       {stat("scopes", () => String(nodeScopes), "", TIP.scopes)}
       {stat("channels", () => String(nodeChannels), "", TIP.channels)}
@@ -1194,6 +1199,7 @@ function poll(): number {
     nodeStates = c.states;
     nodeComputeds = c.computeds;
     nodeEffects = c.effects;
+    nodeViews = c.views;
     nodeSources = c.sources;
     nodeScopes = c.scopes;
     nodeChannels = c.channels;
@@ -1536,7 +1542,7 @@ export function unmountInspector(): void {
   frameMs.length = 0;
   lag = lagPeak = 0;
   healthReady = false;
-  nodeStates = nodeComputeds = nodeEffects = 0;
+  nodeStates = nodeComputeds = nodeEffects = nodeViews = 0;
   nodeSources = nodeScopes = nodeChannels = 0;
   sparkIn.length = 0;
   sparkOut.length = 0;

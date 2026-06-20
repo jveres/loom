@@ -428,20 +428,22 @@ describe("loom channels", () => {
     const s = scope(() => {
       keep.push(state(0));
       keep.push(computed(() => 1));
-      keep.push(effect(() => {}));
+      keep.push(effect(() => {})); // an app effect
+      keep.push(effect(() => {}, { namespace: "dom" })); // a view (DOM binding)
       keep.push(source(() => () => {}, 0)); // a lazy source
     });
 
     const after = inspectResources();
     expect(after.states - before.states).toBe(1);
     expect(after.computeds - before.computeds).toBe(1);
-    expect(after.effects - before.effects).toBe(1);
+    expect(after.effects - before.effects).toBe(1); // app effect only
+    expect(after.views - before.views).toBe(1); // dom-namespaced effect counted as a view
     expect(after.sources - before.sources).toBe(1); // counted apart from plain states
     expect(after.scopes - before.scopes).toBe(1);
 
     s.stop();
     expect(inspectResources().scopes).toBe(before.scopes); // scope teardown decrements
-    expect(keep).toHaveLength(4);
+    expect(keep).toHaveLength(5);
   });
 
   it("ignores channels it doesn't know", () => {
