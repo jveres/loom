@@ -224,12 +224,12 @@ const ICON_MONITOR =
 const ICON_SETTINGS =
   '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>';
 // State markers: a filled dot when the cell drives a DOM element downstream (bound — the hover
-// highlight can outline it), a hollow ring otherwise (text-only or unread). Computed = sigma.
+// highlight can outline it), a hollow ring otherwise (text-only or unread). Computed = function (ƒ).
 const ICON_BOUND =
   '<circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>';
 const ICON_UNBOUND = '<circle cx="12" cy="12" r="5"/>';
 const ICON_COMPUTED =
-  '<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/>';
+  '<path d="M5 19c.264.956.797 2 2.187 2c2.407 0 3.008-2 4.813-9s2.406-9 4.813-9c1.39 0 1.923 1.044 2.187 2M9 10h8"/>';
 const ICON_CHEVRON = '<path d="m6 9 6 6 6-6"/>';
 
 type Theme = "system" | "light" | "dark";
