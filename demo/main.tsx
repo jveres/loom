@@ -191,7 +191,8 @@ let rng = 0x1eed;
 
 requestAnimationFrame(frame);
 
-mountInspector();
+// Diagnostic: load with ?noinspect to run the demo without the dev inspector.
+if (!location.search.includes("noinspect")) mountInspector();
 // Ctrl+Cmd+L shows/hides the inspector (KeyL is layout-independent).
 window.addEventListener("keydown", (event) => {
   if (event.ctrlKey && event.metaKey && event.code === "KeyL") {
