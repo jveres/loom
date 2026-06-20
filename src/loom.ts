@@ -58,6 +58,9 @@ export interface InspectNode {
   readonly target?: object;
   readonly value?: unknown;
   readonly source?: State<unknown>;
+  // Cells from one fields() call share a `group` id; `key` is the property name within it.
+  readonly group?: number;
+  readonly key?: string;
 }
 
 export interface InspectSnapshot {
@@ -141,6 +144,8 @@ interface InspectMeta {
   readonly target: WeakRef<object> | undefined;
   disposed: boolean;
   runs: number;
+  group?: number; // fields() group id (set by fields() when inspection is on)
+  key?: string; // property key within that group
 }
 
 let cycle = 0;
@@ -153,6 +158,7 @@ let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
 const DEFAULT_NAMESPACE = "default";
 let inspectId = 0;
+let fieldsGroup = 0; // shared id stamped on the cells of each fields() call (for inspector grouping)
 let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off the reactive path)
 // Inspection is opt-in: off by default so node creation allocates no metadata (zero cost). Turn it
 // on with configure({ inspect: true }) BEFORE creating the nodes you want visible to inspect()/the
@@ -514,9 +520,19 @@ export function fields<T extends object>(
   }
   const out = {} as { [K in FieldKey<T>]: State<T[K]> };
   const keys = Object.keys(initial) as Array<FieldKey<T>>;
+  // One group id per call so the inspector can re-nest the cells under a single parent.
+  const group = inspectEnabled ? ++fieldsGroup : 0;
   for (let index = 0; index < keys.length; index++) {
     const key = keys[index] as FieldKey<T>;
-    out[key] = state(initial[key], fieldOptions(options, key));
+    const cell = state(initial[key], fieldOptions(options, key));
+    if (group !== 0) {
+      const meta = stateNodes.get(cell as unknown as object)?.meta;
+      if (meta) {
+        meta.group = group;
+        meta.key = key;
+      }
+    }
+    out[key] = cell;
   }
   return out;
 }
@@ -920,19 +936,22 @@ function inspectNode(node: NodeBase, meta: InspectMeta): InspectNode {
   const source = sourceFromNode(node, meta);
   const target = meta.target?.deref();
   const value = nodeValue(node);
-  return inspectNodeWithOptionals(base, source, target, value);
+  return inspectNodeWithOptionals(base, source, target, value, meta);
 }
 
 function inspectNodeWithOptionals(
-  base: Omit<InspectNode, "source" | "target" | "value">,
+  base: Omit<InspectNode, "source" | "target" | "value" | "group" | "key">,
   source: State<unknown> | undefined,
   target: object | undefined,
   value: unknown,
+  meta: InspectMeta,
 ): InspectNode {
   const out: Mutable<InspectNode> = { ...base };
   if (source !== undefined) out.source = source;
   if (target !== undefined) out.target = target;
   if (value !== undefined) out.value = value;
+  if (meta.group !== undefined) out.group = meta.group;
+  if (meta.key !== undefined) out.key = meta.key;
   return out;
 }
 

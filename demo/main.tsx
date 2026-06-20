@@ -83,27 +83,31 @@ const sources = [
   "Iris Sloan",
 ] as const;
 
-const settings = fields({
-  running: false,
-  viewers: 250,
-  eventRate: 6,
-  aiEdits: 3,
-  transform: true,
-  theme: "auto" as ThemeMode,
-});
-const metrics = fields({
-  checks: "idle",
-});
+const settings = fields(
+  {
+    running: false,
+    viewers: 250,
+    eventRate: 6,
+    aiEdits: 3,
+    transform: true,
+    theme: "auto" as ThemeMode,
+  },
+  { label: "settings" },
+);
+const metrics = fields({ checks: "idle" }, { label: "metrics" });
 
 let nextCardId = 0;
 const initialCards = Array.from({ length: 12 }, () => makeCard());
-const cards = state<readonly Card[]>(initialCards);
-const selectedId = state(pick(initialCards, 0).id);
-const selected = computed(() => {
-  const items = cards();
-  const id = selectedId();
-  return items.find((card) => card.id === id) ?? items[0];
-});
+const cards = state<readonly Card[]>(initialCards, { label: "cards" });
+const selectedId = state(pick(initialCards, 0).id, { label: "selectedId" });
+const selected = computed(
+  () => {
+    const items = cards();
+    const id = selectedId();
+    return items.find((card) => card.id === id) ?? items[0];
+  },
+  { label: "selected" },
+);
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root.");
@@ -446,7 +450,7 @@ function makeCard(): Card {
   };
   return {
     id,
-    model: fields(model),
+    model: fields(model, { label: `card ${id}` }),
   };
 }
 

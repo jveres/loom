@@ -8,6 +8,8 @@ import {
   channels,
   configure,
   effect,
+  type InspectNode,
+  inspect,
   inspectResources,
   type Meter,
   meter,
@@ -65,7 +67,8 @@ const CSS = `
 @media (prefers-color-scheme:light){#${PANEL_ID}[data-theme=system],#${PANEL_ID}-menu[data-theme=system]{${LIGHT_VARS}}}
 #${PANEL_ID}.li-min{height:auto!important}
 #${PANEL_ID}.li-min .li-resize{display:none}
-#${PANEL_ID} .li-resize{position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:nwse-resize}
+#${PANEL_ID} .li-resize{position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:nwse-resize;
+  touch-action:none}
 #${PANEL_ID} .li-resize svg{width:100%;height:100%}
 #${PANEL_ID} .li-resize path{fill:none;stroke:var(--li-muted);stroke-width:1.6;stroke-linecap:round;
   opacity:.55;transition:stroke .15s,opacity .15s}
@@ -149,6 +152,28 @@ const CSS = `
 #${PANEL_ID} .li-stat-v.h-ok{color:var(--li-num)}
 #${PANEL_ID} .li-stat-v.h-warn{color:var(--li-str)}
 #${PANEL_ID} .li-stat-v.h-bad{color:var(--li-bool)}
+#${PANEL_ID} .li-graph{padding:4px 0 8px;overflow-y:auto}
+#${PANEL_ID} .li-gns-h{display:flex;align-items:center;gap:6px;padding:4px 10px 3px;cursor:pointer;
+  color:var(--li-muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;user-select:none}
+#${PANEL_ID} .li-gns-h:hover{background:var(--li-hover)}
+#${PANEL_ID} .li-gns-c{margin-left:auto;font-variant-numeric:tabular-nums}
+#${PANEL_ID} .li-chev{flex:0 0 auto;margin:0;color:var(--li-muted);transition:transform .12s ease}
+#${PANEL_ID} .li-gns.collapsed .li-chev{transform:rotate(-90deg)}
+#${PANEL_ID} .li-gns.collapsed .li-gns-body{display:none}
+#${PANEL_ID} .li-grow{display:flex;align-items:center;gap:7px;padding:2px 10px 2px 22px;
+  font-size:11.5px;border-radius:4px;cursor:default}
+#${PANEL_ID} .li-gns-body .li-grow{padding-left:30px}
+#${PANEL_ID} .li-grow:hover{background:var(--li-hover)}
+#${PANEL_ID} .li-gicon{flex:0 0 auto;margin:0}
+#${PANEL_ID} .li-gi-state{color:var(--li-key)}
+#${PANEL_ID} .li-gi-computed{color:var(--li-num)}
+#${PANEL_ID} .li-glabel{color:var(--li-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#${PANEL_ID} .li-gns-tag{flex:0 0 auto;font-size:9px;color:var(--li-muted);background:var(--li-fill);
+  border-radius:3px;padding:0 4px;text-transform:uppercase;letter-spacing:.03em}
+#${PANEL_ID} .li-gval{margin-left:auto;font-family:${MONO};color:var(--li-muted);white-space:nowrap;
+  font-variant-numeric:tabular-nums;max-width:45%;overflow:hidden;text-overflow:ellipsis}
+#${PANEL_ID} .li-flash{animation:li-insp-flash .6s ease-out}
+@keyframes li-insp-flash{from{background:var(--li-accent-soft)}to{background:transparent}}
 #${PANEL_ID} .li-tabscroll{display:flex;align-items:flex-end;gap:1px;flex:1 1 auto;margin-top:6px;
   min-width:0;overflow-x:auto;scrollbar-width:none;
   --li-fade-a:0px;--li-fade-b:0px;
@@ -187,6 +212,12 @@ const ICON_MONITOR =
   '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>';
 const ICON_SETTINGS =
   '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>';
+// lucide: variable (state), sigma (computed), chevron-down (group toggle)
+const ICON_STATE =
+  '<path d="M8 21s-4-3-4-9 4-9 4-9"/><path d="M16 3s4 3 4 9-4 9-4 9"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/>';
+const ICON_COMPUTED =
+  '<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/>';
+const ICON_CHEVRON = '<path d="m6 9 6 6 6-6"/>';
 
 type Theme = "system" | "light" | "dark";
 const THEME_ICONS: Record<Theme, string> = {
@@ -215,11 +246,10 @@ const SPARK_RAMP: ReadonlyArray<readonly [number, number]> = [
 
 /* ============================================================ module state ========= */
 
-type TabId = "stats" | "state" | "views" | "writes";
+type TabId = "stats" | "graph" | "writes";
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: "stats", label: "Info" },
-  { id: "state", label: "State" },
-  { id: "views", label: "Views" },
+  { id: "graph", label: "Graph" },
   { id: "writes", label: "Writes" },
 ];
 
@@ -296,6 +326,28 @@ let nodeViews = 0;
 let nodeSources = 0;
 let nodeScopes = 0;
 let nodeChannels = 0;
+
+// Graph tab: an imperative namespace-grouped tree of states/computeds/views, reconciled in
+// renderGraph() on the heartbeat while the tab is visible. Rows update value + flash on change and
+// outline their DOM node(s) on hover. Imperative (not loom bindings) to stay light at hundreds of
+// rows and to keep hover/expand state across reconciles.
+interface GraphRow {
+  readonly row: HTMLElement;
+  readonly val: HTMLElement;
+  prevVal: string;
+}
+interface GraphGroup {
+  readonly wrap: HTMLElement;
+  readonly body: HTMLElement;
+  readonly count: HTMLElement;
+  readonly labelEl: HTMLElement;
+}
+let graphEl: HTMLElement | null = null;
+let graphById = new Map<number, InspectNode>();
+let gOverlays: HTMLElement[] = []; // active hover-highlight overlay boxes
+const graphRows = new Map<number, GraphRow>();
+const graphGroups = new Map<number, GraphGroup>(); // keyed by fields() group id
+const graphCollapsed = new Set<number>();
 
 // Rendering-pipeline sparkline series: writes in (top) vs DOM updates out (bottom), per poll.
 const sparkIn: number[] = [];
@@ -975,6 +1027,207 @@ const TIP = {
     "Registered observability channels (7 built-in + any app-declared).",
 } as const;
 
+/* ============================================================ graph tab =========== */
+
+function buildGraphPane(): HTMLElement {
+  graphEl = (<div class="li-pane li-graph" />) as HTMLElement;
+  return graphEl;
+}
+
+function gIcon(n: InspectNode): string {
+  return n.kind === "computed" ? ICON_COMPUTED : ICON_STATE;
+}
+function gClass(n: InspectNode): string {
+  return n.kind === "computed" ? "li-gi-computed" : "li-gi-state";
+}
+function gFormat(v: unknown): string {
+  if (v === undefined) return "—";
+  if (v === null) return "null";
+  if (typeof v === "number")
+    return Number.isInteger(v) ? String(v) : v.toFixed(2);
+  if (typeof v === "string")
+    return v.length > 16 ? `"${v.slice(0, 15)}…"` : `"${v}"`;
+  if (typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) return `[${v.length}]`;
+  if (typeof v === "object") return "{…}";
+  return String(v);
+}
+
+// Views aren't listed; instead, hovering a state/computed outlines every view downstream of it
+// (walk subscribers through computeds to the effects that actually write DOM).
+function gTargetsFor(id: number): Element[] {
+  const out: Element[] = [];
+  const seen = new Set<number>([id]);
+  const start = graphById.get(id);
+  const queue = start ? [...start.subs] : [];
+  while (queue.length > 0) {
+    const sid = queue.shift();
+    if (sid === undefined || seen.has(sid)) continue;
+    seen.add(sid);
+    const node = graphById.get(sid);
+    if (!node) continue;
+    if (node.kind === "effect") {
+      if (node.target instanceof Element) out.push(node.target);
+    } else for (const s of node.subs) queue.push(s);
+  }
+  return out;
+}
+// Union of the downstream views of every cell in a fields() group (hover the group header).
+function gGroupTargets(gid: number): Element[] {
+  const out: Element[] = [];
+  const seen = new Set<Element>();
+  for (const n of graphById.values()) {
+    if (n.group !== gid) continue;
+    for (const el of gTargetsFor(n.id))
+      if (!seen.has(el)) {
+        seen.add(el);
+        out.push(el);
+      }
+  }
+  return out;
+}
+// Highlight via fixed overlay boxes (not `outline`, which follows the target's border-radius in
+// modern browsers) so the marker is always a sharp rectangle. Transient: it tracks a hover, not
+// scroll/resize.
+function gPaint(els: Element[], on: boolean): void {
+  for (const o of gOverlays) o.remove();
+  gOverlays = [];
+  if (!on) return;
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) continue;
+    const o = document.createElement("div");
+    o.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border:1.5px solid #ff9500;border-radius:0;pointer-events:none;z-index:2147483646`;
+    document.body.append(o);
+    gOverlays.push(o);
+  }
+}
+function gFlash(row: HTMLElement): void {
+  row.classList.remove("li-flash");
+  void row.offsetWidth; // reflow so the animation restarts even on rapid updates
+  row.classList.add("li-flash");
+}
+
+// A group's display name: the fields() label prefix ("card 3" from "card 3.title"), else anonymous.
+function gGroupLabel(gid: number, cells: InspectNode[]): string {
+  const first = cells[0];
+  const dot = first ? first.label.lastIndexOf(".") : -1;
+  return first && dot > 0 ? first.label.slice(0, dot) : `fields #${gid}`;
+}
+
+function gEnsureGroup(gid: number, label: string): GraphGroup {
+  const existing = graphGroups.get(gid);
+  if (existing) {
+    existing.labelEl.textContent = label;
+    return existing;
+  }
+  const count = (<span class="li-gns-c" />) as HTMLElement;
+  const labelEl = (<span>{label}</span>) as HTMLElement;
+  const body = (<div class="li-gns-body" />) as HTMLElement;
+  const chev = icon(ICON_CHEVRON, 11);
+  chev.classList.add("li-chev");
+  const wrap = (
+    <div class={["li-gns", { collapsed: graphCollapsed.has(gid) }]}>
+      <div class="li-gns-h">
+        {chev}
+        {labelEl}
+        {count}
+      </div>
+      {body}
+    </div>
+  ) as HTMLElement;
+  const header = wrap.querySelector(".li-gns-h") as HTMLElement;
+  header.onclick = () => {
+    const collapsed = wrap.classList.toggle("collapsed");
+    if (collapsed) graphCollapsed.add(gid);
+    else graphCollapsed.delete(gid);
+  };
+  header.onmouseenter = () => gPaint(gGroupTargets(gid), true);
+  header.onmouseleave = () => gPaint(gGroupTargets(gid), false);
+  graphEl?.append(wrap);
+  const group: GraphGroup = { wrap, body, count, labelEl };
+  graphGroups.set(gid, group);
+  return group;
+}
+
+function gUpdateRow(n: InspectNode, parent: HTMLElement, child: boolean): void {
+  let r = graphRows.get(n.id);
+  if (!r) {
+    const val = (<span class="li-gval" />) as HTMLElement;
+    const ic = icon(gIcon(n), 13);
+    ic.classList.add("li-gicon", gClass(n));
+    const labelText = child ? (n.key ?? n.label) : n.label;
+    const row = (
+      <div class="li-grow">
+        {ic}
+        <span class="li-glabel">{labelText}</span>
+        {!child && n.namespace !== "default" ? (
+          <span class="li-gns-tag">{n.namespace}</span>
+        ) : null}
+        {val}
+      </div>
+    ) as HTMLElement;
+    row.onmouseenter = () => gPaint(gTargetsFor(n.id), true);
+    row.onmouseleave = () => gPaint(gTargetsFor(n.id), false);
+    parent.append(row);
+    r = { row, val, prevVal: " " };
+    graphRows.set(n.id, r);
+  }
+  const v = gFormat(n.value);
+  if (v !== r.prevVal) {
+    r.val.textContent = v;
+    if (r.prevVal !== " ") gFlash(r.row);
+    r.prevVal = v;
+  }
+}
+
+function renderGraph(): void {
+  if (!graphEl) return;
+  const all = inspect().nodes;
+  graphById = new Map(all.map((n) => [n.id, n]));
+
+  // The tree holds state + computed cells only; views (effects) are reached by hover, not listed.
+  // fields() cells fold back under one collapsible group; standalone cells render at the root.
+  const groups = new Map<number, InspectNode[]>();
+  const singles: InspectNode[] = [];
+  for (const n of all) {
+    if (n.internal || n.kind === "effect") continue;
+    if (n.group !== undefined) {
+      const arr = groups.get(n.group);
+      if (arr) arr.push(n);
+      else groups.set(n.group, [n]);
+    } else singles.push(n);
+  }
+
+  const seenRows = new Set<number>();
+  const seenGroups = new Set<number>();
+  for (const [gid, cells] of groups) {
+    seenGroups.add(gid);
+    cells.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
+    const g = gEnsureGroup(gid, gGroupLabel(gid, cells));
+    g.count.textContent = String(cells.length);
+    for (const n of cells) {
+      seenRows.add(n.id);
+      gUpdateRow(n, g.body, true);
+    }
+  }
+  for (const n of singles) {
+    seenRows.add(n.id);
+    gUpdateRow(n, graphEl, false);
+  }
+
+  for (const [id, r] of graphRows)
+    if (!seenRows.has(id)) {
+      r.row.remove();
+      graphRows.delete(id);
+    }
+  for (const [gid, g] of graphGroups)
+    if (!seenGroups.has(gid)) {
+      g.wrap.remove();
+      graphGroups.delete(gid);
+    }
+}
+
 function buildStatsPane(): HTMLElement {
   const fpsValue = (<span class="li-perfh-fps" />) as HTMLElement;
   bindText(
@@ -1194,7 +1447,8 @@ function poll(): number {
   // The graph census walks every node, so recompute it only while the stats tab is actually
   // visible. The sequence advances every tick regardless, so the always-visible spark keeps moving
   // across tab switches; the hidden stats bindings stay asleep via their own paused scope.
-  if (ui?.() === "stats" && !panel?.classList.contains("li-min")) {
+  const visible = !panel?.classList.contains("li-min");
+  if (ui?.() === "stats" && visible) {
     const c = inspectResources();
     nodeStates = c.states;
     nodeComputeds = c.computeds;
@@ -1203,6 +1457,8 @@ function poll(): number {
     nodeSources = c.sources;
     nodeScopes = c.scopes;
     nodeChannels = c.channels;
+  } else if (ui?.() === "graph" && visible) {
+    renderGraph();
   }
   return ++metricSeq;
 }
@@ -1395,7 +1651,7 @@ export function mountInspector(target: Element = document.body): void {
   }, PANEL_OPTS);
   if (startMin) inspectorScope.pause();
 
-  // Panes: Info (stats) is wired; the rest are placeholders for now.
+  // Panes: Info (stats) and Graph are wired; Writes is still a placeholder.
   const panes = new Map<TabId, HTMLElement>();
   const tabBtns = new Map<TabId, HTMLElement>();
   bodyEl = (<div class="li-body" />) as HTMLElement;
@@ -1403,6 +1659,8 @@ export function mountInspector(target: Element = document.body): void {
     const pane =
       t.id === "stats" ? (
         statsPane
+      ) : t.id === "graph" ? (
+        buildGraphPane()
       ) : (
         <div class="li-pane">
           <div class="li-empty">Not wired yet.</div>
@@ -1478,6 +1736,7 @@ export function mountInspector(target: Element = document.body): void {
     // Suspend the stats pane's bindings whenever its tab isn't the visible one.
     if (tab === "stats") statsScope?.resume();
     else statsScope?.pause();
+    if (tab !== "graph") gPaint([], false); // drop any lingering hover highlight
     for (const t of TABS) {
       const on = t.id === tab;
       const pane = panes.get(t.id);
@@ -1544,6 +1803,13 @@ export function unmountInspector(): void {
   healthReady = false;
   nodeStates = nodeComputeds = nodeEffects = nodeViews = 0;
   nodeSources = nodeScopes = nodeChannels = 0;
+  for (const o of gOverlays) o.remove();
+  gOverlays = [];
+  graphEl = null;
+  graphRows.clear();
+  graphGroups.clear();
+  graphCollapsed.clear();
+  graphById = new Map();
   sparkIn.length = 0;
   sparkOut.length = 0;
 }
