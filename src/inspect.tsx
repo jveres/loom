@@ -1054,14 +1054,6 @@ function buildGraphPane(): HTMLElement {
 function gBound(n: InspectNode): boolean {
   return gTargetsFor(n.id).length > 0;
 }
-function gIcon(n: InspectNode): string {
-  if (n.kind === "computed") return ICON_COMPUTED;
-  return gBound(n) ? ICON_BOUND : ICON_UNBOUND;
-}
-function gClass(n: InspectNode): string {
-  if (!gBound(n)) return "li-gi-dim";
-  return n.kind === "computed" ? "li-gi-computed" : "li-gi-state";
-}
 function gFormat(v: unknown): string {
   if (v === undefined) return "—";
   if (v === null) return "null";
@@ -1110,6 +1102,10 @@ function gBeginEdit(cell: State<unknown>, val: HTMLElement, r: GraphRow): void {
     gShowVal(r, cell());
     return;
   }
+  // The handler is wired once; bail if the value has since become non-primitive (can't edit it).
+  if (prev !== null && typeof prev !== "number" && typeof prev !== "string") {
+    return;
+  }
   const input = document.createElement("input");
   input.className = "li-gedit";
   input.value = typeof prev === "string" ? prev : String(prev);
@@ -1135,9 +1131,10 @@ function gBeginEdit(cell: State<unknown>, val: HTMLElement, r: GraphRow): void {
 }
 // Paint a row's value cell (text + type colour), preserving the edit affordance class.
 function gShowVal(r: GraphRow, v: unknown): void {
-  r.val.textContent = gFormat(v);
+  const text = gFormat(v);
+  r.val.textContent = text;
   r.val.className = `li-gval${r.val.classList.contains("li-edit") ? " li-edit" : ""} ${gValueClass(v)}`;
-  r.prevVal = gFormat(v);
+  r.prevVal = text;
 }
 
 // Views aren't listed; instead, hovering a state/computed outlines every view downstream of it
@@ -1241,8 +1238,19 @@ function gUpdateRow(n: InspectNode, parent: HTMLElement, child: boolean): void {
   let r = graphRows.get(n.id);
   if (!r) {
     const val = (<span class="li-gval" />) as HTMLElement;
-    const ic = icon(gIcon(n), 13);
-    ic.classList.add("li-gicon", gClass(n));
+    const bound = gBound(n);
+    const ic = icon(
+      n.kind === "computed" ? ICON_COMPUTED : bound ? ICON_BOUND : ICON_UNBOUND,
+      13,
+    );
+    ic.classList.add(
+      "li-gicon",
+      !bound
+        ? "li-gi-dim"
+        : n.kind === "computed"
+          ? "li-gi-computed"
+          : "li-gi-state",
+    );
     const labelText = child ? (n.key ?? n.label) : n.label;
     const row = (
       <div class="li-grow">
