@@ -118,7 +118,9 @@ app.replaceChildren(
         type="button"
         class={["primary", { on: settings.running }]}
         aria-pressed={settings.running}
-        onClick={() => settings.running(!settings.running())}
+        // pointerup, not click: iOS Safari drops the synthesized click when the DOM mutates mid-tap
+        // (which the chaos does every frame), but pointer events are dispatched directly.
+        onPointerUp={() => settings.running(!settings.running())}
       >
         {() => (settings.running() ? "Stop chaos" : "Start chaos")}
       </button>
@@ -241,7 +243,7 @@ function renderCard(card: Card): Element {
         <button
           type="button"
           class="card-title-button"
-          onClick={() => selectedId(card.id)}
+          onPointerUp={() => selectedId(card.id)}
         >
           {model.title}
         </button>
@@ -415,7 +417,7 @@ function command(
     <button
       type="button"
       class={["ghost", active ? { on: active } : undefined]}
-      onClick={run}
+      onPointerUp={run}
     >
       {label}
     </button>

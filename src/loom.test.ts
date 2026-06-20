@@ -266,9 +266,11 @@ describe("loom core", () => {
     expect(m.read()["loom:flush"]?.count).toBe(0);
 
     app(1); // app flush -> batchSize 1
-    const last = m.read()["loom:flush"]?.samples.at(-1);
-    expect(last?.["batchSize"]).toBe(1);
-    expect(typeof last?.["durationMs"]).toBe("number");
+    const last = m.read()["loom:flush"]?.samples.at(-1) as
+      | { batchSize: number; durationMs: number }
+      | undefined;
+    expect(last?.batchSize).toBe(1);
+    expect(typeof last?.durationMs).toBe("number");
 
     stopApp();
     stopInternal();

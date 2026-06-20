@@ -594,9 +594,11 @@ function createChannelNode(
 function recordChannel(node: ChannelNode, a: unknown, b: unknown): void {
   if (node.cap !== 0) {
     const h = node.head;
-    const cols = node.cols;
-    if (cols.length > 0) cols[0]![h] = a;
-    if (cols.length > 1) cols[1]![h] = b;
+    const { cols } = node;
+    const c0 = cols[0];
+    if (c0 !== undefined) c0[h] = a;
+    const c1 = cols[1];
+    if (c1 !== undefined) c1[h] = b;
     node.head = (h + 1) & node.mask;
   }
   node.seq++;

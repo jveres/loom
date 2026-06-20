@@ -1151,10 +1151,12 @@ function poll(): number {
   effectRate = ema(effectRate, deff);
   computedRate = ema(computedRate, dc);
   flushRate = ema(flushRate, flushFrame?.count ?? 0);
-  const lastFlush = flushFrame?.samples.at(-1);
+  const lastFlush = flushFrame?.samples.at(-1) as
+    | { batchSize: number; durationMs: number }
+    | undefined;
   if (lastFlush !== undefined) {
-    lastFlushBatch = lastFlush["batchSize"] as number;
-    lastFlushMs = lastFlush["durationMs"] as number;
+    lastFlushBatch = lastFlush.batchSize;
+    lastFlushMs = lastFlush.durationMs;
   }
   // Sparkline = rendering-pipeline utilization: writes entering vs effect runs produced.
   sparkIn.push(dw);
