@@ -167,6 +167,7 @@ const CSS = `
 #${PANEL_ID} .li-gicon{flex:0 0 auto;margin:0}
 #${PANEL_ID} .li-gi-state{color:var(--li-key)}
 #${PANEL_ID} .li-gi-computed{color:var(--li-num)}
+#${PANEL_ID} .li-gi-dim{color:var(--li-muted);opacity:.7}
 #${PANEL_ID} .li-glabel{color:var(--li-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #${PANEL_ID} .li-gns-tag{flex:0 0 auto;font-size:9px;color:var(--li-muted);background:var(--li-fill);
   border-radius:3px;padding:0 4px;text-transform:uppercase;letter-spacing:.03em}
@@ -212,9 +213,12 @@ const ICON_MONITOR =
   '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>';
 const ICON_SETTINGS =
   '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>';
-// lucide: variable (state), sigma (computed), chevron-down (group toggle)
-const ICON_STATE =
-  '<path d="M8 21s-4-3-4-9 4-9 4-9"/><path d="M16 3s4 3 4 9-4 9-4 9"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/>';
+// lucide icons. eye (a state read by a view → "observed"), eye-off (a state nothing reads →
+// "unobserved"), sigma (computed/derived), chevron-down (group toggle).
+const ICON_BOUND =
+  '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>';
+const ICON_UNBOUND =
+  '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>';
 const ICON_COMPUTED =
   '<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/>';
 const ICON_CHEVRON = '<path d="m6 9 6 6 6-6"/>';
@@ -1034,10 +1038,17 @@ function buildGraphPane(): HTMLElement {
   return graphEl;
 }
 
+// A cell is "bound" when something reactively reads it (≥1 subscriber); unbound cells are dead
+// weight, shown dim with an eye-off icon.
+function gBound(n: InspectNode): boolean {
+  return n.subs.length > 0;
+}
 function gIcon(n: InspectNode): string {
-  return n.kind === "computed" ? ICON_COMPUTED : ICON_STATE;
+  if (n.kind === "computed") return ICON_COMPUTED;
+  return gBound(n) ? ICON_BOUND : ICON_UNBOUND;
 }
 function gClass(n: InspectNode): string {
+  if (!gBound(n)) return "li-gi-dim";
   return n.kind === "computed" ? "li-gi-computed" : "li-gi-state";
 }
 function gFormat(v: unknown): string {
