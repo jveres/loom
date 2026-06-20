@@ -280,7 +280,7 @@ document.body.append(
       "aria-pressed": attr("aria-pressed", hot),
       class: classed("hot", hot),
       style: style("opacity", () => (hot() ? 1 : 0.65)),
-      onClick: () => hot(!hot()),
+      onclick: () => hot(!hot()),
     },
     [text(label)],
   ),
@@ -297,6 +297,37 @@ The DOM entrypoint exports these functions:
 - `list(container, read, options)` reconciles a keyed list.
 - `dispose(root)` disposes effects owned by a node subtree.
 - `remove(node)` disposes a node subtree and removes it from the DOM.
+- `tap(node, handler)` binds a robust tap (see [Events](#events) below).
+
+### Events
+
+Loom is a thin layer over the DOM, so event props use **the DOM's own lowercase
+names** — `onclick`, `oninput`, `onpointerup`, `onkeydown` — not React's
+camelCase. Any `on<event>` function prop is wired with `addEventListener`, so you
+get standard bubbling and the precise DOM event type in the handler:
+
+```ts
+h("input", { oninput: (event) => value(event.currentTarget.valueAsNumber) });
+```
+
+(A camelCase `onClick` still works — the runtime lowercases `on*` — but lowercase
+is the typed, documented form.)
+
+**`ontap` — the one synthetic event.** iOS Safari **drops the synthesized
+`click`** when the DOM mutates between `touchstart` and `touchend`. An app that
+rewrites the DOM during interaction (a live dashboard, a game, the demo's chaos
+mode) will see taps silently do nothing — the button shows `:active` but the
+handler never runs. `ontap` is built from raw `pointerdown`+`pointerup`, which
+are dispatched directly rather than hit-test-synthesized, so it survives:
+
+```ts
+h("button", { ontap: () => stop() }); // fires reliably even under DOM churn
+```
+
+It fires on release when the pointer hasn't moved more than ~10px from the press
+(so a drag or scroll doesn't trigger it). Use plain `onclick` everywhere else;
+reach for `ontap` only in the rare continuous-mutation case. `tap(node, handler)`
+is the same logic for imperative (non-JSX) call sites.
 
 `list()` reorders keyed nodes by default. Pass `reorder: () => false` when an
 external layout system positions existing keyed nodes and only needs Loom to
@@ -377,7 +408,7 @@ function Counter() {
       type="button"
       aria-pressed={() => count() > 0}
       class={{ active: () => count() > 0 }}
-      onClick={() => count(count() + 1)}
+      onclick={() => count(count() + 1)}
     >
       {count}
     </button>
@@ -509,8 +540,9 @@ Loom uses `alien-signals` as the reactive graph implementation detail. The
 public API stays small: callable state cells, computed reads, effects, batching,
 manual triggers, object field cells, and an observability surface.
 
-Observer event emission is gated by per-kind observer counters, so reads,
-writes, computed updates, and effect runs stay allocation-free and pay only a
-predicted-not-taken branch when no observer is attached. Every node still carries
-lightweight inspect metadata so `inspect()` and `depsOf()` work without prior
-arming.
+The built-in observability channels are gated by a per-channel meter count, so
+reads, writes, computed updates, and effect runs stay allocation-free and pay
+only a predicted-not-taken branch when nothing is metering them — and the records
+themselves are written into a pre-allocated ring, never an event object. Every
+node still carries lightweight inspect metadata so `inspect()` and `depsOf()`
+work without prior arming.

@@ -21,6 +21,7 @@ import {
   source,
   state,
 } from "loom";
+import { tap } from "loom/dom";
 
 /* ============================================================ palette + css ========= */
 
@@ -48,7 +49,7 @@ const CSS = `
   position:fixed;right:12px;bottom:12px;width:360px;height:440px;max-height:calc(100vh - 24px);
   z-index:2147483647;display:flex;flex-direction:column;font:12px/1.5 ${SANS};
   color:var(--li-fg);background:var(--li-bg);border:1px solid var(--li-border);
-  border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);overflow:hidden}
+  border-radius:10px;box-shadow:0 6px 22px rgba(0,0,0,.26);overflow:hidden}
 /* Self-contained reset so host-page element styles (e.g. a global button{min-height})
    can't bleed into the panel (or its portalled menu) and break the chrome dimensions. */
 #${PANEL_ID} *,#${PANEL_ID}-menu *{box-sizing:border-box}
@@ -56,7 +57,7 @@ const CSS = `
 #${PANEL_ID}-menu{${DARK_VARS};
   position:fixed;z-index:2147483647;min-width:150px;padding:5px;display:flex;flex-direction:column;gap:1px;
   font:11px/1.45 ${SANS};color:var(--li-fg);background:var(--li-bg);
-  border:1px solid var(--li-border);border-radius:9px;box-shadow:0 8px 28px rgba(0,0,0,.45)}
+  border:1px solid var(--li-border);border-radius:9px;box-shadow:0 4px 16px rgba(0,0,0,.22)}
 #${PANEL_ID}-menu[hidden]{display:none}
 #${PANEL_ID}-menu svg{display:block;pointer-events:none}
 #${PANEL_ID}[data-theme=light],#${PANEL_ID}-menu[data-theme=light]{${LIGHT_VARS}}
@@ -1251,12 +1252,12 @@ export function mountInspector(target: Element = document.body): void {
       {themeVal}
     </button>
   ) as HTMLButtonElement;
-  themeItem.onclick = (): void => {
+  tap(themeItem, (): void => {
     const order: Theme[] = ["system", "light", "dark"];
     theme = order[(order.indexOf(theme) + 1) % order.length] ?? "system";
     lsSet(THEME_KEY, theme);
     applyTheme();
-  };
+  });
   const menu = (<div class="li-menu" hidden />) as HTMLElement;
   menu.id = `${PANEL_ID}-menu`;
   menu.append(themeItem);
@@ -1274,15 +1275,15 @@ export function mountInspector(target: Element = document.body): void {
       <span class="li-kbd">⌃⌘L</span>
     </button>
   ) as HTMLButtonElement;
-  hideItem.onclick = (): void => {
+  tap(hideItem, (): void => {
     closeMenu();
     unmountInspector();
-  };
+  });
   menu.append(hideItem);
 
   const gear = (<button type="button" title="Settings" />) as HTMLButtonElement;
   gear.append(barIcon(ICON_SETTINGS));
-  gear.onclick = (e): void => {
+  tap(gear, (e): void => {
     e.stopPropagation();
     if (!menu.hidden) {
       closeMenu();
@@ -1300,7 +1301,7 @@ export function mountInspector(target: Element = document.body): void {
     if (top + m.height > window.innerHeight - margin) top = r.top - m.height;
     menu.style.left = `${Math.max(margin, left)}px`;
     menu.style.top = `${Math.max(margin, top)}px`;
-  };
+  });
 
   const min = (<button type="button" />) as HTMLButtonElement;
   const paintMin = (isMin: boolean): void => {
@@ -1309,14 +1310,14 @@ export function mountInspector(target: Element = document.body): void {
   };
   const startMin = lsGet(MIN_KEY) === "1";
   paintMin(startMin);
-  min.onclick = (): void => {
+  tap(min, (): void => {
     const isMin = !!panel?.classList.toggle("li-min");
     paintMin(isMin);
     lsSet(MIN_KEY, isMin ? "1" : "0");
     // Freeze (or thaw) the panel's reactivity while collapsed.
     if (isMin) inspectorScope?.pause();
     else inspectorScope?.resume();
-  };
+  });
 
   const brand = (
     <span class="li-brand">
@@ -1392,7 +1393,7 @@ export function mountInspector(target: Element = document.body): void {
         {t.label}
       </button>
     ) as HTMLButtonElement;
-    btn.onclick = (): void => ui?.(t.id);
+    tap(btn, (): void => ui?.(t.id));
     tabBtns.set(t.id, btn);
     tabscroll.append(btn);
   }

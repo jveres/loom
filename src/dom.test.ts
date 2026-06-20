@@ -1,6 +1,16 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { attr, classed, dispose, h, list, remove, style, text } from "./dom.js";
+import {
+  attr,
+  classed,
+  dispose,
+  h,
+  list,
+  remove,
+  style,
+  tap,
+  text,
+} from "./dom.js";
 import { state } from "./loom.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -112,7 +122,7 @@ describe("loom DOM props and bindings", () => {
       disabled: false, // non-aria false -> skipped
       "aria-hidden": false, // aria false -> rendered as "false"
       "aria-pressed": () => pressed(), // reactive aria boolean
-      onClick: () => {
+      onclick: () => {
         clicks++;
       },
       title: attr("title", () => title()), // explicit attr binding
@@ -137,6 +147,51 @@ describe("loom DOM props and bindings", () => {
     expect(el.getAttribute("title")).toBe("bye");
     expect(el.getAttribute("data-x")).toBe("bye");
     expect(el.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("fires ontap on a tap but not a drag, and resets on pointercancel", () => {
+    let taps = 0;
+    const el = h("button", {
+      ontap: () => {
+        taps++;
+      },
+    });
+    const send = (kind: string, x: number, y: number): void => {
+      el.dispatchEvent(
+        new PointerEvent(kind, { pointerId: 1, clientX: x, clientY: y }),
+      );
+    };
+
+    send("pointerdown", 10, 10);
+    send("pointerup", 12, 12); // within slop -> a tap
+    expect(taps).toBe(1);
+
+    send("pointerdown", 10, 10);
+    send("pointerup", 40, 40); // moved past slop -> a drag, not a tap
+    expect(taps).toBe(1);
+
+    send("pointerdown", 10, 10);
+    el.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1 }));
+    send("pointerup", 10, 10); // press was cancelled -> no tap
+    expect(taps).toBe(1);
+
+    // A pointerup whose id doesn't match the press is ignored.
+    send("pointerdown", 10, 10);
+    el.dispatchEvent(
+      new PointerEvent("pointerup", { pointerId: 2, clientX: 10, clientY: 10 }),
+    );
+    expect(taps).toBe(1);
+  });
+
+  it("binds tap imperatively too", () => {
+    let taps = 0;
+    const el = h("button", {});
+    tap(el, () => {
+      taps++;
+    });
+    el.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 1 }));
+    el.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+    expect(taps).toBe(1);
   });
 
   it("renders boolean-true and removes null attributes", () => {

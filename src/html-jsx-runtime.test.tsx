@@ -57,7 +57,7 @@ describe("loom HTML JSX runtime", () => {
     const out = (
       <form
         action="javascript:alert(1)"
-        onSubmit={() => undefined}
+        onsubmit={() => undefined}
         style={{ color: "red", fontSize: "12px" }}
       >
         Link
@@ -96,7 +96,7 @@ describe("loom HTML JSX runtime", () => {
       key: "k",
       constructor: "c",
       prototype: "pr",
-      onClick: () => {},
+      onclick: () => {},
       "bad name": "x",
       keep: "ok",
     };

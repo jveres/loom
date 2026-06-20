@@ -243,6 +243,42 @@ export function remove(node: Node): void {
   node.parentNode?.removeChild(node);
 }
 
+// px: a pointerup within this distance of the pointerdown counts as a tap, not a drag/scroll.
+const TAP_SLOP = 10;
+
+/**
+ * Bind a robust tap handler. Unlike `click`, this is not dropped by iOS Safari when the DOM mutates
+ * mid-gesture, because it is built from raw pointer events rather than a hit-test-synthesized click.
+ * `handler` fires on pointerup when the release is the same pointer as the press and within
+ * {@link TAP_SLOP} px of it (so a drag or scroll does not trigger it). Use the `ontap` JSX prop,
+ * which routes here; this export is for imperative call sites (e.g. the inspector).
+ */
+export function tap(
+  node: Element,
+  handler: (event: PointerEvent) => void,
+): void {
+  let id = -1;
+  let x = 0;
+  let y = 0;
+  node.addEventListener("pointerdown", (event) => {
+    const pointer = event as PointerEvent;
+    id = pointer.pointerId;
+    x = pointer.clientX;
+    y = pointer.clientY;
+  });
+  node.addEventListener("pointerup", (event) => {
+    const pointer = event as PointerEvent;
+    if (pointer.pointerId !== id) return;
+    id = -1;
+    const dx = pointer.clientX - x;
+    const dy = pointer.clientY - y;
+    if (dx * dx + dy * dy <= TAP_SLOP * TAP_SLOP) handler(pointer);
+  });
+  node.addEventListener("pointercancel", () => {
+    id = -1;
+  });
+}
+
 function own(node: Node, stop: Stop): void {
   const owned = ownedEffects.get(node);
   if (!owned) ownedEffects.set(node, stop);
@@ -277,6 +313,10 @@ function applyProps(node: Element, props: Props): void {
     }
     if (isAttrBinding(value)) {
       bindAttr(node, value);
+      continue;
+    }
+    if (name === "ontap" && typeof value === "function") {
+      tap(node, value as (event: PointerEvent) => void);
       continue;
     }
     if (name.startsWith("on") && typeof value === "function") {

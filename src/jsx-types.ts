@@ -4,21 +4,32 @@ type Component = (props: never) => Child;
 type EventHandler<TElement extends Element, TEvent extends Event> = (
   event: TEvent & { readonly currentTarget: TElement },
 ) => void;
+// DOM-native event names (lowercase, as the DOM uses them) -> their event types. Loom is a thin
+// layer over the DOM, so it follows the platform here rather than React's renamed camelCase props.
+// `tap` is Loom's one synthetic event: a robust pointerdown+pointerup tap (see `tap()` in dom.ts).
+interface DomEventMap {
+  blur: FocusEvent;
+  change: Event;
+  click: MouseEvent;
+  dblclick: MouseEvent;
+  focus: FocusEvent;
+  input: InputEvent;
+  keydown: KeyboardEvent;
+  keyup: KeyboardEvent;
+  mousedown: MouseEvent;
+  mouseup: MouseEvent;
+  pointercancel: PointerEvent;
+  pointerdown: PointerEvent;
+  pointermove: PointerEvent;
+  pointerup: PointerEvent;
+  submit: SubmitEvent;
+  tap: PointerEvent;
+}
 type EventProps<TElement extends Element> = {
-  onBlur?: EventHandler<TElement, FocusEvent>;
-  onChange?: EventHandler<TElement, Event>;
-  onClick?: EventHandler<TElement, MouseEvent>;
-  onDblClick?: EventHandler<TElement, MouseEvent>;
-  onFocus?: EventHandler<TElement, FocusEvent>;
-  onInput?: EventHandler<TElement, InputEvent>;
-  onKeyDown?: EventHandler<TElement, KeyboardEvent>;
-  onKeyUp?: EventHandler<TElement, KeyboardEvent>;
-  onMouseDown?: EventHandler<TElement, MouseEvent>;
-  onMouseUp?: EventHandler<TElement, MouseEvent>;
-  onPointerDown?: EventHandler<TElement, PointerEvent>;
-  onPointerMove?: EventHandler<TElement, PointerEvent>;
-  onPointerUp?: EventHandler<TElement, PointerEvent>;
-  onSubmit?: EventHandler<TElement, SubmitEvent>;
+  [K in keyof DomEventMap as `on${K & string}`]?: EventHandler<
+    TElement,
+    DomEventMap[K]
+  >;
 };
 type ElementProps<TElement extends HTMLElement> = Props &
   EventProps<TElement> & {
