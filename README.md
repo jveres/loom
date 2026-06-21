@@ -27,8 +27,8 @@
   transform and no virtual-DOM diff. JSX returns real elements.
 - **Near-native speed.** Built on [`alien-signals`](https://github.com/stackblitz/alien-signals);
   the per-operation read/write/effect path stays within `~1.03x`–`~1.07x` of the
-  raw primitives on the chaos benchmark — and that margin is the observability
-  layer, which is off by default.
+  raw primitives on the chaos benchmark. That thin margin is the always-on channel
+  instrumentation; inspection (the heavier per-node metadata) is off by default.
 - **Callable cells.** `count()` reads, `count(1)` writes — the whole state model
   in one shape, no setters or hooks.
 - **Generic channel/meter primitives.** A gated ring-buffer `channel` and a pull-based
@@ -406,6 +406,11 @@ list(container, rows, {
 });
 ```
 
+For long lists, `@jveres/loom/dom/vlist` is a standalone fixed-row-height
+virtualizer — only the rows in (and just around) the viewport stay in the DOM. It
+takes a `{ rowHeight, key, render }` and windows against an existing scroll
+container; the inspector's graph tree is built on it.
+
 ### JSX
 
 Loom supports JSX through standard automatic JSX runtime entrypoints. The
@@ -630,7 +635,7 @@ The panel has three tabs:
 
 - **Info** — the `inspectResources()` census (states, computeds, effects, views,
   sources, scopes, channels, `unread`) plus a live rendering-pipeline sparkline
-  (writes in vs DOM updates out) driven by a `meter` over the built-in channels.
+  (writes in vs DOM updates out) driven by a `meter` over the built-in `events`.
 - **Graph** — the reactive graph as a virtualized tree of state/computed cells,
   grouped by `fields()` group and namespace. A filled dot means the cell drives a
   DOM node downstream; a hollow dot means it doesn't. Hovering a cell (or a group
@@ -643,7 +648,7 @@ The panel has three tabs:
 
 The CLI benchmark compares Loom against native `alien-signals` primitives under a
 full-chaos workload (`vitest bench`). It runs three variants on the same machine:
-`@jveres/loom` (using `fields()`), `loom manual` (manually declared state cells), and
+`loom` (using `fields()`), `loom manual` (manually declared state cells), and
 `alien native` (native `alien-signals` cells).
 
 ```sh
