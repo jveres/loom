@@ -1361,18 +1361,25 @@ function gFlash(row: HTMLElement): void {
   void row.offsetWidth; // reflow so the animation restarts even on rapid updates
   row.classList.add("li-flash");
 }
-// Scroll the first of these DOM targets into view, then flash the highlight (after the smooth
-// scroll settles, so the fixed overlays land at the final positions).
-function gScrollToTargets(targets: Node[]): void {
+// Scroll the first of these DOM targets into view, then re-assert the highlight at the settled
+// position (the fixed overlays are stale after a scroll). It is not auto-cleared — the hover that
+// owns it (mouseleave on the header) does that — so it persists while the row stays hovered.
+// `stillActive` guards the late repaint from firing after the pointer has already left.
+function gScrollToTargets(targets: Node[], stillActive: () => boolean): void {
   const t = targets[0];
   const el = t instanceof Element ? t : (t?.parentElement ?? null);
   if (!el) return;
-  gPaint([], false); // drop the hover overlay; it'd be stale after scrolling
+  gPaint([], false); // drop the now-stale overlay while scrolling
   el.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
-  window.setTimeout(() => {
-    gPaint(targets, true);
-    window.setTimeout(() => gPaint([], false), 1100);
-  }, 340);
+  let done = false;
+  const settle = (): void => {
+    if (done) return;
+    done = true;
+    window.removeEventListener("scrollend", settle);
+    if (stillActive()) gPaint(targets, true);
+  };
+  window.addEventListener("scrollend", settle);
+  window.setTimeout(settle, 600); // fallback: scrollend may not fire (already in view / unsupported)
 }
 
 // A group's display name: the fields() label prefix ("card 3" from "card 3.title"), else anonymous.
@@ -1420,7 +1427,7 @@ function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
   };
   locate.onclick = (e) => {
     e.stopPropagation();
-    gScrollToTargets(gGroupTargets(gid));
+    gScrollToTargets(gGroupTargets(gid), () => header.matches(":hover"));
   };
   header.onmouseenter = () => gPaint(gGroupTargets(gid), true);
   header.onmouseleave = () => gPaint(gGroupTargets(gid), false);
