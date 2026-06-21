@@ -25,6 +25,7 @@ import {
   state,
 } from "loom";
 import { tap } from "loom/dom";
+import { type VirtualList, virtualList } from "./vlist.js";
 
 /* ============================================================ palette + css ========= */
 
@@ -152,8 +153,6 @@ const CSS = `
 #${PANEL_ID} .li-stat-v.h-ok{color:var(--li-num)}
 #${PANEL_ID} .li-stat-v.h-warn{color:var(--li-str)}
 #${PANEL_ID} .li-stat-v.h-bad{color:var(--li-bool)}
-#${PANEL_ID} .li-vlist{position:relative}
-#${PANEL_ID} .li-vsizer{width:1px;pointer-events:none}
 #${PANEL_ID} .li-gns-h{position:absolute;top:0;left:0;right:0;height:22px;box-sizing:border-box;
   display:flex;align-items:center;gap:6px;padding:0 10px;cursor:pointer;will-change:transform;
   color:var(--li-muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;user-select:none}
@@ -397,117 +396,6 @@ const POLL_S = POLL_MS / 1000;
 const GRAPH_RENDER_MS = 300; // throttle the (heavy) graph reconcile below the 120ms heartbeat
 const GRAPH_ROW_H = 22; // uniform graph row/header height (must match the .li-grow/.li-gns-h CSS)
 const LAG_MS = 200;
-
-/* ============================================================ virtual list ======== */
-
-// A minimal fixed-row-height windowing list: only the rows in (and just around) the viewport are
-// in the DOM. `el` is an in-flow, full-height holder (a spacer sets its height) that scrolls inside
-// an existing scroll container (the panel body) — it does not introduce its own scrollbar; the
-// window is computed from that parent's scroll position. Rows are placed with translateY (a
-// compositor transform — no per-row layout). `render(item, reuse)` creates a row when reuse is null,
-// else updates it in place. Reused by the Graph tree (flattened to rows) and, later, the event log.
-interface VirtualList<T> {
-  readonly el: HTMLElement;
-  setItems(items: readonly T[]): void;
-  refresh(): void;
-  scrollToEnd(): void;
-  destroy(): void;
-}
-
-function virtualList<T>(opts: {
-  rowHeight: number;
-  key: (item: T) => string | number;
-  render: (item: T, reuse: HTMLElement | null) => HTMLElement;
-  overscan?: number;
-}): VirtualList<T> {
-  const h = opts.rowHeight;
-  const overscan = opts.overscan ?? 6;
-  const el = (<div class="li-vlist" />) as HTMLElement;
-  const sizer = (<div class="li-vsizer" />) as HTMLElement;
-  el.append(sizer);
-  let items: readonly T[] = [];
-  const mounted = new Map<string | number, HTMLElement>();
-  let scroller: HTMLElement | null = null;
-  let raf = 0;
-
-  const reconcile = (): void => {
-    const sp = scroller;
-    if (!sp) return;
-    const vh = sp.clientHeight;
-    if (vh === 0) return; // hidden (inactive tab); reconciles again when shown
-    // How far el's top sits above the scroll viewport's top = the scroll offset into the list.
-    const offset =
-      sp.getBoundingClientRect().top - el.getBoundingClientRect().top;
-    const total = items.length;
-    let start = Math.floor(offset / h) - overscan;
-    if (start < 0) start = 0;
-    let end = Math.ceil((offset + vh) / h) + overscan;
-    if (end > total) end = total;
-    const live = new Set<string | number>();
-    for (let i = start; i < end; i++) {
-      const item = items[i] as T;
-      const k = opts.key(item);
-      live.add(k);
-      const existing = mounted.get(k) ?? null;
-      const row = opts.render(item, existing);
-      row.style.transform = `translateY(${i * h}px)`;
-      if (existing === null) {
-        el.append(row);
-        mounted.set(k, row);
-      } else if (row !== existing) {
-        // render() is meant to update `existing` in place, but tolerate a fresh element too.
-        existing.replaceWith(row);
-        mounted.set(k, row);
-      }
-    }
-    for (const [k, row] of mounted)
-      if (!live.has(k)) {
-        row.remove();
-        mounted.delete(k);
-      }
-  };
-
-  const schedule = (): void => {
-    if (raf) return;
-    raf = requestAnimationFrame(() => {
-      raf = 0;
-      reconcile();
-    });
-  };
-
-  // The scroll container is resolved on first reconcile (el must be mounted first).
-  const ensureScroller = (): void => {
-    if (scroller) return;
-    const sp = el.parentElement;
-    if (!sp) return;
-    scroller = sp;
-    sp.addEventListener("scroll", schedule, { passive: true });
-  };
-
-  return {
-    el,
-    setItems(next) {
-      items = next;
-      sizer.style.height = `${items.length * h}px`;
-      ensureScroller();
-      reconcile();
-    },
-    refresh() {
-      ensureScroller();
-      reconcile();
-    },
-    scrollToEnd() {
-      if (scroller) scroller.scrollTop = scroller.scrollHeight;
-    },
-    destroy() {
-      if (raf) cancelAnimationFrame(raf);
-      scroller?.removeEventListener("scroll", schedule);
-      scroller = null;
-      mounted.clear();
-      el.replaceChildren();
-    },
-  };
-}
 
 /* ============================================================ binding helpers ====== */
 
