@@ -13,7 +13,7 @@ import {
   update,
 } from "loom";
 import { dispose, list } from "loom/dom";
-import { mountInspector, toggleInspector } from "loom/inspect";
+import { mountInspector, toggleInspector } from "loom/devtools";
 import "./styles.css";
 
 // Inspection is opt-in (off by default = zero cost). Enable it before creating any nodes — when the

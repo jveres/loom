@@ -32,10 +32,10 @@
 - **Callable cells.** `count()` reads, `count(1)` writes — the whole state model
   in one shape, no setters or hooks.
 - **Observability with zero idle cost.** Built-in channels allocate nothing until
-  a meter attaches, and an opt-in inspector (`@jveres/loom/inspect`) visualizes the live
+  a meter attaches, and an opt-in inspector (`@jveres/loom/devtools`) visualizes the live
   reactive graph.
 - **One core, four entrypoints.** `@jveres/loom` (reactivity) · `@jveres/loom/dom` (DOM bindings) ·
-  `@jveres/loom/html` (SSR/SSG) · `@jveres/loom/inspect` (dev panel).
+  `@jveres/loom/html` (SSR/SSG) · `@jveres/loom/devtools` (dev panel).
 
 ## At a glance
 
@@ -581,14 +581,14 @@ zero. `inspect()` still returns a pull snapshot of the whole graph, and
 
 ### Inspector
 
-`@jveres/loom/inspect` is a self-contained dev panel built entirely on the public
+`@jveres/loom/devtools` is a self-contained dev panel built entirely on the public
 surface above (`inspect`, `inspectResources`, `channels`/`meter`, `scope`,
 `polled`, `source`). Mount it to get a live, draggable, resizable overlay; it is
 purely a consumer of the runtime, so the same data is available to any tooling
 you write yourself.
 
 ```ts
-import { mountInspector } from "@jveres/loom/inspect";
+import { mountInspector } from "@jveres/loom/devtools";
 
 mountInspector(); // appends to document.body by default; pass an Element to host it elsewhere
 ```
@@ -610,7 +610,7 @@ inspection at startup before creating them:
 
 ```ts
 import { configure } from "@jveres/loom";
-import { mountInspector } from "@jveres/loom/inspect";
+import { mountInspector } from "@jveres/loom/devtools";
 
 configure({ inspect: true }); // earliest opportunity — every node from here is visible
 // ... build your app ...

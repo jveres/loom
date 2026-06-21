@@ -21,7 +21,7 @@
     ".": "./src/loom.ts",
     "./dom": "./src/dom.ts",
     "./vlist": "./src/vlist.ts",
-    "./inspect": "./src/inspect.tsx",
+    "./devtools": "./src/devtools/index.ts",
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
     "./html": "./src/html.ts",
