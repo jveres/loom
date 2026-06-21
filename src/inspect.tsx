@@ -152,18 +152,19 @@ const CSS = `
 #${PANEL_ID} .li-stat-v.h-ok{color:var(--li-num)}
 #${PANEL_ID} .li-stat-v.h-warn{color:var(--li-str)}
 #${PANEL_ID} .li-stat-v.h-bad{color:var(--li-bool)}
-#${PANEL_ID} .li-graph{padding:4px 0 8px;overflow-y:auto}
-#${PANEL_ID} .li-gns-h{display:flex;align-items:center;gap:6px;padding:4px 10px 3px;cursor:pointer;
+#${PANEL_ID} .li-vlist{position:relative}
+#${PANEL_ID} .li-vsizer{width:1px;pointer-events:none}
+#${PANEL_ID} .li-gns-h{position:absolute;top:0;left:0;right:0;height:22px;box-sizing:border-box;
+  display:flex;align-items:center;gap:6px;padding:0 10px;cursor:pointer;will-change:transform;
   color:var(--li-muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;user-select:none}
 #${PANEL_ID} .li-gns-h:hover{background:var(--li-hover)}
 #${PANEL_ID} .li-gns-c{font-variant-numeric:tabular-nums;opacity:.7}
 #${PANEL_ID} .li-chev{flex:0 0 auto;margin:0;color:var(--li-muted);transition:transform .12s ease}
-#${PANEL_ID} .li-gns.collapsed .li-chev{transform:rotate(-90deg)}
-#${PANEL_ID} .li-gns.collapsed .li-gns-body{display:none}
-#${PANEL_ID} .li-grow{display:flex;align-items:center;gap:7px;padding:2px 10px 2px 22px;
-  font-size:11.5px;border-radius:4px;cursor:default;
-  content-visibility:auto;contain-intrinsic-size:auto 21px}
-#${PANEL_ID} .li-gns-body .li-grow{padding-left:30px}
+#${PANEL_ID} .li-gns-h.collapsed .li-chev{transform:rotate(-90deg)}
+#${PANEL_ID} .li-grow{position:absolute;top:0;left:0;right:0;height:22px;box-sizing:border-box;
+  display:flex;align-items:center;gap:7px;padding:0 10px 0 22px;font-size:11.5px;cursor:default;
+  will-change:transform}
+#${PANEL_ID} .li-grow-child{padding-left:30px}
 #${PANEL_ID} .li-grow:hover{background:var(--li-hover)}
 #${PANEL_ID} .li-gicon{flex:0 0 auto;margin:0}
 #${PANEL_ID} .li-gi-state{color:var(--li-key)}
@@ -342,28 +343,34 @@ let nodeScopes = 0;
 let nodeChannels = 0;
 let nodeUnread = 0;
 
-// Graph tab: an imperative namespace-grouped tree of states/computeds/views, reconciled in
-// renderGraph() on the heartbeat while the tab is visible. Rows update value + flash on change and
-// outline their DOM node(s) on hover. Imperative (not loom bindings) to stay light at hundreds of
-// rows and to keep hover/expand state across reconciles.
-interface GraphRow {
-  readonly row: HTMLElement;
-  readonly val: HTMLElement;
-  prevVal: string;
-}
-interface GraphGroup {
-  readonly wrap: HTMLElement;
-  readonly body: HTMLElement;
-  readonly count: HTMLElement;
-  readonly labelEl: HTMLElement;
-}
-let graphEl: HTMLElement | null = null;
+// Graph tab: a namespace-grouped tree of states/computeds, flattened to a uniform-height row list
+// and rendered through a windowing virtualizer (only on-screen rows are in the DOM). renderGraph()
+// rebuilds the flat list on the heartbeat; rows update value + flash on change and outline their
+// DOM node(s) on hover. fields() cells fold under a collapsible header; standalone cells at the root.
+type GraphItem =
+  | {
+      readonly kind: "header";
+      readonly gid: number;
+      readonly label: string;
+      readonly count: number;
+    }
+  | {
+      readonly kind: "cell";
+      readonly node: InspectNode;
+      readonly child: boolean;
+    };
+let graphVList: VirtualList<GraphItem> | null = null;
 let graphById = new Map<number, InspectNode>();
+let graphGroupsData: Array<{
+  gid: number;
+  label: string;
+  cells: InspectNode[];
+}> = [];
+let graphSingles: InspectNode[] = [];
 let gOverlays: HTMLElement[] = []; // active hover-highlight overlay boxes
 let gEditing: HTMLInputElement | null = null; // the open in-place value editor, if any
+let gEditingId = -1; // node id whose value is being edited (its row skips value updates)
 let lastGraphRender = 0; // performance.now() of the last graph reconcile (see GRAPH_RENDER_MS)
-const graphRows = new Map<number, GraphRow>();
-const graphGroups = new Map<number, GraphGroup>(); // keyed by fields() group id
 const graphCollapsed = new Set<number>();
 
 // Rendering-pipeline sparkline series: writes in (top) vs DOM updates out (bottom), per poll.
@@ -373,7 +380,115 @@ const sparkOut: number[] = [];
 const POLL_MS = 120;
 const POLL_S = POLL_MS / 1000;
 const GRAPH_RENDER_MS = 300; // throttle the (heavy) graph reconcile below the 120ms heartbeat
+const GRAPH_ROW_H = 22; // uniform graph row/header height (must match the .li-grow/.li-gns-h CSS)
 const LAG_MS = 200;
+
+/* ============================================================ virtual list ======== */
+
+// A minimal fixed-row-height windowing list: only the rows in (and just around) the viewport are
+// in the DOM. `el` is an in-flow, full-height holder (a spacer sets its height) that scrolls inside
+// an existing scroll container (the panel body) — it does not introduce its own scrollbar; the
+// window is computed from that parent's scroll position. Rows are placed with translateY (a
+// compositor transform — no per-row layout). `render(item, reuse)` creates a row when reuse is null,
+// else updates it in place. Reused by the Graph tree (flattened to rows) and, later, the event log.
+interface VirtualList<T> {
+  readonly el: HTMLElement;
+  setItems(items: readonly T[]): void;
+  refresh(): void;
+  scrollToEnd(): void;
+  destroy(): void;
+}
+
+function virtualList<T>(opts: {
+  rowHeight: number;
+  key: (item: T) => string | number;
+  render: (item: T, reuse: HTMLElement | null) => HTMLElement;
+  overscan?: number;
+}): VirtualList<T> {
+  const h = opts.rowHeight;
+  const overscan = opts.overscan ?? 6;
+  const el = (<div class="li-vlist" />) as HTMLElement;
+  const sizer = (<div class="li-vsizer" />) as HTMLElement;
+  el.append(sizer);
+  let items: readonly T[] = [];
+  const mounted = new Map<string | number, HTMLElement>();
+  let scroller: HTMLElement | null = null;
+  let raf = 0;
+
+  const reconcile = (): void => {
+    const sp = scroller;
+    if (!sp) return;
+    const vh = sp.clientHeight;
+    if (vh === 0) return; // hidden (inactive tab); reconciles again when shown
+    // How far el's top sits above the scroll viewport's top = the scroll offset into the list.
+    const offset =
+      sp.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    const total = items.length;
+    let start = Math.floor(offset / h) - overscan;
+    if (start < 0) start = 0;
+    let end = Math.ceil((offset + vh) / h) + overscan;
+    if (end > total) end = total;
+    const live = new Set<string | number>();
+    for (let i = start; i < end; i++) {
+      const item = items[i] as T;
+      const k = opts.key(item);
+      live.add(k);
+      const existing = mounted.get(k) ?? null;
+      const row = opts.render(item, existing);
+      row.style.transform = `translateY(${i * h}px)`;
+      if (existing === null) {
+        el.append(row);
+        mounted.set(k, row);
+      }
+    }
+    for (const [k, row] of mounted)
+      if (!live.has(k)) {
+        row.remove();
+        mounted.delete(k);
+      }
+  };
+
+  const schedule = (): void => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      reconcile();
+    });
+  };
+
+  // The scroll container is resolved on first reconcile (el must be mounted first).
+  const ensureScroller = (): void => {
+    if (scroller) return;
+    const sp = el.parentElement;
+    if (!sp) return;
+    scroller = sp;
+    sp.addEventListener("scroll", schedule, { passive: true });
+  };
+
+  return {
+    el,
+    setItems(next) {
+      items = next;
+      sizer.style.height = `${items.length * h}px`;
+      ensureScroller();
+      reconcile();
+    },
+    refresh() {
+      ensureScroller();
+      reconcile();
+    },
+    scrollToEnd() {
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    },
+    destroy() {
+      if (raf) cancelAnimationFrame(raf);
+      scroller?.removeEventListener("scroll", schedule);
+      scroller = null;
+      mounted.clear();
+      el.replaceChildren();
+    },
+  };
+}
 
 /* ============================================================ binding helpers ====== */
 
@@ -1050,8 +1165,13 @@ const TIP = {
 /* ============================================================ graph tab =========== */
 
 function buildGraphPane(): HTMLElement {
-  graphEl = (<div class="li-pane li-graph" />) as HTMLElement;
-  return graphEl;
+  graphVList = virtualList<GraphItem>({
+    rowHeight: GRAPH_ROW_H,
+    key: (it) => (it.kind === "header" ? `g${it.gid}` : it.node.id),
+    render: gRender,
+  });
+  graphVList.el.classList.add("li-pane", "li-graph");
+  return graphVList.el;
 }
 
 // A cell is "bound" when it drives a DOM element somewhere downstream — i.e. the hover highlight
@@ -1099,48 +1219,62 @@ function gEditable(n: InspectNode): boolean {
     typeof v === "boolean"
   );
 }
-// Open the in-place editor for a state cell: booleans toggle, others get an <input> that commits
-// on Enter/blur and writes straight back to the live cell.
-function gBeginEdit(cell: State<unknown>, val: HTMLElement, r: GraphRow): void {
+// Paint a row's value cell (text + type colour), flashing on change. Skipped while the row's value
+// is being edited (its <span> is detached into an <input>). prevVal lives on the element's dataset
+// so flash fires only on a genuine change of an on-screen row, not on scroll-in.
+function gPaintVal(row: HTMLElement, value: unknown, id: number): void {
+  if (gEditingId === id) return;
+  const val = row.querySelector(".li-gval") as HTMLElement | null;
+  if (!val) return;
+  const text = gFormat(value);
+  if (row.dataset["prev"] !== undefined && row.dataset["prev"] !== text)
+    gFlash(row);
+  val.textContent = text;
+  const edit = val.classList.contains("li-edit") ? " li-edit" : "";
+  val.className = `li-gval${edit} ${gValueClass(value)}`;
+  row.dataset["prev"] = text;
+}
+// Open the in-place editor for a state cell: booleans toggle, others get an <input> that commits on
+// Enter/blur (Escape cancels) and writes straight back to the live cell.
+function gBeginEdit(
+  id: number,
+  cell: State<unknown>,
+  val: HTMLElement,
+  row: HTMLElement,
+): void {
   const prev = cell();
   if (typeof prev === "boolean") {
     cell(!prev);
-    gShowVal(r, cell());
+    gPaintVal(row, cell(), id);
     return;
   }
-  // The handler is wired once; bail if the value has since become non-primitive (can't edit it).
   if (prev !== null && typeof prev !== "number" && typeof prev !== "string") {
-    return;
+    return; // value turned non-primitive since the handler was wired
   }
   const input = document.createElement("input");
   input.className = "li-gedit";
   input.value = typeof prev === "string" ? prev : String(prev);
-  val.replaceWith(input);
   gEditing = input;
+  gEditingId = id;
+  val.replaceWith(input);
   input.focus();
   input.select();
   const restore = (): void => {
     gEditing = null;
+    gEditingId = -1;
     if (input.parentNode) input.replaceWith(val);
   };
   const commit = (): void => {
     if (gEditing !== input) return;
     cell(gCoerce(input.value, prev));
     restore();
-    gShowVal(r, cell());
+    gPaintVal(row, cell(), id);
   };
-  input.onblur = commit;
+  input.onblur = commit; // also fires when the row is scrolled out of the window
   input.onkeydown = (e) => {
     if (e.key === "Enter") commit();
     else if (e.key === "Escape") restore();
   };
-}
-// Paint a row's value cell (text + type colour), preserving the edit affordance class.
-function gShowVal(r: GraphRow, v: unknown): void {
-  const text = gFormat(v);
-  r.val.textContent = text;
-  r.val.className = `li-gval${r.val.classList.contains("li-edit") ? " li-edit" : ""} ${gValueClass(v)}`;
-  r.prevVal = text;
 }
 
 // Views aren't listed; instead, hovering a state/computed outlines every view downstream of it
@@ -1177,8 +1311,7 @@ function gGroupTargets(gid: number): Element[] {
   return out;
 }
 // Highlight via fixed overlay boxes (not `outline`, which follows the target's border-radius in
-// modern browsers) so the marker is always a sharp rectangle. Transient: it tracks a hover, not
-// scroll/resize.
+// modern browsers) so the marker is always a sharp rectangle. Transient: it tracks a hover.
 function gPaint(els: Element[], on: boolean): void {
   for (const o of gOverlays) o.remove();
   gOverlays = [];
@@ -1205,99 +1338,124 @@ function gGroupLabel(gid: number, cells: InspectNode[]): string {
   return first && dot > 0 ? first.label.slice(0, dot) : `fields #${gid}`;
 }
 
-function gEnsureGroup(gid: number, label: string): GraphGroup {
-  const existing = graphGroups.get(gid);
-  if (existing) {
-    existing.labelEl.textContent = label;
-    return existing;
-  }
-  const count = (<span class="li-gns-c" />) as HTMLElement;
-  const labelEl = (<span>{label}</span>) as HTMLElement;
-  const body = (<div class="li-gns-body" />) as HTMLElement;
+/* ---- virtual-list row renderers (create when reuse is null, else update in place) ---- */
+
+function gRender(item: GraphItem, reuse: HTMLElement | null): HTMLElement {
+  if (item.kind === "header")
+    return reuse ? gUpdateHeader(reuse, item) : gCreateHeader(item);
+  return reuse ? gUpdateCell(reuse, item) : gCreateCell(item);
+}
+
+function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
+  const count = (
+    <span class="li-gns-c">{`(${item.count})`}</span>
+  ) as HTMLElement;
+  const labelEl = (<span class="li-gns-lbl">{item.label}</span>) as HTMLElement;
   const chev = icon(ICON_CHEVRON, 11);
   chev.classList.add("li-chev");
-  const wrap = (
-    <div class={["li-gns", { collapsed: graphCollapsed.has(gid) }]}>
-      <div class="li-gns-h">
-        {chev}
-        {labelEl}
-        {count}
-      </div>
-      {body}
+  const header = (
+    <div class="li-gns-h">
+      {chev}
+      {labelEl}
+      {count}
     </div>
   ) as HTMLElement;
-  const header = wrap.querySelector(".li-gns-h") as HTMLElement;
+  const gid = item.gid;
+  if (graphCollapsed.has(gid)) header.classList.add("collapsed");
   header.onclick = () => {
-    const collapsed = wrap.classList.toggle("collapsed");
-    if (collapsed) graphCollapsed.add(gid);
-    else graphCollapsed.delete(gid);
+    if (graphCollapsed.has(gid)) graphCollapsed.delete(gid);
+    else graphCollapsed.add(gid);
+    graphVList?.setItems(gFlatten());
   };
   header.onmouseenter = () => gPaint(gGroupTargets(gid), true);
   header.onmouseleave = () => gPaint(gGroupTargets(gid), false);
-  graphEl?.append(wrap);
-  const group: GraphGroup = { wrap, body, count, labelEl };
-  graphGroups.set(gid, group);
-  return group;
+  return header;
+}
+function gUpdateHeader(
+  header: HTMLElement,
+  item: GraphItem & { kind: "header" },
+): HTMLElement {
+  const c = header.querySelector(".li-gns-c");
+  if (c) c.textContent = `(${item.count})`;
+  const l = header.querySelector(".li-gns-lbl");
+  if (l) l.textContent = item.label;
+  header.classList.toggle("collapsed", graphCollapsed.has(item.gid));
+  return header;
 }
 
-function gUpdateRow(n: InspectNode, parent: HTMLElement, child: boolean): void {
-  let r = graphRows.get(n.id);
-  if (!r) {
-    const val = (<span class="li-gval" />) as HTMLElement;
-    const bound = gBound(n);
-    const ic = icon(
-      n.kind === "computed" ? ICON_COMPUTED : bound ? ICON_BOUND : ICON_UNBOUND,
-      13,
-    );
-    ic.classList.add(
-      "li-gicon",
-      !bound
-        ? "li-gi-dim"
-        : n.kind === "computed"
-          ? "li-gi-computed"
-          : "li-gi-state",
-    );
-    const labelText = child ? (n.key ?? n.label) : n.label;
-    const row = (
-      <div class="li-grow">
-        {ic}
-        <span class="li-glabel">{labelText}</span>
-        {!child && n.namespace !== "default" ? (
-          <span class="li-gns-tag">{n.namespace}</span>
-        ) : null}
-        {val}
-      </div>
-    ) as HTMLElement;
-    row.onmouseenter = () => gPaint(gTargetsFor(n.id), true);
-    row.onmouseleave = () => gPaint(gTargetsFor(n.id), false);
-    parent.append(row);
-    const created: GraphRow = { row, val, prevVal: " " };
-    graphRows.set(n.id, created);
-    r = created;
-    if (gEditable(n) && n.source) {
-      val.classList.add("li-edit");
-      const cell = n.source;
-      val.onclick = () => gBeginEdit(cell, val, created);
-    }
+function gCreateCell(item: GraphItem & { kind: "cell" }): HTMLElement {
+  const n = item.node;
+  const val = (<span class="li-gval" />) as HTMLElement;
+  const bound = gBound(n);
+  const ic = icon(
+    n.kind === "computed" ? ICON_COMPUTED : bound ? ICON_BOUND : ICON_UNBOUND,
+    13,
+  );
+  ic.classList.add(
+    "li-gicon",
+    !bound
+      ? "li-gi-dim"
+      : n.kind === "computed"
+        ? "li-gi-computed"
+        : "li-gi-state",
+  );
+  const labelText = item.child ? (n.key ?? n.label) : n.label;
+  const row = (
+    <div class="li-grow">
+      {ic}
+      <span class="li-glabel">{labelText}</span>
+      {!item.child && n.namespace !== "default" ? (
+        <span class="li-gns-tag">{n.namespace}</span>
+      ) : null}
+      {val}
+    </div>
+  ) as HTMLElement;
+  if (item.child) row.classList.add("li-grow-child");
+  row.onmouseenter = () => gPaint(gTargetsFor(n.id), true);
+  row.onmouseleave = () => gPaint(gTargetsFor(n.id), false);
+  if (gEditable(n) && n.source) {
+    val.classList.add("li-edit");
+    const cell = n.source;
+    val.onclick = () => gBeginEdit(n.id, cell, val, row);
   }
-  // Skip the row currently being edited (its value cell is detached into an <input>).
-  if (!r.val.isConnected) return;
-  const v = gFormat(n.value);
-  if (v !== r.prevVal) {
-    if (r.prevVal !== " ") gFlash(r.row);
-    gShowVal(r, n.value);
+  gPaintVal(row, n.value, n.id);
+  return row;
+}
+function gUpdateCell(
+  row: HTMLElement,
+  item: GraphItem & { kind: "cell" },
+): HTMLElement {
+  gPaintVal(row, item.node.value, item.node.id);
+  return row;
+}
+
+// Flatten the cached groups + singles into the visible row list, honouring collapse state.
+function gFlatten(): GraphItem[] {
+  const items: GraphItem[] = [];
+  for (const g of graphGroupsData) {
+    items.push({
+      kind: "header",
+      gid: g.gid,
+      label: g.label,
+      count: g.cells.length,
+    });
+    if (!graphCollapsed.has(g.gid))
+      for (const n of g.cells)
+        items.push({ kind: "cell", node: n, child: true });
   }
+  for (const n of graphSingles)
+    items.push({ kind: "cell", node: n, child: false });
+  return items;
 }
 
 function renderGraph(): void {
-  if (!graphEl) return;
+  if (!graphVList) return;
   // active:true drops subscriber-less cells before they're even built — excluding the ghost cells
   // of removed objects (alive until GC) that would otherwise balloon the tree under churn.
   const all = inspect({ active: true }).nodes;
   graphById = new Map(all.map((n) => [n.id, n]));
 
   // The tree holds state + computed cells only; views (effects) are reached by hover, not listed.
-  // fields() cells fold back under one collapsible group; standalone cells render at the root.
   const groups = new Map<number, InspectNode[]>();
   const singles: InspectNode[] = [];
   for (const n of all) {
@@ -1308,34 +1466,13 @@ function renderGraph(): void {
       else groups.set(n.group, [n]);
     } else singles.push(n);
   }
-
-  const seenRows = new Set<number>();
-  const seenGroups = new Set<number>();
+  graphGroupsData = [];
   for (const [gid, cells] of groups) {
-    seenGroups.add(gid);
     cells.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
-    const g = gEnsureGroup(gid, gGroupLabel(gid, cells));
-    g.count.textContent = `(${cells.length})`;
-    for (const n of cells) {
-      seenRows.add(n.id);
-      gUpdateRow(n, g.body, true);
-    }
+    graphGroupsData.push({ gid, label: gGroupLabel(gid, cells), cells });
   }
-  for (const n of singles) {
-    seenRows.add(n.id);
-    gUpdateRow(n, graphEl, false);
-  }
-
-  for (const [id, r] of graphRows)
-    if (!seenRows.has(id)) {
-      r.row.remove();
-      graphRows.delete(id);
-    }
-  for (const [gid, g] of graphGroups)
-    if (!seenGroups.has(gid)) {
-      g.wrap.remove();
-      graphGroups.delete(gid);
-    }
+  graphSingles = singles;
+  graphVList.setItems(gFlatten());
 }
 
 function buildStatsPane(): HTMLElement {
@@ -1928,9 +2065,12 @@ export function unmountInspector(): void {
   nodeSources = nodeScopes = nodeChannels = nodeUnread = 0;
   for (const o of gOverlays) o.remove();
   gOverlays = [];
-  graphEl = null;
-  graphRows.clear();
-  graphGroups.clear();
+  gEditing = null;
+  gEditingId = -1;
+  graphVList?.destroy();
+  graphVList = null;
+  graphGroupsData = [];
+  graphSingles = [];
   graphCollapsed.clear();
   graphById = new Map();
   sparkIn.length = 0;
