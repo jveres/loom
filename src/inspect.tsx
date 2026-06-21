@@ -340,7 +340,7 @@ let nodeViews = 0;
 let nodeSources = 0;
 let nodeScopes = 0;
 let nodeChannels = 0;
-let nodeIdle = 0;
+let nodeUnread = 0;
 
 // Graph tab: an imperative namespace-grouped tree of states/computeds/views, reconciled in
 // renderGraph() on the heartbeat while the tab is visible. Rows update value + flash on change and
@@ -1043,7 +1043,8 @@ const TIP = {
   scopes: "Live scopes grouping effects and resources.",
   channels:
     "Registered observability channels (7 built-in + any app-declared).",
-  idle: "State/computed cells nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked cells.",
+  unread:
+    "States/computeds nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked cells.",
 } as const;
 
 /* ============================================================ graph tab =========== */
@@ -1465,17 +1466,17 @@ function buildStatsPane(): HTMLElement {
       {stat("disposes / s", () => fmtRate(disposeRate), "lo", TIP.disposes)}
       {stat("states", () => String(nodeStates), "", TIP.states)}
       {stat("computeds", () => String(nodeComputeds), "", TIP.computeds)}
+      {vitalStat(
+        "unread",
+        () => String(nodeUnread),
+        () => (nodeUnread > 0 ? "h-warn" : ""),
+        TIP.unread,
+      )}
       {stat("effects", () => String(nodeEffects), "", TIP.effects)}
       {stat("views", () => String(nodeViews), "", TIP.views)}
       {stat("sources", () => String(nodeSources), "", TIP.sources)}
       {stat("scopes", () => String(nodeScopes), "", TIP.scopes)}
       {stat("channels", () => String(nodeChannels), "", TIP.channels)}
-      {vitalStat(
-        "idle cells",
-        () => String(nodeIdle),
-        () => (nodeIdle > 0 ? "h-warn" : ""),
-        TIP.idle,
-      )}
     </div>
   );
 }
@@ -1572,7 +1573,7 @@ function poll(): number {
     nodeSources = c.sources;
     nodeScopes = c.scopes;
     nodeChannels = c.channels;
-    nodeIdle = c.idle;
+    nodeUnread = c.unread;
   } else if (ui?.() === "graph" && visible) {
     // The graph walk (inspect() builds every node) is the heavy part, so refresh it at ~3/s rather
     // than every 120ms tick — plenty for reading values, and it halves the cost under churn.
@@ -1924,7 +1925,7 @@ export function unmountInspector(): void {
   lag = lagPeak = 0;
   healthReady = false;
   nodeStates = nodeComputeds = nodeEffects = nodeViews = 0;
-  nodeSources = nodeScopes = nodeChannels = nodeIdle = 0;
+  nodeSources = nodeScopes = nodeChannels = nodeUnread = 0;
   for (const o of gOverlays) o.remove();
   gOverlays = [];
   graphEl = null;
