@@ -400,7 +400,7 @@ function rangeControl(
   max: number,
   step: number,
 ): Element {
-  return (
+  const ctl = (
     <label class="ctl">
       <span>{label}</span>
       <input
@@ -408,14 +408,25 @@ function rangeControl(
         min={min}
         max={max}
         step={step}
-        value={value()}
         oninput={(event) => {
           value(event.currentTarget.valueAsNumber);
         }}
       />
       <strong>{() => String(value())}</strong>
     </label>
+  ) as HTMLElement;
+  // Two-way: reflect the state onto the thumb. We set the .value *property* (not the attribute, which
+  // a range input ignores once dragged), so external writes — e.g. editing the cell in the inspector —
+  // move the slider. target:input ties the binding to the element so the inspector marks the state
+  // bound and highlights the slider on hover.
+  const input = ctl.querySelector("input") as HTMLInputElement;
+  effect(
+    () => {
+      input.value = String(value());
+    },
+    { target: input },
   );
+  return ctl;
 }
 
 function command(
