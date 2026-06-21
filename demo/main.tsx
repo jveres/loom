@@ -177,6 +177,23 @@ list(board, cards, {
   reorder: () => !settings.transform(),
 });
 
+// Selection highlight via a single binding instead of one per card: rather than every card reading
+// selectedId() in its class (N subscribers, re-run on every selection change), one effect moves a
+// data-selected marker between the affected cards. Re-reads cards() so it re-locates after the list
+// reconciles. target:board ties it to the board in the inspector.
+let selectedCardEl: Element | null = null;
+effect(
+  () => {
+    cards(); // re-locate after inserts/removes/reorders
+    const next = board.querySelector(`.card[data-id="${selectedId()}"]`);
+    if (next === selectedCardEl) return;
+    selectedCardEl?.removeAttribute("data-selected");
+    next?.setAttribute("data-selected", "");
+    selectedCardEl = next;
+  },
+  { target: board },
+);
+
 effect(() => {
   cards();
   settings.transform();
@@ -239,10 +256,8 @@ function renderCard(card: Card): Element {
   const model = card.model;
   return (
     <article
-      class={[
-        "card",
-        { selected: () => selectedId() === card.id, hot: model.hot },
-      ]}
+      class={["card", { hot: model.hot }]}
+      data-id={card.id}
       data-tone={() => toneName(model.tone())}
     >
       <div class="kicker">

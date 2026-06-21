@@ -249,7 +249,7 @@ button.ghost.on {
   --tone: var(--tone-green);
 }
 
-.card.selected,
+.card[data-selected],
 .card.hot {
   border-color: var(--tone, var(--tone-violet));
 }
