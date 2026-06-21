@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "description": "A tiny runtime reactive UI core.",
+  "license": "MIT",
+  "author": "Janos Veres",
   "sideEffects": false,
   "scripts": {
     "test": "vitest run",

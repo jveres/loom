@@ -1,47 +1,80 @@
-# Loom
+<p align="center">
+  <img src="./assets/loom.svg" alt="Loom" width="96" height="96">
+</p>
 
-Loom is a tiny runtime reactive UI core for building simple and complex
-reactive interfaces with callable state cells, computed reads, effects,
-batched updates, and a small DOM binding layer.
+<h1 align="center">Loom</h1>
 
-> **Note:** Loom is under active development. The API is intentionally small
-> and can still change while the core and inspector surface are refined.
+<p align="center">
+  <strong>A tiny runtime reactive UI core.</strong><br>
+  Callable state cells, computed reads, effects, and a small DOM layer —
+  no compiler, no virtual DOM.
+</p>
+
+<p align="center">
+  <a href="./LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-green"></a>
+  <img alt="status: alpha" src="https://img.shields.io/badge/status-alpha-orange">
+  <img alt="gzip ~5 kB" src="https://img.shields.io/badge/gzip-~5%20kB-blue">
+  <img alt="TypeScript" src="https://img.shields.io/badge/types-TypeScript-3178c6">
+  <img alt="built on alien-signals" src="https://img.shields.io/badge/built%20on-alien--signals-8957e5">
+</p>
+
+> Loom is under active development. The API is intentionally small and can still
+> change while the core and inspector surface are refined.
+
+## Why Loom
+
+- **Runtime, not compiled.** Plain functions and live DOM nodes — no build-step
+  transform and no virtual-DOM diff. JSX returns real elements.
+- **Near-native speed.** Built on [`alien-signals`](https://github.com/stackblitz/alien-signals);
+  the per-operation read/write/effect path stays within `~1.03x`–`~1.07x` of the
+  raw primitives on the chaos benchmark — and that margin is the observability
+  layer, which is off by default.
+- **Callable cells.** `count()` reads, `count(1)` writes — the whole state model
+  in one shape, no setters or hooks.
+- **Observability with zero idle cost.** Built-in channels allocate nothing until
+  a meter attaches, and an opt-in inspector (`@jveres/loom/inspect`) visualizes the live
+  reactive graph.
+- **One core, four entrypoints.** `@jveres/loom` (reactivity) · `@jveres/loom/dom` (DOM bindings) ·
+  `@jveres/loom/html` (SSR/SSG) · `@jveres/loom/inspect` (dev panel).
+
+## At a glance
+
+```tsx
+import { computed, state } from "@jveres/loom";
+
+const count = state(0);
+const label = computed(() => `count: ${count()}`);
+
+function Counter() {
+  return <button onclick={() => count(count() + 1)}>{label}</button>;
+}
+
+document.body.append(<Counter />);
+```
+
+State cells are callable: calling without an argument reads the value, calling
+with an argument writes the next one. A `computed` caches a derived read; an
+`effect` re-runs when its dependencies change. JSX evaluates once and returns a
+real DOM node, with reactive reads wired in place.
 
 ## Install
 
-This repository is currently private and developed directly from source.
-Install dependencies with `pnpm`:
-
 ```sh
-pnpm install
+npm install @jveres/loom
 ```
 
-Run the standard checks:
+To use browser JSX, point TypeScript (and your bundler) at Loom's automatic
+runtime — see [JSX](#jsx). For local development of Loom itself, see
+[Develop](#develop).
 
-```sh
-pnpm run check
-pnpm run lint
-pnpm test
-pnpm run bench
-```
+## Guide
 
-Run the dev server:
+### Core primitives
 
-```sh
-pnpm run dev
-```
-
-Open `/demo/` for the realtime UI demo, or `/bench/` for the browser
-benchmark.
-
-## Core API
-
-Import reactive primitives from `loom`. State cells are callable functions:
-calling without an argument reads the value, and calling with an argument
-writes the next value.
+Import reactive primitives from `@jveres/loom`.
 
 ```ts
-import { batch, computed, effect, fields, state, update } from "loom";
+import { batch, computed, effect, state, update } from "@jveres/loom";
 
 const count = state(0);
 const doubled = computed(() => count() * 2);
@@ -98,7 +131,7 @@ The core exports these functions:
   inspection layer — **off by default**, so node creation allocates no metadata
   (zero cost); turn it on once at startup, before creating the nodes you want
   visible, when you need tooling. `onError` installs a global effect error
-  boundary (see below).
+  boundary (see [Error handling](#error-handling)).
 - `inspect()` returns a snapshot of the current reactive graph (empty unless
   inspection is enabled). Pass `{ active: true }` to skip state/computed cells
   with no subscribers — idle cells and "ghosts" (cells of a removed object that
@@ -136,7 +169,7 @@ Pass `{ label, namespace }` to `state`, `computed`, `effect`, or `fields` when
 you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
 tooling state that must not appear in app-level event streams by default.
 
-## Object fields
+### Object fields
 
 Use `fields()` when you want fine-grained updates for a plain object. Each
 enumerable string key becomes its own state cell.
@@ -161,7 +194,7 @@ model.likes(1);
 not exposed because the runtime uses enumerable string keys. When you pass a
 `label`, each field is labeled as `label.key`, for example `post.likes`.
 
-## In-place mutation
+### In-place mutation
 
 Loom state compares values by identity. When you mutate an object or array in
 place, use `trigger()` or `mutate()` to notify dependents.
@@ -181,14 +214,14 @@ mutate(rows, (value) => {
 });
 ```
 
-## External sources
+### External sources
 
 Bridge imperative or external data into the graph. `polled()` re-samples on an
 interval (eager, deduped); `source()` is lazy — it connects on first subscriber
 and disconnects on last, so the producer only runs while observed.
 
 ```ts
-import { effect, polled, source } from "loom";
+import { effect, polled, source } from "@jveres/loom";
 
 // Eager: sample performance.now() every 250ms (unchanged samples don't re-run readers).
 const clock = polled(() => Date.now(), 250);
@@ -211,7 +244,7 @@ The dev inspector uses both: a `polled()` heartbeat drives its per-tick metric
 math, and the CLS/LCP/INP web vitals are `source()`s whose `PerformanceObserver`s
 connect and disconnect with the panel — no manual teardown.
 
-## Scopes
+### Scopes
 
 `scope(fn)` groups the effects created in `fn` so a whole subtree can be torn
 down or suspended at once. `stop()` disposes; `pause()` suspends runs (changes
@@ -219,7 +252,7 @@ just mark effects dirty) and `resume()` re-runs the ones that went dirty — so 
 hidden panel does no reactive work without losing its state or DOM.
 
 ```ts
-import { effect, scope, state } from "loom";
+import { effect, scope, state } from "@jveres/loom";
 
 const active = state(true);
 
@@ -238,19 +271,6 @@ minimized) with a nested scope around the stats tab (paused when it isn't the
 active tab). Pausing the outer scope freezes everything; resuming it leaves the
 stats scope suspended if its tab is still hidden — no manual coordination.
 
-```ts
-let stats: Scope;
-const inspector = scope(() => {
-  buildHeader();
-  stats = scope(() => buildStatsTab()); // nested child scope
-  buildOtherTabs();
-});
-
-inspector.pause(); // minimized: freezes the whole panel, stats included
-inspector.resume(); // restored: stats stays suspended if its tab is hidden
-stats!.pause(); // leaving the stats tab on its own
-```
-
 Scopes own resources, not just effects: a `polled()` or `source()` created inside
 a scope is suspended with it too. Pausing the scope clears a `polled()`'s timer
 (resuming takes a fresh sample) and disconnects a `source()`'s producer even
@@ -264,7 +284,7 @@ without repeating the options on every primitive. A node's own options win, and
 nested scopes inherit and can override:
 
 ```ts
-import { effect, fields, scope, state } from "loom";
+import { effect, fields, scope } from "@jveres/loom";
 
 scope(
   () => {
@@ -280,7 +300,7 @@ The dev inspector relies on this: its panel scope is created with
 heartbeat, the web-vital sources and the heap timer are filtered from the
 observability it reports — without passing options to each one.
 
-## Error handling
+### Error handling
 
 By default an effect that throws propagates the error to whatever triggered the
 run — a `state` write or `batch` — and aborts the rest of that flush. Install a
@@ -288,7 +308,7 @@ global boundary with `configure({ onError })` to contain it: the throw is routed
 to your handler and the flush continues running the other effects.
 
 ```ts
-import { configure, state, effect } from "loom";
+import { configure, effect, state } from "@jveres/loom";
 
 configure({
   onError: (error, node) => {
@@ -302,7 +322,7 @@ const count = state(0);
 effect(() => {
   if (count() === 1) throw new Error("boom"); // caught by onError, not rethrown
 });
-const seen = effect(() => document.title = String(count()));
+const seen = effect(() => (document.title = String(count())));
 
 count(1); // does not throw here; onError fires and `seen` still runs
 ```
@@ -311,15 +331,15 @@ The handler is a single global boundary; pass `configure({ onError: undefined })
 to remove it. Errors raised while *reading* a `computed` still surface at the
 reader — `onError` covers effect runs, the push side of the graph.
 
-## DOM API
+### DOM and events
 
-Import DOM helpers from `loom/dom`. The DOM layer creates nodes, binds reactive
+Import DOM helpers from `@jveres/loom/dom`. The DOM layer creates nodes, binds reactive
 text, attributes, classes, and styles, reconciles keyed lists, and disposes
 owned effects when nodes are removed.
 
 ```ts
-import { state } from "loom";
-import { attr, classed, h, style, text } from "loom/dom";
+import { state } from "@jveres/loom";
+import { attr, classed, h, style, text } from "@jveres/loom/dom";
 
 const hot = state(false);
 const label = state("Ready");
@@ -348,9 +368,7 @@ The DOM entrypoint exports these functions:
 - `list(container, read, options)` reconciles a keyed list.
 - `dispose(root)` disposes effects owned by a node subtree.
 - `remove(node)` disposes a node subtree and removes it from the DOM.
-- `tap(node, handler)` binds a robust tap (see [Events](#events) below).
-
-### Events
+- `tap(node, handler)` binds a robust tap (see below).
 
 Loom is a thin layer over the DOM, so event props use **the DOM's own lowercase
 names** — `onclick`, `oninput`, `onpointerup`, `onkeydown` — not React's
@@ -392,114 +410,31 @@ list(container, rows, {
 });
 ```
 
-## Observability
-
-Loom's runtime is instrumented with **channels** — gated, overwriting ring
-buffers that a consumer **drains on its own clock**. A channel records nothing
-(and allocates nothing) until a meter attaches; under load it keeps only its most
-recent samples, so it stays bounded and the producer runs at full speed
-regardless of how fast the consumer reads. The core's reactive events are the
-built-in `channels`; you can declare your own for app telemetry the same way.
-
-```ts
-import { channels, inspect, meter, state, effect } from "loom";
-
-// Drain the reactive pipeline on your own cadence (here, every 250ms):
-const m = meter([channels.write, channels.effect, channels.flush]);
-setInterval(() => {
-  const f = m.read();
-  console.log("writes/s≈", f["loom:write"].count * 4);
-  const lastFlush = f["loom:flush"].samples.at(-1);
-  if (lastFlush) console.log("last flush", lastFlush.batchSize, lastFlush.durationMs);
-}, 250);
-
-// Your own channel — counter-only or with a bounded detail ring:
-import { channel } from "loom";
-const paint = channel("app:paint", { capacity: 256, fields: ["ms"] });
-paint.emit(16.7); // no-op and zero-alloc unless someone is metering it
-```
-
-The built-in channels record **non-internal** nodes only, so the idle baseline is
-zero. `inspect()` still returns a pull snapshot of the whole graph, and
-`depsOf(read | stop)` returns a node's dependencies.
-
-## Inspector
-
-`loom/inspect` is a self-contained dev panel built entirely on the public
-surface above (`inspect`, `inspectResources`, `channels`/`meter`, `scope`,
-`polled`, `source`). Mount it to get a live, draggable, resizable overlay; it is
-purely a consumer of the runtime, so the same data is available to any tooling
-you write yourself.
-
-```ts
-import { mountInspector } from "loom/inspect";
-
-mountInspector(); // appends to document.body by default; pass an Element to host it elsewhere
-```
-
-The entrypoint exports four functions:
-
-- `mountInspector(target?)` builds and shows the panel (no-op if already
-  mounted, or outside a DOM).
-- `unmountInspector()` tears it down and releases its meters, heartbeat and
-  observers.
-- `inspectorMounted()` reports whether it is currently shown.
-- `toggleInspector(target?)` mounts if hidden, unmounts if shown — handy on a
-  hotkey.
-
-**Mounting turns inspection on.** `mountInspector()` calls
-`configure({ inspect: true })` for you, but only nodes created *after* that point
-carry metadata. To see pre-existing nodes in the census and graph, enable
-inspection at startup before creating them:
-
-```ts
-import { configure } from "loom";
-import { mountInspector } from "loom/inspect";
-
-configure({ inspect: true }); // earliest opportunity — every node from here is visible
-// ... build your app ...
-mountInspector(); // or wire it to a hotkey via toggleInspector()
-```
-
-The panel has three tabs:
-
-- **Info** — the `inspectResources()` census (states, computeds, effects, views,
-  sources, scopes, channels, `unread`) plus a live rendering-pipeline sparkline
-  (writes in vs DOM updates out) driven by a `meter` over the built-in channels.
-- **Graph** — the reactive graph as a virtualized tree of state/computed cells,
-  grouped by `fields()` group and namespace. A filled dot means the cell drives a
-  DOM node downstream; a hollow dot means it doesn't. Hovering a cell (or a group
-  header) highlights every DOM target it feeds; the locate button scrolls the
-  first target into view. Primitive state cells are editable in place, and values
-  flash on change.
-- **Writes** — a live stream of graph events (in progress).
-
-## JSX
+### JSX
 
 Loom supports JSX through standard automatic JSX runtime entrypoints. The
 browser runtime returns live DOM nodes and uses the same DOM binding helpers as
-`h()`.
+`h()`. Function components are plain functions; there is no virtual DOM.
 
-Configure TypeScript for browser JSX with `jsxImportSource: "loom"`:
+Configure TypeScript for browser JSX with `jsxImportSource: "@jveres/loom"`:
 
 ```json
 {
   "compilerOptions": {
     "jsx": "react-jsx",
-    "jsxImportSource": "loom"
+    "jsxImportSource": "@jveres/loom"
   }
 }
 ```
 
 If your bundler transpiles TSX directly, configure it to use the same automatic
-runtime. This repository sets Vite's `oxc.jsx.importSource` to `"loom"`.
+runtime. This repository sets Vite's `oxc.jsx.importSource` to `"@jveres/loom"`.
 
-JSX doesn't create a virtual DOM, and function components are plain functions.
 Reactive reads can be used directly as children, attribute values, and class
 map values.
 
 ```tsx
-import { state } from "loom";
+import { state } from "@jveres/loom";
 
 const count = state(0);
 
@@ -531,7 +466,7 @@ const running = state(false);
     "compact",
     { interactive: true, running, idle: () => !running() },
   ]}
-/>
+/>;
 ```
 
 Style values can be strings, arrays, object maps, or explicit `style()`
@@ -539,7 +474,7 @@ bindings. Object keys can use camelCase or CSS property names. Reactive style
 reads can return `null` to remove the property.
 
 ```tsx
-import { style } from "loom/dom";
+import { style } from "@jveres/loom/dom";
 
 const active = state(false);
 
@@ -550,16 +485,14 @@ const active = state(false);
     { opacity: () => (active() ? 1 : 0.5) },
     style("color", () => (active() ? "red" : null)),
   ]}
-/>
+/>;
 ```
 
-### Reactive JSX expressions
-
-Loom is runtime-only. JSX expressions run once when the DOM node is created, so
+Loom is runtime-only: JSX expressions run once when the DOM node is created, so
 derived reactive values need a read function or `computed()`.
 
 ```tsx
-import { computed, state } from "loom";
+import { computed, state } from "@jveres/loom";
 
 const running = state(false);
 const label = computed(() => (running() ? "Stop chaos" : "Start chaos"));
@@ -573,19 +506,19 @@ const label = computed(() => (running() ? "Stop chaos" : "Start chaos"));
 
 Use these entrypoints for browser JSX:
 
-- `loom/jsx-runtime` powers browser JSX.
-- `loom/jsx-dev-runtime` powers browser JSX in development mode.
+- `@jveres/loom/jsx-runtime` powers browser JSX.
+- `@jveres/loom/jsx-dev-runtime` powers browser JSX in development mode.
 
-## SSR and SSG
+### SSR and SSG
 
-Use `loom/html` when you want static HTML for server-side rendering or
+Use `@jveres/loom/html` when you want static HTML for server-side rendering or
 static-site generation. This runtime escapes interpolated text, supports
 components and fragments, serializes common attributes, and omits event
 handlers because there is no live DOM.
 
 ```tsx
-/** @jsxImportSource loom/html */
-import { renderToString } from "loom/html";
+/** @jsxImportSource @jveres/loom/html */
+import { renderToString } from "@jveres/loom/html";
 
 function Page(props: { title: string }) {
   return (
@@ -599,7 +532,7 @@ function Page(props: { title: string }) {
 const html = renderToString(<Page title="Docs" />);
 ```
 
-The `loom/html` entrypoint exports:
+The `@jveres/loom/html` entrypoint exports:
 
 - `renderToString(child)` serializes a node tree to an HTML string.
 - `html(strings, ...values)` is a tagged template that escapes interpolated
@@ -613,39 +546,112 @@ The `loom/html` entrypoint exports:
 
 Use these entrypoints for static HTML JSX:
 
-- `loom/html/jsx-runtime` powers static HTML JSX.
-- `loom/html/jsx-dev-runtime` powers static HTML JSX in development mode.
+- `@jveres/loom/html/jsx-runtime` powers static HTML JSX.
+- `@jveres/loom/html/jsx-dev-runtime` powers static HTML JSX in development mode.
 
-## Demo and benchmark
+### Observability
 
-The demo is a realtime stress UI written in Loom JSX. It exercises state cells,
-object fields, computed values, effects, keyed list reconciliation, direct JSX
-text and attribute bindings, class map bindings, cleanup through DOM disposal,
-and the browser JSX runtime.
+Loom's runtime is instrumented with **channels** — gated, overwriting ring
+buffers that a consumer **drains on its own clock**. A channel records nothing
+(and allocates nothing) until a meter attaches; under load it keeps only its most
+recent samples, so it stays bounded and the producer runs at full speed
+regardless of how fast the consumer reads. The core's reactive events are the
+built-in `channels`; you can declare your own for app telemetry the same way.
 
-The browser benchmark is available from the dev server at `/bench/`. It uses a
-js-framework-benchmark style table workload and compares Loom DOM bindings
-against a hand-written vanilla DOM baseline on the same machine.
+```ts
+import { channel, channels, meter } from "@jveres/loom";
 
-The CLI benchmark compares Loom against native `alien-signals` primitives under
-a full-chaos workload. The benchmark intentionally includes:
+// Drain the reactive pipeline on your own cadence (here, every 250ms):
+const m = meter([channels.write, channels.effect, channels.flush]);
+setInterval(() => {
+  const f = m.read();
+  console.log("writes/s≈", f["loom:write"].count * 4);
+  const lastFlush = f["loom:flush"].samples.at(-1);
+  if (lastFlush) console.log("last flush", lastFlush.batchSize, lastFlush.durationMs);
+}, 250);
 
-- `loom`, using `fields()`.
-- `loom manual`, using manually declared state cells.
-- `alien native`, using native `alien-signals` cells.
-
-Run it with:
-
-```sh
-pnpm run bench
+// Your own channel — counter-only or with a bounded detail ring:
+const paint = channel("app:paint", { capacity: 256, fields: ["ms"] });
+paint.emit(16.7); // no-op and zero-alloc unless someone is metering it
 ```
 
-On the chaos workload, with inspection off (the default), Loom runs within
-`~1.02x` (manual cells) to `~1.07x` (`fields()`) of native `alien-signals` — the
-per-operation read/write/effect hot paths carry only branch-predicted channel
-guards and otherwise match the native primitives. Enabling inspection
-(`configure({ inspect: true })`) adds one metadata object plus a `WeakRef` per
-node created, which is what widens the gap to ~`1.2x` on create-heavy work.
+The built-in channels record **non-internal** nodes only, so the idle baseline is
+zero. `inspect()` still returns a pull snapshot of the whole graph, and
+`depsOf(read | stop)` returns a node's dependencies.
+
+### Inspector
+
+`@jveres/loom/inspect` is a self-contained dev panel built entirely on the public
+surface above (`inspect`, `inspectResources`, `channels`/`meter`, `scope`,
+`polled`, `source`). Mount it to get a live, draggable, resizable overlay; it is
+purely a consumer of the runtime, so the same data is available to any tooling
+you write yourself.
+
+```ts
+import { mountInspector } from "@jveres/loom/inspect";
+
+mountInspector(); // appends to document.body by default; pass an Element to host it elsewhere
+```
+
+The entrypoint exports four functions:
+
+- `mountInspector(target?)` builds and shows the panel (no-op if already
+  mounted, or outside a DOM).
+- `unmountInspector()` tears it down and releases its meters, heartbeat and
+  observers.
+- `inspectorMounted()` reports whether it is currently shown.
+- `toggleInspector(target?)` mounts if hidden, unmounts if shown — handy on a
+  hotkey.
+
+**Mounting turns inspection on.** `mountInspector()` calls
+`configure({ inspect: true })` for you, but only nodes created *after* that point
+carry metadata. To see pre-existing nodes in the census and graph, enable
+inspection at startup before creating them:
+
+```ts
+import { configure } from "@jveres/loom";
+import { mountInspector } from "@jveres/loom/inspect";
+
+configure({ inspect: true }); // earliest opportunity — every node from here is visible
+// ... build your app ...
+mountInspector(); // or wire it to a hotkey via toggleInspector()
+```
+
+The panel has three tabs:
+
+- **Info** — the `inspectResources()` census (states, computeds, effects, views,
+  sources, scopes, channels, `unread`) plus a live rendering-pipeline sparkline
+  (writes in vs DOM updates out) driven by a `meter` over the built-in channels.
+- **Graph** — the reactive graph as a virtualized tree of state/computed cells,
+  grouped by `fields()` group and namespace. A filled dot means the cell drives a
+  DOM node downstream; a hollow dot means it doesn't. Hovering a cell (or a group
+  header) highlights every DOM target it feeds; the locate button scrolls the
+  first target into view. Primitive state cells are editable in place, and values
+  flash on change.
+- **Writes** — a live stream of graph events (in progress).
+
+## Performance
+
+The CLI benchmark compares Loom against native `alien-signals` primitives under a
+full-chaos workload (`vitest bench`). It runs three variants on the same machine:
+`@jveres/loom` (using `fields()`), `loom manual` (manually declared state cells), and
+`alien native` (native `alien-signals` cells).
+
+```sh
+npm run bench
+```
+
+With inspection off (the default), Loom runs within `~1.03x` (manual cells) to
+`~1.07x` (`fields()`) of native `alien-signals`. The per-operation
+read/write/effect hot paths carry only branch-predicted channel guards and
+otherwise match the native primitives — see [Design notes](#design-notes) for the
+attribution. Enabling inspection (`configure({ inspect: true })`) adds one
+metadata object plus a `WeakRef` per node created, which widens the gap to
+~`1.2x` on create-heavy work.
+
+A browser benchmark is also available from the dev server at `/bench/`. It uses a
+js-framework-benchmark style table workload and compares Loom DOM bindings
+against a hand-written vanilla DOM baseline.
 
 ## Design notes
 
@@ -660,3 +666,49 @@ written into a pre-allocated ring. Inspection is opt-in
 (`configure({ inspect: true })`): while it is off, nodes carry no metadata at
 all; while it is on, each node carries a lightweight metadata record so
 `inspect()` and `depsOf()` work without any further setup.
+
+### Hot path
+
+The per-operation read/write/effect path is deliberately kept at parity with the
+underlying `alien-signals` primitives. The callable cell shape (`signal(...value)`
+read/write dispatch) is the same one `alien-signals` uses, so Loom adds no
+allocation of its own there.
+
+The whole measured gap over native `alien-signals` is the channel
+instrumentation — the `someCh.meters !== 0 && …` guard inlined at each
+read/write/compute/effect/create/dispose site. A controlled experiment (stripping
+just the state-path guards and re-running the chaos bench) attributes ~3% to it on
+the manual-cells path: the cost of keeping observability always available with
+zero allocation when idle. With the guards in place Loom lands within `~1.03x`
+–`~1.07x` of native, and that margin *is* the channel layer, not overhead to
+optimize away.
+
+Two things are intentionally left as-is: the read/write rest parameter (shared
+with `alien-signals`, so removing it would diverge from the reference for no real
+win) and `kindOf`'s `in`-operator dispatch (off the measured hot path — it runs in
+the dirty-check callbacks, which a state→effect graph barely exercises). Inspection
+metadata is the one cost that *was* per-node allocation, which is why it is opt-in
+and off by default.
+
+## Develop
+
+Loom is developed from source with `pnpm`:
+
+```sh
+pnpm install
+pnpm run check   # tsc --noEmit
+pnpm run lint    # biome
+pnpm test        # vitest
+pnpm run bench   # CLI chaos benchmark
+pnpm run dev     # dev server
+```
+
+With the dev server running, open `/demo/` for the realtime UI demo or `/bench/`
+for the browser benchmark. The demo is a realtime stress UI written in Loom JSX:
+it exercises state cells, object fields, computed values, effects, keyed list
+reconciliation, direct JSX text/attribute/class bindings, cleanup through DOM
+disposal, and the browser JSX runtime.
+
+## License
+
+[MIT](./LICENSE) © Janos Veres
