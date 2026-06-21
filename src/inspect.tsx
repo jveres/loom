@@ -454,6 +454,10 @@ function virtualList<T>(opts: {
       if (existing === null) {
         el.append(row);
         mounted.set(k, row);
+      } else if (row !== existing) {
+        // render() is meant to update `existing` in place, but tolerate a fresh element too.
+        existing.replaceWith(row);
+        mounted.set(k, row);
       }
     }
     for (const [k, row] of mounted)
