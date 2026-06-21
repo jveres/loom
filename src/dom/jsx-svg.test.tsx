@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { state } from "./loom.js";
+import { state } from "../loom.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 

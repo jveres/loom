@@ -22,8 +22,8 @@
     "./dom": "./src/dom/index.ts",
     "./dom/vlist": "./src/dom/vlist.ts",
     "./devtools": "./src/devtools/index.ts",
-    "./jsx-runtime": "./src/jsx-runtime.ts",
-    "./jsx-dev-runtime": "./src/jsx-runtime.ts",
+    "./jsx-runtime": "./src/dom/jsx-runtime.ts",
+    "./jsx-dev-runtime": "./src/dom/jsx-runtime.ts",
     "./html": "./src/html/index.ts",
     "./html/jsx-runtime": "./src/html/jsx-runtime.ts",
     "./html/jsx-dev-runtime": "./src/html/jsx-runtime.ts"

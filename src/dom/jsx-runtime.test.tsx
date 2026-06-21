@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { type Child, h, text } from "./dom/index.js";
+import { type Child, h, text } from "./index.js";
 import { Fragment, jsx, jsxDEV, jsxs } from "./jsx-runtime.js";
-import { state } from "./loom.js";
+import { state } from "../loom.js";
 
 class FakeNode {
   parentNode: FakeNode | null = null;

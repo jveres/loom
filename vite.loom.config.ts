@@ -12,7 +12,7 @@ export default defineConfig({
         loom: resolve(root, "src/loom.ts"),
         dom: resolve(root, "src/dom/index.ts"),
         "dom/vlist": resolve(root, "src/dom/vlist.ts"),
-        "jsx-runtime": resolve(root, "src/jsx-runtime.ts"),
+        "jsx-runtime": resolve(root, "src/dom/jsx-runtime.ts"),
         html: resolve(root, "src/html/index.ts"),
         "html/jsx-runtime": resolve(root, "src/html/jsx-runtime.ts"),
       },

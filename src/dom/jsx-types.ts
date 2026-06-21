@@ -1,4 +1,4 @@
-import type { Child, Props } from "./dom/index.js";
+import type { Child, Props } from "./index.js";
 
 type Component = (props: never) => Child;
 type EventHandler<TElement extends Element, TEvent extends Event> = (

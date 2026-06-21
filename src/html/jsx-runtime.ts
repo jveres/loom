@@ -5,7 +5,6 @@ import {
   raw,
   renderToString,
 } from "./index.js";
-import { propsWithoutKey } from "../jsx-props.js";
 
 export type { JSX } from "./jsx-types.js";
 
@@ -194,4 +193,18 @@ function isUrlAttr(name: string): boolean {
     urlAttrs.has(name) ||
     /:(href|src|action|formaction|cite|data|poster)$/.test(name)
   );
+}
+
+// Copy own enumerable props, dropping the `key` the JSX transform passes separately.
+function propsWithoutKey(
+  props: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  if (props) {
+    for (const name in props) {
+      if (!Object.hasOwn(props, name) || name === "key") continue;
+      next[name] = props[name];
+    }
+  }
+  return next;
 }
