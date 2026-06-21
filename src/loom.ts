@@ -726,7 +726,7 @@ export function meter(channels: ReadonlyArray<Channel>): Meter {
   };
 }
 
-// Built-in reactive channels. The core records to these inline at the hot-path sites; they stay
+// Built-in reactive event channels (the `events` registry). The core records to these inline at the hot-path sites; they stay
 // no-ops until a meter attaches. Non-internal nodes only, so the idle baseline is zero.
 const readCh = createChannelNode("loom:read");
 const writeCh = createChannelNode("loom:write");
@@ -753,7 +753,7 @@ for (const node of [
 // /* @__PURE__ */ lets a bundler drop this whole collection (and channelOf) when an app never
 // meters — the built-in channel *nodes* stay (the core's emit gates reference them), but the
 // public wrappers tree-shake away.
-export const channels = {
+export const events = {
   read: /* @__PURE__ */ channelOf(readCh),
   write: /* @__PURE__ */ channelOf(writeCh),
   compute: /* @__PURE__ */ channelOf(computeCh),

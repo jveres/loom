@@ -31,11 +31,12 @@
   layer, which is off by default.
 - **Callable cells.** `count()` reads, `count(1)` writes — the whole state model
   in one shape, no setters or hooks.
-- **Observability with zero idle cost.** Built-in channels allocate nothing until
-  a meter attaches, and an opt-in inspector (`@jveres/loom/devtools`) visualizes the live
-  reactive graph.
-- **One core, four entrypoints.** `@jveres/loom` (reactivity) · `@jveres/loom/dom` (DOM bindings) ·
-  `@jveres/loom/html` (SSR/SSG) · `@jveres/loom/devtools` (dev panel).
+- **Generic channel/meter primitives.** A gated ring-buffer `channel` and a pull-based
+  `meter` for any event or sample stream — zero allocation until metered. Loom uses them
+  to instrument itself; that self-watching surface is the opt-in `@jveres/loom/observe`.
+- **Lean core, opt-in surfaces.** `@jveres/loom` (reactivity, lifecycle, channel/meter) ·
+  `@jveres/loom/observe` (watch loom's internals) · `@jveres/loom/dom` · `@jveres/loom/html`
+  (SSR/SSG) · `@jveres/loom/devtools` (dev panel).
 
 ## At a glance
 
@@ -120,10 +121,10 @@ The core exports these functions:
   listener, timer, `PerformanceObserver`, socket) is only live while observed.
   Returns a read function.
 - `fields(object, options?)` creates one state cell per enumerable string key.
-- `channel(name, options?)` declares a named observability channel — a gated,
+- `channel(name, options?)` declares a named channel — a **generic**, gated,
   overwriting ring buffer that records cheaply (no allocation until metered) and
-  is drained, not pushed. The core's own reactive events are built-in channels
-  (`channels.read/write/compute/effect/flush/create/dispose`).
+  is drained, not pushed. A reusable primitive for any event or sample stream, not
+  just telemetry.
 - `meter(channels)` attaches a pull-based meter; `read()` returns a Frame per
   channel (`{ count, dropped, samples }`) since the last read. A meter is a scope
   resource, so it detaches on `scope.pause()`.
@@ -132,18 +133,12 @@ The core exports these functions:
   (zero cost); turn it on once at startup, before creating the nodes you want
   visible, when you need tooling. `onError` installs a global effect error
   boundary (see [Error handling](#error-handling)).
-- `inspect()` returns a snapshot of the current reactive graph (empty unless
-  inspection is enabled). Pass `{ active: true }` to skip state/computed cells
-  with no subscribers — idle cells and "ghosts" (cells of a removed object that
-  are unreachable but not yet GC'd); effects are always kept.
-- `inspectResources()` returns a live census `{ states, computeds, effects,
-  views, sources, scopes, channels, unread }` — one cheap walk, no per-node
-  allocation; nothing runs on the reactive hot path. `views` are the DOM bindings
-  (effects in the `"dom"` namespace); `effects` are your app effects; `unread` is
-  the number of states/computeds nothing currently reads (a count that keeps
-  climbing under steady state hints at a leak).
-- `depsOf(source)` returns inspected dependencies for a state, computed read, or
-  effect stop handle.
+
+> `channel` and `meter` are generic core primitives. **Watching Loom's *own* internals**
+> — the `events` registry (the runtime's built-in streams) and the graph-snapshot tools
+> `inspect` / `inspectResources` / `depsOf` — is a separate opt-in surface,
+> [`@jveres/loom/observe`](#observability). Keeping it out of the core means the default
+> `@jveres/loom` import stays lean: reactivity, lifecycle, and `channel`/`meter` only.
 
 The core exports these types:
 
@@ -156,9 +151,10 @@ The core exports these types:
 - `EffectFn` is a reusable effect callback type.
 - `ErrorHandler` is the `configure({ onError })` boundary signature.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
-- `InspectNode` and `InspectSnapshot` describe graph snapshots.
-- `ResourceCounts` is the `inspectResources()` census result.
-- `Channel` is a named observability channel; `Meter` drains channels;
+- `InspectNode` describes a graph node (also the `configure({ onError })` node
+  param); `InspectSnapshot` and `ResourceCounts` (the `inspect()` /
+  `inspectResources()` result shapes) come with `@jveres/loom/observe`.
+- `Channel` is a named channel; `Meter` drains channels;
   `Frame` is a per-channel `{ count, dropped, samples }`; `ChannelOptions`
   configures `{ capacity, fields }`.
 - `NodeOptions` (`{ internal, namespace, label }`) and `EffectOptions` (adds
@@ -551,18 +547,22 @@ Use these entrypoints for static HTML JSX:
 
 ### Observability
 
-Loom's runtime is instrumented with **channels** — gated, overwriting ring
-buffers that a consumer **drains on its own clock**. A channel records nothing
-(and allocates nothing) until a meter attaches; under load it keeps only its most
-recent samples, so it stays bounded and the producer runs at full speed
-regardless of how fast the consumer reads. The core's reactive events are the
-built-in `channels`; you can declare your own for app telemetry the same way.
+**`channel` and `meter` are generic core primitives.** A channel is a gated,
+overwriting ring buffer that a consumer **drains on its own clock**: it records
+nothing (and allocates nothing) until a meter attaches, and under load keeps only
+its most recent samples, so it stays bounded and the producer runs at full speed
+regardless of how fast the consumer reads. Use them for any event or sample stream.
+
+The runtime emits to a built-in set of these streams — the **`events` registry**,
+exposed from `@jveres/loom/observe` (loom watching its own pipeline, so it lives in
+the observability surface, not the core). Meter them to get pipeline rates:
 
 ```ts
-import { channel, channels, meter } from "@jveres/loom";
+import { channel, meter } from "@jveres/loom"; // generic primitives
+import { events } from "@jveres/loom/observe"; // loom's own built-in streams
 
 // Drain the reactive pipeline on your own cadence (here, every 250ms):
-const m = meter([channels.write, channels.effect, channels.flush]);
+const m = meter([events.write, events.effect, events.flush]);
 setInterval(() => {
   const f = m.read();
   console.log("writes/s≈", f["loom:write"].count * 4);
@@ -575,14 +575,23 @@ const paint = channel("app:paint", { capacity: 256, fields: ["ms"] });
 paint.emit(16.7); // no-op and zero-alloc unless someone is metering it
 ```
 
-The built-in channels record **non-internal** nodes only, so the idle baseline is
-zero. `inspect()` still returns a pull snapshot of the whole graph, and
-`depsOf(read | stop)` returns a node's dependencies.
+The built-in `events` record **non-internal** nodes only, so the idle baseline is
+zero. The rest of `@jveres/loom/observe` snapshots the reactive graph:
+
+- `inspect()` returns a snapshot of the current graph (empty unless inspection is
+  enabled via `configure({ inspect: true })`). Pass `{ active: true }` to skip
+  state/computed cells with no subscribers — idle cells and "ghosts" (cells of a
+  removed object, unreachable but not yet GC'd); effects are always kept.
+- `inspectResources()` returns a live census `{ states, computeds, effects, views,
+  sources, scopes, channels, unread }` — one cheap walk, no per-node allocation.
+  `views` are the DOM bindings (effects in the `"dom"` namespace); `unread` is the
+  count of states/computeds nothing currently reads (a rising count hints at a leak).
+- `depsOf(read | stop)` returns a node's inspected dependencies.
 
 ### Inspector
 
 `@jveres/loom/devtools` is a self-contained dev panel built entirely on the public
-surface above (`inspect`, `inspectResources`, `channels`/`meter`, `scope`,
+surface (`inspect`, `inspectResources`, `meter`/`events`, `scope`,
 `polled`, `source`). Mount it to get a live, draggable, resizable overlay; it is
 purely a consumer of the runtime, so the same data is available to any tooling
 you write yourself.
@@ -659,7 +668,7 @@ Loom uses `alien-signals` as the reactive graph implementation detail. The
 public API stays small: callable state cells, computed reads, effects, batching,
 manual triggers, object field cells, and an observability surface.
 
-The built-in observability channels are gated by a per-channel meter count, so
+The built-in event channels are gated by a per-channel meter count, so
 reads, writes, computed updates, and effect runs stay allocation-free and pay
 only a predicted-not-taken branch when nothing is metering them; records are
 written into a pre-allocated ring. Inspection is opt-in

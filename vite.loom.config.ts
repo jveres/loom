@@ -9,7 +9,8 @@ export default defineConfig({
     emptyOutDir: true,
     lib: {
       entry: {
-        loom: resolve(root, "src/loom.ts"),
+        loom: resolve(root, "src/index.ts"),
+        observe: resolve(root, "src/observe.ts"),
         dom: resolve(root, "src/dom/index.ts"),
         "dom/vlist": resolve(root, "src/dom/vlist.ts"),
         "jsx-runtime": resolve(root, "src/dom/jsx-runtime.ts"),

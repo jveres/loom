@@ -3,8 +3,6 @@
 // and the gauge / histogram / sparkline widgets. Owns its module state and its own (pausable) scope;
 // the panel drives it through wireStats / pauseStats / resumeStats / stopStats.
 import {
-  channels,
-  inspectResources,
   type Meter,
   meter,
   type Polled,
@@ -15,6 +13,7 @@ import {
   scope,
   source,
 } from "loom";
+import { events, inspectResources } from "loom/observe";
 import { bind, PANEL_OPTS } from "./bindings.js";
 import { PANEL_ID } from "./css.js";
 import { renderGraphThrottled } from "./graph.js";
@@ -802,13 +801,13 @@ export function wireStats(opts: {
   activeTabFn = opts.activeTab;
   isMinimizedFn = opts.isMinimized;
   metricsMeter = meter([
-    channels.read,
-    channels.write,
-    channels.compute,
-    channels.effect,
-    channels.flush,
-    channels.create,
-    channels.dispose,
+    events.read,
+    events.write,
+    events.compute,
+    events.effect,
+    events.flush,
+    events.create,
+    events.dispose,
   ]);
   heartbeat = polled(poll, POLL_MS, PANEL_OPTS);
   let statsPane!: HTMLElement;

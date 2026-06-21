@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   batch,
   channel,
-  channels,
+  events,
   computed,
   configure,
   depsOf,
@@ -226,10 +226,10 @@ describe("loom core", () => {
 
   it("counts non-internal reactive ops on the built-in channels", () => {
     const m = meter([
-      channels.read,
-      channels.write,
-      channels.compute,
-      channels.effect,
+      events.read,
+      events.write,
+      events.compute,
+      events.effect,
     ]);
     const a = state(0);
     const c = computed(() => a() * 2);
@@ -249,7 +249,7 @@ describe("loom core", () => {
   });
 
   it("excludes internal nodes from the built-in channels", () => {
-    const m = meter([channels.write]);
+    const m = meter([events.write]);
     const visible = state(0);
     const hidden = state(0, { internal: true });
     visible(1);
@@ -259,7 +259,7 @@ describe("loom core", () => {
   });
 
   it("records flush batch size + duration, for app work only", () => {
-    const m = meter([channels.flush]);
+    const m = meter([events.flush]);
     const app = state(0);
     const internal = state(0, { internal: true });
     const stopApp = effect(() => {
@@ -554,7 +554,7 @@ describe("loom polled", () => {
 
   it("honours state options: an internal polled is excluded from the channels", () => {
     vi.useFakeTimers();
-    const m = meter([channels.write]);
+    const m = meter([events.write]);
 
     let value = 0;
     // The timer resamples regardless of subscribers, so no effect is needed to drive it.
@@ -1027,13 +1027,13 @@ describe("loom scope edge cases", () => {
 describe("loom coverage", () => {
   it("records every built-in channel and excludes internal nodes", () => {
     const m = meter([
-      channels.read,
-      channels.write,
-      channels.compute,
-      channels.effect,
-      channels.flush,
-      channels.create,
-      channels.dispose,
+      events.read,
+      events.write,
+      events.compute,
+      events.effect,
+      events.flush,
+      events.create,
+      events.dispose,
     ]);
 
     const a = state(1); // create
@@ -1106,7 +1106,7 @@ describe("loom coverage", () => {
     // @ts-expect-error force the fallback branch in now()
     globalThis.performance = undefined;
     try {
-      const m = meter([channels.flush]); // a flush meter makes now() run for the timing
+      const m = meter([events.flush]); // a flush meter makes now() run for the timing
       const a = state(0);
       const e = effect(() => {
         a();
@@ -1193,7 +1193,7 @@ describe("loom coverage", () => {
 
 describe("loom coverage — operators and edges", () => {
   it("creates and updates a source under a meter", () => {
-    const m = meter([channels.create]);
+    const m = meter([events.create]);
     let push: ((v: number) => void) | undefined;
     const s = source<number>((set) => {
       push = set;
@@ -1237,7 +1237,7 @@ describe("loom coverage — operators and edges", () => {
   });
 
   it("ignores a second meter stop and reports node metadata", () => {
-    const m = meter([channels.write]);
+    const m = meter([events.write]);
     m.stop();
     m.stop(); // idempotent
 

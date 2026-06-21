@@ -4,7 +4,8 @@
 // DOM node(s) on hover. fields() cells fold under a collapsible header; standalone cells at the root.
 // Owns its module state; the panel drives it through four seams (buildGraphPane / renderGraphThrottled
 // / showGraph / teardownGraph).
-import { type InspectNode, inspect, type State } from "loom";
+import type { State } from "loom";
+import { type InspectNode, inspect } from "loom/observe";
 import { type VirtualList, virtualList } from "../dom/vlist.js";
 import {
   ICON_BOUND,
