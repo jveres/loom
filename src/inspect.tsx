@@ -285,6 +285,10 @@ let statsScope: Scope | null = null;
 
 // Inspector-owned UI state (internal: filtered from observation). Lazily created on first mount.
 let ui: State<TabId> | null = null;
+// Per-tab body scroll position, preserved across tab switches (the panes share one scroller, so
+// switching otherwise clobbers it as the content height changes).
+const scrollByTab = new Map<TabId, number>();
+let prevTab: TabId | null = null;
 // Wakes the Info-tab bindings each poll while that tab is visible (see startMetrics()).
 let metricSeq = 0;
 
@@ -1993,6 +1997,9 @@ export function mountInspector(target: Element = document.body): void {
   // Reactive tab switching (dogfood: ui -> pane visibility + active styling).
   bind(() => {
     const tab = ui?.();
+    // Save the outgoing tab's scroll before its pane is hidden (heights differ per tab).
+    if (prevTab && prevTab !== tab && bodyEl)
+      scrollByTab.set(prevTab, bodyEl.scrollTop);
     // Suspend the stats pane's bindings whenever its tab isn't the visible one.
     if (tab === "stats") statsScope?.resume();
     else statsScope?.pause();
@@ -2013,6 +2020,16 @@ export function mountInspector(target: Element = document.body): void {
           });
       }
     }
+    // Restore the incoming tab's scroll now its pane is laid out (its content height is back).
+    // The content may have shrunk while we were away (e.g. the graph lost rows), so clamp the saved
+    // offset to the current valid range rather than letting it sit out of bounds.
+    if (tab && bodyEl) {
+      const saved = scrollByTab.get(tab) ?? 0;
+      const max = Math.max(0, bodyEl.scrollHeight - bodyEl.clientHeight);
+      bodyEl.scrollTop = Math.min(saved, max);
+      if (tab === "graph") graphVList?.refresh(); // re-window at the restored position, no flash
+    }
+    prevTab = tab ?? null;
     for (const f of scrollFades) f.refresh();
   });
 
@@ -2049,6 +2066,8 @@ export function unmountInspector(): void {
   panel = null;
   bodyEl = null;
   ui = null;
+  scrollByTab.clear();
+  prevTab = null;
   metricSeq = 0;
 
   // Reset live metrics so the next mount starts clean.
