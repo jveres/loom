@@ -7,7 +7,6 @@
 import {
   channels,
   configure,
-  effect,
   inspectResources,
   type Meter,
   meter,
@@ -17,12 +16,12 @@ import {
   type Scope,
   type SourceConnect,
   type State,
-  type Stop,
   scope,
   source,
   state,
 } from "loom";
 import { tap } from "loom/dom";
+import { PANEL_OPTS, bind, disposeBindings } from "./bindings.js";
 import { CSS, PANEL_ID } from "./css.js";
 import {
   buildGraphPane,
@@ -43,9 +42,6 @@ import {
   svgMarkup,
 } from "./icons.js";
 
-// Shared options for every Loom node the inspector creates: internal (filtered from the
-// observability it reports) and namespaced to the panel. Set once on the scope; nodes inherit it.
-const PANEL_OPTS = { internal: true, namespace: PANEL_ID } as const;
 
 type Theme = "system" | "light" | "dark";
 const THEME_ICONS: Record<Theme, string> = {
@@ -89,8 +85,6 @@ let heartbeat: Polled<number> | null = null;
 let lagTimer: ReturnType<typeof setInterval> | null = null;
 let rafHandle: number | null = null;
 const scrollFades: { refresh: () => void; dispose: () => void }[] = [];
-// Every reactive binding + the tab effect; all `internal`, all disposed on unmount.
-const bindings: Stop[] = [];
 // Scopes for collective pause: the whole panel (paused when minimized) and, nested inside it, the
 // stats tab (paused when it isn't the active tab) — so a hidden subtree does no reactive work.
 let inspectorScope: Scope | null = null;
@@ -171,11 +165,6 @@ const LAG_MS = 200;
 
 /* ============================================================ binding helpers ====== */
 
-// Run `fn` as an internal effect and remember it for disposal. Internal so its reads/runs are
-// excluded from the metrics the inspector reports (it must never observe itself).
-function bind(fn: () => void): void {
-  bindings.push(effect(fn, PANEL_OPTS));
-}
 
 function bindText(node: Element, read: () => string): void {
   let prev: string | undefined;
@@ -1407,8 +1396,7 @@ export function unmountInspector(): void {
   scrollFades.length = 0;
   // Stopping the bindings drops the vital sources' last subscribers, which auto-disconnects
   // their PerformanceObservers (no manual teardown needed).
-  for (const stop of bindings) stop();
-  bindings.length = 0;
+  disposeBindings();
   inspectorScope = statsScope = null;
   clsSource = lcpSource = inpSource = longTasksSource = null;
   if (closeMenuOnOutside)
