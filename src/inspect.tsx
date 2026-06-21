@@ -1157,7 +1157,7 @@ const TIP = {
     "Live lazy sources (source/polled) — external producers wired into the graph.",
   scopes: "Live scopes grouping effects and resources.",
   channels:
-    "Registered observability channels (7 built-in + any app-declared).",
+    "Registered channels — gated ring-buffer event streams for any use (7 built-in reactive ones + any the app declares).",
   unread:
     "States/computeds nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked cells.",
 } as const;
