@@ -239,7 +239,7 @@ const ICON_COMPUTED =
 const ICON_CHEVRON = '<path d="m6 9 6 6 6-6"/>';
 // lucide crosshair — "scroll this group's rendered output into view".
 const ICON_LOCATE =
-  '<circle cx="12" cy="12" r="8"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>';
+  '<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>';
 
 type Theme = "system" | "light" | "dark";
 const THEME_ICONS: Record<Theme, string> = {
