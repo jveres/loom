@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { type Child, h, text } from "./dom.js";
+import { type Child, h, text } from "./dom/index.js";
 import { Fragment, jsx, jsxDEV, jsxs } from "./jsx-runtime.js";
 import { state } from "./loom.js";
 

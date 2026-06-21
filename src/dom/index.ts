@@ -1,4 +1,4 @@
-import { effect, type Read, type Stop, untrack } from "./loom.js";
+import { effect, type Read, type Stop, untrack } from "../loom.js";
 
 export type Child =
   | Node

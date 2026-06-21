@@ -1,4 +1,4 @@
-import type { HtmlChild } from "./html.js";
+import type { HtmlChild } from "./index.js";
 
 type Component = (props: never) => HtmlChild;
 

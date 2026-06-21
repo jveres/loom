@@ -1,7 +1,7 @@
 /** @jsxImportSource loom/html */
 import { describe, expect, it } from "vitest";
-import { html, raw, renderToString } from "./html.js";
-import { Fragment, jsx, jsxDEV, jsxs } from "./html-jsx-runtime.js";
+import { html, raw, renderToString } from "./index.js";
+import { Fragment, jsx, jsxDEV, jsxs } from "./jsx-runtime.js";
 
 describe("loom HTML JSX runtime", () => {
   it("exports automatic JSX runtime helpers", () => {

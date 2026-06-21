@@ -6,7 +6,7 @@ import {
   isHtml,
   raw,
   renderToString,
-} from "./html.js";
+} from "./index.js";
 
 describe("loom html", () => {
   it("raw wraps a string and stringifies", () => {

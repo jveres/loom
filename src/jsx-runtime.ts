@@ -1,4 +1,4 @@
-import { type Child, h, type Props } from "./dom.js";
+import { type Child, h, type Props } from "./dom/index.js";
 import { propsWithoutKey } from "./jsx-props.js";
 
 export type { JSX } from "./jsx-types.js";

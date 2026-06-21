@@ -25,7 +25,7 @@ import {
   state,
 } from "loom";
 import { tap } from "loom/dom";
-import { type VirtualList, virtualList } from "../vlist.js";
+import { type VirtualList, virtualList } from "../dom/vlist.js";
 import { CSS, PANEL_ID } from "./css.js";
 
 // Shared options for every Loom node the inspector creates: internal (filtered from the

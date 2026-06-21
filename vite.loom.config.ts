@@ -10,13 +10,14 @@ export default defineConfig({
     lib: {
       entry: {
         loom: resolve(root, "src/loom.ts"),
-        dom: resolve(root, "src/dom.ts"),
+        dom: resolve(root, "src/dom/index.ts"),
+        "dom/vlist": resolve(root, "src/dom/vlist.ts"),
         "jsx-runtime": resolve(root, "src/jsx-runtime.ts"),
-        "jsx-dev-runtime": resolve(root, "src/jsx-dev-runtime.ts"),
-        html: resolve(root, "src/html.ts"),
-        "html-jsx-runtime": resolve(root, "src/html-jsx-runtime.ts"),
-        "html-jsx-dev-runtime": resolve(root, "src/html-jsx-dev-runtime.ts"),
+        html: resolve(root, "src/html/index.ts"),
+        "html/jsx-runtime": resolve(root, "src/html/jsx-runtime.ts"),
       },
+      // ./jsx-dev-runtime and ./html/jsx-dev-runtime intentionally reuse the prod
+      // runtime bundles (see package.json exports) — Loom has no dev-only JSX behaviour.
       formats: ["es"],
     },
     outDir: "dist/loom",

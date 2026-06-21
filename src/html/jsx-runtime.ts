@@ -4,10 +4,10 @@ import {
   type HtmlChild,
   raw,
   renderToString,
-} from "./html.js";
-import { propsWithoutKey } from "./jsx-props.js";
+} from "./index.js";
+import { propsWithoutKey } from "../jsx-props.js";
 
-export type { JSX } from "./html-jsx-types.js";
+export type { JSX } from "./jsx-types.js";
 
 type Component<P extends object> = (props: P) => HtmlChild;
 type JsxProps =
