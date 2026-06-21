@@ -1182,9 +1182,9 @@ function buildGraphPane(): HTMLElement {
   return graphVList.el;
 }
 
-// A cell is "bound" when it drives a DOM element somewhere downstream — i.e. the hover highlight
-// has something to outline. Cells read only into text nodes, or read by nothing, are unbound
-// (a filled dot promises a highlight, so it must mean a real element target exists).
+// A cell is "bound" (filled dot) when editing it would visibly change the UI — i.e. it drives at
+// least one DOM node (element or text) downstream. Hollow means nothing in the DOM reflects it
+// (read only by non-rendering computeds, or read by nothing).
 function gBound(n: InspectNode): boolean {
   return gTargetsFor(n.id).length > 0;
 }
@@ -1289,10 +1289,12 @@ function gBeginEdit(
   };
 }
 
-// Views aren't listed; instead, hovering a state/computed outlines every view downstream of it
-// (walk subscribers through computeds to the effects that actually write DOM).
-function gTargetsFor(id: number): Element[] {
-  const out: Element[] = [];
+// Views aren't listed; instead, hovering a state/computed outlines every DOM node it drives — walk
+// subscribers through computeds to the effects that write the DOM. A binding's target is an Element
+// (attr/class/style/list) or a Text node (text binding); both count, so a cell that only feeds a
+// text readout is still "bound" (editing it visibly changes the UI).
+function gTargetsFor(id: number): Node[] {
+  const out: Node[] = [];
   const seen = new Set<number>([id]);
   const start = graphById.get(id);
   const queue = start ? [...start.subs] : [];
@@ -1303,34 +1305,44 @@ function gTargetsFor(id: number): Element[] {
     const node = graphById.get(sid);
     if (!node) continue;
     if (node.kind === "effect") {
-      if (node.target instanceof Element) out.push(node.target);
+      const t = node.target;
+      if (t instanceof Element || t instanceof CharacterData) out.push(t);
     } else for (const s of node.subs) queue.push(s);
   }
   return out;
 }
-// Union of the downstream views of every cell in a fields() group (hover the group header).
-function gGroupTargets(gid: number): Element[] {
-  const out: Element[] = [];
-  const seen = new Set<Element>();
+// Union of the downstream targets of every cell in a fields() group (hover the group header).
+function gGroupTargets(gid: number): Node[] {
+  const out: Node[] = [];
+  const seen = new Set<Node>();
   for (const n of graphById.values()) {
     if (n.group !== gid) continue;
-    for (const el of gTargetsFor(n.id))
-      if (!seen.has(el)) {
-        seen.add(el);
-        out.push(el);
+    for (const t of gTargetsFor(n.id))
+      if (!seen.has(t)) {
+        seen.add(t);
+        out.push(t);
       }
   }
   return out;
 }
+// The on-screen rect of a target: an element's box, or a text node's rendered bounds (via a Range,
+// since a Text node has no getBoundingClientRect).
+function gRect(t: Node): DOMRect | null {
+  if (!t.isConnected) return null;
+  if (t instanceof Element) return t.getBoundingClientRect();
+  const range = document.createRange();
+  range.selectNode(t);
+  return range.getBoundingClientRect();
+}
 // Highlight via fixed overlay boxes (not `outline`, which follows the target's border-radius in
 // modern browsers) so the marker is always a sharp rectangle. Transient: it tracks a hover.
-function gPaint(els: Element[], on: boolean): void {
+function gPaint(targets: Node[], on: boolean): void {
   for (const o of gOverlays) o.remove();
   gOverlays = [];
   if (!on) return;
-  for (const el of els) {
-    const r = el.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) continue;
+  for (const t of targets) {
+    const r = gRect(t);
+    if (!r || (r.width === 0 && r.height === 0)) continue;
     const o = document.createElement("div");
     o.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border:1.5px solid #ff9500;border-radius:0;pointer-events:none;z-index:2147483646`;
     document.body.append(o);
