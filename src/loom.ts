@@ -823,6 +823,9 @@ export interface ResourceCounts {
   readonly sources: number;
   readonly scopes: number;
   readonly channels: number;
+  // state/computed cells nothing currently reads (no subscribers): idle, or leaked/ghost cells of
+  // a removed object not yet GC'd. A rising count under steady state hints at a leak.
+  readonly idle: number;
 }
 
 export function inspectResources(): ResourceCounts {
@@ -831,6 +834,7 @@ export function inspectResources(): ResourceCounts {
   let effects = 0;
   let views = 0;
   let sources = 0;
+  let idle = 0;
   for (const [id, ref] of inspectRefs) {
     const node = ref.deref();
     if (node === undefined) {
@@ -839,15 +843,20 @@ export function inspectResources(): ResourceCounts {
     }
     const meta = node.meta;
     if (!meta || meta.internal) continue;
-    if (meta.kind === "computed") computeds++;
-    else if (meta.kind === "effect") {
+    if (meta.kind === "computed") {
+      computeds++;
+      if (node.subs === undefined) idle++;
+    } else if (meta.kind === "effect") {
       // loom/dom tags its bindings (text/attr/class/style/list) with the "dom" namespace; those are
       // views — the rendering output — counted apart from app effects.
       if (meta.namespace === "dom") views++;
       else effects++;
-    } else if ("connect" in node)
+    } else if ("connect" in node) {
       sources++; // a state-kind node backed by an external producer
-    else states++;
+    } else {
+      states++;
+      if (node.subs === undefined) idle++;
+    }
   }
   return {
     states,
@@ -857,6 +866,7 @@ export function inspectResources(): ResourceCounts {
     sources,
     scopes: liveScopes,
     channels: channelRegistry.size,
+    idle,
   };
 }
 

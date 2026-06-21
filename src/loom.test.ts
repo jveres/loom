@@ -440,6 +440,8 @@ describe("loom channels", () => {
     expect(after.views - before.views).toBe(1); // dom-namespaced effect counted as a view
     expect(after.sources - before.sources).toBe(1); // counted apart from plain states
     expect(after.scopes - before.scopes).toBe(1);
+    // the state + computed have no readers -> both counted idle
+    expect(after.idle - before.idle).toBe(2);
 
     s.stop();
     expect(inspectResources().scopes).toBe(before.scopes); // scope teardown decrements

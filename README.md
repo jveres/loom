@@ -102,9 +102,11 @@ The core exports these functions:
   with no subscribers — idle cells and "ghosts" (cells of a removed object that
   are unreachable but not yet GC'd); effects are always kept.
 - `inspectResources()` returns a live census `{ states, computeds, effects,
-  views, sources, scopes, channels }` — one cheap walk, no per-node allocation;
-  nothing runs on the reactive hot path. `views` are the DOM bindings (effects in
-  the `"dom"` namespace); `effects` are your app effects.
+  views, sources, scopes, channels, idle }` — one cheap walk, no per-node
+  allocation; nothing runs on the reactive hot path. `views` are the DOM bindings
+  (effects in the `"dom"` namespace); `effects` are your app effects; `idle` is
+  the number of state/computed cells nothing currently reads (a count that keeps
+  climbing under steady state hints at a leak).
 - `depsOf(source)` returns inspected dependencies for a state, computed read, or
   effect stop handle.
 
