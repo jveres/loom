@@ -63,7 +63,9 @@ The core exports these functions:
 - `state(initial, options?)` creates a callable state cell.
 - `computed(getter, options?)` creates a cached derived read.
 - `effect(fn, options?)` runs `fn` immediately and again when its dependencies
-  change.
+  change. Pass `{ target }` (an `EffectOptions` extra) to associate the effect
+  with the DOM node it writes — the DOM layer does this for its bindings so the
+  inspector can highlight what a cell drives.
 - `batch(fn)` groups writes and flushes effects once after the batch.
 - `scope(fn, options?)` groups the effects (and `polled`/`source` resources)
   created inside `fn` so they can be disposed (`stop()`) or suspended (`pause()`
@@ -126,6 +128,9 @@ The core exports these types:
 - `Channel` is a named observability channel; `Meter` drains channels;
   `Frame` is a per-channel `{ count, dropped, samples }`; `ChannelOptions`
   configures `{ capacity, fields }`.
+- `NodeOptions` (`{ internal, namespace, label }`) and `EffectOptions` (adds
+  `{ target }`) are the option bags accepted by the primitives; `NodeKind` is the
+  `"state" | "computed" | "effect"` union reported on an `InspectNode`.
 
 Pass `{ label, namespace }` to `state`, `computed`, `effect`, or `fields` when
 you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
@@ -418,6 +423,57 @@ The built-in channels record **non-internal** nodes only, so the idle baseline i
 zero. `inspect()` still returns a pull snapshot of the whole graph, and
 `depsOf(read | stop)` returns a node's dependencies.
 
+## Inspector
+
+`loom/inspect` is a self-contained dev panel built entirely on the public
+surface above (`inspect`, `inspectResources`, `channels`/`meter`, `scope`,
+`polled`, `source`). Mount it to get a live, draggable, resizable overlay; it is
+purely a consumer of the runtime, so the same data is available to any tooling
+you write yourself.
+
+```ts
+import { mountInspector } from "loom/inspect";
+
+mountInspector(); // appends to document.body by default; pass an Element to host it elsewhere
+```
+
+The entrypoint exports four functions:
+
+- `mountInspector(target?)` builds and shows the panel (no-op if already
+  mounted, or outside a DOM).
+- `unmountInspector()` tears it down and releases its meters, heartbeat and
+  observers.
+- `inspectorMounted()` reports whether it is currently shown.
+- `toggleInspector(target?)` mounts if hidden, unmounts if shown — handy on a
+  hotkey.
+
+**Mounting turns inspection on.** `mountInspector()` calls
+`configure({ inspect: true })` for you, but only nodes created *after* that point
+carry metadata. To see pre-existing nodes in the census and graph, enable
+inspection at startup before creating them:
+
+```ts
+import { configure } from "loom";
+import { mountInspector } from "loom/inspect";
+
+configure({ inspect: true }); // earliest opportunity — every node from here is visible
+// ... build your app ...
+mountInspector(); // or wire it to a hotkey via toggleInspector()
+```
+
+The panel has three tabs:
+
+- **Info** — the `inspectResources()` census (states, computeds, effects, views,
+  sources, scopes, channels, `unread`) plus a live rendering-pipeline sparkline
+  (writes in vs DOM updates out) driven by a `meter` over the built-in channels.
+- **Graph** — the reactive graph as a virtualized tree of state/computed cells,
+  grouped by `fields()` group and namespace. A filled dot means the cell drives a
+  DOM node downstream; a hollow dot means it doesn't. Hovering a cell (or a group
+  header) highlights every DOM target it feeds; the locate button scrolls the
+  first target into view. Primitive state cells are editable in place, and values
+  flash on change.
+- **Writes** — a live stream of graph events (in progress).
+
 ## JSX
 
 Loom supports JSX through standard automatic JSX runtime entrypoints. The
@@ -543,9 +599,20 @@ function Page(props: { title: string }) {
 const html = renderToString(<Page title="Docs" />);
 ```
 
-Use these entrypoints for static HTML:
+The `loom/html` entrypoint exports:
 
-- `loom/html` exports `html`, `raw`, and `renderToString`.
+- `renderToString(child)` serializes a node tree to an HTML string.
+- `html(strings, ...values)` is a tagged template that escapes interpolated
+  values and returns an `Html` node.
+- `raw(value)` marks a pre-trusted string as `Html` so it is emitted verbatim
+  (no escaping) — use only for content you control.
+- `isHtml(value)` is the type guard for an `Html` node.
+- `escapeText(value)` / `escapeAttribute(value)` are the underlying escapers, for
+  hand-built markup.
+- `Html` and `HtmlChild` are the node types.
+
+Use these entrypoints for static HTML JSX:
+
 - `loom/html/jsx-runtime` powers static HTML JSX.
 - `loom/html/jsx-dev-runtime` powers static HTML JSX in development mode.
 

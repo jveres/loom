@@ -1241,12 +1241,21 @@ function gEditable(n: InspectNode): boolean {
 // Paint a row's value cell (text + type colour), flashing on change. Skipped while the row's value
 // is being edited (its <span> is detached into an <input>). prevVal lives on the element's dataset
 // so flash fires only on a genuine change of an on-screen row, not on scroll-in.
-function gPaintVal(row: HTMLElement, value: unknown, id: number): void {
+// `silent` suppresses the change flash for self-initiated edits (the user just typed the value, so
+// flashing it as "updated" is noise). It still writes dataset.prev, so the next render poll — which
+// sees the now-current value — won't flash it either.
+function gPaintVal(
+  row: HTMLElement,
+  value: unknown,
+  id: number,
+  silent = false,
+): void {
   if (gEditingId === id) return;
   const val = row.querySelector(".li-gval") as HTMLElement | null;
   if (!val) return;
   const text = gFormat(value);
   if (
+    !silent &&
     !gSuppressFlash &&
     row.dataset["prev"] !== undefined &&
     row.dataset["prev"] !== text
@@ -1268,7 +1277,7 @@ function gBeginEdit(
   const prev = cell();
   if (typeof prev === "boolean") {
     cell(!prev);
-    gPaintVal(row, cell(), id);
+    gPaintVal(row, cell(), id, true);
     return;
   }
   if (prev !== null && typeof prev !== "number" && typeof prev !== "string") {
@@ -1291,7 +1300,7 @@ function gBeginEdit(
     if (gEditing !== input) return;
     cell(gCoerce(input.value, prev));
     restore();
-    gPaintVal(row, cell(), id);
+    gPaintVal(row, cell(), id, true);
   };
   input.onblur = commit; // also fires when the row is scrolled out of the window
   input.onkeydown = (e) => {
