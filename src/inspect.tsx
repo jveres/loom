@@ -375,6 +375,10 @@ let gOverlays: HTMLElement[] = []; // active hover-highlight overlay boxes
 let gEditing: HTMLInputElement | null = null; // the open in-place value editor, if any
 let gEditingId = -1; // node id whose value is being edited (its row skips value updates)
 let lastGraphRender = 0; // performance.now() of the last graph reconcile (see GRAPH_RENDER_MS)
+// Flash suppression: when the graph tab is re-shown its values must resync without a flash burst
+// (they changed unseen while hidden). gGraphJustShown gates the first render after show.
+let gSuppressFlash = false;
+let gGraphJustShown = false;
 const graphCollapsed = new Set<number>();
 
 // Rendering-pipeline sparkline series: writes in (top) vs DOM updates out (bottom), per poll.
@@ -1231,7 +1235,11 @@ function gPaintVal(row: HTMLElement, value: unknown, id: number): void {
   const val = row.querySelector(".li-gval") as HTMLElement | null;
   if (!val) return;
   const text = gFormat(value);
-  if (row.dataset["prev"] !== undefined && row.dataset["prev"] !== text)
+  if (
+    !gSuppressFlash &&
+    row.dataset["prev"] !== undefined &&
+    row.dataset["prev"] !== text
+  )
     gFlash(row);
   val.textContent = text;
   const edit = val.classList.contains("li-edit") ? " li-edit" : "";
@@ -1476,7 +1484,11 @@ function renderGraph(): void {
     graphGroupsData.push({ gid, label: gGroupLabel(gid, cells), cells });
   }
   graphSingles = singles;
+  // First render after the tab was re-shown: resync values without flashing (they changed unseen).
+  gSuppressFlash = gGraphJustShown;
   graphVList.setItems(gFlatten());
+  gSuppressFlash = false;
+  gGraphJustShown = false;
 }
 
 function buildStatsPane(): HTMLElement {
@@ -2027,7 +2039,14 @@ export function mountInspector(target: Element = document.body): void {
       const saved = scrollByTab.get(tab) ?? 0;
       const max = Math.max(0, bodyEl.scrollHeight - bodyEl.clientHeight);
       bodyEl.scrollTop = Math.min(saved, max);
-      if (tab === "graph") graphVList?.refresh(); // re-window at the restored position, no flash
+      if (tab === "graph" && graphVList) {
+        // CSS animations pause under display:none and resume when shown — strip any half-played
+        // flash so stale ones don't replay, and suppress the first render's flash burst.
+        for (const r of graphVList.el.querySelectorAll(".li-flash"))
+          r.classList.remove("li-flash");
+        gGraphJustShown = true;
+        graphVList.refresh(); // re-window at the restored position
+      }
     }
     prevTab = tab ?? null;
     for (const f of scrollFades) f.refresh();
