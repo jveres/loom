@@ -159,6 +159,10 @@ const CSS = `
   color:var(--li-muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;user-select:none}
 #${PANEL_ID} .li-gns-h:hover{background:var(--li-hover)}
 #${PANEL_ID} .li-gns-c{font-variant-numeric:tabular-nums;opacity:.7}
+#${PANEL_ID} .li-glocate{margin-left:auto;flex:0 0 auto;display:flex;align-items:center;
+  pointer-events:auto;cursor:pointer;color:var(--li-muted);opacity:0;transition:opacity .12s}
+#${PANEL_ID} .li-gns-h:hover .li-glocate{opacity:.75}
+#${PANEL_ID} .li-glocate:hover{opacity:1;color:var(--li-accent)}
 #${PANEL_ID} .li-chev{flex:0 0 auto;margin:0;color:var(--li-muted);transition:transform .12s ease}
 #${PANEL_ID} .li-gns-h.collapsed .li-chev{transform:rotate(-90deg)}
 #${PANEL_ID} .li-grow{position:absolute;top:0;left:0;right:0;height:22px;box-sizing:border-box;
@@ -233,6 +237,9 @@ const ICON_UNBOUND = '<circle cx="12" cy="12" r="5"/>';
 const ICON_COMPUTED =
   '<path d="M5 19c.264.956.797 2 2.187 2c2.407 0 3.008-2 4.813-9s2.406-9 4.813-9c1.39 0 1.923 1.044 2.187 2M9 10h8"/>';
 const ICON_CHEVRON = '<path d="m6 9 6 6 6-6"/>';
+// lucide crosshair — "scroll this group's rendered output into view".
+const ICON_LOCATE =
+  '<circle cx="12" cy="12" r="8"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>';
 
 type Theme = "system" | "light" | "dark";
 const THEME_ICONS: Record<Theme, string> = {
@@ -1354,6 +1361,19 @@ function gFlash(row: HTMLElement): void {
   void row.offsetWidth; // reflow so the animation restarts even on rapid updates
   row.classList.add("li-flash");
 }
+// Scroll the first of these DOM targets into view, then flash the highlight (after the smooth
+// scroll settles, so the fixed overlays land at the final positions).
+function gScrollToTargets(targets: Node[]): void {
+  const t = targets[0];
+  const el = t instanceof Element ? t : (t?.parentElement ?? null);
+  if (!el) return;
+  gPaint([], false); // drop the hover overlay; it'd be stale after scrolling
+  el.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+  window.setTimeout(() => {
+    gPaint(targets, true);
+    window.setTimeout(() => gPaint([], false), 1100);
+  }, 340);
+}
 
 // A group's display name: the fields() label prefix ("card 3" from "card 3.title"), else anonymous.
 function gGroupLabel(gid: number, cells: InspectNode[]): string {
@@ -1377,11 +1397,18 @@ function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
   const labelEl = (<span class="li-gns-lbl">{item.label}</span>) as HTMLElement;
   const chev = icon(ICON_CHEVRON, 11);
   chev.classList.add("li-chev");
+  // Locate button: scrolls the group's rendered output into view. A span (not the bare svg, which is
+  // pointer-events:none) so it catches the click; stopPropagation keeps it from toggling collapse.
+  const locate = (
+    <span class="li-glocate" title="Scroll into view" />
+  ) as HTMLElement;
+  locate.append(icon(ICON_LOCATE, 11));
   const header = (
     <div class="li-gns-h">
       {chev}
       {labelEl}
       {count}
+      {locate}
     </div>
   ) as HTMLElement;
   const gid = item.gid;
@@ -1390,6 +1417,10 @@ function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
     if (graphCollapsed.has(gid)) graphCollapsed.delete(gid);
     else graphCollapsed.add(gid);
     graphVList?.setItems(gFlatten());
+  };
+  locate.onclick = (e) => {
+    e.stopPropagation();
+    gScrollToTargets(gGroupTargets(gid));
   };
   header.onmouseenter = () => gPaint(gGroupTargets(gid), true);
   header.onmouseleave = () => gPaint(gGroupTargets(gid), false);
