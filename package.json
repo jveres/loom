@@ -20,7 +20,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./observe": "./src/observe.ts",
-    "./css": "./src/css.ts",
     "./dom": "./src/dom/index.ts",
     "./dom/vlist": "./src/dom/vlist.ts",
     "./devtools": "./src/devtools/index.ts",
