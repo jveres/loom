@@ -1,9 +1,9 @@
-// Graph tab: a namespace-grouped tree of states/computeds, flattened to a uniform-height row list
-// and rendered through a windowing virtualizer (only on-screen rows are in the DOM). renderGraph()
-// rebuilds the flat list on the heartbeat; rows update value + flash on change and outline their
-// DOM node(s) on hover. fields() cells fold under a collapsible header; standalone cells at the root.
-// Owns its module state; the panel drives it through four seams (buildGraphPane / renderGraphThrottled
-// / showGraph / teardownGraph).
+// Graph tab: a namespace-grouped tree of states/computeds rendered through a windowing virtualizer —
+// only the on-screen rows are in the DOM, built lazily for the visible window (see gListSource).
+// renderGraph() rebuilds the group structure on the heartbeat; rows update value + flash on change
+// and outline their DOM node(s) on hover. fields() cells fold under a collapsible header; standalone
+// cells at the root. Owns its module state; the panel drives it through five seams (buildGraphPane /
+// renderGraphThrottled / showGraph / clearGraphHighlight / teardownGraph).
 import type { State } from "loom";
 import { type InspectNode, inspect } from "loom/observe";
 import { type ListSource, type VirtualList, virtualList } from "../dom/vlist.js";
