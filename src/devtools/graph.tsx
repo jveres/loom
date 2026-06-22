@@ -6,7 +6,7 @@
 // / showGraph / teardownGraph).
 import type { State } from "loom";
 import { type InspectNode, inspect } from "loom/observe";
-import { type VirtualList, virtualList } from "../dom/vlist.js";
+import { type ListSource, type VirtualList, virtualList } from "../dom/vlist.js";
 import {
   ICON_BOUND,
   ICON_CHEVRON,
@@ -302,7 +302,7 @@ function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
   header.onclick = () => {
     if (graphCollapsed.has(gid)) graphCollapsed.delete(gid);
     else graphCollapsed.add(gid);
-    graphVList?.setItems(gFlatten());
+    graphVList?.setItems(gListSource());
   };
   locate.onclick = (e) => {
     e.stopPropagation();
@@ -370,23 +370,35 @@ function gUpdateCell(
   return row;
 }
 
-// Flatten the cached groups + singles into the visible row list, honouring collapse state.
-function gFlatten(): GraphItem[] {
-  const items: GraphItem[] = [];
+// The visible row list as a lazy source for the vlist: it needs only the total count (for scroll
+// height) plus random access to the viewport rows, so items are built on demand for the ~25 visible
+// rows rather than materialising the whole tree each tick. Honours collapse state.
+function gListLength(): number {
+  let n = graphSingles.length;
+  for (const g of graphGroupsData)
+    n += 1 + (graphCollapsed.has(g.gid) ? 0 : g.cells.length);
+  return n;
+}
+
+function gItemAt(index: number): GraphItem | undefined {
+  let i = index;
   for (const g of graphGroupsData) {
-    items.push({
-      kind: "header",
-      gid: g.gid,
-      label: g.label,
-      count: g.cells.length,
-    });
-    if (!graphCollapsed.has(g.gid))
-      for (const n of g.cells)
-        items.push({ kind: "cell", node: n, child: true });
+    if (i === 0)
+      return { kind: "header", gid: g.gid, label: g.label, count: g.cells.length };
+    i -= 1; // the header
+    if (!graphCollapsed.has(g.gid)) {
+      if (i < g.cells.length)
+        return { kind: "cell", node: g.cells[i] as InspectNode, child: true };
+      i -= g.cells.length;
+    }
   }
-  for (const n of graphSingles)
-    items.push({ kind: "cell", node: n, child: false });
-  return items;
+  return i < graphSingles.length
+    ? { kind: "cell", node: graphSingles[i] as InspectNode, child: false }
+    : undefined;
+}
+
+function gListSource(): ListSource<GraphItem> {
+  return { length: gListLength(), at: gItemAt };
 }
 
 function renderGraph(): void {
@@ -415,7 +427,7 @@ function renderGraph(): void {
   graphSingles = singles;
   // First render after the tab was re-shown: resync values without flashing (they changed unseen).
   gSuppressFlash = gGraphJustShown;
-  graphVList.setItems(gFlatten());
+  graphVList.setItems(gListSource());
   gSuppressFlash = false;
   gGraphJustShown = false;
 }

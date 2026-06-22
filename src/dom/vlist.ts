@@ -8,11 +8,20 @@
 // Contract: the elements returned by `render` must be absolutely positioned within `el` (which this
 // module sets to `position: relative`); this module only sets their `transform`.
 
+// The backing data: the windower needs only the total count (for scroll height) and random access
+// to the items currently in the viewport — never the whole list. A plain array satisfies this
+// (`length` + `Array.prototype.at`), or pass a lazy `{ length, at }` to avoid materializing every
+// item each update (the visible window builds only ~viewport-height items).
+export interface ListSource<T> {
+  readonly length: number;
+  at(index: number): T | undefined;
+}
+
 export interface VirtualList<T> {
   /** The holder element to mount inside a scroll container. */
   readonly el: HTMLElement;
-  /** Replace the backing items and re-window. */
-  setItems(items: readonly T[]): void;
+  /** Replace the backing source and re-window. */
+  setItems(source: ListSource<T>): void;
   /** Recompute the window against the current scroll position. */
   refresh(): void;
   /** Scroll the parent container to the end of the list. */
@@ -40,7 +49,7 @@ export function virtualList<T>(opts: VirtualListOptions<T>): VirtualList<T> {
   const sizer = document.createElement("div");
   sizer.style.cssText = "width:1px;pointer-events:none";
   el.append(sizer);
-  let items: readonly T[] = [];
+  let items: ListSource<T> = [];
   const mounted = new Map<string | number, HTMLElement>();
   let scroller: HTMLElement | null = null;
   let raf = 0;
@@ -60,7 +69,7 @@ export function virtualList<T>(opts: VirtualListOptions<T>): VirtualList<T> {
     if (end > total) end = total;
     const live = new Set<string | number>();
     for (let i = start; i < end; i++) {
-      const item = items[i] as T;
+      const item = items.at(i) as T;
       const k = opts.key(item);
       live.add(k);
       const existing = mounted.get(k) ?? null;
