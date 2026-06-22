@@ -1,10 +1,24 @@
 import {
+  collectCss,
   escapeAttribute,
   type Html,
   type HtmlChild,
   raw,
   renderToString,
 } from "./index.js";
+
+// css() tokens are recognised by their brand (Symbol.for, shared by value) rather than by importing
+// loom/css — so the HTML layer stays independent of the styling addon.
+const CSS_CLASS = Symbol.for("loom.css");
+function isCssClass(
+  value: unknown,
+): value is { readonly className: string; readonly cssText: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<symbol, unknown>)[CSS_CLASS] === true
+  );
+}
 
 export type { JSX } from "./jsx-types.js";
 
@@ -158,6 +172,10 @@ function normalizeClass(value: unknown): string {
       if (normalized) parts.push(normalized);
     }
     return parts.join(" ");
+  }
+  if (isCssClass(value)) {
+    collectCss(value.cssText);
+    return value.className;
   }
   if (value && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)

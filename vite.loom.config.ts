@@ -11,6 +11,7 @@ export default defineConfig({
       entry: {
         loom: resolve(root, "src/index.ts"),
         observe: resolve(root, "src/observe.ts"),
+        css: resolve(root, "src/css.ts"),
         dom: resolve(root, "src/dom/index.ts"),
         "dom/vlist": resolve(root, "src/dom/vlist.ts"),
         "jsx-runtime": resolve(root, "src/dom/jsx-runtime.ts"),

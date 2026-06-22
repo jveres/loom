@@ -54,6 +54,40 @@ export function isHtml(value: unknown): value is Html {
   );
 }
 
+// SSR collection of css() tokens. While renderHtml(fn) runs, the JSX class serializer routes each
+// css() rule here (deduped by rule text); renderHtml returns the markup plus the collected <style>
+// body. The collector is render-scoped so concurrent renders don't bleed.
+let cssCollector: Set<string> | null = null;
+
+/** Record a css() token's rule for the current renderHtml() pass (no-op outside one). */
+export function collectCss(cssText: string): void {
+  cssCollector?.add(cssText);
+}
+
+/**
+ * Render to a static HTML string and collect the css() rules used while rendering. Returns the
+ * markup and a `<style>`-ready stylesheet (wrapped in `@layer loom`, so it composes with the page's
+ * own CSS). Emit them together, e.g. `\`<style>${css}</style>${html}\``.
+ */
+export function renderHtml(render: () => HtmlChild): {
+  html: string;
+  css: string;
+} {
+  const previous = cssCollector;
+  const collector = new Set<string>();
+  cssCollector = collector;
+  try {
+    // HTML JSX evaluates eagerly, so class serialization collects as `render()` builds the tree.
+    const html = renderToString(render());
+    const css = collector.size
+      ? `@layer loom{${[...collector].join("")}}`
+      : "";
+    return { html, css };
+  } finally {
+    cssCollector = previous;
+  }
+}
+
 // Keep this map's keys in sync with the character class in escapeText's regex.
 const ENTITIES: Readonly<Record<string, string>> = {
   "&": "&amp;",

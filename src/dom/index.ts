@@ -31,11 +31,15 @@ export interface StyleBinding {
 type ClassProp =
   | string
   | ClassBinding
+  | CssToken
   | ClassMap
   | null
   | undefined
   | readonly ClassProp[];
 type ClassMap = Record<string, unknown>;
+// The shape of a css() token (loom/css), accepted structurally so the DOM layer needn't import the
+// styling addon. Recognised at runtime by its brand (see isCssClass).
+type CssToken = { readonly className: string; readonly cssText: string };
 type StyleMap = Record<string, unknown>;
 type StyleProp =
   | string
@@ -352,6 +356,11 @@ function applyClassProp(node: Element, value: ClassProp): void {
     return;
   }
   if (!value) return;
+  if (isCssClass(value)) {
+    mountCss(value);
+    appendClassName(node, value.className);
+    return;
+  }
   if (typeof value === "string") {
     appendClassName(node, value);
     return;
@@ -378,6 +387,57 @@ function appendClassName(node: Element, value: string): void {
 function hasClassName(node: Element, name: string): boolean {
   const current = node.getAttribute("class");
   return current ? current.split(/\s+/).includes(name) : false;
+}
+
+// css() tokens are recognised by their brand (Symbol.for, shared by value) rather than by importing
+// loom/css — so the DOM layer stays independent of the styling addon.
+const CSS_CLASS = Symbol.for("loom.css");
+function isCssClass(
+  value: unknown,
+): value is { readonly className: string; readonly cssText: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<symbol, unknown>)[CSS_CLASS] === true
+  );
+}
+
+// Inject a css() token's rule once, into one shared sheet under `@layer loom` so component styles
+// compose with — and lose to — the app's unlayered CSS (no specificity fights). Deduped by class
+// name; a no-op without a document (SSR collects via loom/html instead). Prefers a constructable
+// stylesheet (O(1) insertRule, no DOM node); the first mount probes it and, if the engine can't
+// parse @layer/nesting in insertRule (e.g. happy-dom), permanently falls back to a <style> element
+// whose textContent the browser parses with its full CSS engine.
+let cssMode: "sheet" | "style" | undefined;
+let cssSheet: CSSStyleSheet | undefined;
+let cssStyleEl: HTMLStyleElement | undefined;
+const mountedCss = new Set<string>();
+function mountCss(token: { className: string; cssText: string }): void {
+  if (mountedCss.has(token.className) || typeof document === "undefined") return;
+  mountedCss.add(token.className);
+  const rule = `@layer loom{${token.cssText}}`;
+
+  if (cssMode === undefined) {
+    if (typeof CSSStyleSheet === "function") {
+      try {
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        sheet.insertRule(rule, 0); // probe: real engines parse @layer + nesting here
+        cssSheet = sheet;
+        cssMode = "sheet";
+        return;
+      } catch {
+        // engine rejected the modern syntax (or constructable sheets) — drop to a <style> element
+      }
+    }
+    cssStyleEl = document.createElement("style");
+    document.head.append(cssStyleEl);
+    cssMode = "style";
+  }
+
+  if (cssMode === "sheet" && cssSheet)
+    cssSheet.insertRule(rule, cssSheet.cssRules.length);
+  else if (cssStyleEl) cssStyleEl.textContent += rule;
 }
 
 function applyStyleProp(node: Element, value: StyleProp): void {
