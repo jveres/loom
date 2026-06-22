@@ -249,8 +249,15 @@ export function source<T>(
 }
 
 function connectSource<T>(node: SourceNode<T>): void {
-  node.active = true;
-  node.disconnect = node.connect((value) => sourceSet(node, value));
+  node.active = true; // set first so a re-entrant read during connect() doesn't connect twice
+  try {
+    node.disconnect = node.connect((value) => sourceSet(node, value));
+  } catch (error) {
+    // connect() failed: leave the source disconnected (not wedged "active" with no teardown) so a
+    // later observation can retry, then surface the failure to the reader that triggered it.
+    node.active = false;
+    throw error;
+  }
 }
 
 function disconnectSource(node: SourceNode<unknown>): void {
@@ -294,15 +301,25 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     link(node, previous, 0);
     previous.flags |= HasChildEffect;
   }
+  let caught: { error: unknown } | undefined;
   try {
     runDepth++;
     node.cleanup = asCleanup(node.fn());
   } catch (error) {
-    reportEffectError(error, node);
+    caught = { error };
   } finally {
     runDepth--;
     activeSub = previous;
     node.flags &= ~RecursedCheck;
+  }
+  if (caught !== undefined) {
+    if (onError === undefined) {
+      // The first run threw and there's no boundary: the caller never receives a disposer, so the
+      // deps read before the throw would retain this dead effect. Dispose it here, then surface.
+      stopEffect.call(node);
+      throw caught.error;
+    }
+    reportEffectError(caught.error, node);
   }
   if (meta) meta.runs++;
   if (effectCh.meters !== 0 && meta?.internal !== true) effectCh.seq++;
@@ -587,11 +604,28 @@ interface ChannelNode {
 }
 
 const channelRegistry = new Map<string, ChannelNode>();
+// Shared by every count-only channel's Frame (and any channel with no new samples) so meter.read()
+// allocates nothing on the common path.
+const EMPTY_SAMPLES: ReadonlyArray<Readonly<Record<string, unknown>>> = [];
 
-function toPow2(n: number): number {
-  if (n <= 0) return 0;
+// A detail ring is small (a recent-samples buffer); bound capacity well under 2^31 so the pow2 loop
+// can't overflow into an infinite loop, and reject clearly-invalid input on this public path.
+const MAX_CHANNEL_CAPACITY = 1 << 20; // 1,048,576
+const MAX_CHANNEL_FIELDS = 4; // emit()/recordChannel record up to 4 positional values
+
+function toPow2(capacity: number): number {
+  if (capacity === 0) return 0;
+  if (
+    !Number.isInteger(capacity) ||
+    capacity < 0 ||
+    capacity > MAX_CHANNEL_CAPACITY
+  ) {
+    throw new RangeError(
+      `Channel capacity must be an integer in [0, ${MAX_CHANNEL_CAPACITY}]; got ${capacity}.`,
+    );
+  }
   let p = 1;
-  while (p < n) p <<= 1;
+  while (p < capacity) p <<= 1;
   return p;
 }
 
@@ -601,6 +635,11 @@ function createChannelNode(
 ): ChannelNode {
   const cap = toPow2(options?.capacity ?? 0);
   const fields = options?.fields ?? [];
+  if (fields.length > MAX_CHANNEL_FIELDS) {
+    throw new RangeError(
+      `A channel records up to ${MAX_CHANNEL_FIELDS} fields; "${name}" declares ${fields.length}.`,
+    );
+  }
   const cols: unknown[][] = [];
   if (cap > 0)
     for (let i = 0; i < fields.length; i++) cols.push(new Array(cap));
@@ -704,19 +743,24 @@ export function meter(channels: ReadonlyArray<Channel>): Meter {
         const seq = node.seq;
         const count = seq - m.cursor;
         let dropped = 0;
-        const samples: Array<Record<string, unknown>> = [];
+        // Count-only channels (and any with nothing new) share one frozen empty array, so a read of
+        // the common count-only case allocates nothing per channel.
+        let samples: ReadonlyArray<Readonly<Record<string, unknown>>> =
+          EMPTY_SAMPLES;
         if (node.cap !== 0 && count > 0) {
           const avail = count < node.cap ? count : node.cap;
           dropped = count - avail;
           const { cols, fields, mask, head, cap } = node;
+          const out: Array<Record<string, unknown>> = [];
           for (let k = 0; k < avail; k++) {
             const idx = (head + cap - avail + k) & mask;
             const rec: Record<string, unknown> = {};
             for (let f = 0; f < fields.length; f++) {
               rec[fields[f] as string] = cols[f]?.[idx];
             }
-            samples.push(rec);
+            out.push(rec);
           }
+          samples = out;
         }
         m.cursor = seq;
         frame[node.name] = { count, dropped, samples };

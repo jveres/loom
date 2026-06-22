@@ -297,6 +297,19 @@ describe("loom core", () => {
     stop();
   });
 
+  it("disposes the partial subscription when a first effect run throws without a handler", () => {
+    const a = state(0);
+    // The first run reads `a` then throws, so the caller never receives a disposer.
+    expect(() =>
+      effect(() => {
+        a();
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    // The dead effect must not remain subscribed to `a` — writing must not re-trigger (re-throw) it.
+    expect(() => a(1)).not.toThrow();
+  });
+
   it("routes effect errors to configure({ onError }) and continues the flush", () => {
     const errors: unknown[] = [];
     configure({
@@ -490,6 +503,27 @@ describe("loom channels", () => {
       channel("test:redeclare", { capacity: 4, fields: ["w"] }),
     ).toThrow(/different options/);
   });
+
+  it("rejects out-of-range capacity instead of hanging the pow2 loop", () => {
+    expect(() => channel("test:bigcap", { capacity: 2 ** 31 })).toThrow(
+      /capacity/,
+    );
+    expect(() => channel("test:negcap", { capacity: -1 })).toThrow(/capacity/);
+    expect(() => channel("test:nancap", { capacity: Number.NaN })).toThrow(
+      /capacity/,
+    );
+    // A valid capacity rounds up to a power of two and works.
+    expect(channel("test:okcap", { capacity: 100 }).name).toBe("test:okcap");
+  });
+
+  it("rejects more than four fields", () => {
+    expect(() =>
+      channel("test:5fields", { capacity: 4, fields: ["a", "b", "c", "d", "e"] }),
+    ).toThrow(/up to 4 fields/);
+    expect(() =>
+      channel("test:4fields", { capacity: 4, fields: ["a", "b", "c", "d"] }),
+    ).not.toThrow();
+  });
 });
 
 describe("loom polled", () => {
@@ -603,6 +637,35 @@ describe("loom source", () => {
     stop();
     expect(disconnects).toBe(1);
     expect(push).toBeUndefined();
+  });
+
+  it("does not wedge a source whose connect() throws; retries on the next observe", () => {
+    let attempts = 0;
+    let push: ((v: number) => void) | undefined;
+    const reading = source<number>((set) => {
+      attempts++;
+      if (attempts === 1) throw new Error("connect failed");
+      push = set;
+      return () => {};
+    }, 0);
+
+    // First observe triggers connect(), which throws -> surfaces at the reader; not left "active".
+    expect(() =>
+      effect(() => {
+        reading();
+      }),
+    ).toThrow("connect failed");
+    expect(attempts).toBe(1);
+
+    // A later observe must retry connect() (the source wasn't wedged active with no teardown).
+    let seen: number | undefined;
+    const stop = effect(() => {
+      seen = reading();
+    });
+    expect(attempts).toBe(2);
+    push?.(7);
+    expect(seen).toBe(7);
+    stop();
   });
 
   it("retains the last value while unobserved and reconnects when observed again", () => {
