@@ -22,6 +22,7 @@ import {
   ICON_POINTER,
   ICON_SETTINGS,
   ICON_SUN,
+  elementFromMarkup,
   icon,
   svgMarkup,
 } from "./icons.js";
@@ -290,20 +291,15 @@ function wireScrollFade(
 
 /* ============================================================ SVG widgets ========== */
 
-// Parse the icon markup and return the <svg> element directly (no wrapper), so it sits as a
-// direct child of the bar button / brand exactly like the reference.
-
 // Bar-button icon: the <svg> fills the button's content box and the 24-unit glyph is inset via
 // the viewBox to ~14px visual. A small centered svg *box* leaves margins that round to
 // sub-device-pixels on scaled displays (fractional DPR), making the icon's gap shimmer in
 // Safari; filling the box removes the gap and centers the glyph in resolution-independent SVG
 // space instead. (24px content box · 24/14 ⇒ viewBox side 41.143, inset 8.571.)
 function barIcon(inner: string): Element {
-  const tmp = document.createElement("div");
-  tmp.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="-8.571 -8.571 41.143 41.143" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
-  const svg = tmp.firstElementChild;
-  if (!svg) throw new Error("icon markup produced no element");
-  return svg;
+  return elementFromMarkup(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="-8.571 -8.571 41.143 41.143" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`,
+  );
 }
 
 /* ============================================================ mount / unmount ====== */

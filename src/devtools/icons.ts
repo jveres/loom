@@ -29,11 +29,17 @@ export const ICON_CHEVRON = '<path d="m6 9 6 6 6-6"/>';
 export const ICON_LOCATE =
   '<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>';
 
-// Build an <svg> element from icon markup.
-export function icon(inner: string, size: number): Element {
+// Parse an SVG markup string into its <svg> element. Shared by icon() here and barIcon() in the
+// panel chrome (which builds a different viewBox).
+export function elementFromMarkup(markup: string): Element {
   const tmp = document.createElement("div");
-  tmp.innerHTML = svgMarkup(inner, size);
+  tmp.innerHTML = markup;
   const svg = tmp.firstElementChild;
   if (!svg) throw new Error("icon markup produced no element");
   return svg;
+}
+
+// Build an <svg> element from icon markup at the given size.
+export function icon(inner: string, size: number): Element {
+  return elementFromMarkup(svgMarkup(inner, size));
 }

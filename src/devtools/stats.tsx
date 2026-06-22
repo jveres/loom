@@ -52,7 +52,7 @@ let statsScope: Scope | null = null;
 // leaves the display:none-hidden Info bindings asleep until that tab is shown.
 let metricSeq = 0;
 
-// A pull-based meter on the core's built-in reactive channels; poll() drains it every tick for the
+// A pull-based meter on the runtime's built-in `events`; poll() drains it every tick for the
 // smoothed per-second rates. The meter is a scope resource, so minimizing detaches it.
 let metricsMeter: Meter | null = null;
 let readRate = 0;
@@ -674,7 +674,7 @@ function heapMem(): { usedJSHeapSize: number } | undefined {
 }
 
 function buildHeapStat(): HTMLElement {
-  // Heap drifts slowly, so it's a polled() source (created in mountInspector) sampled every 5s.
+  // Heap drifts slowly, so it's a polled() source (created in wireStats) sampled every 5s.
   return stat(
     "heap",
     () => {
@@ -750,8 +750,8 @@ function poll(): number {
 }
 
 function startMetrics(): void {
-  // The reactive-pipeline rates come from a pull-based meter on the core's built-in channels,
-  // created in the panel scope (see mountInspector) so minimizing detaches it. Web vitals
+  // The reactive-pipeline rates come from a pull-based meter on the runtime's built-in `events`,
+  // created inside the panel's scope (see wireStats) so minimizing detaches it. Web vitals
   // (CLS/LCP/INP) are lazy sources whose PerformanceObservers connect with their readouts.
   lagExpected = performance.now() + LAG_MS;
   lagTimer = setInterval(() => {

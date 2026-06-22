@@ -6,7 +6,7 @@ type EventHandler<TElement extends Element, TEvent extends Event> = (
 ) => void;
 // DOM-native event names (lowercase, as the DOM uses them) -> their event types. Loom is a thin
 // layer over the DOM, so it follows the platform here rather than React's renamed camelCase props.
-// `tap` is Loom's one synthetic event: a robust pointerdown+pointerup tap (see `tap()` in dom.ts).
+// `tap` is Loom's one synthetic event: a robust pointerdown+pointerup tap (see `tap()` in ./index.ts).
 interface DomEventMap {
   blur: FocusEvent;
   change: Event;

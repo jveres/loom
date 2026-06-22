@@ -537,11 +537,12 @@ export function fields<T extends object>(
   return out;
 }
 
-/* ===== Observability channels: gated overwriting ring buffers, drained by a pull-based meter.
+/* ===== Channels & meters: generic, gated, overwriting ring buffers drained by a pull-based meter.
    A channel is a process-global, name-addressed singleton (the producer/consumer rendezvous). It
    stays a no-op — and allocation-free — until a meter attaches. Counts are exact; detail is a
    bounded, most-recent sample that drops oldest under overflow, so no event rate and no consumer
-   can stall the producer. ===== */
+   can stall the producer. (loom's own self-instrumentation built on these is the `events` registry
+   below, surfaced via loom/observe — but the primitives themselves are generic.) ===== */
 
 export interface ChannelOptions {
   /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */
@@ -726,8 +727,9 @@ export function meter(channels: ReadonlyArray<Channel>): Meter {
   };
 }
 
-// Built-in reactive event channels (the `events` registry). The core records to these inline at the hot-path sites; they stay
-// no-ops until a meter attaches. Non-internal nodes only, so the idle baseline is zero.
+// The runtime's built-in channels, exposed publicly as `events` (via loom/observe). The core
+// records to these inline at the hot-path sites; they stay no-ops until a meter attaches. Records
+// non-internal nodes only, so the idle baseline is zero.
 const readCh = createChannelNode("loom:read");
 const writeCh = createChannelNode("loom:write");
 const computeCh = createChannelNode("loom:compute");
@@ -750,9 +752,9 @@ for (const node of [
   channelRegistry.set(node.name, node);
 }
 
-// /* @__PURE__ */ lets a bundler drop this whole collection (and channelOf) when an app never
-// meters — the built-in channel *nodes* stay (the core's emit gates reference them), but the
-// public wrappers tree-shake away.
+// Each /* @__PURE__ */ marks its channelOf() wrapper side-effect-free, so a bundler drops the
+// public `events` accessors when an app never meters. The built-in channel *nodes* above stay (the
+// core's emit gates reference them); only these wrappers tree-shake away.
 export const events = {
   read: /* @__PURE__ */ channelOf(readCh),
   write: /* @__PURE__ */ channelOf(writeCh),
