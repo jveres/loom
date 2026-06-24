@@ -644,6 +644,15 @@ The panel has three tabs:
   flash on change.
 - **Writes** — a live stream of graph events (in progress).
 
+The panel is styled by a single `inspector.css` — ordinary formatted CSS, authored
+with native nesting and scoped under `#loom-inspector` (and `#loom-inspector-menu`
+for the portalled menu). It is imported as a string via Vite's `?inline` and
+injected once at runtime as a `<style>`, so the panel ships fully styled with no
+CSS-in-JS and nothing for consumers to set up. The id scoping is deliberate — it
+keeps the panel styled correctly inside arbitrary host pages (light-DOM isolation by
+specificity, not Shadow DOM); theme colours are `--li-*` custom properties switched
+by a `data-theme` attribute (`light` / `dark` / `system`).
+
 ## Performance
 
 The CLI benchmark compares Loom against native `alien-signals` primitives under a
