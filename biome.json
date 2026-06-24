@@ -19,5 +19,16 @@
     "rules": {
       "recommended": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/devtools/inspector.css"],
+      "linter": {
+        "rules": {
+          "complexity": { "noImportantStyles": "off" },
+          "style": { "noDescendingSpecificity": "off" }
+        }
+      }
+    }
+  ]
 }
