@@ -518,12 +518,12 @@
   .li-flash {
     animation: li-insp-flash 0.6s ease-out;
   }
-  .li-events {
+  .li-trace {
     height: 100%;
     display: flex;
     flex-direction: column;
   }
-  .li-ev-bar {
+  .li-tr-bar {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -531,7 +531,7 @@
     padding: 5px 8px;
     border-bottom: 1px solid var(--li-border-soft);
   }
-  .li-ev-btn {
+  .li-tr-btn {
     flex: 0 0 auto;
     font: inherit;
     color: var(--li-fg);
@@ -545,10 +545,10 @@
     align-items: center;
     justify-content: center;
   }
-  .li-ev-btn:hover {
+  .li-tr-btn:hover {
     border-color: var(--li-accent);
   }
-  .li-ev-filter {
+  .li-tr-filter {
     flex: 1 1 auto;
     min-width: 0;
     font: inherit;
@@ -560,10 +560,10 @@
     height: 22px;
     outline: none;
   }
-  .li-ev-filter:focus {
+  .li-tr-filter:focus {
     border-color: var(--li-accent);
   }
-  .li-ev-mode {
+  .li-tr-mode {
     flex: 0 0 auto;
     font: inherit;
     color: var(--li-fg);
@@ -574,7 +574,7 @@
     padding: 0 4px;
     cursor: pointer;
   }
-  .li-ev-scroll {
+  .li-tr-scroll {
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
@@ -583,16 +583,16 @@
     scrollbar-width: thin;
     scrollbar-color: var(--li-scroll) transparent;
   }
-  .li-ev-scroll::-webkit-scrollbar {
+  .li-tr-scroll::-webkit-scrollbar {
     width: 8px;
   }
-  .li-ev-scroll::-webkit-scrollbar-thumb {
+  .li-tr-scroll::-webkit-scrollbar-thumb {
     background: var(--li-scroll);
     border-radius: 4px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
-  .li-ev {
+  .li-tr {
     position: absolute;
     top: 0;
     left: 0;
@@ -606,10 +606,10 @@
     cursor: default;
     will-change: transform;
   }
-  .li-ev:hover {
+  .li-tr:hover {
     background: var(--li-hover);
   }
-  .li-ev-time {
+  .li-tr-time {
     flex: 0 0 auto;
     color: var(--li-muted);
     font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
@@ -617,7 +617,7 @@
     font-size: 10px;
     opacity: 0.7;
   }
-  .li-ev-name {
+  .li-tr-name {
     flex: 0 0 auto;
     max-width: 45%;
     color: var(--li-fg);
@@ -626,25 +626,34 @@
     text-overflow: ellipsis;
     cursor: pointer;
   }
-  .li-ev-name:hover {
+  .li-tr-name:hover {
     color: var(--li-accent);
     text-decoration: underline;
   }
-  .li-ev-change {
+  .li-tr-change {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  .li-ev-val {
+  .li-tr-val {
     font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
     font-variant-numeric: tabular-nums;
   }
-  .li-ev-arrow {
+  .li-tr-arrow {
     color: var(--li-muted);
   }
-  .li-ev-kind {
+  /* "by <source>" — who read/wrote the cell. Muted; spaced off the value change. */
+  .li-tr-src {
+    color: var(--li-muted);
+    font-style: italic;
+    margin-left: 6px;
+  }
+  .li-tr-src:empty {
+    margin-left: 0;
+  }
+  .li-tr-kind {
     flex: 0 0 auto;
     width: 15px;
     text-align: center;
@@ -653,15 +662,15 @@
     line-height: 14px;
     border-radius: 3px;
   }
-  .li-ev-kind-write {
+  .li-tr-kind-write {
     color: var(--li-bool);
     background: var(--li-hover);
   }
-  .li-ev-kind-read {
+  .li-tr-kind-read {
     color: var(--li-num);
     background: var(--li-hover);
   }
-  .li-events.li-ev-paused .li-ev {
+  .li-trace.li-tr-paused .li-tr {
     opacity: 0.5;
   }
   .li-tabscroll {

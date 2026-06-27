@@ -29,6 +29,10 @@ export const ICON_CHEVRON = '<path d="m6 9 6 6 6-6"/>';
 export const ICON_LOCATE =
   '<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>';
 
+// Trash/clear-all — the Trace tab's clear control.
+export const ICON_CLEAR =
+  '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>';
+
 // Parse an SVG markup string into its <svg> element. Shared by icon() here and barIcon() in the
 // panel chrome (which builds a different viewBox).
 export function elementFromMarkup(markup: string): Element {

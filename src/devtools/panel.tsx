@@ -16,12 +16,12 @@ import {
   teardownGraph,
 } from "./graph.js";
 import {
-  buildEventsPane,
-  setEventsLocate,
-  setEventsWindow,
-  showEvents,
-  teardownEvents,
-} from "./events.js";
+  buildTracePane,
+  setTraceLocate,
+  setTraceWindow,
+  showTrace,
+  teardownTrace,
+} from "./trace.js";
 import { wireScrollFade } from "./scroll-fade.js";
 import {
   ICON_MAXIMIZE,
@@ -46,11 +46,11 @@ const THEME_ICONS: Record<Theme, string> = {
 
 /* ============================================================ module state ========= */
 
-type TabId = "stats" | "graph" | "events";
+type TabId = "stats" | "graph" | "trace";
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: "stats", label: "Info" },
   { id: "graph", label: "Graph" },
-  { id: "events", label: "Events" },
+  { id: "trace", label: "Trace" },
 ];
 
 let panel: HTMLElement | null = null;
@@ -325,7 +325,7 @@ export function mountInspector(target: Element = document.body): void {
   const sizeVal = (<span class="li-menu-val" />) as HTMLElement;
   const applyLogSize = (): void => {
     sizeVal.textContent = `${logSize / 1000}k`;
-    setEventsWindow(logSize);
+    setTraceWindow(logSize);
   };
   const sizeItem = (
     <button
@@ -447,13 +447,13 @@ export function mountInspector(target: Element = document.body): void {
       ) : t.id === "graph" ? (
         buildGraphPane()
       ) : (
-        buildEventsPane()
+        buildTracePane()
       );
     panes.set(t.id, pane);
     bodyEl.append(pane);
   }
-  // Clicking an event's name jumps to that cell in the Graph tab (the panel owns tab state).
-  setEventsLocate((id): void => {
+  // Clicking a trace row's name jumps to that cell in the Graph tab (the panel owns tab state).
+  setTraceLocate((id): void => {
     ui?.("graph");
     revealCell(id);
   });
@@ -552,7 +552,7 @@ export function mountInspector(target: Element = document.body): void {
       const max = Math.max(0, bodyEl.scrollHeight - bodyEl.clientHeight);
       bodyEl.scrollTop = Math.min(saved, max);
       if (tab === "graph") showGraph();
-      else if (tab === "events") showEvents();
+      else if (tab === "trace") showTrace();
     }
     prevTab = tab ?? null;
     for (const f of scrollFades) f.refresh();
@@ -582,7 +582,7 @@ export function unmountInspector(): void {
   scrollByTab.clear();
   prevTab = null;
   teardownGraph();
-  teardownEvents();
+  teardownTrace();
 }
 
 /** Whether the inspector is currently mounted. */

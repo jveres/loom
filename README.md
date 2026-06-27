@@ -646,9 +646,14 @@ The panel has three tabs:
   header) highlights every DOM target it feeds; the locate button scrolls the
   first target into view. Primitive state cells are editable in place, and values
   flash on change.
-- **Events** — a live, newest-on-top stream of state mutations (cell name and
-  `prev → next`), read from the `loom:write` channel's `samples` view. Each write is
-  shown in order; the last ~1000 are kept. Click the list to pause and read it.
+- **Trace** — a live, newest-on-top causal trace of reactive events, read from the
+  `loom:read` and `loom:write` channels' `samples` views. Each row shows the cell, the
+  change (`prev → next` for writes), and the **source** — the effect/computed that read
+  or wrote it (`by dom.class.chaos`), so the stream reads as "who did what". A header
+  selector picks reads / writes / all; pause, clear, and a name filter narrow it; the
+  last window (1k–25k, set from the menu) is kept, with filtered matches accumulating
+  their own window. Hover a row to highlight the DOM node(s) the cell drives; click a
+  name to jump to it in the Graph.
 
 The panel is styled by a single `inspector.css` — ordinary formatted CSS, authored
 with native nesting and scoped under `#loom-inspector` (and `#loom-inspector-menu`

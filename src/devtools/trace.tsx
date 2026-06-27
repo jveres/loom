@@ -1,23 +1,25 @@
-// Events tab: a live, newest-on-top stream of reactive events, read from the loom:write and/or
-// loom:read channels' *samples* views (each channel ring holds the last 1024). A header selector
-// picks which types stream — writes (default), reads, or all (interleaved by timestamp). On the
-// panel heartbeat (~120ms) it drains the selected ring(s) into a capped, newest-first log rendered
-// through the windowing vlist. Pause/resume freezes it to read; the filter narrows by cell name;
-// hovering a row outlines the DOM node(s) that cell drives. Panel seams: buildEventsPane /
-// renderEvents / showEvents / teardownEvents.
+// Trace tab: a live, newest-on-top causal trace of reactive events, read from the loom:write and/or
+// loom:read channels' *samples* views (each channel ring holds the last 1024). Each event carries
+// its source — the effect/computed that read or wrote the cell — so a row reads "X — by Y". A header
+// selector picks which types stream (writes, reads, or all interleaved by timestamp); pause freezes
+// it, clear empties it, the filter narrows by cell name, hovering a row outlines the DOM node(s) the
+// cell drives, and clicking a name jumps to it in the Graph. On the panel heartbeat (~120ms) it
+// drains the selected ring(s) into a capped, newest-first log rendered through the windowing vlist.
+// Panel seams: buildTracePane / renderTrace / showTrace / teardownTrace.
 import { type Meter, meter } from "loom";
 import { events, inspect } from "loom/observe";
 import { type VirtualList, virtualList } from "../dom/vlist.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
+import { ICON_CLEAR, icon } from "./icons.js";
 import { wireScrollFade } from "./scroll-fade.js";
 
-const EVENT_ROW_H = 22; // uniform row height (must match the .li-ev CSS)
+const TRACE_ROW_H = 22; // uniform row height (must match the .li-tr CSS)
 const VALUE_MAX = 200; // cap a recorded value's text so a giant string can't bloat the DOM/tooltip
 let windowSize = 1000; // how many events the log keeps; set from the inspector menu
 
-type EventMode = "writes" | "reads" | "all";
+type TraceMode = "writes" | "reads" | "all";
 
-type EventRow = {
+type TraceRow = {
   readonly seq: number; // unique, monotonic — the vlist key (the log shifts as it prepends)
   readonly id: number; // the cell id — for hover-highlighting the DOM nodes it drives
   readonly kind: "read" | "write";
@@ -27,165 +29,180 @@ type EventRow = {
   readonly prevCls: string;
   readonly nextText: string;
   readonly nextCls: string;
+  readonly srcText: string; // "by <source>" — who read/wrote it; "" when external/none
   readonly full: string; // untruncated line, for the hover title
 };
 
-let eventsVList: VirtualList<EventRow> | null = null;
+let traceVList: VirtualList<TraceRow> | null = null;
 let writeMeter: Meter | null = null;
 let readMeter: Meter | null = null;
-let eventMode: EventMode = "all";
-let eventsRoot: HTMLElement | null = null;
-let eventsScroll: HTMLElement | null = null;
-let eventsFade: { refresh: () => void; dispose: () => void } | null = null;
+let traceMode: TraceMode = "all";
+let traceRoot: HTMLElement | null = null;
+let traceScroll: HTMLElement | null = null;
+let traceFade: { refresh: () => void; dispose: () => void } | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
-let eventLog: EventRow[] = []; // newest-first, capped at windowSize
-let filterLog: EventRow[] = []; // when a filter is active, its own newest-first window of matches
-let eventsPaused = false;
-let eventsFilter = ""; // lowercased name substring; "" = no filter
+let traceLog: TraceRow[] = []; // newest-first, capped at windowSize
+let filterLog: TraceRow[] = []; // when a filter is active, its own newest-first window of matches
+let tracePaused = false;
+let traceFilter = ""; // lowercased name substring; "" = no filter
 let rowSeq = 0; // monotonic key source
 let lastHoverId = -1; // cell id currently hover-highlighted (avoids re-snapshotting within a row)
 let onLocate: ((id: number) => void) | null = null; // jump-to-graph, wired by the panel
 
 // Wire the "click a name to jump to it in the Graph" action (set by the panel, which owns tab state).
-export function setEventsLocate(fn: (id: number) => void): void {
+export function setTraceLocate(fn: (id: number) => void): void {
   onLocate = fn;
 }
 
-export function buildEventsPane(): HTMLElement {
+export function buildTracePane(): HTMLElement {
   applyMode(); // attaches the write meter for the default mode
 
-  eventsVList = virtualList<EventRow>({
-    rowHeight: EVENT_ROW_H,
+  traceVList = virtualList<TraceRow>({
+    rowHeight: TRACE_ROW_H,
     key: (r) => r.seq,
-    render: evRender,
+    render: trRender,
   });
 
   pauseBtn = (
-    <button type="button" class="li-ev-btn" title="Pause / resume the stream">
+    <button type="button" class="li-tr-btn" title="Pause / resume the trace">
       ⏸
     </button>
   ) as HTMLButtonElement;
-  pauseBtn.addEventListener("click", () => setPaused(!eventsPaused));
+  pauseBtn.addEventListener("click", () => setPaused(!tracePaused));
+
+  const clearBtn = (
+    <button type="button" class="li-tr-btn" title="Clear the trace" />
+  ) as HTMLButtonElement;
+  clearBtn.append(icon(ICON_CLEAR, 13));
+  clearBtn.addEventListener("click", clearLog);
 
   const modeSel = (
-    <select class="li-ev-mode" title="Which events to stream">
+    <select class="li-tr-mode" title="Which events to stream">
       <option value="writes">writes</option>
       <option value="reads">reads</option>
       <option value="all">all</option>
     </select>
   ) as HTMLSelectElement;
-  modeSel.value = eventMode; // reflect the default ("all")
+  modeSel.value = traceMode; // reflect the default ("all")
   modeSel.addEventListener("change", () => {
-    eventMode = modeSel.value as EventMode;
+    traceMode = modeSel.value as TraceMode;
     applyMode();
   });
 
   const filter = (
     <input
       type="text"
-      class="li-ev-filter"
+      class="li-tr-filter"
       placeholder="filter by name…"
       spellcheck={false}
     />
   ) as HTMLInputElement;
   filter.addEventListener("input", () => {
-    eventsFilter = filter.value.trim().toLowerCase();
+    traceFilter = filter.value.trim().toLowerCase();
     // Seed the filtered window from the recent raw log, then keep accumulating matches into it (see
-    // renderEvents) so a narrow filter retains its own last-`windowSize` events rather than being
+    // renderTrace) so a narrow filter retains its own last-`windowSize` events rather than being
     // purged as the raw window slides past them.
-    filterLog = eventsFilter
-      ? eventLog.filter((r) => r.name.toLowerCase().includes(eventsFilter))
+    filterLog = traceFilter
+      ? traceLog.filter((r) => r.name.toLowerCase().includes(traceFilter))
       : [];
     applyView();
   });
 
-  eventsScroll = (<div class="li-ev-scroll li-fade-y" />) as HTMLElement;
-  eventsScroll.append(eventsVList.el);
-  eventsFade = wireScrollFade(eventsScroll, "y"); // same edge fade as the panel body
+  traceScroll = (<div class="li-tr-scroll li-fade-y" />) as HTMLElement;
+  traceScroll.append(traceVList.el);
+  traceFade = wireScrollFade(traceScroll, "y"); // same edge fade as the panel body
   // Hover a row to outline the DOM node(s) that cell drives — same overlay the Graph uses. Delegated
   // (rows are reused) and guarded so moving within a row doesn't re-snapshot.
-  eventsScroll.addEventListener("pointerover", (e) => {
-    const row = (e.target as Element).closest?.(".li-ev") as HTMLElement | null;
+  traceScroll.addEventListener("pointerover", (e) => {
+    const row = (e.target as Element).closest?.(".li-tr") as HTMLElement | null;
     const id = row?.dataset["id"];
     if (id !== undefined && Number(id) !== lastHoverId) {
       lastHoverId = Number(id);
       highlightCell(lastHoverId);
     }
   });
-  eventsScroll.addEventListener("pointerleave", () => {
+  traceScroll.addEventListener("pointerleave", () => {
     lastHoverId = -1;
     clearGraphHighlight();
   });
   // Click a cell name to jump to it in the Graph tab.
-  eventsScroll.addEventListener("click", (e) => {
-    const name = (e.target as Element).closest?.(".li-ev-name");
-    const row = name?.closest(".li-ev") as HTMLElement | null;
+  traceScroll.addEventListener("click", (e) => {
+    const name = (e.target as Element).closest?.(".li-tr-name");
+    const row = name?.closest(".li-tr") as HTMLElement | null;
     const id = row?.dataset["id"];
     if (id === undefined) return;
     lastHoverId = -1;
     clearGraphHighlight(); // drop the hover overlay before jumping
     onLocate?.(Number(id));
   });
-  eventsRoot = (
-    <div class="li-pane li-events">
-      <div class="li-ev-bar">
+  traceRoot = (
+    <div class="li-pane li-trace">
+      <div class="li-tr-bar">
         {pauseBtn}
+        {clearBtn}
         {modeSel}
         {filter}
       </div>
-      {eventsScroll}
+      {traceScroll}
     </div>
   ) as HTMLElement;
-  return eventsRoot;
+  return traceRoot;
 }
 
-// (Re)attach the channel meters for the current mode and restart the stream. Writes always carry
+// (Re)attach the channel meters for the current mode and restart the trace. Writes always carry
 // detail; reads are the high-frequency firehose, so the read meter is attached only when selected.
 function applyMode(): void {
   writeMeter?.stop();
   writeMeter = null;
   readMeter?.stop();
   readMeter = null;
-  if (eventMode !== "reads") writeMeter = meter([events.write], "samples");
-  if (eventMode !== "writes") readMeter = meter([events.read], "samples");
-  eventLog = [];
+  if (traceMode !== "reads") writeMeter = meter([events.write], "samples");
+  if (traceMode !== "writes") readMeter = meter([events.read], "samples");
+  traceLog = [];
   filterLog = [];
   applyView();
-  renderEvents();
+  renderTrace();
+}
+
+// Empty the trace (both windows) — useful to start a clean capture before reproducing something.
+function clearLog(): void {
+  traceLog = [];
+  filterLog = [];
+  applyView();
 }
 
 // Set how many events the log keeps (the window). Exposed for the inspector menu.
-export function setEventsWindow(n: number): void {
+export function setTraceWindow(n: number): void {
   windowSize = n;
-  if (eventLog.length > n) eventLog.length = n;
+  if (traceLog.length > n) traceLog.length = n;
   if (filterLog.length > n) filterLog.length = n;
   applyView();
 }
-export function getEventsWindow(): number {
-  return windowSize;
-}
 
 // Drain the selected ring(s) into the log (newest-first) and re-window. A no-op while paused.
-export function renderEvents(): void {
-  if (eventsPaused || eventsVList === null) return;
-  const fresh: Array<{ s: Readonly<Record<string, unknown>>; kind: "read" | "write" }> = [];
+export function renderTrace(): void {
+  if (tracePaused || traceVList === null) return;
+  const fresh: Array<{
+    s: Readonly<Record<string, unknown>>;
+    kind: "read" | "write";
+  }> = [];
   const writes = writeMeter?.read()["loom:write"]?.samples;
   if (writes) for (const s of writes) fresh.push({ s, kind: "write" });
   const reads = readMeter?.read()["loom:read"]?.samples;
   if (reads) for (const s of reads) fresh.push({ s, kind: "read" });
   if (fresh.length === 0) return;
   // Interleave the two rings by their recorded timestamp when streaming both.
-  if (eventMode === "all")
+  if (traceMode === "all")
     fresh.sort((a, b) => (a.s["t"] as number) - (b.s["t"] as number));
   const labels = labelMap();
   for (const { s, kind } of fresh) {
     const row = makeRow(s, kind, labels);
-    eventLog.unshift(row);
+    traceLog.unshift(row);
     // Accumulate matches into the filtered window too, so filtering keeps its own last-`windowSize`.
-    if (eventsFilter && row.name.toLowerCase().includes(eventsFilter))
+    if (traceFilter && row.name.toLowerCase().includes(traceFilter))
       filterLog.unshift(row);
   }
-  if (eventLog.length > windowSize) eventLog.length = windowSize; // drop oldest past the window
+  if (traceLog.length > windowSize) traceLog.length = windowSize; // drop oldest past the window
   if (filterLog.length > windowSize) filterLog.length = windowSize;
   applyView();
 }
@@ -193,53 +210,59 @@ export function renderEvents(): void {
 // Tab shown: re-window for the now-visible pane (the vlist no-ops reconciles while hidden), then once
 // more next frame — the first reconcile can race the layout of the just-un-hidden pane, which would
 // otherwise leave the top rows blank until a scroll nudged it.
-export function showEvents(): void {
-  renderEvents();
+export function showTrace(): void {
+  renderTrace();
   applyView();
-  requestAnimationFrame(() => eventsVList?.refresh());
+  requestAnimationFrame(() => traceVList?.refresh());
 }
 
-export function teardownEvents(): void {
+export function teardownTrace(): void {
   writeMeter?.stop();
   writeMeter = null;
   readMeter?.stop();
   readMeter = null;
-  eventsVList = null;
-  eventsRoot = null;
-  eventsScroll = null;
-  eventsFade?.dispose();
-  eventsFade = null;
+  traceVList = null;
+  traceRoot = null;
+  traceScroll = null;
+  traceFade?.dispose();
+  traceFade = null;
   pauseBtn = null;
-  eventLog = [];
+  traceLog = [];
   filterLog = [];
-  eventsPaused = false;
-  eventsFilter = "";
-  eventMode = "all";
+  tracePaused = false;
+  traceFilter = "";
+  traceMode = "all";
   lastHoverId = -1;
   onLocate = null;
 }
 
 function setPaused(paused: boolean): void {
-  eventsPaused = paused;
+  tracePaused = paused;
   if (pauseBtn) pauseBtn.textContent = paused ? "▶" : "⏸";
-  eventsRoot?.classList.toggle("li-ev-paused", paused);
-  if (!paused) renderEvents(); // resume: catch up immediately
+  traceRoot?.classList.toggle("li-tr-paused", paused);
+  if (!paused) renderTrace(); // resume: catch up immediately
 }
 
 // Re-window with the active filter applied (a name substring match).
 function applyView(): void {
-  eventsVList?.setItems(eventsFilter ? filterLog : eventLog);
-  eventsFade?.refresh(); // content height changed — the ResizeObserver won't catch that
+  traceVList?.setItems(traceFilter ? filterLog : traceLog);
+  traceFade?.refresh(); // content height changed — the ResizeObserver won't catch that
 }
 
 function makeRow(
   s: Readonly<Record<string, unknown>>,
   kind: "read" | "write",
   labels: Map<number, string>,
-): EventRow {
+): TraceRow {
   const id = s["id"] as number;
   const name = labels.get(id) ?? `#${id}`;
-  const timeText = evTime(s["t"] as number);
+  const timeText = trTime(s["t"] as number);
+  const source = s["source"];
+  const srcName =
+    source !== undefined
+      ? (labels.get(source as number) ?? `#${source}`)
+      : "";
+  const srcText = srcName ? `by ${srcName}` : "";
   if (kind === "read") {
     return {
       seq: rowSeq++,
@@ -251,11 +274,12 @@ function makeRow(
       prevCls: "",
       nextText: "",
       nextCls: "",
-      full: `${name} (read)`,
+      srcText,
+      full: `${name} — read ${srcText || "(external)"}`,
     };
   }
-  const prevText = evFormat(s["prev"]);
-  const nextText = evFormat(s["next"]);
+  const prevText = trFormat(s["prev"]);
+  const nextText = trFormat(s["next"]);
   return {
     seq: rowSeq++,
     id,
@@ -263,10 +287,11 @@ function makeRow(
     timeText,
     name,
     prevText,
-    prevCls: evValueClass(s["prev"]),
+    prevCls: trValueClass(s["prev"]),
     nextText,
-    nextCls: evValueClass(s["next"]),
-    full: `${name}: ${prevText} → ${nextText}`,
+    nextCls: trValueClass(s["next"]),
+    srcText,
+    full: `${name}: ${prevText} → ${nextText} ${srcText || "(external)"}`,
   };
 }
 
@@ -278,50 +303,53 @@ function labelMap(): Map<number, string> {
   return m;
 }
 
-function evRender(item: EventRow, reuse: HTMLElement | null): HTMLElement {
-  const row = reuse ?? evCreateRow();
+function trRender(item: TraceRow, reuse: HTMLElement | null): HTMLElement {
+  const row = reuse ?? trCreateRow();
   const kind = row.children[0] as HTMLElement;
   kind.textContent = item.kind === "read" ? "R" : "W";
-  kind.className = `li-ev-kind li-ev-kind-${item.kind}`;
+  kind.className = `li-tr-kind li-tr-kind-${item.kind}`;
   (row.children[1] as HTMLElement).textContent = item.timeText;
   (row.children[2] as HTMLElement).textContent = item.name;
   const change = row.children[3] as HTMLElement;
   const prev = change.children[0] as HTMLElement;
   const arrow = change.children[1] as HTMLElement;
   const next = change.children[2] as HTMLElement;
+  const src = change.children[3] as HTMLElement;
   if (item.kind === "read") {
     prev.textContent = "";
     arrow.textContent = "";
     next.textContent = "";
   } else {
     prev.textContent = item.prevText;
-    prev.className = `li-ev-val ${item.prevCls}`;
+    prev.className = `li-tr-val ${item.prevCls}`;
     arrow.textContent = " → ";
     next.textContent = item.nextText;
-    next.className = `li-ev-val ${item.nextCls}`;
+    next.className = `li-tr-val ${item.nextCls}`;
   }
+  src.textContent = item.srcText; // "by <source>" — the effect/computed that read/wrote it
   row.title = item.full; // hover shows the untruncated line
   row.dataset["id"] = String(item.id); // for hover-highlight (delegated on the scroll container)
   return row;
 }
 
-function evCreateRow(): HTMLElement {
+function trCreateRow(): HTMLElement {
   return (
-    <div class="li-ev">
-      <span class="li-ev-kind" />
-      <span class="li-ev-time" />
-      <span class="li-ev-name" />
-      <span class="li-ev-change">
-        <span class="li-ev-val" />
-        <span class="li-ev-arrow" />
-        <span class="li-ev-val" />
+    <div class="li-tr">
+      <span class="li-tr-kind" />
+      <span class="li-tr-time" />
+      <span class="li-tr-name" />
+      <span class="li-tr-change">
+        <span class="li-tr-val" />
+        <span class="li-tr-arrow" />
+        <span class="li-tr-val" />
+        <span class="li-tr-src" />
       </span>
     </div>
   ) as HTMLElement;
 }
 
 // Wall-clock minute:second.millis of the event — enough to order/correlate within a session.
-function evTime(t: number): string {
+function trTime(t: number): string {
   if (!t) return "";
   const d = new Date(t);
   const p = (n: number) => String(n).padStart(2, "0");
@@ -330,7 +358,7 @@ function evTime(t: number): string {
 
 // Compact value display; full strings are kept (CSS ellipsis truncates them at the right edge),
 // only capped against pathological lengths.
-function evFormat(v: unknown): string {
+function trFormat(v: unknown): string {
   if (v === undefined) return "—";
   if (v === null) return "null";
   if (typeof v === "number")
@@ -342,7 +370,7 @@ function evFormat(v: unknown): string {
   if (typeof v === "object") return "{…}";
   return String(v);
 }
-function evValueClass(v: unknown): string {
+function trValueClass(v: unknown): string {
   if (typeof v === "number") return "li-gv-num";
   if (typeof v === "string") return "li-gv-str";
   if (typeof v === "boolean") return "li-gv-bool";

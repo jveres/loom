@@ -16,7 +16,7 @@ import {
 import { events, inspectResources } from "loom/observe";
 import { bind, PANEL_OPTS } from "./bindings.js";
 import { PANEL_ID } from "./css.js";
-import { renderEvents } from "./events.js";
+import { renderTrace } from "./trace.js";
 import { renderGraphThrottled } from "./graph.js";
 
 /* ---- geometry ---- */
@@ -747,8 +747,8 @@ function poll(): number {
     // The graph walk (inspect() builds every node) is the heavy part, so it self-throttles to ~3/s
     // rather than every 120ms tick — plenty for reading values, and it halves the cost under churn.
     renderGraphThrottled();
-  } else if (activeTabFn() === "events" && visible) {
-    renderEvents(); // drain the write ring into the log every tick
+  } else if (activeTabFn() === "trace" && visible) {
+    renderTrace(); // drain the trace ring(s) into the log every tick
   }
   return ++metricSeq;
 }
