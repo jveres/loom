@@ -294,11 +294,19 @@ function makeRow(
   };
 }
 
-// id → label for the current snapshot, so an event shows its cell name (disposed cells fall back to
-// their id). Off the hot path — it runs on the heartbeat only while this tab is active.
+// id → display name for the current snapshot, so an event shows its cell/source name (disposed nodes
+// fall back to their id). A non-default namespace is prefixed as `ns:label` (the Graph shows it as a
+// tag), except where the label already carries it (loom/dom's "dom.text" etc.). Off the hot path —
+// it runs on the heartbeat only while this tab is active.
 function labelMap(): Map<number, string> {
   const m = new Map<number, string>();
-  for (const n of inspect().nodes) m.set(n.id, n.label);
+  for (const n of inspect().nodes) {
+    const ns = n.namespace;
+    m.set(
+      n.id,
+      ns !== "default" && !n.label.startsWith(ns) ? `${ns}:${n.label}` : n.label,
+    );
+  }
   return m;
 }
 
