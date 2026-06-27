@@ -789,7 +789,13 @@ export function meter(
 // The runtime's built-in channels, exposed publicly as `events` (via loom/observe). The core
 // records to these inline at the hot-path sites; they stay no-ops until a meter attaches. Records
 // non-internal nodes only, so the idle baseline is zero.
-const readCh = createChannelNode("loom:read");
+// read carries detail (which cell, when) so a "samples" meter can stream reads (the Events tab);
+// a "count" meter (the read rate) ignores the ring. Reads are the highest-frequency event, so the
+// per-read recording is paid only while metered (inspector open) and stays zero-alloc.
+const readCh = createChannelNode("loom:read", {
+  capacity: 1024,
+  fields: ["id", "t"],
+});
 // write carries detail so a "samples" meter can stream individual mutations (id + prev→next + a
 // wall-clock timestamp), e.g. the inspector's Events tab; a "count" meter (the rates) ignores the
 // ring and allocates nothing.
@@ -1210,7 +1216,12 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   const sub = activeSub;
   if (sub !== undefined) {
     link(this, sub, cycle);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) readCh.seq++;
+    if (readCh.meters !== 0 && this.meta?.internal !== true) {
+      const meta = this.meta;
+      if (meta !== undefined)
+        recordChannel(readCh, meta.id, Date.now(), undefined, undefined);
+      else readCh.seq++;
+    }
   }
   return this.currentValue;
 }
@@ -1228,7 +1239,12 @@ function sourceOper<T>(this: SourceNode<T>): T {
     const first = this.subs === undefined;
     link(this, sub, cycle);
     if (first && !this.active) connectSource(this);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) readCh.seq++;
+    if (readCh.meters !== 0 && this.meta?.internal !== true) {
+      const meta = this.meta;
+      if (meta !== undefined)
+        recordChannel(readCh, meta.id, Date.now(), undefined, undefined);
+      else readCh.seq++;
+    }
   }
   return this.currentValue;
 }
@@ -1273,7 +1289,12 @@ function computedOper<T>(this: ComputedNode<T>): T {
   const sub = activeSub;
   if (sub !== undefined) {
     link(this, sub, cycle);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) readCh.seq++;
+    if (readCh.meters !== 0 && this.meta?.internal !== true) {
+      const meta = this.meta;
+      if (meta !== undefined)
+        recordChannel(readCh, meta.id, Date.now(), undefined, undefined);
+      else readCh.seq++;
+    }
   }
   return this.value as T;
 }

@@ -559,6 +559,17 @@
   .li-ev-filter:focus {
     border-color: var(--li-accent);
   }
+  .li-ev-mode {
+    flex: 0 0 auto;
+    font: inherit;
+    color: var(--li-fg);
+    background: var(--li-fill);
+    border: 1px solid var(--li-border);
+    border-radius: 5px;
+    height: 22px;
+    padding: 0 4px;
+    cursor: pointer;
+  }
   .li-ev-scroll {
     flex: 1 1 auto;
     min-height: 0;
@@ -623,6 +634,23 @@
   }
   .li-ev-arrow {
     color: var(--li-muted);
+  }
+  .li-ev-kind {
+    flex: 0 0 auto;
+    width: 15px;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 14px;
+    border-radius: 3px;
+  }
+  .li-ev-kind-write {
+    color: var(--li-key);
+    background: var(--li-accent-soft);
+  }
+  .li-ev-kind-read {
+    color: var(--li-muted);
+    background: var(--li-hover);
   }
   .li-events.li-ev-paused .li-ev {
     opacity: 0.5;
