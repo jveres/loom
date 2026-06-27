@@ -43,42 +43,42 @@ interface Card {
 }
 
 const titles = [
-  "Introducing Claude Fable and Mythos",
-  "OpenAI makes GPT Instant the default",
-  "Inference runtimes move closer to apps",
-  "Durable agents and the runtime problem",
-  "The rise of the agent runtime",
-  "How small models win local loops",
-  "A frontier without an ecosystem is brittle",
-  "Sparse attention at long context",
-  "Evaluations become product infrastructure",
-  "Tracing agent action boundaries",
-  "Runtime caches become the new index",
-  "Typed tools reshape product surfaces",
+  "Introducing the new project board",
+  "Edge regions roll out worldwide",
+  "Background jobs move closer to apps",
+  "Durable workflows and the retry problem",
+  "The rise of local-first sync",
+  "How small teams win on latency",
+  "A platform without an ecosystem is brittle",
+  "Streaming updates at scale",
+  "Observability becomes product infrastructure",
+  "Tracing request boundaries",
+  "Caches become the new index",
+  "Typed APIs reshape product surfaces",
 ] as const;
 
 const sections = [
   "Announcements",
-  "Models",
+  "Releases",
   "Infrastructure",
-  "Agents",
+  "Workflows",
   "Industry",
-  "Machine learning",
+  "Engineering",
   "Strategy",
   "Research",
   "Tooling",
-  "Safety",
+  "Reliability",
 ] as const;
 
 const sources = [
-  "Anthropic",
+  "Lena Park",
   "Ivan Mehta",
   "Jordan Novet",
   "James Arthur",
   "John De Goes",
   "Oxkato",
-  "S. Nadella",
-  "DeepSeek",
+  "Sam Boyd",
+  "Omar Reyes",
   "Mira Chen",
   "Iris Sloan",
 ] as const;
@@ -88,7 +88,7 @@ const settings = fields(
     running: false,
     viewers: 250,
     eventRate: 6,
-    aiEdits: 3,
+    edits: 3,
     transform: true,
     theme: "auto" as ThemeMode,
   },
@@ -136,7 +136,7 @@ app.replaceChildren(
       </button>
       {rangeControl("viewers", settings.viewers, 0, 5_000, 50)}
       {rangeControl("events / viewer s", settings.eventRate, 0, 12, 1)}
-      {rangeControl("AI edits / s", settings.aiEdits, 0, 180, 3)}
+      {rangeControl("edits / s", settings.edits, 0, 180, 3)}
       <span class="break" />
       {command("Edit", () => editRandom())}
       {command("Insert", () => insertCard())}
@@ -215,7 +215,7 @@ effect(() => {
 });
 
 let lastFrame = performance.now();
-let aiBudget = 0;
+let editBudget = 0;
 let rng = 0x1eed;
 
 requestAnimationFrame(frame);
@@ -242,12 +242,12 @@ function tick(dt: number): void {
     2_000,
     Math.floor(settings.viewers() * settings.eventRate() * dt),
   );
-  aiBudget += settings.aiEdits() * dt;
+  editBudget += settings.edits() * dt;
   batch(() => {
     for (let index = 0; index < trafficOps; index++) applyTraffic(randomCard());
-    while (aiBudget >= 1) {
-      aiBudget--;
-      applyAiEdit();
+    while (editBudget >= 1) {
+      editBudget--;
+      applyEdit();
     }
   });
 }
@@ -493,7 +493,7 @@ function applyTraffic(card: Card): void {
   else if (model.hot()) update(model.trend, (value) => value + amount);
 }
 
-function applyAiEdit(): void {
+function applyEdit(): void {
   const roll = random();
   if (roll < 0.48) editRandom();
   else if (roll < 0.66) insertCard();
