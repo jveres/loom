@@ -32,7 +32,7 @@ type EventRow = {
 let eventsVList: VirtualList<EventRow> | null = null;
 let writeMeter: Meter | null = null;
 let readMeter: Meter | null = null;
-let eventMode: EventMode = "writes";
+let eventMode: EventMode = "all";
 let eventsRoot: HTMLElement | null = null;
 let eventsScroll: HTMLElement | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
@@ -65,6 +65,7 @@ export function buildEventsPane(): HTMLElement {
       <option value="all">all</option>
     </select>
   ) as HTMLSelectElement;
+  modeSel.value = eventMode; // reflect the default ("all")
   modeSel.addEventListener("change", () => {
     eventMode = modeSel.value as EventMode;
     applyMode();
@@ -165,7 +166,7 @@ export function teardownEvents(): void {
   eventLog = [];
   eventsPaused = false;
   eventsFilter = "";
-  eventMode = "writes";
+  eventMode = "all";
   lastHoverId = -1;
 }
 

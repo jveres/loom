@@ -645,11 +645,11 @@
     border-radius: 3px;
   }
   .li-ev-kind-write {
-    color: var(--li-key);
-    background: var(--li-accent-soft);
+    color: var(--li-bool);
+    background: var(--li-hover);
   }
   .li-ev-kind-read {
-    color: var(--li-muted);
+    color: var(--li-num);
     background: var(--li-hover);
   }
   .li-events.li-ev-paused .li-ev {
