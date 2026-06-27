@@ -139,9 +139,9 @@ export function buildTracePane(): HTMLElement {
     <div class="li-pane li-trace">
       <div class="li-tr-bar">
         {pauseBtn}
-        {clearBtn}
         {modeSel}
         {filter}
+        {clearBtn}
       </div>
       {traceScroll}
     </div>
