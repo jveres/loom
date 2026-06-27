@@ -790,11 +790,12 @@ export function meter(
 // records to these inline at the hot-path sites; they stay no-ops until a meter attaches. Records
 // non-internal nodes only, so the idle baseline is zero.
 const readCh = createChannelNode("loom:read");
-// write carries detail so a "samples" meter can stream individual mutations (id + prev→next), e.g.
-// the inspector's Events tab; a "count" meter (the rates) ignores the ring and allocates nothing.
+// write carries detail so a "samples" meter can stream individual mutations (id + prev→next + a
+// wall-clock timestamp), e.g. the inspector's Events tab; a "count" meter (the rates) ignores the
+// ring and allocates nothing.
 const writeCh = createChannelNode("loom:write", {
   capacity: 1024,
-  fields: ["id", "prev", "next"],
+  fields: ["id", "prev", "next", "t"],
 });
 const computeCh = createChannelNode("loom:compute");
 const effectCh = createChannelNode("loom:effect");
@@ -1187,7 +1188,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
       if (writeCh.meters !== 0 && this.meta?.internal !== true) {
         const meta = this.meta;
         if (meta !== undefined)
-          recordChannel(writeCh, meta.id, previous, next, undefined);
+          recordChannel(writeCh, meta.id, previous, next, Date.now());
         else writeCh.seq++;
       }
       const subs = this.subs;

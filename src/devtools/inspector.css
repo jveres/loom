@@ -531,26 +531,35 @@
   .li-ev:hover {
     background: var(--li-hover);
   }
+  .li-ev-time {
+    flex: 0 0 auto;
+    color: var(--li-muted);
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+    opacity: 0.7;
+  }
   .li-ev-name {
+    flex: 0 0 auto;
+    max-width: 45%;
     color: var(--li-fg);
     white-space: nowrap;
-    flex: 0 0 auto;
-    max-width: 55%;
     overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .li-ev-change {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
   }
   .li-ev-val {
     font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .li-ev-arrow {
     color: var(--li-muted);
-    flex: 0 0 auto;
   }
   .li-events.li-ev-paused .li-ev {
     opacity: 0.5;
