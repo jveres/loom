@@ -14,8 +14,6 @@
   --li-accent-soft: rgba(139, 124, 255, 0.3);
   --li-bar-bg: rgba(139, 124, 255, 0.12);
   --li-key: #8b7cff;
-  --li-node: #b6b6c0;
-  --li-vkind: #5b9dff;
   --li-num: #57c97e;
   --li-str: #f0b65a;
   --li-bool: #ff7a9c;
@@ -134,7 +132,7 @@
     scrollbar-color: var(--li-scroll) transparent;
   }
   /* Reusable vertical scroll-edge fade (driven by wireScrollFade): used by the panel body and the
-     Events list. The --li-fade-a/b lengths are set per-scroller in JS. */
+     Trace list. The --li-fade-a/b lengths are set per-scroller in JS. */
   .li-fade-y {
     --li-fade-a: 0px;
     --li-fade-b: 0px;
@@ -169,12 +167,6 @@
     border-radius: 4px;
     border: 2px solid transparent;
     background-clip: padding-box;
-  }
-  .li-empty {
-    color: var(--li-muted);
-    padding: 16px 10px;
-    font-size: 12px;
-    line-height: 1.5;
   }
   &.li-min .li-body,
   &.li-min .li-tabs {
@@ -790,8 +782,6 @@
   --li-accent-soft: rgba(139, 124, 255, 0.3);
   --li-bar-bg: rgba(139, 124, 255, 0.12);
   --li-key: #8b7cff;
-  --li-node: #b6b6c0;
-  --li-vkind: #5b9dff;
   --li-num: #57c97e;
   --li-str: #f0b65a;
   --li-bool: #ff7a9c;
@@ -901,8 +891,6 @@
   --li-accent-soft: rgba(109, 92, 240, 0.16);
   --li-bar-bg: rgba(109, 92, 240, 0.1);
   --li-key: #6d5cf0;
-  --li-node: #51515b;
-  --li-vkind: #2f7ff0;
   --li-num: #2f9e5a;
   --li-str: #c0801f;
   --li-bool: #e5446b;
@@ -927,8 +915,6 @@
     --li-accent-soft: rgba(109, 92, 240, 0.16);
     --li-bar-bg: rgba(109, 92, 240, 0.1);
     --li-key: #6d5cf0;
-    --li-node: #51515b;
-    --li-vkind: #2f7ff0;
     --li-num: #2f9e5a;
     --li-str: #c0801f;
     --li-bool: #e5446b;

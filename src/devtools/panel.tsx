@@ -322,7 +322,7 @@ export function mountInspector(target: Element = document.body): void {
   menu.append(themeItem);
   menuEl = menu;
 
-  // Events-log window size — cycle 1k / 5k / 25k (how many events the Events tab keeps).
+  // Trace-log window size — cycle 1k / 5k / 25k (how many events the Trace tab keeps).
   let logSize = loadLogSize();
   const sizeVal = (<span class="li-menu-val" />) as HTMLElement;
   const applyLogSize = (): void => {
@@ -333,7 +333,7 @@ export function mountInspector(target: Element = document.body): void {
     <button
       type="button"
       class="li-menu-item"
-      title="Events log size (click to cycle)"
+      title="Trace log size (click to cycle)"
     >
       <span>Log size</span>
       {sizeVal}
@@ -438,7 +438,7 @@ export function mountInspector(target: Element = document.body): void {
   }, PANEL_OPTS);
   if (startMin) inspectorScope.pause();
 
-  // Panes: Info (stats), Graph, and Events are each their own module.
+  // Panes: Info (stats), Graph, and Trace are each their own module.
   const panes = new Map<TabId, HTMLElement>();
   const tabBtns = new Map<TabId, HTMLElement>();
   bodyEl = (<div class="li-body li-fade-y" />) as HTMLElement;

@@ -1,7 +1,7 @@
 // A soft edge fade for a scroll container, masking only as far as content is actually clipped (so a
 // fully-scrolled edge is sharp). Drives two CSS custom properties the `.li-fade-y` / `.li-fade-x`
 // mask reads; rAF-throttled, auto-refreshing on scroll and resize. Shared by the panel body and the
-// Events list. Returns refresh() (for content changes the ResizeObserver can't see) and dispose().
+// Trace list. Returns refresh() (for content changes the ResizeObserver can't see) and dispose().
 export function wireScrollFade(
   scroller: HTMLElement,
   axis: "x" | "y",

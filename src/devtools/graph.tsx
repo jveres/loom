@@ -48,7 +48,7 @@ let lastGraphRender = 0; // performance.now() of the last graph reconcile (see G
 let gSuppressFlash = false;
 let gGraphJustShown = false;
 const graphCollapsed = new Set<number>();
-let gRevealId = -1; // a cell to flash on its next render (set by revealCell, from the Events tab)
+let gRevealId = -1; // a cell to flash on its next render (set by revealCell, from the Trace tab)
 
 export function buildGraphPane(): HTMLElement {
   graphVList = virtualList<GraphItem>({
@@ -236,7 +236,7 @@ function gPaint(targets: Node[], on: boolean): void {
     gOverlays.push(o);
   }
 }
-// Outline the DOM node(s) a given cell drives — for callers outside the graph (the Events tab).
+// Outline the DOM node(s) a given cell drives — for callers outside the graph (the Trace tab).
 // Rebuilds the id→node map from a fresh snapshot since the graph itself may not have rendered;
 // clearGraphHighlight() removes it. A no-op highlight (no targets / unknown id) just clears.
 export function highlightCell(id: number): void {
@@ -283,7 +283,7 @@ function gRender(item: GraphItem, reuse: HTMLElement | null): HTMLElement {
     return reuse ? gUpdateHeader(reuse, item) : gCreateHeader(item);
   const row = reuse ? gUpdateCell(reuse, item) : gCreateCell(item);
   if (item.node.id === gRevealId) {
-    gFlash(row); // a jump from the Events tab — flash the revealed cell
+    gFlash(row); // a jump from the Trace tab — flash the revealed cell
     gRevealId = -1;
   }
   return row;
@@ -487,7 +487,7 @@ function gIndexOf(id: number): number {
   return si >= 0 ? i + si : -1;
 }
 
-// Jump the graph to a cell — used by the Events tab's clickable name. Rebuilds the tree so the cell
+// Jump the graph to a cell — used by the Trace tab's clickable name. Rebuilds the tree so the cell
 // is current, expands its group if needed, scrolls it to centre, and flashes it on render.
 export function revealCell(id: number): void {
   if (graphVList === null) return;

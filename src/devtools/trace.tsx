@@ -355,8 +355,10 @@ function trRender(item: TraceRow, reuse: HTMLElement | null): HTMLElement {
   const src = change.children[3] as HTMLElement;
   if (item.kind === "read") {
     prev.textContent = "";
+    prev.className = "li-tr-val"; // drop any value-type class left from a reused write row
     arrow.textContent = "";
     next.textContent = "";
+    next.className = "li-tr-val";
   } else {
     prev.textContent = item.prevText;
     prev.className = `li-tr-val ${item.prevCls}`;
