@@ -25,8 +25,12 @@ type EventRow = {
 
 let eventsVList: VirtualList<EventRow> | null = null;
 let eventsMeter: Meter | null = null;
+let eventsRoot: HTMLElement | null = null; // the flex-column pane (header + scroll list)
+let eventsScroll: HTMLElement | null = null; // the vlist's scroll container
+let pauseBtn: HTMLButtonElement | null = null;
 let eventLog: EventRow[] = []; // newest-first, capped at LOG_CAP
 let eventsPaused = false;
+let eventsFilter = ""; // lowercased name substring; "" = no filter
 let rowSeq = 0; // monotonic key source
 
 export function buildEventsPane(): HTMLElement {
@@ -36,14 +40,56 @@ export function buildEventsPane(): HTMLElement {
     key: (r) => r.seq,
     render: evRender,
   });
-  eventsVList.el.classList.add("li-pane", "li-events");
-  // Click anywhere toggles pause — the way to actually read a fast stream (freeze, then scroll).
-  eventsVList.el.addEventListener("click", () => {
-    eventsPaused = !eventsPaused;
-    eventsVList?.el.classList.toggle("li-ev-paused", eventsPaused);
-    if (!eventsPaused) renderEvents(); // resume: catch up immediately
+
+  pauseBtn = (
+    <button type="button" class="li-ev-btn" title="Pause / resume the stream">
+      ⏸
+    </button>
+  ) as HTMLButtonElement;
+  pauseBtn.addEventListener("click", () => setPaused(!eventsPaused));
+
+  const filter = (
+    <input
+      type="text"
+      class="li-ev-filter"
+      placeholder="filter by name…"
+      spellcheck={false}
+    />
+  ) as HTMLInputElement;
+  filter.addEventListener("input", () => {
+    eventsFilter = filter.value.trim().toLowerCase();
+    applyView();
   });
-  return eventsVList.el;
+
+  eventsScroll = (<div class="li-ev-scroll" />) as HTMLElement;
+  eventsScroll.append(eventsVList.el);
+  eventsRoot = (
+    <div class="li-pane li-events">
+      <div class="li-ev-bar">
+        {pauseBtn}
+        {filter}
+      </div>
+      {eventsScroll}
+    </div>
+  ) as HTMLElement;
+  return eventsRoot;
+}
+
+function setPaused(paused: boolean): void {
+  eventsPaused = paused;
+  if (pauseBtn) pauseBtn.textContent = paused ? "▶" : "⏸";
+  eventsRoot?.classList.toggle("li-ev-paused", paused);
+  if (!paused) renderEvents(); // resume: catch up immediately
+}
+
+// Re-window with the active filter applied (a name substring match).
+function applyView(): void {
+  if (eventsVList === null) return;
+  eventsVList.setItems(
+    eventsFilter
+      ? eventLog.filter((r) => r.name.toLowerCase().includes(eventsFilter))
+      : eventLog,
+  );
 }
 
 // Drain the write ring into the log (newest-first) and re-window. Called on the heartbeat while the
@@ -70,7 +116,7 @@ export function renderEvents(): void {
     });
   }
   if (eventLog.length > LOG_CAP) eventLog.length = LOG_CAP; // drop oldest past the window
-  eventsVList.setItems(eventLog);
+  applyView();
 }
 
 // Tab shown: re-window for the now-visible pane (the vlist no-ops reconciles while hidden), then once
@@ -78,7 +124,7 @@ export function renderEvents(): void {
 // otherwise leave the top rows blank until a scroll nudged it.
 export function showEvents(): void {
   renderEvents();
-  eventsVList?.setItems(eventLog);
+  applyView();
   requestAnimationFrame(() => eventsVList?.refresh());
 }
 
@@ -86,8 +132,12 @@ export function teardownEvents(): void {
   eventsMeter?.stop();
   eventsMeter = null;
   eventsVList = null;
+  eventsRoot = null;
+  eventsScroll = null;
+  pauseBtn = null;
   eventLog = [];
   eventsPaused = false;
+  eventsFilter = "";
 }
 
 // id → label for the current snapshot, so a write shows its cell name (disposed cells fall back to

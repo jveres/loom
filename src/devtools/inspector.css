@@ -514,6 +514,69 @@
   .li-flash {
     animation: li-insp-flash 0.6s ease-out;
   }
+  .li-events {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .li-ev-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--li-border-soft);
+  }
+  .li-ev-btn {
+    flex: 0 0 auto;
+    font: inherit;
+    color: var(--li-fg);
+    background: var(--li-fill);
+    border: 1px solid var(--li-border);
+    border-radius: 5px;
+    width: 24px;
+    height: 22px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .li-ev-btn:hover {
+    border-color: var(--li-accent);
+  }
+  .li-ev-filter {
+    flex: 1 1 auto;
+    min-width: 0;
+    font: inherit;
+    color: var(--li-fg);
+    background: var(--li-input-bg);
+    border: 1px solid var(--li-border);
+    border-radius: 5px;
+    padding: 2px 8px;
+    height: 22px;
+    outline: none;
+  }
+  .li-ev-filter:focus {
+    border-color: var(--li-accent);
+  }
+  .li-ev-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    position: relative;
+    padding: 6px 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--li-scroll) transparent;
+  }
+  .li-ev-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+  .li-ev-scroll::-webkit-scrollbar-thumb {
+    background: var(--li-scroll);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
   .li-ev {
     position: absolute;
     top: 0;
