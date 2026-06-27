@@ -14,7 +14,12 @@ import {
   showGraph,
   teardownGraph,
 } from "./graph.js";
-import { buildEventsPane, showEvents, teardownEvents } from "./events.js";
+import {
+  buildEventsPane,
+  setEventsWindow,
+  showEvents,
+  teardownEvents,
+} from "./events.js";
 import {
   ICON_MAXIMIZE,
   ICON_MINIMIZE,
@@ -82,10 +87,16 @@ const THEME_KEY = `${PANEL_ID}-theme`;
 const MIN_KEY = `${PANEL_ID}-min`;
 const POS_KEY = `${PANEL_ID}-pos`;
 const SIZE_KEY = `${PANEL_ID}-size`;
+const LOGSIZE_KEY = `${PANEL_ID}-logsize`;
+const LOG_SIZES = [1000, 5000, 25000];
 
 function loadTheme(): Theme {
   const t = lsGet(THEME_KEY);
   return t === "light" || t === "dark" || t === "system" ? t : "system";
+}
+function loadLogSize(): number {
+  const n = Number(lsGet(LOGSIZE_KEY));
+  return LOG_SIZES.includes(n) ? n : 1000;
 }
 function loadPos(): { left: number; top: number } | null {
   const raw = lsGet(POS_KEY);
@@ -347,6 +358,31 @@ export function mountInspector(target: Element = document.body): void {
   menu.id = `${PANEL_ID}-menu`;
   menu.append(themeItem);
   menuEl = menu;
+
+  // Events-log window size — cycle 1k / 5k / 25k (how many events the Events tab keeps).
+  let logSize = loadLogSize();
+  const sizeVal = (<span class="li-menu-val" />) as HTMLElement;
+  const applyLogSize = (): void => {
+    sizeVal.textContent = `${logSize / 1000}k`;
+    setEventsWindow(logSize);
+  };
+  const sizeItem = (
+    <button
+      type="button"
+      class="li-menu-item"
+      title="Events log size (click to cycle)"
+    >
+      <span>Log size</span>
+      {sizeVal}
+    </button>
+  ) as HTMLButtonElement;
+  tap(sizeItem, (): void => {
+    logSize = LOG_SIZES[(LOG_SIZES.indexOf(logSize) + 1) % LOG_SIZES.length] ?? 1000;
+    lsSet(LOGSIZE_KEY, String(logSize));
+    applyLogSize();
+  });
+  menu.append(sizeItem);
+  applyLogSize();
   const closeMenu = (): void => {
     menu.hidden = true;
   };

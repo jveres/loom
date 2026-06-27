@@ -11,8 +11,8 @@ import { type VirtualList, virtualList } from "../dom/vlist.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
 
 const EVENT_ROW_H = 22; // uniform row height (must match the .li-ev CSS)
-const LOG_CAP = 1024; // the visible log depth — matches each channel ring
 const VALUE_MAX = 200; // cap a recorded value's text so a giant string can't bloat the DOM/tooltip
+let windowSize = 1000; // how many events the log keeps; set from the inspector menu
 
 type EventMode = "writes" | "reads" | "all";
 
@@ -36,7 +36,8 @@ let eventMode: EventMode = "all";
 let eventsRoot: HTMLElement | null = null;
 let eventsScroll: HTMLElement | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
-let eventLog: EventRow[] = []; // newest-first, capped at LOG_CAP
+let eventLog: EventRow[] = []; // newest-first, capped at windowSize
+let filterLog: EventRow[] = []; // when a filter is active, its own newest-first window of matches
 let eventsPaused = false;
 let eventsFilter = ""; // lowercased name substring; "" = no filter
 let rowSeq = 0; // monotonic key source
@@ -81,6 +82,12 @@ export function buildEventsPane(): HTMLElement {
   ) as HTMLInputElement;
   filter.addEventListener("input", () => {
     eventsFilter = filter.value.trim().toLowerCase();
+    // Seed the filtered window from the recent raw log, then keep accumulating matches into it (see
+    // renderEvents) so a narrow filter retains its own last-`windowSize` events rather than being
+    // purged as the raw window slides past them.
+    filterLog = eventsFilter
+      ? eventLog.filter((r) => r.name.toLowerCase().includes(eventsFilter))
+      : [];
     applyView();
   });
 
@@ -123,8 +130,20 @@ function applyMode(): void {
   if (eventMode !== "reads") writeMeter = meter([events.write], "samples");
   if (eventMode !== "writes") readMeter = meter([events.read], "samples");
   eventLog = [];
+  filterLog = [];
   applyView();
   renderEvents();
+}
+
+// Set how many events the log keeps (the window). Exposed for the inspector menu.
+export function setEventsWindow(n: number): void {
+  windowSize = n;
+  if (eventLog.length > n) eventLog.length = n;
+  if (filterLog.length > n) filterLog.length = n;
+  applyView();
+}
+export function getEventsWindow(): number {
+  return windowSize;
 }
 
 // Drain the selected ring(s) into the log (newest-first) and re-window. A no-op while paused.
@@ -140,8 +159,15 @@ export function renderEvents(): void {
   if (eventMode === "all")
     fresh.sort((a, b) => (a.s["t"] as number) - (b.s["t"] as number));
   const labels = labelMap();
-  for (const { s, kind } of fresh) eventLog.unshift(makeRow(s, kind, labels));
-  if (eventLog.length > LOG_CAP) eventLog.length = LOG_CAP; // drop oldest past the window
+  for (const { s, kind } of fresh) {
+    const row = makeRow(s, kind, labels);
+    eventLog.unshift(row);
+    // Accumulate matches into the filtered window too, so filtering keeps its own last-`windowSize`.
+    if (eventsFilter && row.name.toLowerCase().includes(eventsFilter))
+      filterLog.unshift(row);
+  }
+  if (eventLog.length > windowSize) eventLog.length = windowSize; // drop oldest past the window
+  if (filterLog.length > windowSize) filterLog.length = windowSize;
   applyView();
 }
 
@@ -164,6 +190,7 @@ export function teardownEvents(): void {
   eventsScroll = null;
   pauseBtn = null;
   eventLog = [];
+  filterLog = [];
   eventsPaused = false;
   eventsFilter = "";
   eventMode = "all";
@@ -179,12 +206,7 @@ function setPaused(paused: boolean): void {
 
 // Re-window with the active filter applied (a name substring match).
 function applyView(): void {
-  if (eventsVList === null) return;
-  eventsVList.setItems(
-    eventsFilter
-      ? eventLog.filter((r) => r.name.toLowerCase().includes(eventsFilter))
-      : eventLog,
-  );
+  eventsVList?.setItems(eventsFilter ? filterLog : eventLog);
 }
 
 function makeRow(
