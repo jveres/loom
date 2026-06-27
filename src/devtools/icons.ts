@@ -33,6 +33,11 @@ export const ICON_LOCATE =
 export const ICON_CLEAR =
   '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>';
 
+// Lucide `pause` / `play` — the Trace tab's pause/resume toggle.
+export const ICON_PAUSE =
+  '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>';
+export const ICON_PLAY = '<polygon points="6 3 20 12 6 21 6 3"/>';
+
 // Parse an SVG markup string into its <svg> element. Shared by icon() here and barIcon() in the
 // panel chrome (which builds a different viewBox).
 export function elementFromMarkup(markup: string): Element {

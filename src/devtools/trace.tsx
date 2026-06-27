@@ -10,7 +10,7 @@ import { type Meter, meter } from "loom";
 import { events, inspect } from "loom/observe";
 import { type VirtualList, virtualList } from "../dom/vlist.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
-import { ICON_CLEAR, icon } from "./icons.js";
+import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
 import { wireScrollFade } from "./scroll-fade.js";
 
 const TRACE_ROW_H = 22; // uniform row height (must match the .li-tr CSS)
@@ -64,10 +64,9 @@ export function buildTracePane(): HTMLElement {
   });
 
   pauseBtn = (
-    <button type="button" class="li-tr-btn" title="Pause / resume the trace">
-      ⏸
-    </button>
+    <button type="button" class="li-tr-btn" title="Pause / resume the trace" />
   ) as HTMLButtonElement;
+  pauseBtn.append(icon(ICON_PAUSE, 13));
   pauseBtn.addEventListener("click", () => setPaused(!tracePaused));
 
   const clearBtn = (
@@ -238,7 +237,7 @@ export function teardownTrace(): void {
 
 function setPaused(paused: boolean): void {
   tracePaused = paused;
-  if (pauseBtn) pauseBtn.textContent = paused ? "▶" : "⏸";
+  pauseBtn?.replaceChildren(icon(paused ? ICON_PLAY : ICON_PAUSE, 13));
   traceRoot?.classList.toggle("li-tr-paused", paused);
   if (!paused) renderTrace(); // resume: catch up immediately
 }
