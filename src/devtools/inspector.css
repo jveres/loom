@@ -536,8 +536,7 @@
   }
   .li-tr-live.off {
     animation: none;
-    background: transparent;
-    border: 1.5px solid var(--li-muted);
+    background: var(--li-muted); /* solid gray = paused */
   }
   .li-tr-live.inactive {
     display: none; /* the Trace tab isn't shown — no live capture, so no dot */
