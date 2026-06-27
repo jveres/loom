@@ -531,7 +531,7 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--li-accent);
+    background: var(--li-num); /* green = live/capturing */
     animation: li-tr-pulse 1.6s ease-in-out infinite;
   }
   .li-tr-live.off {
