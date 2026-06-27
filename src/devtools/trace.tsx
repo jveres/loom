@@ -45,14 +45,41 @@ let liveDot: HTMLElement | null = null;
 let traceLog: TraceRow[] = []; // newest-first, capped at windowSize
 let filterLog: TraceRow[] = []; // when a filter is active, its own newest-first window of matches
 let tracePaused = false;
+let traceActive = false; // is the Trace tab the visible one? (the live view only updates then)
 let traceFilter = ""; // lowercased name substring; "" = no filter
 let rowSeq = 0; // monotonic key source
+let lastTopSeq = -1; // seq of the row that was the top before the last update (new-arrivals boundary)
 let lastHoverId = -1; // cell id currently hover-highlighted (avoids re-snapshotting within a row)
 let onLocate: ((id: number) => void) | null = null; // jump-to-graph, wired by the panel
 
 // Wire the "click a name to jump to it in the Graph" action (set by the panel, which owns tab state).
 export function setTraceLocate(fn: (id: number) => void): void {
   onLocate = fn;
+}
+
+// The panel owns the live dot (it lives in the Trace tab); reflect the current state on it.
+export function setTraceLiveDot(el: HTMLElement | null): void {
+  liveDot = el;
+  updateLiveDot();
+}
+
+// The Trace tab became (in)active. The live view only streams while it's shown, so the dot — and the
+// "capturing" it signals — is hidden on the other tabs.
+export function setTraceActive(active: boolean): void {
+  traceActive = active;
+  updateLiveDot();
+}
+
+// Hidden when the tab isn't shown; a hollow ring when paused; a pulsing dot when live.
+function updateLiveDot(): void {
+  if (!liveDot) return;
+  liveDot.classList.toggle("inactive", !traceActive);
+  liveDot.classList.toggle("off", tracePaused);
+  liveDot.title = !traceActive
+    ? "Trace"
+    : tracePaused
+      ? "Paused"
+      : "Live — capturing";
 }
 
 export function buildTracePane(): HTMLElement {
@@ -63,10 +90,6 @@ export function buildTracePane(): HTMLElement {
     key: (r) => r.seq,
     render: trRender,
   });
-
-  liveDot = (
-    <span class="li-tr-live" title="Live — capturing" />
-  ) as HTMLElement;
 
   pauseBtn = (
     <button type="button" class="li-tr-btn" title="Pause / resume the trace" />
@@ -142,7 +165,6 @@ export function buildTracePane(): HTMLElement {
   traceRoot = (
     <div class="li-pane li-trace">
       <div class="li-tr-bar">
-        {liveDot}
         {pauseBtn}
         {modeSel}
         {filter}
@@ -165,6 +187,7 @@ function applyMode(): void {
   if (traceMode !== "writes") readMeter = meter([events.read], "samples");
   traceLog = [];
   filterLog = [];
+  lastTopSeq = -1;
   applyView();
   renderTrace();
 }
@@ -173,6 +196,7 @@ function applyMode(): void {
 function clearLog(): void {
   traceLog = [];
   filterLog = [];
+  lastTopSeq = -1;
   applyView();
 }
 
@@ -200,6 +224,7 @@ export function renderTrace(): void {
   if (traceMode === "all")
     fresh.sort((a, b) => (a.s["t"] as number) - (b.s["t"] as number));
   const labels = labelMap();
+  const prevTop = (traceFilter ? filterLog : traceLog)[0]?.seq ?? -1;
   for (const { s, kind } of fresh) {
     const row = makeRow(s, kind, labels);
     traceLog.unshift(row);
@@ -209,6 +234,10 @@ export function renderTrace(): void {
   }
   if (traceLog.length > windowSize) traceLog.length = windowSize; // drop oldest past the window
   if (filterLog.length > windowSize) filterLog.length = windowSize;
+  // Mark where the top was, so this update's new rows are demarcated — only if the displayed list
+  // actually gained rows (a filtered view may not have) and the boundary is still within it.
+  const newTop = (traceFilter ? filterLog : traceLog)[0]?.seq ?? -1;
+  lastTopSeq = newTop !== prevTop ? prevTop : -1;
   applyView();
 }
 
@@ -235,7 +264,9 @@ export function teardownTrace(): void {
   liveDot = null;
   traceLog = [];
   filterLog = [];
+  lastTopSeq = -1;
   tracePaused = false;
+  traceActive = false;
   traceFilter = "";
   traceMode = "all";
   lastHoverId = -1;
@@ -245,7 +276,7 @@ export function teardownTrace(): void {
 function setPaused(paused: boolean): void {
   tracePaused = paused;
   pauseBtn?.replaceChildren(icon(paused ? ICON_PLAY : ICON_PAUSE, 13));
-  if (liveDot) liveDot.title = paused ? "Paused" : "Live — capturing";
+  updateLiveDot();
   traceRoot?.classList.toggle("li-tr-paused", paused);
   if (!paused) renderTrace(); // resume: catch up immediately
 }
@@ -336,6 +367,7 @@ function trRender(item: TraceRow, reuse: HTMLElement | null): HTMLElement {
   src.textContent = item.srcText; // "by <source>" — the effect/computed that read/wrote it
   row.title = item.full; // hover shows the untruncated line
   row.dataset["id"] = String(item.id); // for hover-highlight (delegated on the scroll container)
+  row.classList.toggle("li-tr-mark", item.seq === lastTopSeq); // new-arrivals boundary
   return row;
 }
 

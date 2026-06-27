@@ -524,18 +524,23 @@
   /* Live indicator: a pulsing accent dot while the trace is capturing; a static hollow ring when
      paused (the standard "live/recording" status signal — the control itself doesn't animate). */
   .li-tr-live {
-    flex: 0 0 auto;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 6px;
     box-sizing: border-box;
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: var(--li-accent);
     animation: li-tr-pulse 1.6s ease-in-out infinite;
   }
-  .li-trace.li-tr-paused .li-tr-live {
+  .li-tr-live.off {
     animation: none;
     background: transparent;
     border: 1.5px solid var(--li-muted);
+  }
+  .li-tr-live.inactive {
+    display: none; /* the Trace tab isn't shown — no live capture, so no dot */
   }
   .li-tr-btn {
     flex: 0 0 auto;
@@ -565,7 +570,7 @@
     flex: 1 1 auto;
     min-width: 0;
     font: inherit;
-    color: var(--li-fg);
+    color: var(--li-input-fg);
     background: var(--li-input-bg);
     border: 1px solid var(--li-border);
     border-radius: 5px;
@@ -618,6 +623,17 @@
     font-size: 11.5px;
     cursor: default;
     will-change: transform;
+  }
+  /* New-arrivals boundary: a line at the top of the row that was the top before the last update. */
+  .li-tr-mark::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--li-accent);
+    opacity: 0.6;
   }
   .li-tr:hover {
     background: var(--li-hover);

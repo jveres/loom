@@ -17,6 +17,8 @@ import {
 } from "./graph.js";
 import {
   buildTracePane,
+  setTraceActive,
+  setTraceLiveDot,
   setTraceLocate,
   setTraceWindow,
   showTrace,
@@ -465,6 +467,14 @@ export function mountInspector(target: Element = document.body): void {
         {t.label}
       </button>
     ) as HTMLButtonElement;
+    if (t.id === "trace") {
+      // Live indicator lives on the Trace tab, so it's visible from any tab.
+      const dot = (
+        <span class="li-tr-live" title="Live — capturing" />
+      ) as HTMLElement;
+      btn.append(dot);
+      setTraceLiveDot(dot);
+    }
     tap(btn, (): void => ui?.(t.id));
     tabBtns.set(t.id, btn);
     tabscroll.append(btn);
@@ -554,6 +564,7 @@ export function mountInspector(target: Element = document.body): void {
       if (tab === "graph") showGraph();
       else if (tab === "trace") showTrace();
     }
+    setTraceActive(tab === "trace"); // the live dot only shows while the Trace tab is visible
     prevTab = tab ?? null;
     for (const f of scrollFades) f.refresh();
   });
