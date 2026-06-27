@@ -275,6 +275,30 @@ describe("loom core", () => {
     m.stop();
   });
 
+  it("records the source — the effect that read or wrote a cell", () => {
+    const rm = meter([events.read], "samples");
+    const wm = meter([events.write], "samples");
+    const a = state(0);
+    const b = state(0);
+    const stop = effect(() => {
+      b(a() + 1);
+    });
+    rm.read(); // drain the effect's initial run
+    wm.read();
+    a(5); // top-level write → re-runs the effect (it reads a, writes b)
+    const reads = rm.read()["loom:read"]?.samples ?? [];
+    const writes = wm.read()["loom:write"]?.samples ?? [];
+    const aRead = reads.find((r) => r["id"] !== undefined);
+    const bWrite = writes.find((w) => w["next"] === 6);
+    const aWrite = writes.find((w) => w["next"] === 5);
+    expect(typeof aRead?.["source"]).toBe("number"); // a was read by the effect
+    expect(bWrite?.["source"]).toBe(aRead?.["source"]); // the same effect then wrote b
+    expect(aWrite?.["source"]).toBeUndefined(); // a's own top-level write has no reactive source
+    stop();
+    rm.stop();
+    wm.stop();
+  });
+
   it("records flush batch size + duration, for app work only", () => {
     const m = meter([events.flush], "samples");
     const app = state(0);
@@ -551,13 +575,32 @@ describe("loom channels", () => {
     expect(channel("test:okcap", { capacity: 100 }).name).toBe("test:okcap");
   });
 
-  it("rejects more than four fields", () => {
+  it("rejects more than five fields", () => {
     expect(() =>
-      channel("test:5fields", { capacity: 4, fields: ["a", "b", "c", "d", "e"] }),
-    ).toThrow(/up to 4 fields/);
+      channel("test:6fields", {
+        capacity: 4,
+        fields: ["a", "b", "c", "d", "e", "f"],
+      }),
+    ).toThrow(/up to 5 fields/);
     expect(() =>
-      channel("test:4fields", { capacity: 4, fields: ["a", "b", "c", "d"] }),
+      channel("test:5fields", {
+        capacity: 4,
+        fields: ["a", "b", "c", "d", "e"],
+      }),
     ).not.toThrow();
+  });
+
+  it("records a fifth field (emit's 5th value)", () => {
+    const ch = channel("test:5cols", {
+      capacity: 4,
+      fields: ["a", "b", "c", "d", "e"],
+    });
+    const m = meter([ch], "samples");
+    ch.emit(1, 2, 3, 4, 5);
+    expect(m.read()["test:5cols"]?.samples).toEqual([
+      { a: 1, b: 2, c: 3, d: 4, e: 5 },
+    ]);
+    m.stop();
   });
 });
 

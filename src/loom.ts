@@ -564,7 +564,7 @@ export function fields<T extends object>(
 export interface ChannelOptions {
   /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */
   readonly capacity?: number;
-  /** Field names recorded per event on a detail channel (up to 4); emit() takes one value each. */
+  /** Field names recorded per event on a detail channel (up to 5); emit() takes one value each. */
   readonly fields?: readonly string[];
 }
 
@@ -573,7 +573,7 @@ export interface Channel {
   /** True while ≥1 meter is attached — gate expensive argument prep behind it. */
   readonly active: boolean;
   /** Record one event. No-op and zero-allocation when inactive. One value per declared field. */
-  emit(a?: unknown, b?: unknown, c?: unknown, d?: unknown): void;
+  emit(a?: unknown, b?: unknown, c?: unknown, d?: unknown, e?: unknown): void;
 }
 
 export interface Frame {
@@ -622,7 +622,7 @@ const EMPTY_SAMPLES: ReadonlyArray<Readonly<Record<string, unknown>>> = [];
 // A detail ring is small (a recent-samples buffer); bound capacity well under 2^31 so the pow2 loop
 // can't overflow into an infinite loop, and reject clearly-invalid input on this public path.
 const MAX_CHANNEL_CAPACITY = 1 << 20; // 1,048,576
-const MAX_CHANNEL_FIELDS = 4; // emit()/recordChannel record up to 4 positional values
+const MAX_CHANNEL_FIELDS = 5; // emit()/recordChannel record up to 5 positional values
 
 function toPow2(capacity: number): number {
   if (capacity === 0) return 0;
@@ -667,13 +667,14 @@ function createChannelNode(
 }
 
 // Record one event (caller has checked node.meters !== 0). Zero-allocation: columnar ring write,
-// one fixed positional value per field (up to 4) so nothing is allocated on the producer path.
+// one fixed positional value per field (up to 5) so nothing is allocated on the producer path.
 function recordChannel(
   node: ChannelNode,
   a: unknown,
   b: unknown,
   c: unknown,
   d: unknown,
+  e: unknown,
 ): void {
   if (node.cap !== 0) {
     const h = node.head;
@@ -686,6 +687,8 @@ function recordChannel(
     if (c2 !== undefined) c2[h] = c;
     const c3 = cols[3];
     if (c3 !== undefined) c3[h] = d;
+    const c4 = cols[4];
+    if (c4 !== undefined) c4[h] = e;
     node.head = (h + 1) & node.mask;
   }
   node.seq++;
@@ -697,8 +700,8 @@ function channelOf(node: ChannelNode): Channel {
     get active() {
       return node.meters !== 0;
     },
-    emit(a, b, c, d) {
-      if (node.meters !== 0) recordChannel(node, a, b, c, d);
+    emit(a, b, c, d, e) {
+      if (node.meters !== 0) recordChannel(node, a, b, c, d, e);
     },
   };
 }
@@ -789,19 +792,21 @@ export function meter(
 // The runtime's built-in channels, exposed publicly as `events` (via loom/observe). The core
 // records to these inline at the hot-path sites; they stay no-ops until a meter attaches. Records
 // non-internal nodes only, so the idle baseline is zero.
-// read carries detail (which cell, when) so a "samples" meter can stream reads (the Events tab);
-// a "count" meter (the read rate) ignores the ring. Reads are the highest-frequency event, so the
-// per-read recording is paid only while metered (inspector open) and stays zero-alloc.
+// read carries detail (which cell, the reader that read it, when) so a "samples" meter can stream
+// reads (the Trace tab); a "count" meter (the read rate) ignores the ring. Reads are the
+// highest-frequency event, so the per-read recording is paid only while metered and stays zero-alloc.
+// `source` is the running effect/computed that performed the read — i.e. who consumed the cell.
 const readCh = createChannelNode("loom:read", {
   capacity: 1024,
-  fields: ["id", "t"],
+  fields: ["id", "source", "t"],
 });
-// write carries detail so a "samples" meter can stream individual mutations (id + prev→next + a
-// wall-clock timestamp), e.g. the inspector's Events tab; a "count" meter (the rates) ignores the
-// ring and allocates nothing.
+// write carries detail so a "samples" meter can stream individual mutations (id + prev→next + the
+// source that wrote it + a wall-clock timestamp), e.g. the inspector's Trace tab; a "count" meter
+// (the rates) ignores the ring and allocates nothing. `source` is the effect/computed that wrote
+// during a reactive cascade, or undefined for a top-level (event-handler) write.
 const writeCh = createChannelNode("loom:write", {
   capacity: 1024,
-  fields: ["id", "prev", "next", "t"],
+  fields: ["id", "prev", "next", "source", "t"],
 });
 const computeCh = createChannelNode("loom:compute");
 const effectCh = createChannelNode("loom:effect");
@@ -1194,7 +1199,14 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
       if (writeCh.meters !== 0 && this.meta?.internal !== true) {
         const meta = this.meta;
         if (meta !== undefined)
-          recordChannel(writeCh, meta.id, previous, next, Date.now());
+          recordChannel(
+            writeCh,
+            meta.id,
+            previous,
+            next,
+            activeSub?.meta?.id, // the effect/computed writing during a cascade, else external
+            Date.now(),
+          );
         else writeCh.seq++;
       }
       const subs = this.subs;
@@ -1219,7 +1231,14 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
     if (readCh.meters !== 0 && this.meta?.internal !== true) {
       const meta = this.meta;
       if (meta !== undefined)
-        recordChannel(readCh, meta.id, Date.now(), undefined, undefined);
+        recordChannel(
+          readCh,
+          meta.id,
+          sub.meta?.id, // the reader (the running effect/computed) that consumed this cell
+          Date.now(),
+          undefined,
+          undefined,
+        );
       else readCh.seq++;
     }
   }
@@ -1242,7 +1261,14 @@ function sourceOper<T>(this: SourceNode<T>): T {
     if (readCh.meters !== 0 && this.meta?.internal !== true) {
       const meta = this.meta;
       if (meta !== undefined)
-        recordChannel(readCh, meta.id, Date.now(), undefined, undefined);
+        recordChannel(
+          readCh,
+          meta.id,
+          sub.meta?.id, // the reader (the running effect/computed) that consumed this cell
+          Date.now(),
+          undefined,
+          undefined,
+        );
       else readCh.seq++;
     }
   }
@@ -1292,7 +1318,14 @@ function computedOper<T>(this: ComputedNode<T>): T {
     if (readCh.meters !== 0 && this.meta?.internal !== true) {
       const meta = this.meta;
       if (meta !== undefined)
-        recordChannel(readCh, meta.id, Date.now(), undefined, undefined);
+        recordChannel(
+          readCh,
+          meta.id,
+          sub.meta?.id, // the reader (the running effect/computed) that consumed this cell
+          Date.now(),
+          undefined,
+          undefined,
+        );
       else readCh.seq++;
     }
   }
@@ -1410,6 +1443,7 @@ function flush(): void {
         flushCh,
         appBatchSize,
         start ? now() - start : 0,
+        undefined,
         undefined,
         undefined,
       );
