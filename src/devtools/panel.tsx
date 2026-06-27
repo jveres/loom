@@ -11,11 +11,13 @@ import { CSS, PANEL_ID } from "./css.js";
 import {
   buildGraphPane,
   clearGraphHighlight,
+  revealCell,
   showGraph,
   teardownGraph,
 } from "./graph.js";
 import {
   buildEventsPane,
+  setEventsLocate,
   setEventsWindow,
   showEvents,
   teardownEvents,
@@ -491,6 +493,11 @@ export function mountInspector(target: Element = document.body): void {
     panes.set(t.id, pane);
     bodyEl.append(pane);
   }
+  // Clicking an event's name jumps to that cell in the Graph tab (the panel owns tab state).
+  setEventsLocate((id): void => {
+    ui?.("graph");
+    revealCell(id);
+  });
 
   const tabscroll = (<div class="li-tabscroll" />) as HTMLElement;
   for (const t of TABS) {

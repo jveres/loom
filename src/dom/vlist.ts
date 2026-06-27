@@ -26,6 +26,8 @@ export interface VirtualList<T> {
   refresh(): void;
   /** Scroll the parent container to the end of the list. */
   scrollToEnd(): void;
+  /** Scroll so the row at `index` is centered in the viewport. */
+  scrollToIndex(index: number): void;
   /** Detach listeners and clear mounted rows. */
   destroy(): void;
 }
@@ -122,6 +124,11 @@ export function virtualList<T>(opts: VirtualListOptions<T>): VirtualList<T> {
     },
     scrollToEnd() {
       if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    },
+    scrollToIndex(index) {
+      if (!scroller) return;
+      scroller.scrollTop = Math.max(0, index * h - (scroller.clientHeight - h) / 2);
+      reconcile();
     },
     destroy() {
       if (raf) cancelAnimationFrame(raf);

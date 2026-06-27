@@ -620,6 +620,11 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .li-ev-name:hover {
+    color: var(--li-accent);
+    text-decoration: underline;
   }
   .li-ev-change {
     flex: 1 1 auto;

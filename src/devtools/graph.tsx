@@ -48,6 +48,7 @@ let lastGraphRender = 0; // performance.now() of the last graph reconcile (see G
 let gSuppressFlash = false;
 let gGraphJustShown = false;
 const graphCollapsed = new Set<number>();
+let gRevealId = -1; // a cell to flash on its next render (set by revealCell, from the Events tab)
 
 export function buildGraphPane(): HTMLElement {
   graphVList = virtualList<GraphItem>({
@@ -280,7 +281,12 @@ function gGroupLabel(gid: number, cells: InspectNode[]): string {
 function gRender(item: GraphItem, reuse: HTMLElement | null): HTMLElement {
   if (item.kind === "header")
     return reuse ? gUpdateHeader(reuse, item) : gCreateHeader(item);
-  return reuse ? gUpdateCell(reuse, item) : gCreateCell(item);
+  const row = reuse ? gUpdateCell(reuse, item) : gCreateCell(item);
+  if (item.node.id === gRevealId) {
+    gFlash(row); // a jump from the Events tab — flash the revealed cell
+    gRevealId = -1;
+  }
+  return row;
 }
 
 function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
@@ -464,6 +470,35 @@ export function showGraph(): void {
     r.classList.remove("li-flash");
   gGraphJustShown = true;
   graphVList.refresh();
+}
+
+// The flat index of a cell in the rendered tree, expanding its group if it's collapsed.
+function gIndexOf(id: number): number {
+  let i = 0;
+  for (const g of graphGroupsData) {
+    const ci = g.cells.findIndex((c) => c.id === id);
+    if (ci >= 0) {
+      if (graphCollapsed.has(g.gid)) {
+        graphCollapsed.delete(g.gid);
+        graphVList?.setItems(gListSource());
+      }
+      return i + 1 + ci; // +1 for the group header
+    }
+    i += 1 + (graphCollapsed.has(g.gid) ? 0 : g.cells.length);
+  }
+  const si = graphSingles.findIndex((c) => c.id === id);
+  return si >= 0 ? i + si : -1;
+}
+
+// Jump the graph to a cell — used by the Events tab's clickable name. Rebuilds the tree so the cell
+// is current, expands its group if needed, scrolls it to centre, and flashes it on render.
+export function revealCell(id: number): void {
+  if (graphVList === null) return;
+  renderGraph();
+  const index = gIndexOf(id);
+  if (index < 0) return;
+  gRevealId = id;
+  graphVList.scrollToIndex(index);
 }
 
 // Tear down the graph tab's DOM and state (from unmountInspector).

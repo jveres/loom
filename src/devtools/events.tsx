@@ -42,6 +42,12 @@ let eventsPaused = false;
 let eventsFilter = ""; // lowercased name substring; "" = no filter
 let rowSeq = 0; // monotonic key source
 let lastHoverId = -1; // cell id currently hover-highlighted (avoids re-snapshotting within a row)
+let onLocate: ((id: number) => void) | null = null; // jump-to-graph, wired by the panel
+
+// Wire the "click a name to jump to it in the Graph" action (set by the panel, which owns tab state).
+export function setEventsLocate(fn: (id: number) => void): void {
+  onLocate = fn;
+}
 
 export function buildEventsPane(): HTMLElement {
   applyMode(); // attaches the write meter for the default mode
@@ -106,6 +112,16 @@ export function buildEventsPane(): HTMLElement {
   eventsScroll.addEventListener("pointerleave", () => {
     lastHoverId = -1;
     clearGraphHighlight();
+  });
+  // Click a cell name to jump to it in the Graph tab.
+  eventsScroll.addEventListener("click", (e) => {
+    const name = (e.target as Element).closest?.(".li-ev-name");
+    const row = name?.closest(".li-ev") as HTMLElement | null;
+    const id = row?.dataset["id"];
+    if (id === undefined) return;
+    lastHoverId = -1;
+    clearGraphHighlight(); // drop the hover overlay before jumping
+    onLocate?.(Number(id));
   });
   eventsRoot = (
     <div class="li-pane li-events">
@@ -195,6 +211,7 @@ export function teardownEvents(): void {
   eventsFilter = "";
   eventMode = "all";
   lastHoverId = -1;
+  onLocate = null;
 }
 
 function setPaused(paused: boolean): void {
