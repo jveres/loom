@@ -235,6 +235,13 @@ function gPaint(targets: Node[], on: boolean): void {
     gOverlays.push(o);
   }
 }
+// Outline the DOM node(s) a given cell drives — for callers outside the graph (the Events tab).
+// Rebuilds the id→node map from a fresh snapshot since the graph itself may not have rendered;
+// clearGraphHighlight() removes it. A no-op highlight (no targets / unknown id) just clears.
+export function highlightCell(id: number): void {
+  graphById = new Map(inspect({ active: true }).nodes.map((n) => [n.id, n]));
+  gPaint(gTargetsFor(id), true);
+}
 function gFlash(row: HTMLElement): void {
   row.classList.remove("li-flash");
   void row.offsetWidth; // reflow so the animation restarts even on rapid updates

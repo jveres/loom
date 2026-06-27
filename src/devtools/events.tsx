@@ -7,6 +7,7 @@
 import { type Meter, meter } from "loom";
 import { events, inspect } from "loom/observe";
 import { type VirtualList, virtualList } from "../dom/vlist.js";
+import { clearGraphHighlight, highlightCell } from "./graph.js";
 
 const EVENT_ROW_H = 22; // uniform row height (must match the .li-ev CSS)
 const LOG_CAP = 1024; // the visible log depth — matches the loom:write ring (the last 1024 writes)
@@ -14,6 +15,7 @@ const VALUE_MAX = 200; // cap a recorded value's text so a giant string can't bl
 
 type EventRow = {
   readonly seq: number; // unique, monotonic — the vlist key (the log shifts as it prepends)
+  readonly id: number; // the cell id — for hover-highlighting the DOM nodes it drives
   readonly timeText: string;
   readonly name: string;
   readonly prevText: string;
@@ -32,6 +34,7 @@ let eventLog: EventRow[] = []; // newest-first, capped at LOG_CAP
 let eventsPaused = false;
 let eventsFilter = ""; // lowercased name substring; "" = no filter
 let rowSeq = 0; // monotonic key source
+let lastHoverId = -1; // cell id currently hover-highlighted (avoids re-snapshotting within a row)
 
 export function buildEventsPane(): HTMLElement {
   eventsMeter = meter([events.write], "samples"); // the records view of the write instrument
@@ -63,6 +66,20 @@ export function buildEventsPane(): HTMLElement {
 
   eventsScroll = (<div class="li-ev-scroll" />) as HTMLElement;
   eventsScroll.append(eventsVList.el);
+  // Hover a row to outline the DOM node(s) that cell drives — same overlay the Graph uses. Delegated
+  // (rows are reused) and guarded so moving within a row doesn't re-snapshot.
+  eventsScroll.addEventListener("pointerover", (e) => {
+    const row = (e.target as Element).closest?.(".li-ev") as HTMLElement | null;
+    const id = row?.dataset["id"];
+    if (id !== undefined && Number(id) !== lastHoverId) {
+      lastHoverId = Number(id);
+      highlightCell(lastHoverId);
+    }
+  });
+  eventsScroll.addEventListener("pointerleave", () => {
+    lastHoverId = -1;
+    clearGraphHighlight();
+  });
   eventsRoot = (
     <div class="li-pane li-events">
       <div class="li-ev-bar">
@@ -106,6 +123,7 @@ export function renderEvents(): void {
     const nextText = evFormat(s["next"]);
     eventLog.unshift({
       seq: rowSeq++,
+      id,
       timeText: evTime(s["t"] as number),
       name,
       prevText,
@@ -138,6 +156,7 @@ export function teardownEvents(): void {
   eventLog = [];
   eventsPaused = false;
   eventsFilter = "";
+  lastHoverId = -1;
 }
 
 // id → label for the current snapshot, so a write shows its cell name (disposed cells fall back to
@@ -160,6 +179,7 @@ function evRender(item: EventRow, reuse: HTMLElement | null): HTMLElement {
   next.textContent = item.nextText;
   next.className = `li-ev-val ${item.nextCls}`;
   row.title = item.full; // hover shows the untruncated line
+  row.dataset["id"] = String(item.id); // for hover-highlight (delegated on the scroll container)
   return row;
 }
 
