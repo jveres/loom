@@ -462,16 +462,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .li-gns-tag {
-    flex: 0 0 auto;
-    font-size: 9px;
-    color: var(--li-muted);
-    background: var(--li-fill);
-    border-radius: 3px;
-    padding: 0 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
   .li-gval {
     font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
     color: var(--li-muted);

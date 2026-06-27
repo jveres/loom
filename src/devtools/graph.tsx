@@ -1,4 +1,4 @@
-// Graph tab: a namespace-grouped tree of states/computeds rendered through a windowing virtualizer —
+// Graph tab: a grouped tree of states/computeds (by fields() group) rendered through a windowing —
 // only the on-screen rows are in the DOM, built lazily for the visible window (see gListSource).
 // renderGraph() rebuilds the group structure on the heartbeat; rows update value + flash on change
 // and outline their DOM node(s) on hover. fields() cells fold under a collapsible header; standalone
@@ -358,9 +358,6 @@ function gCreateCell(item: GraphItem & { kind: "cell" }): HTMLElement {
     <div class="li-grow">
       {ic}
       <span class="li-glabel">{labelText}</span>
-      {!item.child && n.namespace !== "default" ? (
-        <span class="li-gns-tag">{n.namespace}</span>
-      ) : null}
       {val}
     </div>
   ) as HTMLElement;

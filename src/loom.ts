@@ -38,7 +38,6 @@ export type NodeKind = "state" | "computed" | "effect";
 export interface NodeOptions {
   readonly internal?: boolean;
   readonly label?: string;
-  readonly namespace?: string;
 }
 
 export interface EffectOptions extends NodeOptions {
@@ -49,7 +48,6 @@ export interface InspectNode {
   readonly id: number;
   readonly kind: NodeKind;
   readonly label: string;
-  readonly namespace: string;
   readonly internal: boolean;
   readonly deps: readonly number[];
   readonly subs: readonly number[];
@@ -128,7 +126,7 @@ interface ScopeNode {
   readonly resources: ScopeResource[];
   readonly children: ScopeNode[];
   readonly parent: ScopeNode | undefined;
-  // Default node options (internal/namespace/label) applied to everything created in the scope,
+  // Default node options (internal/label) applied to everything created in the scope,
   // already merged with any ancestor scope's defaults.
   readonly options: NodeOptions | undefined;
   paused: boolean;
@@ -140,7 +138,6 @@ interface InspectMeta {
   readonly internal: boolean;
   readonly kind: NodeKind;
   readonly label: string;
-  readonly namespace: string;
   readonly target: WeakRef<object> | undefined;
   disposed: boolean;
   runs: number;
@@ -156,7 +153,6 @@ let queuedLength = 0;
 let activeSub: NodeBase | undefined;
 let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
-const DEFAULT_NAMESPACE = "default";
 let inspectId = 0;
 let fieldsGroup = 0; // shared id stamped on the cells of each fields() call (for inspector grouping)
 let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off the reactive path)
@@ -925,9 +921,9 @@ export function inspectResources(): ResourceCounts {
       computeds++;
       if (node.subs === undefined) unread++;
     } else if (meta.kind === "effect") {
-      // loom/dom tags its bindings (text/attr/class/style/list) with the "dom" namespace; those are
-      // views — the rendering output — counted apart from app effects.
-      if (meta.namespace === "dom") views++;
+      // An effect bound to a DOM node (loom/dom's text/attr/class/style/list bindings set `target`)
+      // is a view — the rendering output — counted apart from app effects.
+      if (meta.target !== undefined) views++;
       else effects++;
     } else if ("connect" in node) {
       sources++; // a state-kind node backed by an external producer
@@ -979,7 +975,7 @@ function registerNode(
   // Opt-in: when inspection is off, skip all metadata work — this is the per-node allocation
   // (InspectMeta + WeakRef + Map insert) that dominates create-heavy workloads.
   if (!inspectEnabled) return undefined;
-  // Apply the active scope's ambient defaults (internal/namespace/label) under any explicit ones.
+  // Apply the active scope's ambient defaults (internal/label) under any explicit ones.
   const opts = mergeOptions(activeScope?.options, options);
   const id = ++inspectId;
   const meta: InspectMeta = {
@@ -988,7 +984,6 @@ function registerNode(
     internal: opts?.internal === true,
     kind,
     label: opts?.label ?? `${kind} #${id}`,
-    namespace: opts?.namespace ?? DEFAULT_NAMESPACE,
     runs: 0,
     target:
       opts && "target" in opts && opts.target
@@ -1008,14 +1003,9 @@ function fieldOptions(
   const out: NodeOptions = {
     label: options.label ? `${options.label}.${key}` : key,
   };
-  if (options.internal !== undefined) {
-    return options.namespace === undefined
-      ? { ...out, internal: options.internal }
-      : { ...out, internal: options.internal, namespace: options.namespace };
-  }
-  return options.namespace === undefined
-    ? out
-    : { ...out, namespace: options.namespace };
+  return options.internal !== undefined
+    ? { ...out, internal: options.internal }
+    : out;
 }
 
 function nodeForSource(source: Read<unknown> | Stop): NodeBase | undefined {
@@ -1031,7 +1021,6 @@ function inspectNode(node: NodeBase, meta: InspectMeta): InspectNode {
     internal: meta.internal,
     kind: meta.kind,
     label: meta.label,
-    namespace: meta.namespace,
     runs: meta.runs,
     subs: idsFromSubs(node),
   };

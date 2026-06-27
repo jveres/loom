@@ -186,10 +186,9 @@ describe("loom core", () => {
   });
 
   it("labels inspectable nodes and reports dependencies", () => {
-    const count = state(1, { label: "inspect.count", namespace: "unit" });
+    const count = state(1, { label: "inspect.count" });
     const doubled = computed(() => count() * 2, {
       label: "inspect.doubled",
-      namespace: "unit",
     });
     let seen = 0;
 
@@ -197,7 +196,7 @@ describe("loom core", () => {
       () => {
         seen = doubled();
       },
-      { label: "inspect.view", namespace: "unit" },
+      { label: "inspect.view" },
     );
 
     expect(seen).toBe(2);
@@ -213,7 +212,6 @@ describe("loom core", () => {
       inspect().nodes.find((node) => node.label === "inspect.view"),
     ).toMatchObject({
       kind: "effect",
-      namespace: "unit",
       runs: 2,
     });
 
@@ -501,7 +499,7 @@ describe("loom channels", () => {
       keep.push(state(0));
       keep.push(computed(() => 1));
       keep.push(effect(() => {})); // an app effect
-      keep.push(effect(() => {}, { namespace: "dom" })); // a view (DOM binding)
+      keep.push(effect(() => {}, { target: {} })); // a view (effect bound to a DOM node)
       keep.push(source(() => () => {}, 0)); // a lazy source
     });
 
@@ -509,7 +507,7 @@ describe("loom channels", () => {
     expect(after.states - before.states).toBe(1);
     expect(after.computeds - before.computeds).toBe(1);
     expect(after.effects - before.effects).toBe(1); // app effect only
-    expect(after.views - before.views).toBe(1); // dom-namespaced effect counted as a view
+    expect(after.views - before.views).toBe(1); // the effect with a target counted as a view
     expect(after.sources - before.sources).toBe(1); // counted apart from plain states
     expect(after.scopes - before.scopes).toBe(1);
     // the state + computed have no readers -> both counted unread
@@ -1003,16 +1001,15 @@ describe("loom scope options", () => {
     const keep: unknown[] = [];
     scope(
       () => {
-        keep.push(state(0));
-        keep.push(effect(() => {}));
+        keep.push(state(0, { label: "opts-s" }));
+        keep.push(effect(() => {}, { label: "opts-e" }));
       },
-      { internal: true, namespace: "opts-a" },
+      { internal: true },
     );
-    const sn = node((n) => n.kind === "state" && n.namespace === "opts-a");
-    const en = node((n) => n.kind === "effect" && n.namespace === "opts-a");
+    const sn = node((n) => n.kind === "state" && n.label === "opts-s");
+    const en = node((n) => n.kind === "effect" && n.label === "opts-e");
     expect(sn?.internal).toBe(true);
     expect(en?.internal).toBe(true);
-    expect(en?.namespace).toBe("opts-a");
     expect(keep).toHaveLength(2);
   });
 
@@ -1020,13 +1017,12 @@ describe("loom scope options", () => {
     const keep: unknown[] = [];
     scope(
       () => {
-        keep.push(state(0, { namespace: "own-ns" }));
+        keep.push(state(0, { label: "own-x", internal: false }));
       },
-      { internal: true, namespace: "opts-b" },
+      { internal: true },
     );
-    const sn = node((n) => n.namespace === "own-ns");
-    expect(sn?.internal).toBe(true); // inherited from the scope
-    expect(sn?.namespace).toBe("own-ns"); // overridden by the node
+    const sn = node((n) => n.label === "own-x");
+    expect(sn?.internal).toBe(false); // the node's own internal overrides the scope default
     expect(keep).toHaveLength(1);
   });
 
@@ -1036,16 +1032,16 @@ describe("loom scope options", () => {
       () => {
         scope(
           () => {
-            keep.push(state(0, { label: "inner-x" }));
+            keep.push(state(0)); // no own options -> inherits both scope defaults
           },
-          { namespace: "child-ns" },
+          { internal: true },
         );
       },
-      { internal: true, namespace: "parent-ns" },
+      { label: "outer-default" },
     );
-    const sn = node((n) => n.label === "inner-x");
-    expect(sn?.internal).toBe(true); // from the outer scope
-    expect(sn?.namespace).toBe("child-ns"); // from the nested scope
+    const sn = node((n) => n.label === "outer-default");
+    expect(sn?.internal).toBe(true); // from the nested scope
+    expect(sn?.label).toBe("outer-default"); // from the outer scope
     expect(keep).toHaveLength(1);
   });
 
@@ -1053,11 +1049,13 @@ describe("loom scope options", () => {
     const keep: unknown[] = [];
     scope(
       () => {
-        keep.push(fields({ a: 1, b: 2 }));
+        keep.push(fields({ a: 1, b: 2 }, { label: "form" }));
       },
-      { internal: true, namespace: "form-ns" },
+      { internal: true },
     );
-    const cells = inspect().nodes.filter((n) => n.namespace === "form-ns");
+    const cells = inspect().nodes.filter(
+      (n) => n.label === "form.a" || n.label === "form.b",
+    );
     expect(cells).toHaveLength(2);
     expect(cells.every((n) => n.internal)).toBe(true);
   });
@@ -1232,13 +1230,13 @@ describe("loom coverage", () => {
     const keep: unknown[] = [];
     keep.push(fields({ a: 9001 })); // no options
     keep.push(fields({ b: 9002 }, { label: "fcomb" })); // label only
-    keep.push(fields({ c: 9003 }, { internal: true })); // internal, no namespace
-    keep.push(fields({ d: 9004 }, { internal: false, namespace: "fc-ns" })); // internal + namespace
+    keep.push(fields({ c: 9003 }, { internal: true })); // internal only
+    keep.push(fields({ d: 9004 }, { internal: false, label: "fd" })); // internal flag + label
     const byVal = (v: number) => inspect().nodes.find((n) => n.value === v);
-    expect(byVal(9001)?.namespace).toBe("default"); // no options -> defaults
+    expect(byVal(9001)?.key).toBe("a"); // no options -> still grouped, key is the field name
     expect(byVal(9002)?.label).toBe("fcomb.b"); // label prefixes the key
-    expect(byVal(9003)?.internal).toBe(true); // internal, default namespace
-    expect(byVal(9004)?.namespace).toBe("fc-ns"); // internal flag + namespace
+    expect(byVal(9003)?.internal).toBe(true); // internal
+    expect(byVal(9004)?.label).toBe("fd.d"); // internal flag + label prefix
     expect(keep).toHaveLength(4);
   });
 
@@ -1387,14 +1385,6 @@ describe("loom coverage — operators and edges", () => {
     const node = inspect().nodes.find((n) => n.label === "with-target");
     expect(node?.target).toBe(target);
     s();
-  });
-
-  it("covers fields() namespace-only options", () => {
-    const keep = fields({ z: 9009 }, { namespace: "only-ns" }); // namespace, no internal
-    const create = inspect().nodes.find((n) => n.value === 9009);
-    expect(create?.namespace).toBe("only-ns");
-    expect(create?.internal).toBe(false);
-    expect(keep.z()).toBe(9009);
   });
 
   it("exposes deps and subs ids in inspect snapshots", () => {

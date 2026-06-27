@@ -1,11 +1,10 @@
 // The panel's reactive-binding infrastructure, shared by the chrome (panel.tsx) and the stats tab
 // (stats.tsx). Every binding is an `internal` effect so the inspector never observes itself.
 import { type Stop, effect } from "loom";
-import { PANEL_ID } from "./css.js";
 
-// Shared options for every Loom node the inspector creates: internal (filtered from the
-// observability it reports) and namespaced to the panel. Set once; nodes inherit it.
-export const PANEL_OPTS = { internal: true, namespace: PANEL_ID } as const;
+// Shared options for every Loom node the inspector creates: internal, so the inspector never appears
+// in the observability it reports. Set once; nodes inherit it.
+export const PANEL_OPTS = { internal: true } as const;
 
 // Every reactive binding + the tab effect; all `internal`, all disposed on unmount.
 const bindings: Stop[] = [];

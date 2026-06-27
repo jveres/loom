@@ -61,7 +61,6 @@ export interface ListOptions<T> {
 
 type OwnedEffect = Stop | Stop[];
 
-const DOM_NAMESPACE = "dom";
 const ownedEffects = new WeakMap<Node, OwnedEffect>();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -146,7 +145,7 @@ export function text(read: Read<unknown>): Text {
         previous = next;
         node.data = next;
       },
-      { label: "dom.text", namespace: DOM_NAMESPACE, target: node },
+      { label: "dom.text", target: node },
     ),
   );
   own(node, stop);
@@ -210,7 +209,7 @@ export function list<T>(
 
         if (before) animateMoved(before, nodes);
       },
-      { label: "dom.list", namespace: DOM_NAMESPACE, target: container },
+      { label: "dom.list", target: container },
     ),
   );
 
@@ -428,7 +427,6 @@ function bindClass(node: Element, binding: ClassBinding): void {
       },
       {
         label: `dom.class.${binding.name}`,
-        namespace: DOM_NAMESPACE,
         target: node,
       },
     ),
@@ -448,7 +446,6 @@ function bindAttr(node: Element, binding: AttrBinding): void {
       },
       {
         label: `dom.attr.${binding.name}`,
-        namespace: DOM_NAMESPACE,
         target: node,
       },
     ),
@@ -470,7 +467,6 @@ function bindStyle(node: Element, binding: StyleBinding): void {
       },
       {
         label: `dom.style.${binding.name}`,
-        namespace: DOM_NAMESPACE,
         target: node,
       },
     ),
