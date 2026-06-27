@@ -514,6 +514,47 @@
   .li-flash {
     animation: li-insp-flash 0.6s ease-out;
   }
+  .li-ev {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 10px;
+    font-size: 11.5px;
+    cursor: default;
+    will-change: transform;
+  }
+  .li-ev:hover {
+    background: var(--li-hover);
+  }
+  .li-ev-name {
+    color: var(--li-fg);
+    white-space: nowrap;
+    flex: 0 0 auto;
+    max-width: 55%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .li-ev-val {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .li-ev-arrow {
+    color: var(--li-muted);
+    flex: 0 0 auto;
+  }
+  .li-events.li-ev-paused .li-ev {
+    opacity: 0.5;
+  }
   .li-tabscroll {
     display: flex;
     align-items: flex-end;

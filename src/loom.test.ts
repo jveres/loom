@@ -258,8 +258,25 @@ describe("loom core", () => {
     m.stop();
   });
 
+  it("streams id + prev→next on the write samples view, in order", () => {
+    const m = meter([events.write], "samples");
+    const a = state(5);
+    a(6);
+    a(7);
+    const f = m.read()["loom:write"];
+    expect(f?.count).toBe(2); // the two writes (creation isn't a write)
+    const rows = f?.samples ?? [];
+    // every write captured, in order, with the cell id + the exact prev→next transition
+    expect(rows.map((r) => [r["prev"], r["next"]])).toEqual([
+      [5, 6],
+      [6, 7],
+    ]);
+    expect(new Set(rows.map((r) => r["id"])).size).toBe(1); // same cell
+    m.stop();
+  });
+
   it("records flush batch size + duration, for app work only", () => {
-    const m = meter([events.flush]);
+    const m = meter([events.flush], "samples");
     const app = state(0);
     const internal = state(0, { internal: true });
     const stopApp = effect(() => {
@@ -373,7 +390,7 @@ describe("loom channels", () => {
     ch.emit(1, 2, 3, 4); // no meter yet -> gated no-op
     expect(ch.active).toBe(false);
 
-    const m = meter([ch]);
+    const m = meter([ch], "samples");
     expect(ch.active).toBe(true);
     ch.emit(10, 20, 30, 40);
     ch.emit(11, 21, 31, 41);
@@ -391,7 +408,7 @@ describe("loom channels", () => {
 
   it("counts everything but drops oldest detail past capacity", () => {
     const ch = channel("test:overflow", { capacity: 2, fields: ["n"] });
-    const m = meter([ch]);
+    const m = meter([ch], "samples");
     for (let i = 0; i < 5; i++) ch.emit(i);
 
     const f = m.read()["test:overflow"];
@@ -410,6 +427,24 @@ describe("loom channels", () => {
     expect(f?.count).toBe(2);
     expect(f?.samples).toEqual([]);
     m.stop();
+  });
+
+  it("reads one channel through two views: count (default) vs samples", () => {
+    const ch = channel("test:views", { capacity: 4, fields: ["v"] });
+    const countView = meter([ch]); // default "count"
+    const sampleView = meter([ch], "samples");
+    ch.emit(1);
+    ch.emit(2);
+
+    const c = countView.read()["test:views"];
+    const s = sampleView.read()["test:views"];
+    // both see the exact count; only the samples view materialises records
+    expect(c?.count).toBe(2);
+    expect(c?.samples).toEqual([]); // count view builds nothing (the shared empty)
+    expect(s?.count).toBe(2);
+    expect(s?.samples).toEqual([{ v: 1 }, { v: 2 }]);
+    countView.stop();
+    sampleView.stop();
   });
 
   it("detaches as a scope resource on pause and re-attaches on resume", () => {

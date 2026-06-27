@@ -560,22 +560,26 @@ regardless of how fast the consumer reads. Use them for any event or sample stre
 
 The runtime emits to a built-in set of these streams — the **`events` registry**,
 exposed from `@jveres/loom/observe` (loom watching its own pipeline, so it lives in
-the observability surface, not the core). Meter them to get pipeline rates:
+the observability surface, not the core). A meter reads its channels through one of
+two **views**: `"count"` (the default — exact counts for rates, with zero per-event
+allocation) or `"samples"` (the channel's retained ring records, for event streams
+and value histograms):
 
 ```ts
 import { channel, meter } from "@jveres/loom"; // generic primitives
 import { events } from "@jveres/loom/observe"; // loom's own built-in streams
 
-// Drain the reactive pipeline on your own cadence (here, every 250ms):
-const m = meter([events.write, events.effect, events.flush]);
+// Rates — the "count" view (default), allocation-free:
+const rates = meter([events.write, events.effect]);
+// Records — the "samples" view: e.g. each flush's batch size + duration:
+const flushes = meter([events.flush], "samples");
 setInterval(() => {
-  const f = m.read();
-  console.log("writes/s≈", f["loom:write"].count * 4);
-  const lastFlush = f["loom:flush"].samples.at(-1);
-  if (lastFlush) console.log("last flush", lastFlush.batchSize, lastFlush.durationMs);
+  console.log("writes/s≈", rates.read()["loom:write"].count * 4);
+  const last = flushes.read()["loom:flush"].samples.at(-1);
+  if (last) console.log("last flush", last.batchSize, last.durationMs);
 }, 250);
 
-// Your own channel — counter-only or with a bounded detail ring:
+// Your own channel — count-only, or a bounded detail ring read via the "samples" view:
 const paint = channel("app:paint", { capacity: 256, fields: ["ms"] });
 paint.emit(16.7); // no-op and zero-alloc unless someone is metering it
 ```
@@ -642,7 +646,9 @@ The panel has three tabs:
   header) highlights every DOM target it feeds; the locate button scrolls the
   first target into view. Primitive state cells are editable in place, and values
   flash on change.
-- **Writes** — a live stream of graph events (in progress).
+- **Events** — a live, newest-on-top stream of state mutations (cell name and
+  `prev → next`), read from the `loom:write` channel's `samples` view. Each write is
+  shown in order; the last ~1000 are kept. Click the list to pause and read it.
 
 The panel is styled by a single `inspector.css` — ordinary formatted CSS, authored
 with native nesting and scoped under `#loom-inspector` (and `#loom-inspector-menu`

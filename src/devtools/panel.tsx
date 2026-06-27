@@ -14,6 +14,7 @@ import {
   showGraph,
   teardownGraph,
 } from "./graph.js";
+import { buildEventsPane, showEvents, teardownEvents } from "./events.js";
 import {
   ICON_MAXIMIZE,
   ICON_MINIMIZE,
@@ -37,11 +38,11 @@ const THEME_ICONS: Record<Theme, string> = {
 
 /* ============================================================ module state ========= */
 
-type TabId = "stats" | "graph" | "writes";
+type TabId = "stats" | "graph" | "events";
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: "stats", label: "Info" },
   { id: "graph", label: "Graph" },
-  { id: "writes", label: "Writes" },
+  { id: "events", label: "Events" },
 ];
 
 let panel: HTMLElement | null = null;
@@ -438,7 +439,7 @@ export function mountInspector(target: Element = document.body): void {
   }, PANEL_OPTS);
   if (startMin) inspectorScope.pause();
 
-  // Panes: Info (stats) and Graph are wired; Writes is still a placeholder.
+  // Panes: Info (stats), Graph, and Events are each their own module.
   const panes = new Map<TabId, HTMLElement>();
   const tabBtns = new Map<TabId, HTMLElement>();
   bodyEl = (<div class="li-body" />) as HTMLElement;
@@ -449,9 +450,7 @@ export function mountInspector(target: Element = document.body): void {
       ) : t.id === "graph" ? (
         buildGraphPane()
       ) : (
-        <div class="li-pane">
-          <div class="li-empty">Not wired yet.</div>
-        </div>
+        buildEventsPane()
       );
     panes.set(t.id, pane);
     bodyEl.append(pane);
@@ -551,6 +550,7 @@ export function mountInspector(target: Element = document.body): void {
       const max = Math.max(0, bodyEl.scrollHeight - bodyEl.clientHeight);
       bodyEl.scrollTop = Math.min(saved, max);
       if (tab === "graph") showGraph();
+      else if (tab === "events") showEvents();
     }
     prevTab = tab ?? null;
     for (const f of scrollFades) f.refresh();
@@ -580,6 +580,7 @@ export function unmountInspector(): void {
   scrollByTab.clear();
   prevTab = null;
   teardownGraph();
+  teardownEvents();
 }
 
 /** Whether the inspector is currently mounted. */

@@ -16,6 +16,7 @@ import {
 import { events, inspectResources } from "loom/observe";
 import { bind, PANEL_OPTS } from "./bindings.js";
 import { PANEL_ID } from "./css.js";
+import { renderEvents } from "./events.js";
 import { renderGraphThrottled } from "./graph.js";
 
 /* ---- geometry ---- */
@@ -54,7 +55,8 @@ let metricSeq = 0;
 
 // A pull-based meter on the runtime's built-in `events`; poll() drains it every tick for the
 // smoothed per-second rates. The meter is a scope resource, so minimizing detaches it.
-let metricsMeter: Meter | null = null;
+let metricsMeter: Meter | null = null; // count view: the per-channel rates
+let flushMeter: Meter | null = null; // samples view: the last flush's batch size + duration
 let readRate = 0;
 let writeRate = 0;
 let computedRate = 0;
@@ -695,7 +697,7 @@ function poll(): number {
   const dc = frame?.["loom:compute"]?.count ?? 0;
   const dcr = frame?.["loom:create"]?.count ?? 0;
   const ddi = frame?.["loom:dispose"]?.count ?? 0;
-  const flushFrame = frame?.["loom:flush"];
+  const flushFrame = flushMeter?.read()?.["loom:flush"];
   readRate = ema(readRate, dr);
   writeRate = ema(writeRate, dw);
   effectRate = ema(effectRate, deff);
@@ -745,6 +747,8 @@ function poll(): number {
     // The graph walk (inspect() builds every node) is the heavy part, so it self-throttles to ~3/s
     // rather than every 120ms tick — plenty for reading values, and it halves the cost under churn.
     renderGraphThrottled();
+  } else if (activeTabFn() === "events" && visible) {
+    renderEvents(); // drain the write ring into the log every tick
   }
   return ++metricSeq;
 }
@@ -805,10 +809,10 @@ export function wireStats(opts: {
     events.write,
     events.compute,
     events.effect,
-    events.flush,
     events.create,
     events.dispose,
-  ]);
+  ]); // default "count" view — rates only, no per-event allocation
+  flushMeter = meter([events.flush], "samples"); // the one channel we read records from
   heartbeat = polled(poll, POLL_MS, PANEL_OPTS);
   let statsPane!: HTMLElement;
   statsScope = scope(() => {
@@ -842,6 +846,8 @@ export function resumeStats(): void {
 export function stopStats(): void {
   metricsMeter?.stop();
   metricsMeter = null;
+  flushMeter?.stop();
+  flushMeter = null;
   heartbeat?.stop();
   heartbeat = null;
   heapSource?.stop();

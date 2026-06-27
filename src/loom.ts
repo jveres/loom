@@ -585,6 +585,17 @@ export interface Frame {
   readonly samples: ReadonlyArray<Readonly<Record<string, unknown>>>;
 }
 
+/**
+ * How a meter reads its channels — borrowed from OpenTelemetry's instrument↔view split: the channel
+ * is the instrument (what's measured), the meter is the reader/view (how it's read), and different
+ * meters can read the same channel differently.
+ * - `"count"` (default) — the Sum/Counter view: `read()` returns counts only and builds no per-event
+ *   objects (zero allocation). For rates.
+ * - `"samples"` — the records view (OTel exemplars/logs): `read()` also materialises the channel's
+ *   retained ring records. For event streams and histograms.
+ */
+export type MeterAggregation = "count" | "samples";
+
 export interface Meter {
   /** Pull one Frame per metered channel, keyed by channel name. Call on your own clock. */
   read(): Readonly<Record<string, Frame>>;
@@ -711,7 +722,11 @@ export function channel(name: string, options?: ChannelOptions): Channel {
   return channelOf(node);
 }
 
-export function meter(channels: ReadonlyArray<Channel>): Meter {
+export function meter(
+  channels: ReadonlyArray<Channel>,
+  aggregation: MeterAggregation = "count",
+): Meter {
+  const withSamples = aggregation === "samples";
   const members: Array<{ readonly node: ChannelNode; cursor: number }> = [];
   for (const ch of channels) {
     const node = channelRegistry.get(ch.name);
@@ -743,11 +758,11 @@ export function meter(channels: ReadonlyArray<Channel>): Meter {
         const seq = node.seq;
         const count = seq - m.cursor;
         let dropped = 0;
-        // Count-only channels (and any with nothing new) share one frozen empty array, so a read of
-        // the common count-only case allocates nothing per channel.
+        // The `count` view (and any channel with nothing new) shares one frozen empty array, so a
+        // count read allocates nothing per channel; only a `samples` view materialises records.
         let samples: ReadonlyArray<Readonly<Record<string, unknown>>> =
           EMPTY_SAMPLES;
-        if (node.cap !== 0 && count > 0) {
+        if (withSamples && node.cap !== 0 && count > 0) {
           const avail = count < node.cap ? count : node.cap;
           dropped = count - avail;
           const { cols, fields, mask, head, cap } = node;
@@ -775,7 +790,12 @@ export function meter(channels: ReadonlyArray<Channel>): Meter {
 // records to these inline at the hot-path sites; they stay no-ops until a meter attaches. Records
 // non-internal nodes only, so the idle baseline is zero.
 const readCh = createChannelNode("loom:read");
-const writeCh = createChannelNode("loom:write");
+// write carries detail so a "samples" meter can stream individual mutations (id + prev→next), e.g.
+// the inspector's Events tab; a "count" meter (the rates) ignores the ring and allocates nothing.
+const writeCh = createChannelNode("loom:write", {
+  capacity: 1024,
+  fields: ["id", "prev", "next"],
+});
 const computeCh = createChannelNode("loom:compute");
 const effectCh = createChannelNode("loom:effect");
 const flushCh = createChannelNode("loom:flush", {
@@ -1162,7 +1182,14 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
     if (previous !== next) {
       this.pendingValue = next;
       this.flags = Mutable | Dirty;
-      if (writeCh.meters !== 0 && this.meta?.internal !== true) writeCh.seq++;
+      // Idle path unchanged (the `meters !== 0` short-circuit gates everything). When metered with
+      // inspection on, record id + prev→next for the samples view; otherwise just count.
+      if (writeCh.meters !== 0 && this.meta?.internal !== true) {
+        const meta = this.meta;
+        if (meta !== undefined)
+          recordChannel(writeCh, meta.id, previous, next, undefined);
+        else writeCh.seq++;
+      }
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);

@@ -30,6 +30,7 @@ export type {
   Frame,
   InspectNode,
   Meter,
+  MeterAggregation,
   NodeKind,
   NodeOptions,
   Polled,
