@@ -22,6 +22,7 @@ import {
   showEvents,
   teardownEvents,
 } from "./events.js";
+import { wireScrollFade } from "./scroll-fade.js";
 import {
   ICON_MAXIMIZE,
   ICON_MINIMIZE,
@@ -261,48 +262,6 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
   });
 }
 
-// Edge fade for a scroller, only as far as content is actually hidden. rAF-throttled.
-function wireScrollFade(
-  scroller: HTMLElement,
-  axis: "x" | "y",
-): { refresh: () => void; dispose: () => void } {
-  const FADE = 16;
-  const DEAD = 6;
-  let frame = 0;
-  const update = (): void => {
-    frame = 0;
-    const size = axis === "x" ? scroller.clientWidth : scroller.clientHeight;
-    const full = axis === "x" ? scroller.scrollWidth : scroller.scrollHeight;
-    const before = axis === "x" ? scroller.scrollLeft : scroller.scrollTop;
-    const after = Math.max(0, full - size) - before;
-    scroller.style.setProperty(
-      "--li-fade-a",
-      `${before < DEAD ? 0 : Math.min(before, FADE)}px`,
-    );
-    scroller.style.setProperty(
-      "--li-fade-b",
-      `${after < DEAD ? 0 : Math.min(after, FADE)}px`,
-    );
-  };
-  const schedule = (): void => {
-    if (frame) return;
-    frame = requestAnimationFrame(update);
-  };
-  scroller.addEventListener("scroll", schedule, { passive: true });
-  const ro =
-    typeof ResizeObserver === "function" ? new ResizeObserver(schedule) : null;
-  ro?.observe(scroller);
-  schedule();
-  return {
-    refresh: schedule,
-    dispose: (): void => {
-      scroller.removeEventListener("scroll", schedule);
-      ro?.disconnect();
-      if (frame) cancelAnimationFrame(frame);
-    },
-  };
-}
-
 /* ============================================================ SVG widgets ========== */
 
 // Bar-button icon: the <svg> fills the button's content box and the 24-unit glyph is inset via
@@ -480,7 +439,7 @@ export function mountInspector(target: Element = document.body): void {
   // Panes: Info (stats), Graph, and Events are each their own module.
   const panes = new Map<TabId, HTMLElement>();
   const tabBtns = new Map<TabId, HTMLElement>();
-  bodyEl = (<div class="li-body" />) as HTMLElement;
+  bodyEl = (<div class="li-body li-fade-y" />) as HTMLElement;
   for (const t of TABS) {
     const pane =
       t.id === "stats" ? (

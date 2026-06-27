@@ -132,6 +132,10 @@
     background: transparent;
     scrollbar-width: thin;
     scrollbar-color: var(--li-scroll) transparent;
+  }
+  /* Reusable vertical scroll-edge fade (driven by wireScrollFade): used by the panel body and the
+     Events list. The --li-fade-a/b lengths are set per-scroller in JS. */
+  .li-fade-y {
     --li-fade-a: 0px;
     --li-fade-b: 0px;
     -webkit-mask-image: linear-gradient(

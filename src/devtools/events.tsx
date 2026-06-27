@@ -9,6 +9,7 @@ import { type Meter, meter } from "loom";
 import { events, inspect } from "loom/observe";
 import { type VirtualList, virtualList } from "../dom/vlist.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
+import { wireScrollFade } from "./scroll-fade.js";
 
 const EVENT_ROW_H = 22; // uniform row height (must match the .li-ev CSS)
 const VALUE_MAX = 200; // cap a recorded value's text so a giant string can't bloat the DOM/tooltip
@@ -35,6 +36,7 @@ let readMeter: Meter | null = null;
 let eventMode: EventMode = "all";
 let eventsRoot: HTMLElement | null = null;
 let eventsScroll: HTMLElement | null = null;
+let eventsFade: { refresh: () => void; dispose: () => void } | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
 let eventLog: EventRow[] = []; // newest-first, capped at windowSize
 let filterLog: EventRow[] = []; // when a filter is active, its own newest-first window of matches
@@ -97,8 +99,9 @@ export function buildEventsPane(): HTMLElement {
     applyView();
   });
 
-  eventsScroll = (<div class="li-ev-scroll" />) as HTMLElement;
+  eventsScroll = (<div class="li-ev-scroll li-fade-y" />) as HTMLElement;
   eventsScroll.append(eventsVList.el);
+  eventsFade = wireScrollFade(eventsScroll, "y"); // same edge fade as the panel body
   // Hover a row to outline the DOM node(s) that cell drives — same overlay the Graph uses. Delegated
   // (rows are reused) and guarded so moving within a row doesn't re-snapshot.
   eventsScroll.addEventListener("pointerover", (e) => {
@@ -204,6 +207,8 @@ export function teardownEvents(): void {
   eventsVList = null;
   eventsRoot = null;
   eventsScroll = null;
+  eventsFade?.dispose();
+  eventsFade = null;
   pauseBtn = null;
   eventLog = [];
   filterLog = [];
@@ -224,6 +229,7 @@ function setPaused(paused: boolean): void {
 // Re-window with the active filter applied (a name substring match).
 function applyView(): void {
   eventsVList?.setItems(eventsFilter ? filterLog : eventLog);
+  eventsFade?.refresh(); // content height changed — the ResizeObserver won't catch that
 }
 
 function makeRow(
