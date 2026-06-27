@@ -548,6 +548,13 @@
   .li-tr-btn:hover {
     border-color: var(--li-accent);
   }
+  /* The icon svg's width attribute isn't used as its flex-basis, so it collapses to 0 in the
+     inline-flex button — pin its box explicitly. */
+  .li-tr-btn svg {
+    flex: 0 0 auto;
+    width: 13px;
+    height: 13px;
+  }
   .li-tr-filter {
     flex: 1 1 auto;
     min-width: 0;
