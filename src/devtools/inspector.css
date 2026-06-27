@@ -521,6 +521,22 @@
     padding: 5px 8px;
     border-bottom: 1px solid var(--li-border-soft);
   }
+  /* Live indicator: a pulsing accent dot while the trace is capturing; a static hollow ring when
+     paused (the standard "live/recording" status signal — the control itself doesn't animate). */
+  .li-tr-live {
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--li-accent);
+    animation: li-tr-pulse 1.6s ease-in-out infinite;
+  }
+  .li-trace.li-tr-paused .li-tr-live {
+    animation: none;
+    background: transparent;
+    border: 1.5px solid var(--li-muted);
+  }
   .li-tr-btn {
     flex: 0 0 auto;
     font: inherit;
@@ -915,5 +931,17 @@
   }
   to {
     background: transparent;
+  }
+}
+
+@keyframes li-tr-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.82);
   }
 }

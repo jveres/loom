@@ -41,6 +41,7 @@ let traceRoot: HTMLElement | null = null;
 let traceScroll: HTMLElement | null = null;
 let traceFade: { refresh: () => void; dispose: () => void } | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
+let liveDot: HTMLElement | null = null;
 let traceLog: TraceRow[] = []; // newest-first, capped at windowSize
 let filterLog: TraceRow[] = []; // when a filter is active, its own newest-first window of matches
 let tracePaused = false;
@@ -62,6 +63,10 @@ export function buildTracePane(): HTMLElement {
     key: (r) => r.seq,
     render: trRender,
   });
+
+  liveDot = (
+    <span class="li-tr-live" title="Live — capturing" />
+  ) as HTMLElement;
 
   pauseBtn = (
     <button type="button" class="li-tr-btn" title="Pause / resume the trace" />
@@ -137,6 +142,7 @@ export function buildTracePane(): HTMLElement {
   traceRoot = (
     <div class="li-pane li-trace">
       <div class="li-tr-bar">
+        {liveDot}
         {pauseBtn}
         {modeSel}
         {filter}
@@ -226,6 +232,7 @@ export function teardownTrace(): void {
   traceFade?.dispose();
   traceFade = null;
   pauseBtn = null;
+  liveDot = null;
   traceLog = [];
   filterLog = [];
   tracePaused = false;
@@ -238,6 +245,7 @@ export function teardownTrace(): void {
 function setPaused(paused: boolean): void {
   tracePaused = paused;
   pauseBtn?.replaceChildren(icon(paused ? ICON_PLAY : ICON_PAUSE, 13));
+  if (liveDot) liveDot.title = paused ? "Paused" : "Live — capturing";
   traceRoot?.classList.toggle("li-tr-paused", paused);
   if (!paused) renderTrace(); // resume: catch up immediately
 }
