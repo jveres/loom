@@ -7,6 +7,7 @@
 // drains the selected ring(s) into a capped, newest-first log rendered through the windowing vlist.
 // Panel seams: buildTracePane / renderTrace / showTrace / teardownTrace.
 import { type Meter, meter } from "loom";
+import { tap } from "loom/dom";
 import { events, inspect } from "loom/observe";
 import { type VirtualList, virtualList } from "../dom/vlist.js";
 import { formatValue, valueClass } from "./format.js";
@@ -105,13 +106,13 @@ export function buildTracePane(): HTMLElement {
     <button type="button" class="li-tr-btn" title="Pause / resume the trace" />
   ) as HTMLButtonElement;
   pauseBtn.append(icon(ICON_PAUSE, 12));
-  pauseBtn.addEventListener("click", () => setPaused(!tracePaused));
+  tap(pauseBtn, () => setPaused(!tracePaused)); // tap, not click — click is dropped under load on iOS
 
   const clearBtn = (
     <button type="button" class="li-tr-btn" title="Clear the trace" />
   ) as HTMLButtonElement;
   clearBtn.append(icon(ICON_CLEAR, 12));
-  clearBtn.addEventListener("click", clearLog);
+  tap(clearBtn, () => clearLog());
 
   const modeSel = (
     <select class="li-tr-mode" title="Which events to stream">
@@ -162,8 +163,9 @@ export function buildTracePane(): HTMLElement {
     lastHoverId = -1;
     clearGraphHighlight();
   });
-  // Click a cell name to jump to it in the Graph tab.
-  traceScroll.addEventListener("click", (e) => {
+  // Tap a cell name to jump to it in the Graph tab (tap, not click — click is dropped under load on
+  // iOS; tap's slop also ignores a scroll drag).
+  tap(traceScroll, (e) => {
     const name = (e.target as Element).closest?.(".li-tr-name");
     const row = name?.closest(".li-tr") as HTMLElement | null;
     const id = row?.dataset["id"];
