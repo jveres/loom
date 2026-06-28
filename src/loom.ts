@@ -46,8 +46,7 @@ export interface EffectOptions extends NodeOptions {
    * Run this effect in the deferred lane: re-runs happen off the critical path (idle-first,
    * coalesced) instead of in the synchronous flush. The initial run is still synchronous (so deps
    * are tracked and the first output is immediate); only re-runs defer. Coalesced means it sees the
-   * latest value, NOT every transition — use a channel for every-transition. See
-   * docs/deferred-effects.md.
+   * latest value, NOT every transition — use a channel for every-transition.
    */
   readonly defer?: boolean;
   /**
@@ -182,7 +181,7 @@ const queued: Array<EffectNode | undefined> = [];
 // Deferred lane: effects whose re-runs run off the critical path (see deferEffect/drainDeferred).
 const deferredQueue: EffectNode[] = [];
 let drainScheduled = false;
-let drainDeadline = Number.POSITIVE_INFINITY; // maxStale the pending drain was scheduled with
+let drainDeadline = Number.POSITIVE_INFINITY; // absolute time (now()+maxStale) the pending drain fires by
 let drainCancel: (() => void) | undefined;
 let deferTimeout = 200; // global default maxStale (ms); overridable via configure()
 let deferScheduler: DeferScheduler = defaultDeferScheduler;
@@ -1515,18 +1514,22 @@ function defaultDeferScheduler(
 }
 
 // Add a deferred effect to the lane (clearing Watching, as queueEffect does, so the system won't
-// re-notify until it runs) and ensure a drain is scheduled to fire within its maxStale.
+// re-notify until it runs) and ensure a drain is scheduled to fire within its maxStale. Dedup the
+// queue: flushScope can re-offer a still-dirty effect that's already queued (pause→resume mid-flight).
 function deferEffect(node: EffectNode): void {
   node.flags &= ~Watching;
-  deferredQueue.push(node);
+  if (!deferredQueue.includes(node)) deferredQueue.push(node);
   scheduleDrain(node.maxStale);
 }
 
 function scheduleDrain(maxStale: number): void {
-  if (drainScheduled && drainDeadline <= maxStale) return; // a sooner-or-equal drain is pending
-  drainCancel?.(); // a sooner floor is needed — replace the pending drain
+  // Compare absolute fire-by times: a pending drain that already fires in time stands; a tighter
+  // floor (accounting for the time the pending drain has already waited) replaces it.
+  const deadline = now() + maxStale;
+  if (drainScheduled && drainDeadline <= deadline) return;
+  drainCancel?.();
   drainScheduled = true;
-  drainDeadline = maxStale;
+  drainDeadline = deadline;
   drainCancel = deferScheduler(drainDeferred, maxStale);
 }
 

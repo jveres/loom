@@ -41,7 +41,7 @@ const POLL_S = POLL_MS / 1000;
 const LAG_MS = 200;
 
 /* ---- module state ---- */
-// Set by wireStats so poll() can read the panel's active tab + minimized state without importing it.
+// Set by wireStats so renderActiveTab() can read the active tab + minimized state without importing it.
 let activeTabFn: () => string | undefined = () => undefined;
 let isMinimizedFn: () => boolean = () => false;
 

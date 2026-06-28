@@ -129,7 +129,7 @@ The core exports these functions:
 - `meter(channels)` attaches a pull-based meter; `read()` returns a Frame per
   channel (`{ count, dropped, samples }`) since the last read. A meter is a scope
   resource, so it detaches on `scope.pause()`.
-- `configure({ inspect, onError })` sets runtime options. `inspect` toggles the
+- `configure({ inspect, onError, deferScheduler, deferTimeout })` sets runtime options. `inspect` toggles the
   inspection layer — **off by default**, so node creation allocates no metadata
   (zero cost); turn it on once at startup, before creating the nodes you want
   visible, when you need tooling. `onError` installs a global effect error
@@ -320,7 +320,7 @@ configure({ deferScheduler, deferTimeout }); // override the lane's scheduler / 
 - Deferred effects are **sinks** (render / log / persist), not links in a derivation chain.
 
 The synchronous, glitch-free default is untouched — this is a separate lane, not concurrency in the
-core. Design rationale: [`docs/deferred-effects.md`](docs/deferred-effects.md).
+core.
 
 ### Error handling
 

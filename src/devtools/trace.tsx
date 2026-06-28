@@ -3,8 +3,8 @@
 // its source — the effect/computed that read or wrote the cell — so a row reads "X — by Y". A header
 // selector picks which types stream (writes, reads, or all interleaved by timestamp); pause freezes
 // it, clear empties it, the filter narrows by cell name, hovering a row outlines the DOM node(s) the
-// cell drives, and clicking a name jumps to it in the Graph. On the panel heartbeat (~120ms) it
-// drains the selected ring(s) into a capped, newest-first log rendered through the windowing vlist.
+// cell drives, and tapping a name jumps to it in the Graph. Driven off the panel heartbeat (in the
+// deferred lane), it drains the selected ring(s) into a capped, newest-first log rendered via the vlist.
 // Panel seams: buildTracePane / renderTrace / showTrace / teardownTrace.
 import { type Meter, meter } from "loom";
 import { tap } from "loom/dom";
