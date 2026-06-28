@@ -587,13 +587,18 @@
     flex: 1 1 auto;
     min-width: 0;
     font: inherit;
-    color: var(--li-input-fg);
-    background: var(--li-input-bg);
+    /* Theme-aware like the sibling mode select — the --li-input-* tokens are a light box that looks
+       out of place in the dark trace bar. */
+    color: var(--li-fg);
+    background: var(--li-fill);
     border: 1px solid var(--li-border);
     border-radius: 5px;
     padding: 2px 8px;
     height: 22px;
     outline: none;
+  }
+  .li-tr-filter::placeholder {
+    color: var(--li-muted);
   }
   .li-tr-filter:focus {
     border-color: var(--li-accent);
