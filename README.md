@@ -97,9 +97,10 @@ The core exports these functions:
 - `state(initial, options?)` creates a callable state cell.
 - `computed(getter, options?)` creates a cached derived read.
 - `effect(fn, options?)` runs `fn` immediately and again when its dependencies
-  change. Pass `{ target }` (an `EffectOptions` extra) to associate the effect
-  with the DOM node it writes — the DOM layer does this for its bindings so the
-  inspector can highlight what a cell drives.
+  change. Pass `{ target }` to associate the effect with the DOM node it writes
+  (the DOM layer does this for its bindings so the inspector can highlight what a
+  cell drives), or `{ defer: true, maxStale? }` to run re-runs off the critical
+  path (see [Deferred effects](#deferred-effects)).
 - `batch(fn)` groups writes and flushes effects once after the batch.
 - `scope(fn, options?)` groups the effects (and `polled`/`source` resources)
   created inside `fn` so they can be disposed (`stop()`) or suspended (`pause()`
@@ -132,7 +133,8 @@ The core exports these functions:
   inspection layer — **off by default**, so node creation allocates no metadata
   (zero cost); turn it on once at startup, before creating the nodes you want
   visible, when you need tooling. `onError` installs a global effect error
-  boundary (see [Error handling](#error-handling)).
+  boundary (see [Error handling](#error-handling)); `deferScheduler` /
+  `deferTimeout` tune the deferred-effect lane (see [Deferred effects](#deferred-effects)).
 
 > `channel` and `meter` are generic core primitives. **Watching Loom's *own* internals**
 > — the `events` registry (the runtime's built-in streams) and the graph-snapshot tools
@@ -157,9 +159,10 @@ The core exports these types:
 - `Channel` is a named channel; `Meter` drains channels;
   `Frame` is a per-channel `{ count, dropped, samples }`; `ChannelOptions`
   configures `{ capacity, fields }`.
-- `NodeOptions` (`{ internal, namespace, label }`) and `EffectOptions` (adds
-  `{ target }`) are the option bags accepted by the primitives; `NodeKind` is the
-  `"state" | "computed" | "effect"` union reported on an `InspectNode`.
+- `NodeOptions` (`{ internal, label }`) and `EffectOptions` (adds `{ target }`
+  and the deferred-lane `{ defer, maxStale }`) are the option bags accepted by the
+  primitives; `DeferScheduler` is the configurable deferred-lane scheduler;
+  `NodeKind` is the `"state" | "computed" | "effect"` union reported on an `InspectNode`.
 
 Pass `{ label, namespace }` to `state`, `computed`, `effect`, or `fields` when
 you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
@@ -295,6 +298,29 @@ The dev inspector relies on this: its panel scope is created with
 `{ internal: true, namespace: "loom-inspector" }`, so every binding, the
 heartbeat, the web-vital sources and the heap timer are filtered from the
 observability it reports — without passing options to each one.
+
+### Deferred effects
+
+Pass `{ defer: true }` to run an effect's **re-runs** off the critical path — idle-first and
+coalesced — instead of in the synchronous flush. The first run stays synchronous (deps are tracked,
+the initial output is immediate); only re-runs defer. Use it for non-frame-critical reactive work:
+telemetry, debounced persistence, secondary UI, or a tool's own rendering.
+
+```ts
+effect(() => save(doc()), { defer: true, maxStale: 2000 });
+configure({ deferScheduler, deferTimeout }); // override the lane's scheduler / default floor (200ms)
+```
+
+- **Coalesced — latest value, not every transition.** Many changes before the next drain collapse
+  into **one** run at the latest value; for every-transition, use a `channel`.
+- **`maxStale`** (ms) is the guaranteed-refresh floor — idle-first, but at least this often under
+  load. It is **best-effort, not hard real-time**: a single app task longer than `maxStale` delays
+  everything (the lane bounds Loom's contribution, not the app's long tasks).
+- **Scope-aware** — a paused scope doesn't drain its deferred effects; resume re-runs them.
+- Deferred effects are **sinks** (render / log / persist), not links in a derivation chain.
+
+The synchronous, glitch-free default is untouched — this is a separate lane, not concurrency in the
+core. Design rationale: [`docs/deferred-effects.md`](docs/deferred-effects.md).
 
 ### Error handling
 

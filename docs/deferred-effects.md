@@ -1,12 +1,9 @@
 # Design note — deferred (low-priority) effect lane
 
-**Status:** design approved, not yet implemented. This note captures the agreed design and — more
-importantly — the caveats, so they aren't lost when it's built.
-
-**On implementation — required:** document it in the **README**, not just here. The `effect(fn, {
-defer })` / `maxStale` API goes in the Guide; the caveats (especially **best-effort `maxStale`** and
-**coalesced latest-value**) go in **Design notes**. This file can then be trimmed to rationale or
-removed.
+**Status:** **implemented** — `effect(fn, { defer, maxStale })` + `configure({ deferScheduler,
+deferTimeout })`. User-facing docs live in the README ([Deferred effects](../README.md#deferred-effects));
+this note is the design rationale + caveats. **Follow-up:** the first intended consumer — migrating the
+inspector's `polled(120ms)` heartbeat onto the lane — is not done yet.
 
 ## Motivation
 
