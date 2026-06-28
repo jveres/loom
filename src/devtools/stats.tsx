@@ -757,6 +757,12 @@ function renderActiveTab(): void {
   }
 }
 
+// On returning to a backgrounded tab, the lag timer was throttled/frozen the whole time, so reset its
+// baseline to now — otherwise the first tick back reports the minutes away as one giant lag spike.
+function onLagVisibility(): void {
+  if (!document.hidden) lagExpected = performance.now() + LAG_MS;
+}
+
 function startMetrics(): void {
   // The reactive-pipeline rates come from a pull-based meter on the runtime's built-in `events`,
   // created inside the panel's scope (see wireStats) so minimizing detaches it. Web vitals
@@ -764,10 +770,17 @@ function startMetrics(): void {
   lagExpected = performance.now() + LAG_MS;
   lagTimer = setInterval(() => {
     const t = performance.now();
+    // A hidden tab throttles/freezes this timer, so a tick fired while hidden is the time away, not
+    // main-thread lag — resync the baseline and skip it (onLagVisibility resets it again on return).
+    if (document.hidden) {
+      lagExpected = t + LAG_MS;
+      return;
+    }
     lag = Math.max(0, t - lagExpected);
     if (lag > lagPeak) lagPeak = lag;
     lagExpected = t + LAG_MS;
   }, LAG_MS);
+  document.addEventListener("visibilitychange", onLagVisibility);
 
   lastFrameT = 0;
   const onFrame = (t: number): void => {
@@ -867,6 +880,7 @@ export function stopStats(): void {
   heartbeat = null;
   if (lagTimer != null) clearInterval(lagTimer);
   lagTimer = null;
+  document.removeEventListener("visibilitychange", onLagVisibility);
   if (rafHandle != null) cancelAnimationFrame(rafHandle);
   rafHandle = null;
   // statsScope owns the heap + web-vital sources and the Info-pane bindings; stopping it tears them
