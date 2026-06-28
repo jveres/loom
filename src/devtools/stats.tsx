@@ -12,6 +12,7 @@ import {
   type SourceConnect,
   scope,
   source,
+  untrack,
 } from "loom";
 import { events, inspectResources } from "loom/observe";
 import { bind, PANEL_OPTS } from "./bindings.js";
@@ -729,9 +730,15 @@ function poll(): number {
     fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
   }
 
-  // The graph census walks every node, so recompute it only while the stats tab is actually
-  // visible. The sequence advances every tick regardless, so the always-visible spark keeps moving
-  // across tab switches; the hidden stats bindings stay asleep via their own paused scope.
+  // The sequence advances every tick so the value bindings + the always-visible spark re-render. The
+  // heavy per-tab refresh is split into renderActiveTab() and driven off the critical path.
+  return ++metricSeq;
+}
+
+// The active tab's heavy refresh — the node census (stats), the graph reconcile, or draining the
+// trace ring(s). Run via a deferred effect (see wireStats) so it yields to the app under load:
+// idle-first, ~POLL_MS floor. Only the visible tab does work, and the graph self-throttles to ~3/s.
+function renderActiveTab(): void {
   const visible = !isMinimizedFn();
   if (activeTabFn() === "stats" && visible) {
     const c = inspectResources();
@@ -744,13 +751,10 @@ function poll(): number {
     nodeChannels = c.channels;
     nodeUnread = c.unread;
   } else if (activeTabFn() === "graph" && visible) {
-    // The graph walk (inspect() builds every node) is the heavy part, so it self-throttles to ~3/s
-    // rather than every 120ms tick — plenty for reading values, and it halves the cost under churn.
     renderGraphThrottled();
   } else if (activeTabFn() === "trace" && visible) {
-    renderTrace(); // drain the trace ring(s) into the log every tick
+    renderTrace(); // drain the trace ring(s) into the log
   }
-  return ++metricSeq;
 }
 
 function startMetrics(): void {
@@ -814,6 +818,17 @@ export function wireStats(opts: {
   ]); // default "count" view — rates only, no per-event allocation
   flushMeter = meter([events.flush], "samples"); // the one channel we read records from
   heartbeat = polled(poll, POLL_MS, PANEL_OPTS);
+  // The heavy per-tab refresh runs in the deferred lane — ticked by the heartbeat but off the
+  // critical path (idle-first, ~POLL_MS floor), so under app load it yields instead of competing each
+  // frame. untracked so it re-runs only on the tick, not on whatever the render reads. Owned by the
+  // panel scope, so it pauses with minimize like the heartbeat.
+  bind(
+    () => {
+      heartbeat?.read();
+      untrack(renderActiveTab);
+    },
+    { defer: true, maxStale: POLL_MS },
+  );
   let statsPane!: HTMLElement;
   statsScope = scope(() => {
     clsSource = source(connectCls, 0, PANEL_OPTS);

@@ -2,8 +2,7 @@
 
 **Status:** **implemented** — `effect(fn, { defer, maxStale })` + `configure({ deferScheduler,
 deferTimeout })`. User-facing docs live in the README ([Deferred effects](../README.md#deferred-effects));
-this note is the design rationale + caveats. **Follow-up:** the first intended consumer — migrating the
-inspector's `polled(120ms)` heartbeat onto the lane — is not done yet.
+this note is the design rationale + caveats. First consumer **done** (see below).
 
 ## Motivation
 
@@ -101,8 +100,12 @@ inactive) automatically suspend that tab's deferred render — no extra wiring. 
 zero-detail-recording-when-off-screen change, the inspector's whole cost under chaos collapses to
 "one bounded render of the visible pane at the maxStale floor (~6fps)."
 
-## First consumer
+## First consumer (done)
 
-Migrate the inspector's `polled(120ms)` heartbeat to `effect(render, { defer: true, maxStale: 120 })`.
-Strictly better: same floor under chaos (no starvation), more responsive when there's slack, and runs
-only when the data it shows actually changed.
+The inspector's `poll()` was split. The cheap metric sampling (rates, sparkline, health) stays on the
+`polled(POLL_MS)` heartbeat so the value displays + the always-visible spark stay live on the timer.
+The **heavy per-tab refresh** — the node census (stats), the graph reconcile, or draining the trace
+ring(s) — moved into `renderActiveTab()`, run by a deferred effect (`bind(fn, { defer: true, maxStale:
+POLL_MS })`) ticked by the heartbeat and `untrack`ed so it re-runs only on the tick. So under app load
+the expensive part yields (idle-first, POLL_MS floor) instead of competing each frame, and — being in
+the panel scope — it pauses with minimize like the heartbeat.
