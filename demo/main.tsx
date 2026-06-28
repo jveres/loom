@@ -297,15 +297,18 @@ function renderCard(card: Card): Element {
       </h2>
       <div class="byline">{() => `By ${model.source()}`}</div>
       <div class="foot">
-        {metricButton("likes", "♥", model.likes, () => model.liked())}
+        {metricButton(
+          "likes",
+          "♥",
+          model.likes,
+          () => model.liked(),
+          () => likeCard(card),
+        )}
         {metricButton("views", "▣", () => compact(model.views()))}
-        <button
-          type="button"
-          class={["metric", "trend", { hidden: () => !model.hot() }]}
-        >
+        <span class={["metric", "trend", { hidden: () => !model.hot() }]}>
           <span class="glyph">🔥</span>
           {model.trend}
-        </button>
+        </span>
         <span class="presence">
           <span class="live" />
           <span>{() => `${model.readers()} reading`}</span>
@@ -320,15 +323,23 @@ function metricButton(
   glyph: string,
   read: () => unknown,
   active?: () => boolean,
+  onTap?: () => void,
 ): Element {
-  return (
-    <button
-      type="button"
-      class={["metric", keyName, active ? { liked: active } : undefined]}
-    >
-      <span class="glyph">{glyph}</span>
-      <span class="value">{read}</span>
+  const cls = ["metric", keyName, active ? { liked: active } : undefined];
+  const glyphEl = <span class="glyph">{glyph}</span>;
+  const valueEl = <span class="value">{read}</span>;
+  // Interactive metrics (likes) are real buttons; plain readouts (views) are spans, so they don't
+  // show a clickable cursor for an action that doesn't exist.
+  return onTap ? (
+    <button type="button" class={cls} ontap={onTap}>
+      {glyphEl}
+      {valueEl}
     </button>
+  ) : (
+    <span class={cls}>
+      {glyphEl}
+      {valueEl}
+    </span>
   );
 }
 
@@ -557,11 +568,15 @@ function toggleSelectedHot(): void {
   if (card) toggleCardHot(card);
 }
 
+function likeCard(card: Card): void {
+  const liked = card.model.liked();
+  update(card.model.likes, (value) => value + (liked ? -1 : 1));
+  card.model.liked(!liked);
+}
+
 function likeSelected(): void {
   const card = selected();
-  if (!card) return;
-  update(card.model.likes, (value) => value + 1);
-  card.model.liked(true);
+  if (card) likeCard(card);
 }
 
 function removeSelected(): void {
