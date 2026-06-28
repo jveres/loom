@@ -1,4 +1,10 @@
-import { effect, type Read, type Stop, untrack } from "../loom.js";
+import {
+  effect,
+  type EffectOptions,
+  type Read,
+  type Stop,
+  untrack,
+} from "../loom.js";
 
 export type Child =
   | Node
@@ -134,7 +140,9 @@ export function h(
   return node;
 }
 
-export function text(read: Read<unknown>): Text {
+// `options` lets a caller relabel the binding or, for tooling built on loom, mark it `internal` so
+// it isn't observed by the inspector (which uses this to bind its own text without self-reporting).
+export function text(read: Read<unknown>, options?: EffectOptions): Text {
   const node = document.createTextNode("");
   let previous = "";
   const stop = untrack(() =>
@@ -145,7 +153,7 @@ export function text(read: Read<unknown>): Text {
         previous = next;
         node.data = next;
       },
-      { label: "dom.text", target: node },
+      { label: "dom.text", target: node, ...options },
     ),
   );
   own(node, stop);

@@ -15,6 +15,7 @@ import {
   untrack,
 } from "loom";
 import { events, inspectResources } from "loom/observe";
+import { text } from "loom/dom";
 import { bind, PANEL_OPTS } from "./bindings.js";
 import { PANEL_ID } from "./css.js";
 import { renderTrace } from "./trace.js";
@@ -108,16 +109,6 @@ const sparkIn: number[] = [];
 const sparkOut: number[] = [];
 
 /* ---- binding helpers ---- */
-function bindText(node: Element, read: () => string): void {
-  let prev: string | undefined;
-  bind(() => {
-    const next = read();
-    if (next === prev) return;
-    prev = next;
-    node.textContent = next;
-  });
-}
-
 function bindAttr(node: Element, name: string, read: () => string): void {
   let prev: string | undefined;
   bind(() => {
@@ -282,9 +273,7 @@ function buildGauge(): HTMLElement {
     />
   );
   const num = (
-    <text class="li-gnum" x={44} y={48} text-anchor="middle">
-      100
-    </text>
+    <text class="li-gnum" x={44} y={48} text-anchor="middle" />
   );
   bindAttr(
     arc,
@@ -300,9 +289,8 @@ function buildGauge(): HTMLElement {
     "class",
     pulse(() => gaugeClass("li-garc")),
   );
-  bindText(
-    num,
-    pulse(() => (healthReady ? String(score) : "100")),
+  num.append(
+    text(pulse(() => (healthReady ? String(score) : "100")), PANEL_OPTS),
   );
   bindAttr(
     num,
@@ -463,7 +451,7 @@ function stat(
   title = "",
 ): HTMLElement {
   const val = (<span class={`li-stat-v ${cls}`} />) as HTMLElement;
-  bindText(val, pulse(get));
+  val.append(text(pulse(get), PANEL_OPTS));
   return (
     <div class="li-stat">
       <span class="li-stat-k" title={title}>
@@ -515,9 +503,11 @@ const TIP = {
 
 function buildStatsPane(): HTMLElement {
   const fpsValue = (<span class="li-perfh-fps" />) as HTMLElement;
-  bindText(
-    fpsValue,
-    pulse(() => (fpsReady ? `${Math.round(fps)} fps` : "— fps")),
+  fpsValue.append(
+    text(
+      pulse(() => (fpsReady ? `${Math.round(fps)} fps` : "— fps")),
+      PANEL_OPTS,
+    ),
   );
   bindAttr(
     fpsValue,
@@ -526,9 +516,11 @@ function buildStatsPane(): HTMLElement {
   );
 
   const hlabel = (<div class="li-hlabel" title={TIP.health} />) as HTMLElement;
-  bindText(
-    hlabel,
-    pulse(() => (fpsReady ? health(fps).label.toUpperCase() : "LOADING")),
+  hlabel.append(
+    text(
+      pulse(() => (fpsReady ? health(fps).label.toUpperCase() : "LOADING")),
+      PANEL_OPTS,
+    ),
   );
   bindAttr(
     hlabel,
