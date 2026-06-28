@@ -1,6 +1,6 @@
 // The panel's reactive-binding infrastructure, shared by the chrome (panel.tsx) and the stats tab
 // (stats.tsx). Every binding is an `internal` effect so the inspector never observes itself.
-import { type EffectOptions, type Stop, effect } from "loom";
+import { type EffectOptions, effect, type Stop } from "loom";
 
 // Shared options for every Loom node the inspector creates: internal, so the inspector never appears
 // in the observability it reports. Set once; nodes inherit it.

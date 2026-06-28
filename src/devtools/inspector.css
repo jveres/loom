@@ -19,7 +19,10 @@
   --li-hover: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06));
   --li-fill: light-dark(#eeeef3, #1d1d28);
   --li-accent: light-dark(#6d5cf0, #8b7cff);
-  --li-accent-soft: light-dark(rgba(109, 92, 240, 0.16), rgba(139, 124, 255, 0.3));
+  --li-accent-soft: light-dark(
+    rgba(109, 92, 240, 0.16),
+    rgba(139, 124, 255, 0.3)
+  );
   --li-bar-bg: light-dark(rgba(109, 92, 240, 0.1), rgba(139, 124, 255, 0.12));
   --li-key: light-dark(#6d5cf0, #8b7cff);
   --li-num: light-dark(#2f9e5a, #57c97e);
@@ -572,7 +575,9 @@
     justify-content: center;
   }
   .li-tr-btn:hover {
-    background: var(--li-bar-bg); /* a background tint, not an accent border ring (cf. tabs/menu) */
+    background: var(
+      --li-bar-bg
+    ); /* a background tint, not an accent border ring (cf. tabs/menu) */
   }
   /* The icon svg's width attribute isn't used as its flex-basis, so it collapses to 0 in the
      inline-flex button — pin its box explicitly. */

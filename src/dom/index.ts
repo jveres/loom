@@ -1,6 +1,6 @@
 import {
-  effect,
   type EffectOptions,
+  effect,
   type Read,
   type Stop,
   untrack,

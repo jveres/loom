@@ -16,6 +16,20 @@ import {
   teardownGraph,
 } from "./graph.js";
 import {
+  elementFromMarkup,
+  ICON_MAXIMIZE,
+  ICON_MINIMIZE,
+  ICON_MONITOR,
+  ICON_MOON,
+  ICON_POINTER,
+  ICON_SETTINGS,
+  ICON_SUN,
+  icon,
+  svgMarkup,
+} from "./icons.js";
+import { wireScrollFade } from "./scroll-fade.js";
+import { pauseStats, resumeStats, stopStats, wireStats } from "./stats.js";
+import {
   buildTracePane,
   setTraceActive,
   setTraceLiveDot,
@@ -24,20 +38,6 @@ import {
   showTrace,
   teardownTrace,
 } from "./trace.js";
-import { wireScrollFade } from "./scroll-fade.js";
-import {
-  ICON_MAXIMIZE,
-  ICON_MINIMIZE,
-  ICON_MONITOR,
-  ICON_MOON,
-  ICON_POINTER,
-  ICON_SETTINGS,
-  ICON_SUN,
-  elementFromMarkup,
-  icon,
-  svgMarkup,
-} from "./icons.js";
-import { pauseStats, resumeStats, stopStats, wireStats } from "./stats.js";
 
 type Theme = "system" | "light" | "dark";
 const THEME_ICONS: Record<Theme, string> = {
@@ -340,7 +340,8 @@ export function mountInspector(target: Element = document.body): void {
     </button>
   ) as HTMLButtonElement;
   tap(sizeItem, (): void => {
-    logSize = LOG_SIZES[(LOG_SIZES.indexOf(logSize) + 1) % LOG_SIZES.length] ?? 1000;
+    logSize =
+      LOG_SIZES[(LOG_SIZES.indexOf(logSize) + 1) % LOG_SIZES.length] ?? 1000;
     lsSet(LOGSIZE_KEY, String(logSize));
     applyLogSize();
   });
@@ -445,13 +446,11 @@ export function mountInspector(target: Element = document.body): void {
   bodyEl = (<div class="li-body li-fade-y" />) as HTMLElement;
   for (const t of TABS) {
     const pane =
-      t.id === "stats" ? (
-        statsPane
-      ) : t.id === "graph" ? (
-        buildGraphPane()
-      ) : (
-        buildTracePane()
-      );
+      t.id === "stats"
+        ? statsPane
+        : t.id === "graph"
+          ? buildGraphPane()
+          : buildTracePane();
     panes.set(t.id, pane);
     bodyEl.append(pane);
   }
@@ -567,7 +566,9 @@ export function mountInspector(target: Element = document.body): void {
     }
     // Trace is "active" only while its tab is shown AND the panel isn't minimized — drives both the
     // live dot and (the point) detaching its meters so the core records zero detail when off-screen.
-    setTraceActive(tab === "trace" && panel?.classList.contains("li-min") !== true);
+    setTraceActive(
+      tab === "trace" && panel?.classList.contains("li-min") !== true,
+    );
     prevTab = tab ?? null;
     for (const f of scrollFades) f.refresh();
   });

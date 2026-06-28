@@ -6,7 +6,11 @@
 // renderGraphThrottled / showGraph / clearGraphHighlight / teardownGraph).
 import type { State } from "loom";
 import { type InspectNode, inspect } from "loom/observe";
-import { type ListSource, type VirtualList, virtualList } from "../dom/vlist.js";
+import {
+  type ListSource,
+  type VirtualList,
+  virtualList,
+} from "../dom/vlist.js";
 import { formatValue, valueClass } from "./format.js";
 import {
   ICON_BOUND,
@@ -384,7 +388,12 @@ function gItemAt(index: number): GraphItem | undefined {
   let i = index;
   for (const g of graphGroupsData) {
     if (i === 0)
-      return { kind: "header", gid: g.gid, label: g.label, count: g.cells.length };
+      return {
+        kind: "header",
+        gid: g.gid,
+        label: g.label,
+        count: g.cells.length,
+      };
     i -= 1; // the header
     if (!graphCollapsed.has(g.gid)) {
       if (i < g.cells.length)

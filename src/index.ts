@@ -3,23 +3,7 @@
 // — watching loom's own internals via the built-in `events` registry and graph snapshots — is a separate,
 // opt-in surface at `loom/observe`. The implementation lives in ./loom.ts; this file just curates
 // what the default import exposes.
-export {
-  batch,
-  channel,
-  computed,
-  configure,
-  effect,
-  fields,
-  meter,
-  mutate,
-  polled,
-  scope,
-  source,
-  state,
-  trigger,
-  untrack,
-  update,
-} from "./loom.js";
+
 export type {
   Channel,
   ChannelOptions,
@@ -40,4 +24,21 @@ export type {
   SourceConnect,
   State,
   Stop,
+} from "./loom.js";
+export {
+  batch,
+  channel,
+  computed,
+  configure,
+  effect,
+  fields,
+  meter,
+  mutate,
+  polled,
+  scope,
+  source,
+  state,
+  trigger,
+  untrack,
+  update,
 } from "./loom.js";

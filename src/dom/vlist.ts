@@ -127,7 +127,10 @@ export function virtualList<T>(opts: VirtualListOptions<T>): VirtualList<T> {
     },
     scrollToIndex(index) {
       if (!scroller) return;
-      scroller.scrollTop = Math.max(0, index * h - (scroller.clientHeight - h) / 2);
+      scroller.scrollTop = Math.max(
+        0,
+        index * h - (scroller.clientHeight - h) / 2,
+      );
       reconcile();
     },
     destroy() {

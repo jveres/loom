@@ -745,7 +745,14 @@ function recordChannel(
 function recordRead(node: NodeBase, sub: NodeBase): void {
   const meta = node.meta;
   if (meta !== undefined)
-    recordChannel(readCh, meta.id, sub.meta?.id, Date.now(), undefined, undefined);
+    recordChannel(
+      readCh,
+      meta.id,
+      sub.meta?.id,
+      Date.now(),
+      undefined,
+      undefined,
+    );
   else readCh.seq++;
 }
 
@@ -923,7 +930,8 @@ export function configure(options: {
 }): void {
   if (options.inspect !== undefined) inspectEnabled = options.inspect;
   if ("onError" in options) onError = options.onError;
-  if (options.deferScheduler !== undefined) deferScheduler = options.deferScheduler;
+  if (options.deferScheduler !== undefined)
+    deferScheduler = options.deferScheduler;
   if (options.deferTimeout !== undefined) deferTimeout = options.deferTimeout;
 }
 
@@ -1494,7 +1502,10 @@ function defaultDeferScheduler(
 ): () => void {
   const g = globalThis as unknown as {
     requestIdleCallback?: (
-      cb: (d: { timeRemaining(): number; readonly didTimeout: boolean }) => void,
+      cb: (d: {
+        timeRemaining(): number;
+        readonly didTimeout: boolean;
+      }) => void,
       opts?: { timeout?: number },
     ) => number;
     cancelIdleCallback?: (id: number) => void;
@@ -1551,7 +1562,8 @@ function drainDeferred(hasBudget: () => boolean): void {
   }
   if (deferredQueue.length > 0) {
     let soonest = Number.POSITIVE_INFINITY;
-    for (const n of deferredQueue) if (n.maxStale < soonest) soonest = n.maxStale;
+    for (const n of deferredQueue)
+      if (n.maxStale < soonest) soonest = n.maxStale;
     scheduleDrain(soonest);
   }
 }

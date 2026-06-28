@@ -12,8 +12,8 @@ import {
   untrack,
   update,
 } from "loom";
-import { dispose, list } from "loom/dom";
 import { mountInspector, toggleInspector } from "loom/devtools";
+import { dispose, list } from "loom/dom";
 import "./styles.css";
 
 // Inspection is opt-in (off by default = zero cost). Enable it before creating any nodes — when the
@@ -142,9 +142,7 @@ app.replaceChildren(
         }}
       >
         {() =>
-          settings.running()
-            ? `Stop chaos · ${chaosSeconds()}s`
-            : "Start chaos"
+          settings.running() ? `Stop chaos · ${chaosSeconds()}s` : "Start chaos"
         }
       </button>
       {rangeControl("viewers", settings.viewers, 0, 5_000, 50)}

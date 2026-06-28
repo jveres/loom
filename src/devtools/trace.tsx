@@ -323,9 +323,7 @@ function makeRow(
   const timeText = trTime(s["t"] as number);
   const source = s["by"];
   const srcName =
-    source !== undefined
-      ? (labels.get(source as number) ?? `#${source}`)
-      : "";
+    source !== undefined ? (labels.get(source as number) ?? `#${source}`) : "";
   const srcText = srcName ? `by ${srcName}` : "";
   if (kind === "read") {
     return {
@@ -422,4 +420,3 @@ function trTime(t: number): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(d.getMinutes())}:${p(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, "0")}`;
 }
-

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
+import { state } from "../loom.js";
 import {
   attr,
   classed,
@@ -11,7 +12,6 @@ import {
   tap,
   text,
 } from "./index.js";
-import { state } from "../loom.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const HTML_NS = "http://www.w3.org/1999/xhtml";

@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   batch,
   channel,
-  events,
   computed,
   configure,
   depsOf,
   type EffectFn,
   effect,
+  events,
   fields,
   inspect,
   inspectResources,
@@ -223,12 +223,7 @@ describe("loom core", () => {
   });
 
   it("counts non-internal reactive ops on the built-in channels", () => {
-    const m = meter([
-      events.read,
-      events.write,
-      events.compute,
-      events.effect,
-    ]);
+    const m = meter([events.read, events.write, events.compute, events.effect]);
     const a = state(0);
     const c = computed(() => a() * 2);
     const stop = effect(() => {
@@ -1460,7 +1455,12 @@ describe("loom deferred effects", () => {
   });
 
   it("the scheduler controls timing — a synchronous scheduler makes deferred effects run at once", () => {
-    configure({ deferScheduler: (drain) => (drain(() => true), () => {}) });
+    configure({
+      deferScheduler: (drain) => {
+        drain(() => true);
+        return () => {};
+      },
+    });
     const a = state(0);
     const seen: number[] = [];
     const stop = effect(() => seen.push(a()), { defer: true });
@@ -1522,7 +1522,13 @@ describe("loom deferred effects", () => {
     const cells = [state(0), state(0), state(0)];
     const ran: number[] = [];
     const stops = cells.map((c, i) =>
-      effect(() => (c(), ran.push(i)), { defer: true }),
+      effect(
+        () => {
+          c();
+          ran.push(i);
+        },
+        { defer: true },
+      ),
     );
     ran.length = 0;
     for (const c of cells) c(1); // all three queued

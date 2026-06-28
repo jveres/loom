@@ -14,12 +14,12 @@ import {
   source,
   untrack,
 } from "loom";
-import { events, inspectResources } from "loom/observe";
 import { text } from "loom/dom";
+import { events, inspectResources } from "loom/observe";
 import { bind, PANEL_OPTS } from "./bindings.js";
 import { PANEL_ID } from "./css.js";
-import { renderTrace } from "./trace.js";
 import { renderGraphThrottled } from "./graph.js";
+import { renderTrace } from "./trace.js";
 
 /* ---- geometry ---- */
 const FRAME_N = 138; // frame-time histogram samples (matches the demo overlay)
@@ -272,9 +272,7 @@ function buildGauge(): HTMLElement {
       stroke-dasharray={`0 ${GAUGE_C}`}
     />
   );
-  const num = (
-    <text class="li-gnum" x={44} y={48} text-anchor="middle" />
-  );
+  const num = <text class="li-gnum" x={44} y={48} text-anchor="middle" />;
   bindAttr(
     arc,
     "stroke-dasharray",
@@ -290,7 +288,10 @@ function buildGauge(): HTMLElement {
     pulse(() => gaugeClass("li-garc")),
   );
   num.append(
-    text(pulse(() => (healthReady ? String(score) : "100")), PANEL_OPTS),
+    text(
+      pulse(() => (healthReady ? String(score) : "100")),
+      PANEL_OPTS,
+    ),
   );
   bindAttr(
     num,
