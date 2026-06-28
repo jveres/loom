@@ -3,6 +3,11 @@
 **Status:** design approved, not yet implemented. This note captures the agreed design and — more
 importantly — the caveats, so they aren't lost when it's built.
 
+**On implementation — required:** document it in the **README**, not just here. The `effect(fn, {
+defer })` / `maxStale` API goes in the Guide; the caveats (especially **best-effort `maxStale`** and
+**coalesced latest-value**) go in **Design notes**. This file can then be trimmed to rationale or
+removed.
+
 ## Motivation
 
 Loom effects run **synchronously** in the flush after a state write (glitch-free, no torn state).
