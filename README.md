@@ -105,7 +105,7 @@ The core exports these functions:
 - `scope(fn, options?)` groups the effects (and `polled`/`source` resources)
   created inside `fn` so they can be disposed (`stop()`) or suspended (`pause()`
   / `resume()`) together. Scopes nest, and an effect runs only while no scope in
-  its parent chain is paused. `options` (`internal` / `namespace` / `label`)
+  its parent chain is paused. `options` (`internal` / `label`)
   become defaults for every node created in the scope. Returns
   `{ stop, pause, resume }`.
 - `untrack(fn)` reads state inside `fn` without subscribing the active effect.
@@ -164,7 +164,7 @@ The core exports these types:
   primitives; `DeferScheduler` is the configurable deferred-lane scheduler;
   `NodeKind` is the `"state" | "computed" | "effect"` union reported on an `InspectNode`.
 
-Pass `{ label, namespace }` to `state`, `computed`, `effect`, or `fields` when
+Pass `{ label }` to `state`, `computed`, `effect`, or `fields` when
 you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
 tooling state that must not appear in app-level event streams by default.
 
@@ -179,7 +179,7 @@ const model = fields(
     title: "Hello",
     likes: 0,
   },
-  { label: "post", namespace: "demo" },
+  { label: "post" },
 );
 
 effect(() => {
@@ -278,7 +278,7 @@ scope tears them all down. So a hidden subtree stops not only re-rendering but
 also the timers and observers feeding it.
 
 A scope's second argument sets default options for everything created inside it —
-handy for marking an entire subsystem `internal` and giving it a `namespace`
+handy for marking an entire subsystem `internal` (or giving it a shared `label`)
 without repeating the options on every primitive. A node's own options win, and
 nested scopes inherit and can override:
 
@@ -290,12 +290,12 @@ scope(
     const settings = fields({ theme: "dark", zoom: 1 }); // cells inherit the defaults
     effect(() => apply(settings.theme())); // so does this effect
   },
-  { internal: true, namespace: "panel" },
+  { internal: true },
 );
 ```
 
 The dev inspector relies on this: its panel scope is created with
-`{ internal: true, namespace: "loom-inspector" }`, so every binding, the
+`{ internal: true }`, so every binding, the
 heartbeat, the web-vital sources and the heap timer are filtered from the
 observability it reports — without passing options to each one.
 
@@ -619,7 +619,7 @@ zero. The rest of `@jveres/loom/observe` snapshots the reactive graph:
   removed object, unreachable but not yet GC'd); effects are always kept.
 - `inspectResources()` returns a live census `{ states, computeds, effects, views,
   sources, scopes, channels, unread }` — one cheap walk, no per-node allocation.
-  `views` are the DOM bindings (effects in the `"dom"` namespace); `unread` is the
+  `views` are the DOM bindings (effects bound to a DOM node via `target`); `unread` is the
   count of states/computeds nothing currently reads (a rising count hints at a leak).
 - `depsOf(read | stop)` returns a node's inspected dependencies.
 
@@ -667,7 +667,7 @@ The panel has three tabs:
   sources, scopes, channels, `unread`) plus a live rendering-pipeline sparkline
   (writes in vs DOM updates out) driven by a `meter` over the built-in `events`.
 - **Graph** — the reactive graph as a virtualized tree of state/computed cells,
-  grouped by `fields()` group and namespace. A filled dot means the cell drives a
+  grouped by `fields()` group. A filled dot means the cell drives a
   DOM node downstream; a hollow dot means it doesn't. Hovering a cell (or a group
   header) highlights every DOM target it feeds; the locate button scrolls the
   first target into view. Primitive state cells are editable in place, and values
