@@ -13,6 +13,7 @@ export default defineConfig({
         observe: resolve(root, "src/observe.ts"),
         dom: resolve(root, "src/dom/index.ts"),
         "dom/vlist": resolve(root, "src/dom/vlist.ts"),
+        devtools: resolve(root, "src/devtools/index.ts"),
         "jsx-runtime": resolve(root, "src/dom/jsx-runtime.ts"),
         html: resolve(root, "src/html/index.ts"),
         "html/jsx-runtime": resolve(root, "src/html/jsx-runtime.ts"),

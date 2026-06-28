@@ -4,13 +4,13 @@ import {
   escapeText,
   html,
   isHtml,
-  raw,
   renderToString,
+  unsafeHtml,
 } from "./index.js";
 
 describe("loom html", () => {
-  it("raw wraps a string and stringifies", () => {
-    const r = raw("<b>x</b>");
+  it("unsafeHtml wraps a string and stringifies", () => {
+    const r = unsafeHtml("<b>x</b>");
     expect(isHtml(r)).toBe(true);
     expect(r.value).toBe("<b>x</b>");
     expect(r.toString()).toBe("<b>x</b>");
@@ -31,13 +31,15 @@ describe("loom html", () => {
     expect(renderToString(false)).toBe("");
     expect(renderToString(42)).toBe("42");
     expect(renderToString("a<b")).toBe("a&lt;b");
-    expect(renderToString(raw("<x>"))).toBe("<x>");
-    expect(renderToString(["a", 1, raw("<y>"), null, ["z"]])).toBe("a1<y>z");
+    expect(renderToString(unsafeHtml("<x>"))).toBe("<x>");
+    expect(renderToString(["a", 1, unsafeHtml("<y>"), null, ["z"]])).toBe(
+      "a1<y>z",
+    );
   });
 
   it("html template interpolates and escapes values", () => {
     const name = "<script>";
-    const out = html`<p>${name}</p>${raw("<hr>")}`;
+    const out = html`<p>${name}</p>${unsafeHtml("<hr>")}`;
     expect(out.value).toBe("<p>&lt;script&gt;</p><hr>");
   });
 

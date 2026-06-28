@@ -34,18 +34,18 @@ export interface VirtualList<T> {
 
 export interface VirtualListOptions<T> {
   /** Uniform row height in pixels. */
-  rowHeight: number;
+  readonly rowHeight: number;
   /** Stable identity for an item, so a row can be reused across windows. */
-  key: (item: T) => string | number;
+  readonly key: (item: T) => string | number;
   /** Build a row when `reuse` is null, else update `reuse` in place and return it. */
-  render: (item: T, reuse: HTMLElement | null) => HTMLElement;
+  readonly render: (item: T, reuse: HTMLElement | null) => HTMLElement;
   /** Extra rows rendered above and below the viewport (default 6). */
-  overscan?: number;
+  readonly overscan?: number;
 }
 
-export function virtualList<T>(opts: VirtualListOptions<T>): VirtualList<T> {
-  const h = opts.rowHeight;
-  const overscan = opts.overscan ?? 6;
+export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
+  const h = options.rowHeight;
+  const overscan = options.overscan ?? 6;
   const el = document.createElement("div");
   el.style.position = "relative";
   const sizer = document.createElement("div");
@@ -72,10 +72,10 @@ export function virtualList<T>(opts: VirtualListOptions<T>): VirtualList<T> {
     const live = new Set<string | number>();
     for (let i = start; i < end; i++) {
       const item = items.at(i) as T;
-      const k = opts.key(item);
+      const k = options.key(item);
       live.add(k);
       const existing = mounted.get(k) ?? null;
-      const row = opts.render(item, existing);
+      const row = options.render(item, existing);
       row.style.transform = `translateY(${i * h}px)`;
       if (existing === null) {
         el.append(row);

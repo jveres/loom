@@ -59,10 +59,10 @@ export type Props = Record<string, unknown> & {
 };
 
 export interface ListOptions<T> {
-  key(item: T): string | number;
-  render(item: T, key: string): Element;
-  animate?: Read<boolean>;
-  reorder?: Read<boolean>;
+  readonly key: (item: T) => string | number;
+  readonly render: (item: T, key: string) => Element;
+  readonly animate?: Read<boolean>;
+  readonly reorder?: Read<boolean>;
 }
 
 type OwnedEffect = Stop | Stop[];

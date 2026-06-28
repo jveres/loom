@@ -2,8 +2,8 @@ import {
   escapeAttribute,
   type Html,
   type HtmlChild,
-  raw,
   renderToString,
+  unsafeHtml,
 } from "./index.js";
 
 export type { JSX } from "./jsx-types.js";
@@ -68,7 +68,7 @@ export const jsxs: typeof jsx = jsx;
 export function Fragment(
   props: { readonly children?: HtmlChild } | null,
 ): Html {
-  return raw(renderToString(props?.children));
+  return unsafeHtml(renderToString(props?.children));
 }
 
 export function jsxDEV(
@@ -84,7 +84,7 @@ export function jsxDEV(
 
 function createJsx(type: JsxType, props: JsxProps): Html {
   if (typeof type === "function") {
-    return raw(renderToString(type(propsWithoutKey(props) as object)));
+    return unsafeHtml(renderToString(type(propsWithoutKey(props) as object)));
   }
 
   return renderElement(type, props);
@@ -114,7 +114,7 @@ function renderElement(type: string, props: JsxProps): Html {
     out += `</${type}>`;
   }
 
-  return raw(out);
+  return unsafeHtml(out);
 }
 
 function renderAttribute(name: string, value: unknown): string {

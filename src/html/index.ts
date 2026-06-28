@@ -14,7 +14,7 @@ export type HtmlChild =
   | undefined
   | readonly HtmlChild[];
 
-export function raw(value: string): Html {
+export function unsafeHtml(value: string): Html {
   return {
     [htmlMarker]: true,
     value,
@@ -31,7 +31,7 @@ export function html(
     out += renderToString(values[index]);
     out += strings[index + 1] ?? "";
   }
-  return raw(out);
+  return unsafeHtml(out);
 }
 
 export function renderToString(value: HtmlChild): string {

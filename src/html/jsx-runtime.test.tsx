@@ -1,6 +1,6 @@
 /** @jsxImportSource loom/html */
 import { describe, expect, it } from "vitest";
-import { html, raw, renderToString } from "./index.js";
+import { html, renderToString, unsafeHtml } from "./index.js";
 import { Fragment, jsx, jsxDEV, jsxs } from "./jsx-runtime.js";
 
 describe("loom HTML JSX runtime", () => {
@@ -45,8 +45,8 @@ describe("loom HTML JSX runtime", () => {
     expect(receivedKey).toBeUndefined();
   });
 
-  it("supports html templates and trusted raw HTML", () => {
-    const out = html`<main>${raw("<strong>safe</strong>")} ${"<script>"}</main>`;
+  it("supports html templates and trusted unsafeHtml HTML", () => {
+    const out = html`<main>${unsafeHtml("<strong>safe</strong>")} ${"<script>"}</main>`;
 
     expect(renderToString(out)).toBe(
       "<main><strong>safe</strong> &lt;script&gt;</main>",

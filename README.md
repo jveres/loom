@@ -126,8 +126,9 @@ The core exports these functions:
   overwriting ring buffer that records cheaply (no allocation until metered) and
   is drained, not pushed. A reusable primitive for any event or sample stream, not
   just telemetry.
-- `meter(channels)` attaches a pull-based meter; `read()` returns a Frame per
-  channel (`{ count, dropped, samples }`) since the last read. A meter is a scope
+- `meter(channels, aggregation?)` attaches a pull-based meter (`aggregation` is
+  `"count"`, the default, or `"samples"`); `read()` returns a Frame per channel
+  (`{ count, dropped, samples }`) since the last read. A meter is a scope
   resource, so it detaches on `scope.pause()`.
 - `configure({ inspect, onError, deferScheduler, deferTimeout })` sets runtime options. `inspect` toggles the
   inspection layer — **off by default**, so node creation allocates no metadata
@@ -157,8 +158,9 @@ The core exports these types:
   param); `InspectSnapshot` and `ResourceCounts` (the `inspect()` /
   `inspectResources()` result shapes) come with `@jveres/loom/observe`.
 - `Channel` is a named channel; `Meter` drains channels;
-  `Frame` is a per-channel `{ count, dropped, samples }`; `ChannelOptions`
-  configures `{ capacity, fields }`.
+  `Frame` is a per-channel `{ count, dropped, samples }`; `MeterAggregation` is a
+  meter's view (`"count" | "samples"`); `ChannelOptions` configures
+  `{ capacity, fields }`.
 - `NodeOptions` (`{ internal, label }`) and `EffectOptions` (adds `{ target }`
   and the deferred-lane `{ defer, maxStale }`) are the option bags accepted by the
   primitives; `DeferScheduler` is the configurable deferred-lane scheduler;
@@ -433,9 +435,12 @@ list(container, rows, {
 ```
 
 For long lists, `@jveres/loom/dom/vlist` is a standalone fixed-row-height
-virtualizer — only the rows in (and just around) the viewport stay in the DOM. It
-takes a `{ rowHeight, key, render }` and windows against an existing scroll
-container; the inspector's graph tree is built on it.
+virtualizer — only the rows in (and just around) the viewport stay in the DOM.
+`virtualList(options)` takes a `VirtualListOptions` (`{ rowHeight, key, render,
+overscan? }`) and windows against an existing scroll container, returning a
+`VirtualList` handle: `el` (mount it inside the scroller), `setItems(source)`,
+`refresh()`, `scrollToIndex(i)`, and `destroy()` to tear it down. The inspector's
+graph tree is built on it.
 
 ### JSX
 
@@ -564,8 +569,9 @@ The `@jveres/loom/html` entrypoint exports:
 - `renderToString(child)` serializes a node tree to an HTML string.
 - `html(strings, ...values)` is a tagged template that escapes interpolated
   values and returns an `Html` node.
-- `raw(value)` marks a pre-trusted string as `Html` so it is emitted verbatim
-  (no escaping) — use only for content you control.
+- `unsafeHtml(value)` marks a pre-trusted string as `Html` so it is emitted
+  verbatim, bypassing escaping — **trusted input only**: never pass user-supplied
+  content (everything interpolated into `html` is escaped; this is the one hole).
 - `isHtml(value)` is the type guard for an `Html` node.
 - `escapeText(value)` / `escapeAttribute(value)` are the underlying escapers, for
   hand-built markup.
