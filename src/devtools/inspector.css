@@ -749,6 +749,9 @@
     cursor: pointer;
     white-space: nowrap;
     flex: 0 0 auto;
+    /* iOS Safari stretches an appearance:none <button> flex item to fill unless its width is pinned
+       to content — without this the tabs go full-width on iPhone. */
+    width: max-content;
     letter-spacing: 0.04em;
     transition:
       color 0.12s,
