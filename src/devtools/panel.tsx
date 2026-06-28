@@ -580,9 +580,10 @@ export function unmountInspector(): void {
   stopStats();
   for (const f of scrollFades) f.dispose();
   scrollFades.length = 0;
-  // Stopping the bindings drops the vital sources' last subscribers, which auto-disconnects
-  // their PerformanceObservers (no manual teardown needed).
   disposeBindings();
+  // inspectorScope owns the meters, heartbeat, the deferred render effect and every binding; stopping
+  // it is the authoritative teardown, so a resource added to the scope but not tracked above can't leak.
+  inspectorScope?.stop();
   inspectorScope = null;
   if (closeMenuOnOutside)
     document.removeEventListener("pointerdown", closeMenuOnOutside);

@@ -7,25 +7,39 @@
    selectors. Declared once here rather than in each block. */
 #loom-inspector,
 #loom-inspector-menu {
-  --li-bg: #15151d;
-  --li-fg: #ededf0;
-  --li-muted: #8f8f9b;
-  --li-border: rgba(255, 255, 255, 0.14);
-  --li-border-soft: rgba(255, 255, 255, 0.08);
-  --li-hover: rgba(255, 255, 255, 0.06);
-  --li-fill: #1d1d28;
-  --li-accent: #8b7cff;
-  --li-accent-soft: rgba(139, 124, 255, 0.3);
-  --li-bar-bg: rgba(139, 124, 255, 0.12);
-  --li-key: #8b7cff;
-  --li-num: #57c97e;
-  --li-str: #f0b65a;
-  --li-bool: #ff7a9c;
-  --li-nul: #8f8f9b;
-  --li-input-bg: #ededf0;
+  /* Each token carries both values via light-dark(value-light, value-dark); the color-scheme set
+     below (dark default; data-theme overrides) selects which resolves — one definition per token,
+     and it also themes the native trace controls (select/input) to match. */
+  color-scheme: dark;
+  --li-bg: light-dark(#fbfbfd, #15151d);
+  --li-fg: light-dark(#16161c, #ededf0);
+  --li-muted: light-dark(#83838c, #8f8f9b);
+  --li-border: light-dark(rgba(0, 0, 0, 0.17), rgba(255, 255, 255, 0.14));
+  --li-border-soft: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.08));
+  --li-hover: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06));
+  --li-fill: light-dark(#eeeef3, #1d1d28);
+  --li-accent: light-dark(#6d5cf0, #8b7cff);
+  --li-accent-soft: light-dark(rgba(109, 92, 240, 0.16), rgba(139, 124, 255, 0.3));
+  --li-bar-bg: light-dark(rgba(109, 92, 240, 0.1), rgba(139, 124, 255, 0.12));
+  --li-key: light-dark(#6d5cf0, #8b7cff);
+  --li-num: light-dark(#2f9e5a, #57c97e);
+  --li-str: light-dark(#c0801f, #f0b65a);
+  --li-bool: light-dark(#e5446b, #ff7a9c);
+  --li-nul: light-dark(#83838c, #8f8f9b);
+  --li-input-bg: light-dark(#fff, #ededf0);
   --li-input-fg: #16161c;
-  --li-uline: rgba(255, 255, 255, 0.4);
-  --li-scroll: rgba(255, 255, 255, 0.22);
+  --li-uline: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.4));
+  --li-scroll: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.22));
+}
+
+/* Theme = which color-scheme light-dark() reads. Default (above) is dark; data-theme switches it. */
+#loom-inspector[data-theme="light"],
+#loom-inspector-menu[data-theme="light"] {
+  color-scheme: light;
+}
+#loom-inspector[data-theme="system"],
+#loom-inspector-menu[data-theme="system"] {
+  color-scheme: light dark;
 }
 
 #loom-inspector {
@@ -877,54 +891,6 @@
   appearance: none;
   -webkit-tap-highlight-color: transparent;
   outline: none; /* the UA focus outline is a square that ignores border-radius and lingers after a click */
-}
-
-#loom-inspector[data-theme="light"],
-#loom-inspector-menu[data-theme="light"] {
-  --li-bg: #fbfbfd;
-  --li-fg: #16161c;
-  --li-muted: #83838c;
-  --li-border: rgba(0, 0, 0, 0.17);
-  --li-border-soft: rgba(0, 0, 0, 0.09);
-  --li-hover: rgba(0, 0, 0, 0.05);
-  --li-fill: #eeeef3;
-  --li-accent: #6d5cf0;
-  --li-accent-soft: rgba(109, 92, 240, 0.16);
-  --li-bar-bg: rgba(109, 92, 240, 0.1);
-  --li-key: #6d5cf0;
-  --li-num: #2f9e5a;
-  --li-str: #c0801f;
-  --li-bool: #e5446b;
-  --li-nul: #83838c;
-  --li-input-bg: #fff;
-  --li-input-fg: #16161c;
-  --li-uline: rgba(0, 0, 0, 0.3);
-  --li-scroll: rgba(0, 0, 0, 0.2);
-}
-
-@media (prefers-color-scheme: light) {
-  #loom-inspector[data-theme="system"],
-  #loom-inspector-menu[data-theme="system"] {
-    --li-bg: #fbfbfd;
-    --li-fg: #16161c;
-    --li-muted: #83838c;
-    --li-border: rgba(0, 0, 0, 0.17);
-    --li-border-soft: rgba(0, 0, 0, 0.09);
-    --li-hover: rgba(0, 0, 0, 0.05);
-    --li-fill: #eeeef3;
-    --li-accent: #6d5cf0;
-    --li-accent-soft: rgba(109, 92, 240, 0.16);
-    --li-bar-bg: rgba(109, 92, 240, 0.1);
-    --li-key: #6d5cf0;
-    --li-num: #2f9e5a;
-    --li-str: #c0801f;
-    --li-bool: #e5446b;
-    --li-nul: #83838c;
-    --li-input-bg: #fff;
-    --li-input-fg: #16161c;
-    --li-uline: rgba(0, 0, 0, 0.3);
-    --li-scroll: rgba(0, 0, 0, 0.2);
-  }
 }
 
 @keyframes li-insp-flash {

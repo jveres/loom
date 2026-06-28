@@ -865,14 +865,15 @@ export function stopStats(): void {
   flushMeter = null;
   heartbeat?.stop();
   heartbeat = null;
-  heapSource?.stop();
-  heapSource = null;
   if (lagTimer != null) clearInterval(lagTimer);
   lagTimer = null;
   if (rafHandle != null) cancelAnimationFrame(rafHandle);
   rafHandle = null;
-  clsSource = lcpSource = inpSource = longTasksSource = null;
+  // statsScope owns the heap + web-vital sources and the Info-pane bindings; stopping it tears them
+  // all down (and any future resource added inside), so they need no individual teardown here.
+  statsScope?.stop();
   statsScope = null;
+  heapSource = clsSource = lcpSource = inpSource = longTasksSource = null;
   metricSeq = 0;
   readRate = writeRate = computedRate = effectRate = flushRate = 0;
   createRate = disposeRate = 0;
