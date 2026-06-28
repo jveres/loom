@@ -79,6 +79,7 @@ const frameMs: number[] = [];
 let lag = 0;
 let lagPeak = 0;
 let lagExpected = 0;
+let lagWasHidden = false; // tab was hidden during the current inter-tick interval (see startMetrics)
 
 let clsSource: Read<number> | null = null;
 let lcpSource: Read<number> | null = null;
@@ -757,10 +758,11 @@ function renderActiveTab(): void {
   }
 }
 
-// On returning to a backgrounded tab, the lag timer was throttled/frozen the whole time, so reset its
-// baseline to now — otherwise the first tick back reports the minutes away as one giant lag spike.
+// Mark that the tab went hidden. This fires even while the lag timer is throttled/frozen, so the flag
+// is already set when the catch-up tick runs on return — independent of whether that tick or the
+// visibilitychange-to-visible event arrives first.
 function onLagVisibility(): void {
-  if (!document.hidden) lagExpected = performance.now() + LAG_MS;
+  if (document.hidden) lagWasHidden = true;
 }
 
 function startMetrics(): void {
@@ -770,15 +772,24 @@ function startMetrics(): void {
   lagExpected = performance.now() + LAG_MS;
   lagTimer = setInterval(() => {
     const t = performance.now();
-    // A hidden tab throttles/freezes this timer, so a tick fired while hidden is the time away, not
-    // main-thread lag — resync the baseline and skip it (onLagVisibility resets it again on return).
+    const expected = lagExpected;
+    lagExpected = t + LAG_MS;
+    // A backgrounded tab throttles/freezes this timer, so a tick's delta spans the time away — but you
+    // can't tell that from the delta's size (a long real task is also a big delta). Use the actual
+    // signal, the Page Visibility API: skip the tick if the tab is hidden now, or was hidden anytime
+    // during this interval (lagWasHidden, set by visibilitychange before the timer froze, so it holds
+    // regardless of whether the catch-up tick or the visible event lands first). Otherwise the delta
+    // is genuine main-thread lag — record it, however large.
     if (document.hidden) {
-      lagExpected = t + LAG_MS;
+      lagWasHidden = true;
       return;
     }
-    lag = Math.max(0, t - lagExpected);
+    if (lagWasHidden) {
+      lagWasHidden = false; // first tick back after the tab was hidden — its delta is the time away
+      return;
+    }
+    lag = Math.max(0, t - expected);
     if (lag > lagPeak) lagPeak = lag;
-    lagExpected = t + LAG_MS;
   }, LAG_MS);
   document.addEventListener("visibilitychange", onLagVisibility);
 
