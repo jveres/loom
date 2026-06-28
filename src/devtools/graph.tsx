@@ -7,6 +7,7 @@
 import type { State } from "loom";
 import { type InspectNode, inspect } from "loom/observe";
 import { type ListSource, type VirtualList, virtualList } from "../dom/vlist.js";
+import { formatValue, valueClass } from "./format.js";
 import {
   ICON_BOUND,
   ICON_CHEVRON,
@@ -18,6 +19,7 @@ import {
 
 const GRAPH_RENDER_MS = 300; // throttle the (heavy) graph reconcile below the 120ms heartbeat
 const GRAPH_ROW_H = 22; // uniform graph row/header height (must match the .li-grow/.li-gns-h CSS)
+const GRAPH_VALUE_MAX = 16; // string-value truncation budget in the (narrow) graph rows
 
 type GraphItem =
   | {
@@ -66,26 +68,6 @@ export function buildGraphPane(): HTMLElement {
 function gBound(n: InspectNode): boolean {
   return gTargetsFor(n.id).length > 0;
 }
-function gFormat(v: unknown): string {
-  if (v === undefined) return "—";
-  if (v === null) return "null";
-  if (typeof v === "number")
-    return Number.isInteger(v) ? String(v) : v.toFixed(2);
-  if (typeof v === "string")
-    return v.length > 16 ? `"${v.slice(0, 15)}…"` : `"${v}"`;
-  if (typeof v === "boolean") return String(v);
-  if (Array.isArray(v)) return `[${v.length}]`;
-  if (typeof v === "object") return "{…}";
-  return String(v);
-}
-// Type colour for a value (see the --li-num/str/bool/nul palette).
-function gValueClass(v: unknown): string {
-  if (typeof v === "number") return "li-gv-num";
-  if (typeof v === "string") return "li-gv-str";
-  if (typeof v === "boolean") return "li-gv-bool";
-  if (v === null || v === undefined) return "li-gv-nul";
-  return "";
-}
 // Parse an edited string back toward the previous value's type (the rest stay strings).
 function gCoerce(input: string, prev: unknown): unknown {
   if (typeof prev === "number") {
@@ -120,7 +102,7 @@ function gPaintVal(
   if (gEditingId === id) return;
   const val = row.querySelector(".li-gval") as HTMLElement | null;
   if (!val) return;
-  const text = gFormat(value);
+  const text = formatValue(value, GRAPH_VALUE_MAX);
   if (
     !silent &&
     !gSuppressFlash &&
@@ -130,7 +112,7 @@ function gPaintVal(
     gFlash(row);
   val.textContent = text;
   const edit = val.classList.contains("li-edit") ? " li-edit" : "";
-  val.className = `li-gval${edit} ${gValueClass(value)}`;
+  val.className = `li-gval${edit} ${valueClass(value)}`;
   row.dataset["prev"] = text;
 }
 // Open the in-place editor for a state cell: booleans toggle, others get an <input> that commits on

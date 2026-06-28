@@ -9,6 +9,7 @@
 import { type Meter, meter } from "loom";
 import { events, inspect } from "loom/observe";
 import { type VirtualList, virtualList } from "../dom/vlist.js";
+import { formatValue, valueClass } from "./format.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
 import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
 import { wireScrollFade } from "./scroll-fade.js";
@@ -295,7 +296,7 @@ function makeRow(
   const id = s["id"] as number;
   const name = labels.get(id) ?? `#${id}`;
   const timeText = trTime(s["t"] as number);
-  const source = s["source"];
+  const source = s["by"];
   const srcName =
     source !== undefined
       ? (labels.get(source as number) ?? `#${source}`)
@@ -316,8 +317,8 @@ function makeRow(
       full: `${name} — read ${srcText || "(external)"}`,
     };
   }
-  const prevText = trFormat(s["prev"]);
-  const nextText = trFormat(s["next"]);
+  const prevText = formatValue(s["prev"], VALUE_MAX);
+  const nextText = formatValue(s["next"], VALUE_MAX);
   return {
     seq: rowSeq++,
     id,
@@ -325,9 +326,9 @@ function makeRow(
     timeText,
     name,
     prevText,
-    prevCls: trValueClass(s["prev"]),
+    prevCls: valueClass(s["prev"]),
     nextText,
-    nextCls: trValueClass(s["next"]),
+    nextCls: valueClass(s["next"]),
     srcText,
     full: `${name}: ${prevText} → ${nextText} ${srcText || "(external)"}`,
   };
@@ -397,24 +398,3 @@ function trTime(t: number): string {
   return `${p(d.getMinutes())}:${p(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, "0")}`;
 }
 
-// Compact value display; full strings are kept (CSS ellipsis truncates them at the right edge),
-// only capped against pathological lengths.
-function trFormat(v: unknown): string {
-  if (v === undefined) return "—";
-  if (v === null) return "null";
-  if (typeof v === "number")
-    return Number.isInteger(v) ? String(v) : v.toFixed(2);
-  if (typeof v === "string")
-    return v.length > VALUE_MAX ? `"${v.slice(0, VALUE_MAX)}…"` : `"${v}"`;
-  if (typeof v === "boolean") return String(v);
-  if (Array.isArray(v)) return `[${v.length}]`;
-  if (typeof v === "object") return "{…}";
-  return String(v);
-}
-function trValueClass(v: unknown): string {
-  if (typeof v === "number") return "li-gv-num";
-  if (typeof v === "string") return "li-gv-str";
-  if (typeof v === "boolean") return "li-gv-bool";
-  if (v === null || v === undefined) return "li-gv-nul";
-  return "";
-}

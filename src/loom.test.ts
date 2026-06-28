@@ -289,9 +289,9 @@ describe("loom core", () => {
     const aRead = reads.find((r) => r["id"] !== undefined);
     const bWrite = writes.find((w) => w["next"] === 6);
     const aWrite = writes.find((w) => w["next"] === 5);
-    expect(typeof aRead?.["source"]).toBe("number"); // a was read by the effect
-    expect(bWrite?.["source"]).toBe(aRead?.["source"]); // the same effect then wrote b
-    expect(aWrite?.["source"]).toBeUndefined(); // a's own top-level write has no reactive source
+    expect(typeof aRead?.["by"]).toBe("number"); // a was read by the effect
+    expect(bWrite?.["by"]).toBe(aRead?.["by"]); // the same effect then wrote b
+    expect(aWrite?.["by"]).toBeUndefined(); // a's own top-level write has no reactive source
     stop();
     rm.stop();
     wm.stop();

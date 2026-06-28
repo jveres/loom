@@ -74,7 +74,7 @@ export type Fields<T extends object> = {
   readonly [K in FieldKey<T>]: State<T[K]>;
 };
 
-type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
 type NodeBase = ReactiveNode & {
   deps?: Link | undefined;
@@ -690,6 +690,16 @@ function recordChannel(
   node.seq++;
 }
 
+// Record a read on the read channel — the cell, the reader (the running effect/computed) that
+// consumed it, and when. Callers gate on `readCh.meters !== 0 && !internal` so the idle path stays a
+// branch; `meta === undefined` (inspection off for this cell) just counts.
+function recordRead(node: NodeBase, sub: NodeBase): void {
+  const meta = node.meta;
+  if (meta !== undefined)
+    recordChannel(readCh, meta.id, sub.meta?.id, Date.now(), undefined, undefined);
+  else readCh.seq++;
+}
+
 function channelOf(node: ChannelNode): Channel {
   return {
     name: node.name,
@@ -791,18 +801,18 @@ export function meter(
 // read carries detail (which cell, the reader that read it, when) so a "samples" meter can stream
 // reads (the Trace tab); a "count" meter (the read rate) ignores the ring. Reads are the
 // highest-frequency event, so the per-read recording is paid only while metered and stays zero-alloc.
-// `source` is the running effect/computed that performed the read — i.e. who consumed the cell.
+// `by` is the running effect/computed that performed the read — i.e. who consumed the cell.
 const readCh = createChannelNode("loom:read", {
   capacity: 1024,
-  fields: ["id", "source", "t"],
+  fields: ["id", "by", "t"],
 });
 // write carries detail so a "samples" meter can stream individual mutations (id + prev→next + the
-// source that wrote it + a wall-clock timestamp), e.g. the inspector's Trace tab; a "count" meter
-// (the rates) ignores the ring and allocates nothing. `source` is the effect/computed that wrote
-// during a reactive cascade, or undefined for a top-level (event-handler) write.
+// node that wrote it + a wall-clock timestamp), e.g. the inspector's Trace tab; a "count" meter
+// (the rates) ignores the ring and allocates nothing. `by` is the effect/computed that wrote during
+// a reactive cascade, or undefined for a top-level (event-handler) write.
 const writeCh = createChannelNode("loom:write", {
   capacity: 1024,
-  fields: ["id", "prev", "next", "source", "t"],
+  fields: ["id", "prev", "next", "by", "t"],
 });
 const computeCh = createChannelNode("loom:compute");
 const effectCh = createChannelNode("loom:effect");
@@ -1037,7 +1047,7 @@ function inspectNodeWithOptionals(
   value: unknown,
   meta: InspectMeta,
 ): InspectNode {
-  const out: Mutable<InspectNode> = { ...base };
+  const out: Writable<InspectNode> = { ...base };
   if (source !== undefined) out.source = source;
   if (target !== undefined) out.target = target;
   if (value !== undefined) out.value = value;
@@ -1217,19 +1227,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   const sub = activeSub;
   if (sub !== undefined) {
     link(this, sub, cycle);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) {
-      const meta = this.meta;
-      if (meta !== undefined)
-        recordChannel(
-          readCh,
-          meta.id,
-          sub.meta?.id, // the reader (the running effect/computed) that consumed this cell
-          Date.now(),
-          undefined,
-          undefined,
-        );
-      else readCh.seq++;
-    }
+    if (readCh.meters !== 0 && this.meta?.internal !== true) recordRead(this, sub);
   }
   return this.currentValue;
 }
@@ -1247,19 +1245,7 @@ function sourceOper<T>(this: SourceNode<T>): T {
     const first = this.subs === undefined;
     link(this, sub, cycle);
     if (first && !this.active) connectSource(this);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) {
-      const meta = this.meta;
-      if (meta !== undefined)
-        recordChannel(
-          readCh,
-          meta.id,
-          sub.meta?.id, // the reader (the running effect/computed) that consumed this cell
-          Date.now(),
-          undefined,
-          undefined,
-        );
-      else readCh.seq++;
-    }
+    if (readCh.meters !== 0 && this.meta?.internal !== true) recordRead(this, sub);
   }
   return this.currentValue;
 }
@@ -1304,19 +1290,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
   const sub = activeSub;
   if (sub !== undefined) {
     link(this, sub, cycle);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) {
-      const meta = this.meta;
-      if (meta !== undefined)
-        recordChannel(
-          readCh,
-          meta.id,
-          sub.meta?.id, // the reader (the running effect/computed) that consumed this cell
-          Date.now(),
-          undefined,
-          undefined,
-        );
-      else readCh.seq++;
-    }
+    if (readCh.meters !== 0 && this.meta?.internal !== true) recordRead(this, sub);
   }
   return this.value as T;
 }

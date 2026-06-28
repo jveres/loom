@@ -2,7 +2,11 @@
    at runtime (see panel.tsx). The `#loom-inspector` id-scoping is intentional: it keeps the
    panel styled correctly inside arbitrary host pages. NOTE: the id must match PANEL_ID in css.ts. */
 
-#loom-inspector {
+/* Shared token palette — the panel and its portalled menu carry the same custom properties; the
+   light overrides below (and the system-preference media query) recolour both via combined
+   selectors. Declared once here rather than in each block. */
+#loom-inspector,
+#loom-inspector-menu {
   --li-bg: #15151d;
   --li-fg: #ededf0;
   --li-muted: #8f8f9b;
@@ -22,6 +26,9 @@
   --li-input-fg: #16161c;
   --li-uline: rgba(255, 255, 255, 0.4);
   --li-scroll: rgba(255, 255, 255, 0.22);
+}
+
+#loom-inspector {
   position: fixed;
   right: 12px;
   bottom: 12px;
@@ -528,7 +535,7 @@
   }
   .li-tr-live.off {
     animation: none;
-    background: var(--li-muted); /* solid gray = paused */
+    background: #c4c4cf; /* solid light gray = paused */
   }
   .li-tr-live.inactive {
     display: none; /* the Trace tab isn't shown — no live capture, so no dot */
@@ -771,25 +778,6 @@
 }
 
 #loom-inspector-menu {
-  --li-bg: #15151d;
-  --li-fg: #ededf0;
-  --li-muted: #8f8f9b;
-  --li-border: rgba(255, 255, 255, 0.14);
-  --li-border-soft: rgba(255, 255, 255, 0.08);
-  --li-hover: rgba(255, 255, 255, 0.06);
-  --li-fill: #1d1d28;
-  --li-accent: #8b7cff;
-  --li-accent-soft: rgba(139, 124, 255, 0.3);
-  --li-bar-bg: rgba(139, 124, 255, 0.12);
-  --li-key: #8b7cff;
-  --li-num: #57c97e;
-  --li-str: #f0b65a;
-  --li-bool: #ff7a9c;
-  --li-nul: #8f8f9b;
-  --li-input-bg: #ededf0;
-  --li-input-fg: #16161c;
-  --li-uline: rgba(255, 255, 255, 0.4);
-  --li-scroll: rgba(255, 255, 255, 0.22);
   position: fixed;
   z-index: 2147483647;
   min-width: 150px;
@@ -938,11 +926,9 @@
 @keyframes li-tr-pulse {
   0%,
   100% {
-    opacity: 1;
-    transform: scale(1);
+    background: var(--li-num);
   }
   50% {
-    opacity: 0.35;
-    transform: scale(0.82);
+    background: #a3ecbf; /* light green — stays "live", never dims toward the paused/inactive look */
   }
 }
