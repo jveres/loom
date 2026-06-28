@@ -42,7 +42,31 @@ export interface NodeOptions {
 
 export interface EffectOptions extends NodeOptions {
   readonly target?: object;
+  /**
+   * Run this effect in the deferred lane: re-runs happen off the critical path (idle-first,
+   * coalesced) instead of in the synchronous flush. The initial run is still synchronous (so deps
+   * are tracked and the first output is immediate); only re-runs defer. Coalesced means it sees the
+   * latest value, NOT every transition — use a channel for every-transition. See
+   * docs/deferred-effects.md.
+   */
+  readonly defer?: boolean;
+  /**
+   * Deferred lane only: the guaranteed-refresh floor in ms — runs when idle, but at least this often
+   * under sustained load. Default: configure({ deferTimeout }) (200ms). Best-effort, not hard
+   * real-time: an app task longer than this delays everything.
+   */
+  readonly maxStale?: number;
 }
+
+/**
+ * Schedules a deferred drain to run no later than `maxStale` ms, preferring idle time, passing it a
+ * `hasBudget()` to poll so it can yield mid-drain. Returns a cancel. Override via
+ * configure({ deferScheduler }) — e.g. a synchronous one in tests, a no-op on the server.
+ */
+export type DeferScheduler = (
+  drain: (hasBudget: () => boolean) => void,
+  maxStale: number,
+) => () => void;
 
 export interface InspectNode {
   readonly id: number;
@@ -108,6 +132,8 @@ interface EffectNode extends NodeBase {
   cleanup: Stop | undefined;
   // The scope that owns this effect (for collective stop/pause/resume), if any.
   scope: ScopeNode | undefined;
+  deferred: boolean; // route re-runs to the deferred lane instead of the synchronous flush
+  maxStale: number; // deferred lane: guaranteed-refresh floor in ms
 }
 
 // A non-effect resource owned by a scope (a polled timer, a lazy source's connection): suspended
@@ -153,6 +179,14 @@ let queuedLength = 0;
 let activeSub: NodeBase | undefined;
 let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
+// Deferred lane: effects whose re-runs run off the critical path (see deferEffect/drainDeferred).
+const deferredQueue: EffectNode[] = [];
+let drainScheduled = false;
+let drainDeadline = Number.POSITIVE_INFINITY; // maxStale the pending drain was scheduled with
+let drainCancel: (() => void) | undefined;
+let deferTimeout = 200; // global default maxStale (ms); overridable via configure()
+let deferScheduler: DeferScheduler = defaultDeferScheduler;
+const DEFER_BUDGET_MS = 5; // a forced (no-idle) drain runs at most ~this long, then yields
 let inspectId = 0;
 let fieldsGroup = 0; // shared id stamped on the cells of each fields() call (for inspector grouping)
 let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off the reactive path)
@@ -184,7 +218,8 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
       // Effects in a paused scope chain stay dirty and re-run on resume instead of queueing now.
       if (effectNode.scope !== undefined && scopePaused(effectNode.scope))
         return;
-      queueEffect(effectNode);
+      if (effectNode.deferred) deferEffect(effectNode);
+      else queueEffect(effectNode);
     },
     unwatched(node) {
       switch (kindOf(node)) {
@@ -289,6 +324,10 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   if (activeScope !== undefined) {
     node.scope = activeScope;
     activeScope.effects.push(node);
+  }
+  if (options?.defer === true) {
+    node.deferred = true;
+    node.maxStale = options.maxStale ?? deferTimeout;
   }
   const meta = registerNode(node, "effect", options);
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
@@ -432,7 +471,10 @@ function walkResources(
 function flushScope(node: ScopeNode): void {
   if (scopePaused(node)) return;
   for (const effectNode of node.effects) {
-    if (effectNode.flags & (Dirty | Pending)) queueEffect(effectNode);
+    if (effectNode.flags & (Dirty | Pending)) {
+      if (effectNode.deferred) deferEffect(effectNode);
+      else queueEffect(effectNode);
+    }
   }
   for (const child of node.children) flushScope(child);
 }
@@ -870,9 +912,15 @@ export const events = {
 export function configure(options: {
   readonly inspect?: boolean;
   readonly onError?: ErrorHandler | undefined;
+  /** Override the deferred-effect scheduler (e.g. synchronous in tests, no-op on the server). */
+  readonly deferScheduler?: DeferScheduler;
+  /** Default `maxStale` (ms) for deferred effects that don't set their own. Default 200. */
+  readonly deferTimeout?: number;
 }): void {
   if (options.inspect !== undefined) inspectEnabled = options.inspect;
   if ("onError" in options) onError = options.onError;
+  if (options.deferScheduler !== undefined) deferScheduler = options.deferScheduler;
+  if (options.deferTimeout !== undefined) deferTimeout = options.deferTimeout;
 }
 
 /**
@@ -1161,6 +1209,8 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
     fn,
     cleanup: undefined,
     scope: undefined,
+    deferred: false,
+    maxStale: 0,
     meta: undefined,
     subs: undefined,
     subsTail: undefined,
@@ -1430,9 +1480,81 @@ function flush(): void {
   }
 }
 
+/* ----------------------------------------------------- deferred effect lane --------- */
+
+// Default scheduler: requestIdleCallback (idle-first, with a maxStale timeout floor) where present,
+// else a setTimeout floor. Both give the drain a budget so a forced (no-idle) run yields the frame.
+function defaultDeferScheduler(
+  drain: (hasBudget: () => boolean) => void,
+  maxStale: number,
+): () => void {
+  const g = globalThis as unknown as {
+    requestIdleCallback?: (
+      cb: (d: { timeRemaining(): number; readonly didTimeout: boolean }) => void,
+      opts?: { timeout?: number },
+    ) => number;
+    cancelIdleCallback?: (id: number) => void;
+  };
+  if (typeof g.requestIdleCallback === "function") {
+    const id = g.requestIdleCallback(
+      (dl) => {
+        const end = now() + DEFER_BUDGET_MS;
+        // Idle: ride the remaining idle time. Forced (no idle): a fixed budget so we make bounded
+        // progress instead of either starving or blocking the frame.
+        drain(() => (dl.didTimeout ? now() < end : dl.timeRemaining() > 0));
+      },
+      { timeout: maxStale },
+    );
+    return () => g.cancelIdleCallback?.(id);
+  }
+  const id = setTimeout(() => {
+    const end = now() + DEFER_BUDGET_MS;
+    drain(() => now() < end);
+  }, maxStale);
+  return () => clearTimeout(id);
+}
+
+// Add a deferred effect to the lane (clearing Watching, as queueEffect does, so the system won't
+// re-notify until it runs) and ensure a drain is scheduled to fire within its maxStale.
+function deferEffect(node: EffectNode): void {
+  node.flags &= ~Watching;
+  deferredQueue.push(node);
+  scheduleDrain(node.maxStale);
+}
+
+function scheduleDrain(maxStale: number): void {
+  if (drainScheduled && drainDeadline <= maxStale) return; // a sooner-or-equal drain is pending
+  drainCancel?.(); // a sooner floor is needed — replace the pending drain
+  drainScheduled = true;
+  drainDeadline = maxStale;
+  drainCancel = deferScheduler(drainDeferred, maxStale);
+}
+
+// Run queued deferred effects while there's budget; reschedule any leftover. Each runs via runEffect
+// (honouring the dirty check, re-tracking deps, skipping a now-paused scope), which coalesces every
+// change since it was queued into one run at the latest value.
+function drainDeferred(hasBudget: () => boolean): void {
+  drainScheduled = false;
+  drainDeadline = Number.POSITIVE_INFINITY;
+  drainCancel = undefined;
+  while (deferredQueue.length > 0 && hasBudget()) {
+    const node = deferredQueue.shift();
+    if (node !== undefined && node.flags !== 0) runEffect(node); // flags 0 = stopped
+  }
+  if (deferredQueue.length > 0) {
+    let soonest = Number.POSITIVE_INFINITY;
+    for (const n of deferredQueue) if (n.maxStale < soonest) soonest = n.maxStale;
+    scheduleDrain(soonest);
+  }
+}
+
 function stopEffect(this: EffectNode): void {
   const meta = this.meta;
-  this.flags = 0;
+  this.flags = 0; // drainDeferred skips flags===0, but drop the queue ref now if it's pending
+  if (this.deferred) {
+    const i = deferredQueue.indexOf(this);
+    if (i >= 0) deferredQueue.splice(i, 1);
+  }
   disposeDeps(this);
   const sub = this.subs;
   if (sub !== undefined) unlink(sub);

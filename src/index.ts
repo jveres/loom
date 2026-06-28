@@ -23,6 +23,7 @@ export {
 export type {
   Channel,
   ChannelOptions,
+  DeferScheduler,
   EffectFn,
   EffectOptions,
   ErrorHandler,

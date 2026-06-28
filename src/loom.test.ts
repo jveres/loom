@@ -1399,3 +1399,120 @@ describe("loom coverage — operators and edges", () => {
     stop();
   });
 });
+
+describe("loom deferred effects", () => {
+  // A manual scheduler: capture the drain so the test fires it deterministically (no real timers).
+  let fire: ((hasBudget: () => boolean) => void) | null = null;
+  beforeEach(() => {
+    fire = null;
+    configure({
+      deferScheduler: (drain) => {
+        fire = drain;
+        return () => {
+          fire = null;
+        };
+      },
+    });
+  });
+  afterEach(() => {
+    // Drain any pending deferred work so the module-level drain-scheduled state (correct in prod,
+    // where the real scheduler always fires) doesn't leak into the next test's coalescing.
+    while (fire) {
+      const f = fire;
+      fire = null;
+      f(() => true);
+    }
+    configure({ deferTimeout: 200 }); // reset the global default if a test changed it
+  });
+
+  it("runs the first pass synchronously but defers re-runs, coalesced to the latest value", () => {
+    const a = state(0);
+    const seen: number[] = [];
+    const stop = effect(() => seen.push(a()), { defer: true });
+    expect(seen).toEqual([0]); // initial run is synchronous (deps tracked, first output immediate)
+    a(1);
+    a(2);
+    a(3);
+    expect(seen).toEqual([0]); // re-runs did NOT happen synchronously
+    expect(fire).not.toBeNull(); // a drain was scheduled
+    fire?.(() => true);
+    expect(seen).toEqual([0, 3]); // one re-run, coalesced — saw the latest value, skipped 1 and 2
+    stop();
+  });
+
+  it("the scheduler controls timing — a synchronous scheduler makes deferred effects run at once", () => {
+    configure({ deferScheduler: (drain) => (drain(() => true), () => {}) });
+    const a = state(0);
+    const seen: number[] = [];
+    const stop = effect(() => seen.push(a()), { defer: true });
+    a(1);
+    expect(seen).toEqual([0, 1]); // ran synchronously because the scheduler ran the drain inline
+    stop();
+  });
+
+  it("uses configure({ deferTimeout }) as the default maxStale, overridable per effect", () => {
+    let captured = -1;
+    configure({
+      deferTimeout: 321,
+      deferScheduler: (drain, maxStale) => {
+        captured = maxStale;
+        fire = drain;
+        return () => {};
+      },
+    });
+    const a = state(0);
+    const stopA = effect(() => a(), { defer: true });
+    a(1);
+    expect(captured).toBe(321); // the global default
+    fire?.(() => true);
+    const b = state(0);
+    const stopB = effect(() => b(), { defer: true, maxStale: 50 });
+    b(1);
+    expect(captured).toBe(50); // per-effect override
+    stopA();
+    stopB();
+  });
+
+  it("suspends with its scope: pause skips the drain, resume re-runs it", () => {
+    const a = state(0);
+    const seen: number[] = [];
+    const s = scope(() => {
+      effect(() => seen.push(a()), { defer: true });
+    });
+    expect(seen).toEqual([0]);
+    s.pause();
+    a(1);
+    expect(fire).toBeNull(); // nothing scheduled while the scope is paused
+    s.resume(); // re-queues the now-dirty deferred effect into the lane
+    fire?.(() => true);
+    expect(seen).toEqual([0, 1]); // ran on resume
+    s.stop();
+  });
+
+  it("a stopped deferred effect is dropped from the queue before it drains", () => {
+    const a = state(0);
+    const seen: number[] = [];
+    const stop = effect(() => seen.push(a()), { defer: true });
+    a(1);
+    stop(); // disposes + removes from the deferred queue
+    fire?.(() => true);
+    expect(seen).toEqual([0]); // the pending re-run never happened
+  });
+
+  it("processes only what fits the budget and reschedules the rest", () => {
+    const cells = [state(0), state(0), state(0)];
+    const ran: number[] = [];
+    const stops = cells.map((c, i) =>
+      effect(() => (c(), ran.push(i)), { defer: true }),
+    );
+    ran.length = 0;
+    for (const c of cells) c(1); // all three queued
+    let budget = 2;
+    fire?.(() => budget-- > 0); // budget for 2
+    expect(ran).toEqual([0, 1]); // only two ran; the third was rescheduled
+    expect(fire).not.toBeNull(); // a follow-up drain is pending
+    fire?.(() => true);
+    expect(ran).toEqual([0, 1, 2]); // the leftover ran next time
+    for (const s of stops) s();
+  });
+});
