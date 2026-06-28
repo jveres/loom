@@ -1062,6 +1062,25 @@ describe("loom scope options", () => {
 });
 
 describe("loom scope edge cases", () => {
+  it("disposes a throwing scope's already-created effects instead of orphaning them", () => {
+    // alien-signals #118.3: a scope body that throws after creating effects must not leak them — the
+    // caller never receives a disposer, so a top-level scope would otherwise orphan live effects.
+    const a = state(0);
+    let runs = 0;
+    expect(() =>
+      scope(() => {
+        effect(() => {
+          a();
+          runs++;
+        });
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    const afterCreate = runs; // the effect ran once on creation
+    a(1); // a leaked, still-subscribed effect would re-run here
+    expect(runs).toBe(afterCreate);
+  });
+
   it("pause/resume/stop are idempotent", () => {
     const a = state(0);
     let runs = 0;

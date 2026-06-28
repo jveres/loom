@@ -396,6 +396,11 @@ export function scope(fn: () => void, options?: NodeOptions): Scope {
   activeScope = node;
   try {
     fn();
+  } catch (error) {
+    // The body threw partway through: tear down whatever it already created so those effects and
+    // resources aren't orphaned — the caller never receives a disposer. See alien-signals #118.3.
+    stopScope(node);
+    throw error;
   } finally {
     activeScope = previous;
   }
