@@ -100,6 +100,8 @@ let nextCardId = 0;
 const initialCards = Array.from({ length: 12 }, () => makeCard());
 const cards = state<readonly Card[]>(initialCards, { label: "cards" });
 const selectedId = state(pick(initialCards, 0).id, { label: "selectedId" });
+// Seconds the current chaos run has been going; reset to 0 each time chaos starts (see the button).
+const chaosSeconds = state(0, { label: "chaos s" });
 const selected = computed(
   () => {
     const items = cards();
@@ -130,9 +132,20 @@ app.replaceChildren(
         aria-pressed={settings.running}
         // ontap, not onclick: iOS Safari drops the synthesized click when the DOM mutates mid-tap
         // (which the chaos does every frame); ontap is built from raw pointer events, so it survives.
-        ontap={() => settings.running(!settings.running())}
+        ontap={() => {
+          const next = !settings.running();
+          settings.running(next);
+          if (next) {
+            chaosStart = performance.now(); // reset the counter when chaos starts
+            chaosSeconds(0);
+          }
+        }}
       >
-        {() => (settings.running() ? "Stop chaos" : "Start chaos")}
+        {() =>
+          settings.running()
+            ? `Stop chaos · ${chaosSeconds()}s`
+            : "Start chaos"
+        }
       </button>
       {rangeControl("viewers", settings.viewers, 0, 5_000, 50)}
       {rangeControl("events / viewer s", settings.eventRate, 0, 12, 1)}
@@ -220,6 +233,7 @@ effect(() => {
 
 let lastFrame = performance.now();
 let editBudget = 0;
+let chaosStart = 0; // performance.now() when chaos last started; drives the button's seconds counter
 let rng = 0x1eed;
 
 requestAnimationFrame(frame);
@@ -237,7 +251,11 @@ window.addEventListener("keydown", (event) => {
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
-  if (settings.running()) tick(dt);
+  if (settings.running()) {
+    tick(dt);
+    // Deduped by the state cell — only propagates (re-renders the button) when the second changes.
+    chaosSeconds(Math.floor((now - chaosStart) / 1000));
+  }
   requestAnimationFrame(frame);
 }
 
