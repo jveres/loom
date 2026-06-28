@@ -202,13 +202,12 @@ function detachMeters(): void {
   readMeter = null;
 }
 
-// Mode changed: swap the meter set (only while active — detached panes stay zero-cost) and restart.
+// Mode changed: swap the meter set (only while active — detached panes stay zero-cost) and re-filter
+// the view to the new kind(s). The accumulated log is kept — the selector filters, it doesn't wipe.
 function applyMode(): void {
   detachMeters();
   if (traceActive) attachMeters();
-  traceLog = [];
-  filterLog = [];
-  lastTopSeq = -1;
+  lastTopSeq = -1; // the new-arrivals boundary is stale after a mode switch
   applyView();
   renderTrace();
 }
@@ -301,7 +300,14 @@ function setPaused(paused: boolean): void {
 
 // Re-window with the active filter applied (a name substring match).
 function applyView(): void {
-  traceVList?.setItems(traceFilter ? filterLog : traceLog);
+  const base = traceFilter ? filterLog : traceLog;
+  traceVList?.setItems(
+    traceMode === "all"
+      ? base
+      : base.filter(
+          (r) => r.kind === (traceMode === "writes" ? "write" : "read"),
+        ),
+  );
   traceFade?.refresh(); // content height changed — the ResizeObserver won't catch that
 }
 
