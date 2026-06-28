@@ -127,6 +127,7 @@ function gBeginEdit(
   if (typeof prev === "boolean") {
     cell(!prev);
     gPaintVal(row, cell(), id, true);
+    gReframe(id, row);
     return;
   }
   if (prev !== null && typeof prev !== "number" && typeof prev !== "string") {
@@ -150,12 +151,19 @@ function gBeginEdit(
     cell(gCoerce(input.value, prev));
     restore();
     gPaintVal(row, cell(), id, true);
+    gReframe(id, row);
   };
   input.onblur = commit; // also fires when the row is scrolled out of the window
   input.onkeydown = (e) => {
     if (e.key === "Enter") commit();
     else if (e.key === "Escape") restore();
   };
+}
+
+// After a self-edit the cell may drive DOM whose size just changed; if the row is still hovered, its
+// highlight overlay now frames the old bounds, so re-measure it (a no-op when the row isn't hovered).
+function gReframe(id: number, row: HTMLElement): void {
+  if (row.matches(":hover")) gPaint(gTargetsFor(id), true);
 }
 
 // Views aren't listed; instead, hovering a state/computed outlines every DOM node it drives — walk
