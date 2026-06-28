@@ -401,6 +401,7 @@ export function mountInspector(target: Element = document.body): void {
     // Freeze (or thaw) the panel's reactivity while collapsed.
     if (isMin) inspectorScope?.pause();
     else inspectorScope?.resume();
+    setTraceActive(!isMin && ui?.() === "trace"); // detach/re-attach the trace meters with minimize
   });
 
   const brand = (
@@ -564,7 +565,9 @@ export function mountInspector(target: Element = document.body): void {
       if (tab === "graph") showGraph();
       else if (tab === "trace") showTrace();
     }
-    setTraceActive(tab === "trace"); // the live dot only shows while the Trace tab is visible
+    // Trace is "active" only while its tab is shown AND the panel isn't minimized — drives both the
+    // live dot and (the point) detaching its meters so the core records zero detail when off-screen.
+    setTraceActive(tab === "trace" && panel?.classList.contains("li-min") !== true);
     prevTab = tab ?? null;
     for (const f of scrollFades) f.refresh();
   });

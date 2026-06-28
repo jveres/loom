@@ -605,7 +605,9 @@ interface ChannelNode {
   readonly mask: number;
   readonly fields: readonly string[];
   readonly cols: unknown[][];
-  meters: number;
+  meters: number; // attached meters of any kind (gates counting at the emit sites)
+  samples: number; // of those, the "samples" meters — detail recording is gated on this, so a
+  // count-only consumer (e.g. the stats rates) doesn't pay for the ring write + timestamp
   seq: number; // monotonic count (double; exact to 2^53)
   head: number; // ring write index (0..cap-1)
 }
@@ -657,6 +659,7 @@ function createChannelNode(
     fields,
     cols,
     meters: 0,
+    samples: 0,
     seq: 0,
     head: 0,
   };
@@ -747,13 +750,17 @@ export function meter(
     attached = true;
     for (const m of members) {
       m.node.meters++;
+      if (withSamples) m.node.samples++;
       m.cursor = m.node.seq;
     }
   };
   const detach = (): void => {
     if (!attached) return;
     attached = false;
-    for (const m of members) m.node.meters--;
+    for (const m of members) {
+      m.node.meters--;
+      if (withSamples) m.node.samples--;
+    }
   };
   attach();
   // A meter is a scope resource: pause() detaches (the channels can go inactive → the core's emit
@@ -1197,7 +1204,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
       // inspection on, record id + prev→next for the samples view; otherwise just count.
       if (writeCh.meters !== 0 && this.meta?.internal !== true) {
         const meta = this.meta;
-        if (meta !== undefined)
+        if (meta !== undefined && writeCh.samples !== 0)
           recordChannel(
             writeCh,
             meta.id,
@@ -1206,7 +1213,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
             activeSub?.meta?.id, // the effect/computed writing during a cascade, else external
             Date.now(),
           );
-        else writeCh.seq++;
+        else writeCh.seq++; // count only when no samples consumer (the Trace) is attached
       }
       const subs = this.subs;
       if (subs !== undefined) {
@@ -1227,7 +1234,10 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   const sub = activeSub;
   if (sub !== undefined) {
     link(this, sub, cycle);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) recordRead(this, sub);
+    if (readCh.meters !== 0 && this.meta?.internal !== true) {
+      if (readCh.samples !== 0) recordRead(this, sub);
+      else readCh.seq++; // count only — no samples consumer (the Trace) wants detail
+    }
   }
   return this.currentValue;
 }
@@ -1245,7 +1255,10 @@ function sourceOper<T>(this: SourceNode<T>): T {
     const first = this.subs === undefined;
     link(this, sub, cycle);
     if (first && !this.active) connectSource(this);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) recordRead(this, sub);
+    if (readCh.meters !== 0 && this.meta?.internal !== true) {
+      if (readCh.samples !== 0) recordRead(this, sub);
+      else readCh.seq++; // count only — no samples consumer (the Trace) wants detail
+    }
   }
   return this.currentValue;
 }
@@ -1290,7 +1303,10 @@ function computedOper<T>(this: ComputedNode<T>): T {
   const sub = activeSub;
   if (sub !== undefined) {
     link(this, sub, cycle);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) recordRead(this, sub);
+    if (readCh.meters !== 0 && this.meta?.internal !== true) {
+      if (readCh.samples !== 0) recordRead(this, sub);
+      else readCh.seq++; // count only — no samples consumer (the Trace) wants detail
+    }
   }
   return this.value as T;
 }

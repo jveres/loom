@@ -518,6 +518,9 @@
     align-items: center;
     gap: 6px;
     padding: 5px 8px;
+    /* Cancel the body's 8px top padding so the header's own 5px is the only space above the
+       controls — matching the 5px below it (was 8+5 above vs 5 below). */
+    margin-top: -8px;
     border-bottom: 1px solid var(--li-border-soft);
   }
   /* Live indicator: a pulsing accent dot while the trace is capturing; a static hollow ring when
@@ -530,8 +533,8 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--li-num); /* green = live/capturing */
-    animation: li-tr-pulse 1.6s ease-in-out infinite;
+    background: var(--li-num); /* solid green = live/capturing */
+    animation: li-tr-pulse 1.5s ease-out infinite;
   }
   .li-tr-live.off {
     animation: none;
@@ -555,14 +558,16 @@
     justify-content: center;
   }
   .li-tr-btn:hover {
-    border-color: var(--li-accent);
+    background: var(--li-bar-bg); /* a background tint, not an accent border ring (cf. tabs/menu) */
   }
   /* The icon svg's width attribute isn't used as its flex-basis, so it collapses to 0 in the
      inline-flex button — pin its box explicitly. */
   .li-tr-btn svg {
     flex: 0 0 auto;
-    width: 13px;
-    height: 13px;
+    /* Even size so centering in the 24x22 button lands on whole pixels — an odd (13px) icon sits at
+       a half-pixel offset and blurs/shifts 1px on HiDPI (cf. the panel snapPx fix). */
+    width: 12px;
+    height: 12px;
   }
   .li-tr-filter {
     flex: 1 1 auto;
@@ -864,6 +869,11 @@
   min-height: 0;
   margin: 0;
   line-height: 1.5;
+  /* Strip native button chrome — the OS pressed/focus styling is a square that ignores our
+     border-radius (the gray box on click), and the mobile tap flash. */
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none; /* the UA focus outline is a square that ignores border-radius and lingers after a click */
 }
 
 #loom-inspector[data-theme="light"],
@@ -923,12 +933,15 @@
   }
 }
 
+/* Live beacon: the dot stays solid green; a green halo expands and fades out around it. */
 @keyframes li-tr-pulse {
-  0%,
-  100% {
-    background: var(--li-num);
+  0% {
+    box-shadow: 0 0 0 0 rgba(87, 201, 126, 0.5);
   }
-  50% {
-    background: #a3ecbf; /* light green — stays "live", never dims toward the paused/inactive look */
+  70% {
+    box-shadow: 0 0 0 5px rgba(87, 201, 126, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(87, 201, 126, 0);
   }
 }

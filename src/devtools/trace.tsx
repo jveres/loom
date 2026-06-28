@@ -64,10 +64,19 @@ export function setTraceLiveDot(el: HTMLElement | null): void {
   updateLiveDot();
 }
 
-// The Trace tab became (in)active. The live view only streams while it's shown, so the dot — and the
-// "capturing" it signals — is hidden on the other tabs.
+// The Trace tab became (in)active (tab shown AND panel not minimized). The meters are attached only
+// while active — detaching them drops the channels' samples count, so the core stops recording read/
+// write detail entirely (zero hot-path cost) when the trace isn't on screen. Same idea as the stats
+// scope's pause, done explicitly so the per-mode meter set survives mode changes.
 export function setTraceActive(active: boolean): void {
+  if (traceActive === active) return;
   traceActive = active;
+  if (active) {
+    attachMeters();
+    renderTrace(); // catch up immediately on show
+  } else {
+    detachMeters();
+  }
   updateLiveDot();
 }
 
@@ -84,7 +93,7 @@ function updateLiveDot(): void {
 }
 
 export function buildTracePane(): HTMLElement {
-  applyMode(); // attaches the write meter for the default mode
+  applyMode(); // resets state; meters attach only once the tab goes active (setTraceActive)
 
   traceVList = virtualList<TraceRow>({
     rowHeight: TRACE_ROW_H,
@@ -95,13 +104,13 @@ export function buildTracePane(): HTMLElement {
   pauseBtn = (
     <button type="button" class="li-tr-btn" title="Pause / resume the trace" />
   ) as HTMLButtonElement;
-  pauseBtn.append(icon(ICON_PAUSE, 13));
+  pauseBtn.append(icon(ICON_PAUSE, 12));
   pauseBtn.addEventListener("click", () => setPaused(!tracePaused));
 
   const clearBtn = (
     <button type="button" class="li-tr-btn" title="Clear the trace" />
   ) as HTMLButtonElement;
-  clearBtn.append(icon(ICON_CLEAR, 13));
+  clearBtn.append(icon(ICON_CLEAR, 12));
   clearBtn.addEventListener("click", clearLog);
 
   const modeSel = (
@@ -177,15 +186,26 @@ export function buildTracePane(): HTMLElement {
   return traceRoot;
 }
 
-// (Re)attach the channel meters for the current mode and restart the trace. Writes always carry
-// detail; reads are the high-frequency firehose, so the read meter is attached only when selected.
-function applyMode(): void {
+// Attach the samples meters the current mode needs (writes always carry detail; reads are the
+// high-frequency firehose, metered only when selected). Each samples meter bumps the channel's
+// samples count, which is what unlocks detail recording in the core.
+function attachMeters(): void {
+  if (traceMode !== "reads" && !writeMeter)
+    writeMeter = meter([events.write], "samples");
+  if (traceMode !== "writes" && !readMeter)
+    readMeter = meter([events.read], "samples");
+}
+function detachMeters(): void {
   writeMeter?.stop();
   writeMeter = null;
   readMeter?.stop();
   readMeter = null;
-  if (traceMode !== "reads") writeMeter = meter([events.write], "samples");
-  if (traceMode !== "writes") readMeter = meter([events.read], "samples");
+}
+
+// Mode changed: swap the meter set (only while active — detached panes stay zero-cost) and restart.
+function applyMode(): void {
+  detachMeters();
+  if (traceActive) attachMeters();
   traceLog = [];
   filterLog = [];
   lastTopSeq = -1;
@@ -252,10 +272,7 @@ export function showTrace(): void {
 }
 
 export function teardownTrace(): void {
-  writeMeter?.stop();
-  writeMeter = null;
-  readMeter?.stop();
-  readMeter = null;
+  detachMeters();
   traceVList = null;
   traceRoot = null;
   traceScroll = null;
@@ -276,7 +293,7 @@ export function teardownTrace(): void {
 
 function setPaused(paused: boolean): void {
   tracePaused = paused;
-  pauseBtn?.replaceChildren(icon(paused ? ICON_PLAY : ICON_PAUSE, 13));
+  pauseBtn?.replaceChildren(icon(paused ? ICON_PLAY : ICON_PAUSE, 12));
   updateLiveDot();
   traceRoot?.classList.toggle("li-tr-paused", paused);
   if (!paused) renderTrace(); // resume: catch up immediately
