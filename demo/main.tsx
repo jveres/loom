@@ -209,8 +209,12 @@ effect(() => {
 window.addEventListener("resize", queueBoardLayout);
 
 effect(() => {
-  if (!cards().some((card) => card.id === selectedId())) {
-    selectedId(cards()[0]?.id ?? 0);
+  // Read both signals once, not per card: selectedId() inside .some() re-reads it on every
+  // iteration (N tracked reads, N trace events) for the same value.
+  const items = cards();
+  const id = selectedId();
+  if (!items.some((card) => card.id === id)) {
+    selectedId(items[0]?.id ?? 0);
   }
 });
 
@@ -544,8 +548,11 @@ function removeSelected(): void {
   const current = cards();
   if (!card || current.length <= 1) return;
   const next = current.filter((item) => item.id !== card.id);
-  setCards(next);
-  selectedId(next[0]?.id ?? 0);
+  // One flush, not two: batch the cards + selection writes so dependents re-run once.
+  batch(() => {
+    setCards(next);
+    selectedId(next[0]?.id ?? 0);
+  });
 }
 
 function toggleCardHot(card: Card): void {
