@@ -516,8 +516,11 @@ function editRandom(): void {
 function insertCard(): void {
   const card = makeCard();
   const next = [card, ...cards()].slice(0, 80);
-  setCards(next);
-  selectedId(card.id);
+  // One flush: the cards + selection writes share dependents (selected, the selection/guard effects).
+  batch(() => {
+    setCards(next);
+    selectedId(card.id);
+  });
 }
 
 function shuffleCards(): void {
