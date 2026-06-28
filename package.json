@@ -12,7 +12,7 @@
     "check": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "bench": "vitest bench bench/chaos.bench.ts --run",
+    "bench": "vitest bench --run",
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "build:loom": "vite build --config vite.loom.config.ts"
