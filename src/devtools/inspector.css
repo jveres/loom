@@ -550,12 +550,15 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--li-num); /* solid green = live/capturing */
-    animation: li-tr-pulse 1.5s ease-out infinite;
+    background: var(--li-bool); /* solid red = live/recording */
+    animation: li-tr-blink 1s step-end infinite;
   }
   .li-tr-live.off {
     animation: none;
-    background: #c4c4cf; /* solid light gray = paused */
+    background: var(
+      --li-bool
+    ); /* paused = the same red, just muted (the blink's dim tone) */
+    opacity: 0.3;
   }
   .li-tr-live.inactive {
     display: none; /* the Trace tab isn't shown — no live capture, so no dot */
@@ -912,15 +915,9 @@
   }
 }
 
-/* Live beacon: the dot stays solid green; a green halo expands and fades out around it. */
-@keyframes li-tr-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(87, 201, 126, 0.5);
-  }
-  70% {
-    box-shadow: 0 0 0 5px rgba(87, 201, 126, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(87, 201, 126, 0);
+/* Live beacon: the red recording dot blinks on/off while the trace is capturing. */
+@keyframes li-tr-blink {
+  50% {
+    opacity: 0.2;
   }
 }
