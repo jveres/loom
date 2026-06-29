@@ -129,9 +129,12 @@ interface ComputedNode<T> extends NodeBase {
 interface EffectNode extends NodeBase {
   fn: InternalEffectFn;
   cleanup: Stop | undefined;
-  // The scope that owns this effect (for collective stop/pause/resume), if any.
+  // The scope that owns this effect (for collective stop/pause/resume), if any, and this effect's
+  // slot in scope.effects — so a manual stop can swap-remove in O(1) instead of leaking the dead node.
   scope: ScopeNode | undefined;
+  scopeIndex: number;
   deferred: boolean; // route re-runs to the deferred lane instead of the synchronous flush
+  deferredQueued: boolean; // currently in deferredQueue (O(1) dedup, replaces an includes() scan)
   maxStale: number; // deferred lane: guaranteed-refresh floor in ms
 }
 
@@ -155,6 +158,9 @@ interface ScopeNode {
   // already merged with any ancestor scope's defaults.
   readonly options: NodeOptions | undefined;
   paused: boolean;
+  // Number of paused scopes in this node's ancestor chain (including itself). scopePaused() is then
+  // an O(1) `> 0` test instead of walking to the root on every notify; maintained on pause/resume.
+  pausedCount: number;
   stopped: boolean;
 }
 
@@ -179,7 +185,10 @@ let activeSub: NodeBase | undefined;
 let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
 // Deferred lane: effects whose re-runs run off the critical path (see deferEffect/drainDeferred).
-const deferredQueue: EffectNode[] = [];
+// A head index makes the drain O(1)-per-item (no shift); drained slots are nulled and the backing
+// array reset once fully consumed.
+const deferredQueue: Array<EffectNode | undefined> = [];
+let deferHead = 0;
 let drainScheduled = false;
 let drainDeadline = Number.POSITIVE_INFINITY; // absolute time (now()+maxStale) the pending drain fires by
 let drainCancel: (() => void) | undefined;
@@ -194,10 +203,18 @@ let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off 
 // inspector — nodes created while it's off carry no metadata and never appear.
 let inspectEnabled = false;
 let onError: ErrorHandler | undefined;
-const computedNodes = new WeakMap<object, ComputedNode<unknown>>();
-const effectNodes = new WeakMap<object, EffectNode>();
 const inspectRefs = new Map<number, WeakRef<NodeBase>>();
-const stateNodes = new WeakMap<object, StateNode<unknown>>();
+// Each public accessor (a state source, computed read, or effect stop) carries a hidden handle to
+// its node via this private symbol — so depsOf()/trigger() resolve a node in O(1) without the
+// per-create WeakMap registration create-heavy workloads would otherwise pay even with inspection off.
+const NODE = Symbol("loom.node");
+type NodeHandle = { [NODE]?: NodeBase | undefined };
+function tagNode(accessor: object, node: NodeBase): void {
+  (accessor as NodeHandle)[NODE] = node;
+}
+function nodeOf(accessor: object): NodeBase | undefined {
+  return (accessor as NodeHandle)[NODE];
+}
 
 const { link, unlink, propagate, checkDirty, shallowPropagate } =
   createReactiveSystem({
@@ -245,7 +262,7 @@ export function state<T>(initial: T, options?: NodeOptions): State<T> {
   const source = stateOper.bind(node) as State<T>;
   node.source = source as State<unknown>;
   const meta = registerNode(node, "state", options);
-  stateNodes.set(source, node as StateNode<unknown>);
+  tagNode(source, node);
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return source;
 }
@@ -265,7 +282,7 @@ export function source<T>(
   const node = createSourceNode(connect, initial);
   const read = sourceOper.bind(node) as Read<T>;
   const meta = registerNode(node, "state", options);
-  stateNodes.set(read, node);
+  tagNode(read, node);
   // When created inside a scope, pausing the scope disconnects the producer even though paused
   // subscribers stay linked; resuming reconnects it if anything is still observing.
   const erased = node as SourceNode<unknown>;
@@ -311,7 +328,7 @@ export function computed<T>(
   const node = createComputedNode(getter);
   const read = computedOper.bind(node) as Read<T>;
   const meta = registerNode(node, "computed", options);
-  computedNodes.set(read, node as ComputedNode<unknown>);
+  tagNode(read, node);
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return read;
 }
@@ -322,6 +339,7 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   const node = createEffectNode(fn);
   if (activeScope !== undefined) {
     node.scope = activeScope;
+    node.scopeIndex = activeScope.effects.length;
     activeScope.effects.push(node);
   }
   if (options?.defer === true) {
@@ -358,7 +376,7 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   if (meta) meta.runs++;
   if (effectCh.meters !== 0 && meta?.internal !== true) effectCh.seq++;
   const stop = stopEffect.bind(node);
-  effectNodes.set(stop, node);
+  tagNode(stop, node);
   return stop;
 }
 
@@ -388,6 +406,8 @@ export function scope(fn: () => void, options?: NodeOptions): Scope {
     // Inherit the parent scope's defaults, letting this scope's own options override.
     options: mergeOptions(activeScope?.options, options),
     paused: false,
+    // Inherit the parent's paused-ancestor count: a scope created under a paused chain starts paused.
+    pausedCount: activeScope?.pausedCount ?? 0,
     stopped: false,
   };
   if (node.options?.internal !== true) liveScopes++;
@@ -412,10 +432,14 @@ export function scope(fn: () => void, options?: NodeOptions): Scope {
 }
 
 function scopePaused(node: ScopeNode): boolean {
-  for (let s: ScopeNode | undefined = node; s !== undefined; s = s.parent) {
-    if (s.paused) return true;
-  }
-  return false;
+  return node.pausedCount > 0;
+}
+
+// Add `delta` to the paused-ancestor count of `node` and its whole subtree (every descendant gains
+// or loses this scope as a paused ancestor). Walks all children, including independently-paused ones.
+function bumpPausedCount(node: ScopeNode, delta: number): void {
+  node.pausedCount += delta;
+  for (const child of node.children) bumpPausedCount(child, delta);
 }
 
 function stopScope(node: ScopeNode): void {
@@ -443,12 +467,14 @@ function pauseScope(node: ScopeNode): void {
   // Suspend resources only when this newly pauses the chain (an ancestor pause already did so).
   const newlySuspends = !scopePaused(node);
   node.paused = true;
+  bumpPausedCount(node, 1);
   if (newlySuspends) walkResources(node, (r) => r.pause());
 }
 
 function resumeScope(node: ScopeNode): void {
   if (!node.paused) return;
   node.paused = false;
+  bumpPausedCount(node, -1);
   // If an ancestor is still paused, the chain stays suspended — do nothing yet.
   if (scopePaused(node)) return;
   walkResources(node, (r) => r.resume());
@@ -528,6 +554,18 @@ export function polled<T>(
 }
 
 export function trigger(source: Read<unknown>): void {
+  // Fast path: a known loom accessor reads exactly its own node, so propagate that node's subs
+  // directly — no temporary watcher to allocate, link, and unlink (the common mutate() case).
+  const known = nodeOf(source as object);
+  if (known !== undefined) {
+    const subs = known.subs;
+    if (subs !== undefined) {
+      propagate(subs, runDepth > 0);
+      shallowPropagate(subs);
+    }
+    if (batchDepth === 0) flush();
+    return;
+  }
   const sub = createWatcherNode();
   const previous = setActiveSub(sub);
   try {
@@ -585,7 +623,7 @@ export function fields<T extends object>(
     const key = keys[index] as FieldKey<T>;
     const cell = state(initial[key], fieldOptions(options, key));
     if (group !== 0) {
-      const meta = stateNodes.get(cell as unknown as object)?.meta;
+      const meta = nodeOf(cell as object)?.meta;
       if (meta) {
         meta.group = group;
         meta.key = key;
@@ -1086,8 +1124,7 @@ function fieldOptions(
 }
 
 function nodeForSource(source: Read<unknown> | Stop): NodeBase | undefined {
-  const key = source as object;
-  return stateNodes.get(key) ?? computedNodes.get(key) ?? effectNodes.get(key);
+  return nodeOf(source as object);
 }
 
 function inspectNode(node: NodeBase, meta: InspectMeta): InspectNode {
@@ -1221,7 +1258,9 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
     fn,
     cleanup: undefined,
     scope: undefined,
+    scopeIndex: -1,
     deferred: false,
+    deferredQueued: false,
     maxStale: 0,
     meta: undefined,
     subs: undefined,
@@ -1534,7 +1573,10 @@ function defaultDeferScheduler(
 // queue: flushScope can re-offer a still-dirty effect that's already queued (pause→resume mid-flight).
 function deferEffect(node: EffectNode): void {
   node.flags &= ~Watching;
-  if (!deferredQueue.includes(node)) deferredQueue.push(node);
+  if (!node.deferredQueued) {
+    node.deferredQueued = true;
+    deferredQueue.push(node);
+  }
   scheduleDrain(node.maxStale);
 }
 
@@ -1556,24 +1598,47 @@ function drainDeferred(hasBudget: () => boolean): void {
   drainScheduled = false;
   drainDeadline = Number.POSITIVE_INFINITY;
   drainCancel = undefined;
-  while (deferredQueue.length > 0 && hasBudget()) {
-    const node = deferredQueue.shift();
-    if (node !== undefined && node.flags !== 0) runEffect(node); // flags 0 = stopped
+  while (deferHead < deferredQueue.length && hasBudget()) {
+    const node = deferredQueue[deferHead];
+    deferredQueue[deferHead] = undefined; // release the slot as we pass the head
+    deferHead++;
+    if (node !== undefined) {
+      node.deferredQueued = false;
+      if (node.flags !== 0) runEffect(node); // flags 0 = stopped while queued
+    }
   }
-  if (deferredQueue.length > 0) {
+  if (deferHead >= deferredQueue.length) {
+    deferredQueue.length = 0;
+    deferHead = 0;
+  } else {
     let soonest = Number.POSITIVE_INFINITY;
-    for (const n of deferredQueue)
-      if (n.maxStale < soonest) soonest = n.maxStale;
+    for (let i = deferHead; i < deferredQueue.length; i++) {
+      const n = deferredQueue[i];
+      if (n !== undefined && n.maxStale < soonest) soonest = n.maxStale;
+    }
     scheduleDrain(soonest);
   }
 }
 
 function stopEffect(this: EffectNode): void {
   const meta = this.meta;
-  this.flags = 0; // drainDeferred skips flags===0, but drop the queue ref now if it's pending
-  if (this.deferred) {
-    const i = deferredQueue.indexOf(this);
-    if (i >= 0) deferredQueue.splice(i, 1);
+  this.flags = 0; // drainDeferred skips flags===0; a still-queued deferred node is compacted next drain
+  this.deferredQueued = false;
+  const owner = this.scope;
+  if (owner !== undefined && !owner.stopped) {
+    // Swap-remove from scope.effects so a long-lived scope doesn't retain dead effects. Skipped while
+    // the scope itself is stopping (stopScope iterates effects then clears the array wholesale).
+    const effects = owner.effects;
+    const i = this.scopeIndex;
+    const last = effects.length - 1;
+    if (i >= 0 && i <= last) {
+      const moved = effects[last] as EffectNode;
+      effects[i] = moved;
+      moved.scopeIndex = i;
+      effects.pop();
+    }
+    this.scope = undefined;
+    this.scopeIndex = -1;
   }
   disposeDeps(this);
   const sub = this.subs;

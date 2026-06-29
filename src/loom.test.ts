@@ -1546,24 +1546,21 @@ describe("loom scope bookkeeping", () => {
   // Regression for the audit finding: manually stopping an effect inside a long-lived scope must
   // release the EffectNode so it can be GC'd, not retain it in scope.effects until the scope stops.
   // The marker is reachable only through the effect's fn closure, so it survives a forced GC iff the
-  // node is still retained. KNOWN-FAILING until stopEffect detaches from scope.effects — flip
-  // `it.fails` to `it` once that lands. (Suite runs with --expose-gc, see vitest.config.ts.)
-  it.fails(
-    "releases a manually-stopped effect from its long-lived scope's bookkeeping",
-    async () => {
-      let ref!: WeakRef<object>;
-      const s = scope(() => {
-        const marker = {};
-        const stop = effect(() => void marker);
-        ref = new WeakRef(marker);
-        stop(); // manual stop while the scope stays alive
-      });
-      for (let i = 0; i < 6; i++) {
-        globalThis.gc?.();
-        await new Promise((r) => setTimeout(r, 0));
-      }
-      expect(ref.deref()).toBeUndefined();
-      s.stop();
-    },
-  );
+  // node is still retained. stopEffect now swap-removes from scope.effects, so it's collectable.
+  // (Suite runs with --expose-gc via the test script.)
+  it("releases a manually-stopped effect from its long-lived scope's bookkeeping", async () => {
+    let ref!: WeakRef<object>;
+    const s = scope(() => {
+      const marker = {};
+      const stop = effect(() => void marker);
+      ref = new WeakRef(marker);
+      stop(); // manual stop while the scope stays alive
+    });
+    for (let i = 0; i < 6; i++) {
+      globalThis.gc?.();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(ref.deref()).toBeUndefined();
+    s.stop();
+  });
 });
