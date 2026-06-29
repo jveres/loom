@@ -796,7 +796,7 @@ pnpm install
 pnpm run check   # tsc --noEmit
 pnpm run lint    # biome
 pnpm test        # vitest
-pnpm run bench   # CLI chaos benchmark
+pnpm run bench   # CLI benchmarks (chaos, micro, hot-path)
 pnpm run dev     # dev server
 ```
 
@@ -805,6 +805,17 @@ for the browser benchmark. The demo is a realtime stress UI written in Loom JSX:
 it exercises state cells, object fields, computed values, effects, keyed list
 reconciliation, direct JSX text/attribute/class bindings, cleanup through DOM
 disposal, and the browser JSX runtime.
+
+The browser benchmark (`/bench/`) is a [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark)-style
+keyed-table suite that times Loom against a hand-written vanilla-DOM baseline on
+the same operations — create 1k/10k rows, append 1k, update every 10th, swap,
+select, remove, and clear. **Run** reports each operation's median time and the
+Loom/vanilla ratio (plus a geo-mean) against indicative published slowdowns for
+other frameworks; **Profile** re-runs Loom in a split mode that separates
+synchronous reconciliation work from forced browser layout, so you can see which
+of the two dominates a given operation. Compare ratios, not absolute milliseconds —
+they are machine-specific. This is the in-browser counterpart to the CLI
+`pnpm run bench` (the `bench/*.bench.ts` chaos, micro, and hot-path suites).
 
 ## License
 
