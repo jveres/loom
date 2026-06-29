@@ -439,7 +439,7 @@ virtualizer — only the rows in (and just around) the viewport stay in the DOM.
 `virtualList(options)` takes a `VirtualListOptions` (`{ rowHeight, key, render,
 overscan? }`) and windows against an existing scroll container, returning a
 `VirtualList` handle: `el` (mount it inside the scroller), `setItems(source)`,
-`refresh()`, `scrollToIndex(i)`, and `destroy()` to tear it down. The inspector's
+`refresh()`, `scrollToIndex(i)`, `scrollToEnd()`, and `destroy()` to tear it down. The inspector's
 graph tree is built on it.
 
 ### JSX
