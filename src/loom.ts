@@ -210,7 +210,7 @@ const inspectRefs = new Map<number, WeakRef<NodeBase>>();
 const NODE = Symbol("loom.node");
 type NodeHandle = { [NODE]?: NodeBase | undefined };
 function tagNode(accessor: object, node: NodeBase): void {
-  (accessor as NodeHandle)[NODE] = node;
+  Object.defineProperty(accessor, NODE, { value: node });
 }
 function nodeOf(accessor: object): NodeBase | undefined {
   return (accessor as NodeHandle)[NODE];
