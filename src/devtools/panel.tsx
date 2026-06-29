@@ -21,10 +21,9 @@ import {
   ICON_MINIMIZE,
   ICON_MONITOR,
   ICON_MOON,
-  ICON_POINTER,
   ICON_SETTINGS,
   ICON_SUN,
-  icon,
+  loomLogo,
   svgMarkup,
 } from "./icons.js";
 import { wireScrollFade } from "./scroll-fade.js";
@@ -407,7 +406,7 @@ export function mountInspector(target: Element = document.body): void {
 
   const brand = (
     <span class="li-brand">
-      {icon(ICON_POINTER, 15)}
+      {loomLogo(15)}
       <b>Loom</b>
     </span>
   );
