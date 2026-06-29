@@ -16,7 +16,6 @@ export type {
   InspectNode,
   Meter,
   MeterAggregation,
-  NodeKind,
   NodeOptions,
   Polled,
   Read,

@@ -4,5 +4,10 @@
 // graph. These are an *application* of the generic channel/meter primitives that live in the core
 // (`loom`), kept out of the default surface so the core stays lean.
 
-export type { InspectNode, InspectSnapshot, ResourceCounts } from "./loom.js";
+export type {
+  InspectNode,
+  InspectSnapshot,
+  NodeKind,
+  ResourceCounts,
+} from "./loom.js";
 export { depsOf, events, inspect, inspectResources } from "./loom.js";

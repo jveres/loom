@@ -155,16 +155,16 @@ The core exports these types:
 - `ErrorHandler` is the `configure({ onError })` boundary signature.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
 - `InspectNode` describes a graph node (also the `configure({ onError })` node
-  param); `InspectSnapshot` and `ResourceCounts` (the `inspect()` /
-  `inspectResources()` result shapes) come with `@jveres/loom/observe`.
+  param); `InspectSnapshot`, `ResourceCounts` (the `inspect()` /
+  `inspectResources()` result shapes), and `NodeKind` (`InspectNode.kind`'s
+  `"state" | "computed" | "effect"` union) come with `@jveres/loom/observe`.
 - `Channel` is a named channel; `Meter` drains channels;
   `Frame` is a per-channel `{ count, dropped, samples }`; `MeterAggregation` is a
   meter's view (`"count" | "samples"`); `ChannelOptions` configures
   `{ capacity, fields }`.
 - `NodeOptions` (`{ internal, label }`) and `EffectOptions` (adds `{ target }`
   and the deferred-lane `{ defer, maxStale }`) are the option bags accepted by the
-  primitives; `DeferScheduler` is the configurable deferred-lane scheduler;
-  `NodeKind` is the `"state" | "computed" | "effect"` union reported on an `InspectNode`.
+  primitives; `DeferScheduler` is the configurable deferred-lane scheduler.
 
 Pass `{ label }` to `state`, `computed`, `effect`, or `fields` when
 you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
