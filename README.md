@@ -647,6 +647,27 @@ surface (`inspect`, `inspectResources`, `meter`/`events`, `scope`,
 purely a consumer of the runtime, so the same data is available to any tooling
 you write yourself.
 
+The panel has three tabs:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/inspector-info-dark.png">
+    <img src="./assets/inspector-info-light.png" alt="Inspector Info tab" width="320">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/inspector-graph-dark.png">
+    <img src="./assets/inspector-graph-light.png" alt="Inspector Graph tab" width="320">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/inspector-trace-dark.png">
+    <img src="./assets/inspector-trace-light.png" alt="Inspector Trace tab" width="320">
+  </picture>
+</p>
+
+<p align="center">
+  <em><strong>Info</strong> — FPS, web-vitals and live pipeline rates · <strong>Graph</strong> — state cells grouped by source with current values · <strong>Trace</strong> — the live event stream, pausable and filterable.</em>
+</p>
+
 ```ts
 import { mountInspector } from "loom/devtools";
 
