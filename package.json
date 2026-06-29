@@ -6,6 +6,10 @@
   "description": "A tiny runtime reactive UI core.",
   "license": "MIT",
   "author": "Janos Veres",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jveres/loom.git"
+  },
   "sideEffects": false,
   "scripts": {
     "test": "NODE_OPTIONS=--expose-gc vitest run",

@@ -33,15 +33,15 @@
   in one shape, no setters or hooks.
 - **Generic channel/meter primitives.** A gated ring-buffer `channel` and a pull-based
   `meter` for any event or sample stream — zero allocation until metered. Loom uses them
-  to instrument itself; that self-watching surface is the opt-in `@jveres/loom/observe`.
-- **Lean core, opt-in surfaces.** `@jveres/loom` (reactivity, lifecycle, channel/meter) ·
-  `@jveres/loom/observe` (watch loom's internals) · `@jveres/loom/dom` · `@jveres/loom/html`
-  (SSR/SSG) · `@jveres/loom/devtools` (dev panel).
+  to instrument itself; that self-watching surface is the opt-in `loom/observe`.
+- **Lean core, opt-in surfaces.** `loom` (reactivity, lifecycle, channel/meter) ·
+  `loom/observe` (watch loom's internals) · `loom/dom` · `loom/html`
+  (SSR/SSG) · `loom/devtools` (dev panel).
 
 ## At a glance
 
 ```tsx
-import { computed, state } from "@jveres/loom";
+import { computed, state } from "loom";
 
 const count = state(0);
 const label = computed(() => `count: ${count()}`);
@@ -60,9 +60,19 @@ real DOM node, with reactive reads wired in place.
 
 ## Install
 
+Loom is installed straight from GitHub (it is not published to npm):
+
 ```sh
-npm install @jveres/loom
+npm install github:jveres/loom
 ```
+
+Pin to a tag or commit for reproducible builds:
+
+```sh
+npm install github:jveres/loom#v0.1.0
+```
+
+It then imports as `loom` (and `loom/observe`, `loom/dom`, …).
 
 To use browser JSX, point TypeScript (and your bundler) at Loom's automatic
 runtime — see [JSX](#jsx). For local development of Loom itself, see
@@ -72,10 +82,10 @@ runtime — see [JSX](#jsx). For local development of Loom itself, see
 
 ### Core primitives
 
-Import reactive primitives from `@jveres/loom`.
+Import reactive primitives from `loom`.
 
 ```ts
-import { batch, computed, effect, state, update } from "@jveres/loom";
+import { batch, computed, effect, state, update } from "loom";
 
 const count = state(0);
 const doubled = computed(() => count() * 2);
@@ -140,8 +150,8 @@ The core exports these functions:
 > `channel` and `meter` are generic core primitives. **Watching Loom's *own* internals**
 > — the `events` registry (the runtime's built-in streams) and the graph-snapshot tools
 > `inspect` / `inspectResources` / `depsOf` — is a separate opt-in surface,
-> [`@jveres/loom/observe`](#observability). Keeping it out of the core means the default
-> `@jveres/loom` import stays lean: reactivity, lifecycle, and `channel`/`meter` only.
+> [`loom/observe`](#observability). Keeping it out of the core means the default
+> `loom` import stays lean: reactivity, lifecycle, and `channel`/`meter` only.
 
 The core exports these types:
 
@@ -157,7 +167,7 @@ The core exports these types:
 - `InspectNode` describes a graph node (also the `configure({ onError })` node
   param); `InspectSnapshot`, `ResourceCounts` (the `inspect()` /
   `inspectResources()` result shapes), and `NodeKind` (`InspectNode.kind`'s
-  `"state" | "computed" | "effect"` union) come with `@jveres/loom/observe`.
+  `"state" | "computed" | "effect"` union) come with `loom/observe`.
 - `Channel` is a named channel; `Meter` drains channels;
   `Frame` is a per-channel `{ count, dropped, samples }`; `MeterAggregation` is a
   meter's view (`"count" | "samples"`); `ChannelOptions` configures
@@ -222,7 +232,7 @@ interval (eager, deduped); `source()` is lazy — it connects on first subscribe
 and disconnects on last, so the producer only runs while observed.
 
 ```ts
-import { effect, polled, source } from "@jveres/loom";
+import { effect, polled, source } from "loom";
 
 // Eager: sample performance.now() every 250ms (unchanged samples don't re-run readers).
 const clock = polled(() => Date.now(), 250);
@@ -253,7 +263,7 @@ just mark effects dirty) and `resume()` re-runs the ones that went dirty — so 
 hidden panel does no reactive work without losing its state or DOM.
 
 ```ts
-import { effect, scope, state } from "@jveres/loom";
+import { effect, scope, state } from "loom";
 
 const active = state(true);
 
@@ -285,7 +295,7 @@ without repeating the options on every primitive. A node's own options win, and
 nested scopes inherit and can override:
 
 ```ts
-import { effect, fields, scope } from "@jveres/loom";
+import { effect, fields, scope } from "loom";
 
 scope(
   () => {
@@ -332,7 +342,7 @@ global boundary with `configure({ onError })` to contain it: the throw is routed
 to your handler and the flush continues running the other effects.
 
 ```ts
-import { configure, effect, state } from "@jveres/loom";
+import { configure, effect, state } from "loom";
 
 configure({
   onError: (error, node) => {
@@ -357,13 +367,13 @@ reader — `onError` covers effect runs, the push side of the graph.
 
 ### DOM and events
 
-Import DOM helpers from `@jveres/loom/dom`. The DOM layer creates nodes, binds reactive
+Import DOM helpers from `loom/dom`. The DOM layer creates nodes, binds reactive
 text, attributes, classes, and styles, reconciles keyed lists, and disposes
 owned effects when nodes are removed.
 
 ```ts
-import { state } from "@jveres/loom";
-import { attr, classed, h, style, text } from "@jveres/loom/dom";
+import { state } from "loom";
+import { attr, classed, h, style, text } from "loom/dom";
 
 const hot = state(false);
 const label = state("Ready");
@@ -434,7 +444,7 @@ list(container, rows, {
 });
 ```
 
-For long lists, `@jveres/loom/dom/vlist` is a standalone fixed-row-height
+For long lists, `loom/dom/vlist` is a standalone fixed-row-height
 virtualizer — only the rows in (and just around) the viewport stay in the DOM.
 `virtualList(options)` takes a `VirtualListOptions` (`{ rowHeight, key, render,
 overscan? }`) and windows against an existing scroll container, returning a
@@ -448,25 +458,25 @@ Loom supports JSX through standard automatic JSX runtime entrypoints. The
 browser runtime returns live DOM nodes and uses the same DOM binding helpers as
 `h()`. Function components are plain functions; there is no virtual DOM.
 
-Configure TypeScript for browser JSX with `jsxImportSource: "@jveres/loom"`:
+Configure TypeScript for browser JSX with `jsxImportSource: "loom"`:
 
 ```json
 {
   "compilerOptions": {
     "jsx": "react-jsx",
-    "jsxImportSource": "@jveres/loom"
+    "jsxImportSource": "loom"
   }
 }
 ```
 
 If your bundler transpiles TSX directly, configure it to use the same automatic
-runtime. This repository sets Vite's `oxc.jsx.importSource` to `"@jveres/loom"`.
+runtime. This repository sets Vite's `oxc.jsx.importSource` to `"loom"`.
 
 Reactive reads can be used directly as children, attribute values, and class
 map values.
 
 ```tsx
-import { state } from "@jveres/loom";
+import { state } from "loom";
 
 const count = state(0);
 
@@ -506,7 +516,7 @@ bindings. Object keys can use camelCase or CSS property names. Reactive style
 reads can return `null` to remove the property.
 
 ```tsx
-import { style } from "@jveres/loom/dom";
+import { style } from "loom/dom";
 
 const active = state(false);
 
@@ -524,7 +534,7 @@ Loom is runtime-only: JSX expressions run once when the DOM node is created, so
 derived reactive values need a read function or `computed()`.
 
 ```tsx
-import { computed, state } from "@jveres/loom";
+import { computed, state } from "loom";
 
 const running = state(false);
 const label = computed(() => (running() ? "Stop chaos" : "Start chaos"));
@@ -538,19 +548,19 @@ const label = computed(() => (running() ? "Stop chaos" : "Start chaos"));
 
 Use these entrypoints for browser JSX:
 
-- `@jveres/loom/jsx-runtime` powers browser JSX.
-- `@jveres/loom/jsx-dev-runtime` powers browser JSX in development mode.
+- `loom/jsx-runtime` powers browser JSX.
+- `loom/jsx-dev-runtime` powers browser JSX in development mode.
 
 ### SSR and SSG
 
-Use `@jveres/loom/html` when you want static HTML for server-side rendering or
+Use `loom/html` when you want static HTML for server-side rendering or
 static-site generation. This runtime escapes interpolated text, supports
 components and fragments, serializes common attributes, and omits event
 handlers because there is no live DOM.
 
 ```tsx
-/** @jsxImportSource @jveres/loom/html */
-import { renderToString } from "@jveres/loom/html";
+/** @jsxImportSource loom/html */
+import { renderToString } from "loom/html";
 
 function Page(props: { title: string }) {
   return (
@@ -564,7 +574,7 @@ function Page(props: { title: string }) {
 const html = renderToString(<Page title="Docs" />);
 ```
 
-The `@jveres/loom/html` entrypoint exports:
+The `loom/html` entrypoint exports:
 
 - `renderToString(child)` serializes a node tree to an HTML string.
 - `html(strings, ...values)` is a tagged template that escapes interpolated
@@ -579,8 +589,8 @@ The `@jveres/loom/html` entrypoint exports:
 
 Use these entrypoints for static HTML JSX:
 
-- `@jveres/loom/html/jsx-runtime` powers static HTML JSX.
-- `@jveres/loom/html/jsx-dev-runtime` powers static HTML JSX in development mode.
+- `loom/html/jsx-runtime` powers static HTML JSX.
+- `loom/html/jsx-dev-runtime` powers static HTML JSX in development mode.
 
 ### Observability
 
@@ -591,15 +601,15 @@ its most recent samples, so it stays bounded and the producer runs at full speed
 regardless of how fast the consumer reads. Use them for any event or sample stream.
 
 The runtime emits to a built-in set of these streams — the **`events` registry**,
-exposed from `@jveres/loom/observe` (loom watching its own pipeline, so it lives in
+exposed from `loom/observe` (loom watching its own pipeline, so it lives in
 the observability surface, not the core). A meter reads its channels through one of
 two **views**: `"count"` (the default — exact counts for rates, with zero per-event
 allocation) or `"samples"` (the channel's retained ring records, for event streams
 and value histograms):
 
 ```ts
-import { channel, meter } from "@jveres/loom"; // generic primitives
-import { events } from "@jveres/loom/observe"; // loom's own built-in streams
+import { channel, meter } from "loom"; // generic primitives
+import { events } from "loom/observe"; // loom's own built-in streams
 
 // Rates — the "count" view (default), allocation-free:
 const rates = meter([events.write, events.effect]);
@@ -617,7 +627,7 @@ paint.emit(16.7); // no-op and zero-alloc unless someone is metering it
 ```
 
 The built-in `events` record **non-internal** nodes only, so the idle baseline is
-zero. The rest of `@jveres/loom/observe` snapshots the reactive graph:
+zero. The rest of `loom/observe` snapshots the reactive graph:
 
 - `inspect()` returns a snapshot of the current graph (empty unless inspection is
   enabled via `configure({ inspect: true })`). Pass `{ active: true }` to skip
@@ -631,14 +641,14 @@ zero. The rest of `@jveres/loom/observe` snapshots the reactive graph:
 
 ### Inspector
 
-`@jveres/loom/devtools` is a self-contained dev panel built entirely on the public
+`loom/devtools` is a self-contained dev panel built entirely on the public
 surface (`inspect`, `inspectResources`, `meter`/`events`, `scope`,
 `polled`, `source`). Mount it to get a live, draggable, resizable overlay; it is
 purely a consumer of the runtime, so the same data is available to any tooling
 you write yourself.
 
 ```ts
-import { mountInspector } from "@jveres/loom/devtools";
+import { mountInspector } from "loom/devtools";
 
 mountInspector(); // appends to document.body by default; pass an Element to host it elsewhere
 ```
@@ -659,8 +669,8 @@ carry metadata. To see pre-existing nodes in the census and graph, enable
 inspection at startup before creating them:
 
 ```ts
-import { configure } from "@jveres/loom";
-import { mountInspector } from "@jveres/loom/devtools";
+import { configure } from "loom";
+import { mountInspector } from "loom/devtools";
 
 configure({ inspect: true }); // earliest opportunity — every node from here is visible
 // ... build your app ...
