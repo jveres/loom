@@ -400,6 +400,10 @@ The DOM entrypoint exports these functions:
 - `classed(name, read)` creates an explicit reactive class binding.
 - `style(name, read)` creates an explicit reactive style binding.
 - `list(container, read, options)` reconciles a keyed list.
+- `when(cond, render, fallback?)` renders a subtree keyed on the truthiness of
+  `cond` (see [Conditional rendering](#conditional-rendering)).
+- `match(selector, cases, fallback?)` renders a subtree keyed on `selector()` —
+  the switch/case form.
 - `dispose(root)` disposes effects owned by a node subtree.
 - `remove(node)` disposes a node subtree and removes it from the DOM.
 - `tap(node, handler)` binds a robust tap (see below).
@@ -574,37 +578,51 @@ const open = state(true);
 </section>;
 ```
 
-**Mount / unmount, or swap A ↔ B** — drive a keyed `list()` whose source is the
-single current branch. Changing the key disposes the old subtree (and its owned
-effects) and builds the new one. Use a 0-or-1-length array to mount/unmount, or a
-branch id to switch between views.
+**Mount / unmount, or swap branches** — use `when()` / `match()` from `loom/dom`.
+Each returns a child you drop straight into JSX (or `h()`); it manages an anchored
+slot that rebuilds **only when its key changes**, disposing the old subtree's
+effects when it swaps.
+
+`when(cond, render, fallback?)` keys on the **truthiness** of `cond`. It builds
+`render()` while truthy and the optional `fallback()` while falsy:
 
 ```tsx
-import { computed, state } from "loom";
-import { list } from "loom/dom";
+import { when } from "loom/dom";
 
-const tab = state<"info" | "graph">("info");
+const open = state(false);
 
-const slot = <div /> as HTMLElement;
-list(
-  slot,
-  computed(() => [tab()]), // one item: the current branch
-  {
-    key: (t) => t, // key by branch → switching tears down + rebuilds
-    render: (t) => (t === "info" ? <Info /> : <Graph />),
-  },
-);
+<aside>{when(open, () => <Panel />, () => <Empty />)}</aside>;
 ```
 
-For mount-on-condition, make the source empty when the condition is false:
+Because it only rebuilds when the truthiness **flips**, a `cond` that changes
+while staying truthy does *not* recreate the subtree — read live state with your
+own bindings inside `render` for that:
 
 ```tsx
-list(
-  slot,
-  computed(() => (open() ? ["panel"] : [])),
-  { key: (k) => k, render: () => <Panel /> },
-);
+// `user` changing from one object to another keeps <Profile> mounted; its inner
+// bindings update fine-grained. It rebuilds only when user goes null ↔ non-null.
+{when(user, () => <Profile name={() => user()?.name} />)}
 ```
+
+`match(selector, cases, fallback?)` is the switch/case form, keyed on
+`selector()`:
+
+```tsx
+import { match } from "loom/dom";
+
+const tab = state<"info" | "graph" | "trace">("info");
+
+<main>
+  {match(tab, {
+    info: () => <Info />,
+    graph: () => <Graph />,
+    trace: () => <Trace />,
+  })}
+</main>;
+```
+
+Both must be placed as a child of a Loom element (that is what wires the slot);
+they are not standalone mount points.
 
 ### SSR and SSG
 

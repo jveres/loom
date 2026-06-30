@@ -9,12 +9,24 @@ import {
 export type Child =
   | Node
   | Read<unknown>
+  | DynamicChild
   | string
   | number
   | boolean
   | null
   | undefined
   | readonly Child[];
+
+/**
+ * A keyed dynamic-child descriptor produced by {@link when} / {@link match}. Place it as a child of a
+ * Loom element (JSX or `h()`); `appendChild` turns it into an anchored slot that rebuilds its subtree
+ * only when `key()` changes. Opaque to callers — build one with `when`/`match`, don't hand-construct.
+ */
+export interface DynamicChild {
+  readonly __loomDynamic: true;
+  readonly key: Read<string>;
+  readonly pick: (key: string) => Child;
+}
 
 export interface ClassBinding {
   readonly kind: "class";
@@ -230,6 +242,51 @@ export function list<T>(
   return stopList;
 }
 
+function dynamic(
+  key: Read<string>,
+  pick: (key: string) => Child,
+): DynamicChild {
+  return { __loomDynamic: true, key, pick };
+}
+
+/**
+ * Conditional subtree, keyed on the truthiness of `cond`. Renders `render()` while truthy and the
+ * optional `fallback()` while falsy, rebuilding **only when the truthiness flips** — so a `cond` whose
+ * value changes while staying truthy does not tear down and recreate the subtree (read live state with
+ * your own bindings inside `render` for that). The returned value is a child: place it in JSX or
+ * `h()`, e.g. `{when(open, () => <Panel />)}`. Removing the subtree disposes its effects.
+ */
+export function when(
+  cond: Read<unknown>,
+  render: () => Child,
+  fallback?: () => Child,
+): Child {
+  return dynamic(
+    () => (cond() ? "1" : "0"),
+    (key) => (key === "1" ? render() : fallback ? fallback() : null),
+  );
+}
+
+/**
+ * Multi-way subtree, keyed on `selector()`. Builds `cases[String(selector())]` (or `fallback` when no
+ * case matches), rebuilding **only when the selected key changes**. The switch/case companion to
+ * {@link when}: `{match(tab, { info: () => <Info />, graph: () => <Graph /> })}`. Place the result as a
+ * child of a Loom element.
+ */
+export function match(
+  selector: Read<string | number>,
+  cases: Readonly<Record<string, () => Child>>,
+  fallback?: () => Child,
+): Child {
+  return dynamic(
+    () => String(selector()),
+    (key) => {
+      const branch = cases[key] ?? fallback;
+      return branch ? branch() : null;
+    },
+  );
+}
+
 export function dispose(root: Node): void {
   const stack: Node[] = [root];
   for (let index = 0; index < stack.length; index++) {
@@ -343,6 +400,10 @@ function appendChild(parent: Node, child: Child): void {
     for (const item of child) appendChild(parent, item);
     return;
   }
+  if (isDynamic(child)) {
+    mountDynamic(parent, child);
+    return;
+  }
   if (child == null || child === true || child === false) return;
   if (typeof child === "function") {
     parent.appendChild(text(child as Read<unknown>));
@@ -351,6 +412,43 @@ function appendChild(parent: Node, child: Child): void {
   parent.appendChild(
     child instanceof Node ? child : document.createTextNode(String(child)),
   );
+}
+
+function isDynamic(child: Child): child is DynamicChild {
+  return (
+    typeof child === "object" &&
+    child !== null &&
+    (child as Partial<DynamicChild>).__loomDynamic === true
+  );
+}
+
+// Drive a {@link DynamicChild}: append a trailing comment anchor (now, while `parent` exists, so there
+// is no detached-node timing gap), then key a single effect off `key()`. On a key change the previous
+// subtree is removed — disposing its owned effects — and `pick(key)` is built **untracked** before the
+// anchor, so only the key subscribes the slot, not whatever the branch content reads. The effect is
+// owned by the anchor, so removing the parent subtree tears it down.
+function mountDynamic(parent: Node, desc: DynamicChild): void {
+  const anchor = document.createComment("loom-dyn");
+  parent.appendChild(anchor);
+  let mounted: Node[] = [];
+  let currentKey: string | undefined;
+  const opts: EffectOptions =
+    parent instanceof Element
+      ? { label: "dom.dynamic", target: parent }
+      : { label: "dom.dynamic" };
+  const stop = untrack(() =>
+    effect(() => {
+      const key = desc.key();
+      if (key === currentKey) return;
+      currentKey = key;
+      for (const node of mounted) remove(node);
+      const frag = document.createDocumentFragment();
+      untrack(() => appendChild(frag, desc.pick(key)));
+      mounted = [...frag.childNodes];
+      anchor.parentNode?.insertBefore(frag, anchor);
+    }, opts),
+  );
+  own(anchor, stop);
 }
 
 function applyClassProp(node: Element, value: ClassProp): void {

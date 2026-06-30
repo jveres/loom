@@ -7,10 +7,12 @@ import {
   dispose,
   h,
   list,
+  match,
   remove,
   style,
   tap,
   text,
+  when,
 } from "./index.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -440,5 +442,137 @@ describe("loom DOM branch coverage", () => {
     offRows([{ id: "b" }, { id: "a" }]);
     expect(animate).not.toHaveBeenCalled();
     stopOff();
+  });
+});
+
+describe("loom DOM when/match", () => {
+  it("toggles a subtree on the truthiness of the condition", () => {
+    const open = state(false);
+    const root = h("div", null, [
+      "before",
+      when(open, () => h("span", null, "panel")),
+      "after",
+    ]);
+    expect(root.textContent).toBe("beforeafter");
+
+    open(true);
+    expect(root.querySelector("span")?.textContent).toBe("panel");
+    expect(root.textContent).toBe("beforepanelafter");
+
+    open(false);
+    expect(root.querySelector("span")).toBeNull();
+    expect(root.textContent).toBe("beforeafter");
+  });
+
+  it("renders the fallback while falsy", () => {
+    const open = state(true);
+    const root = h(
+      "div",
+      null,
+      when(
+        open,
+        () => h("span", { class: "on" }, "on"),
+        () => h("span", { class: "off" }, "off"),
+      ),
+    );
+    expect(root.querySelector(".on")).not.toBeNull();
+    open(false);
+    expect(root.querySelector(".on")).toBeNull();
+    expect(root.querySelector(".off")?.textContent).toBe("off");
+  });
+
+  it("does not rebuild while the condition stays truthy", () => {
+    const user = state<{ name: string } | null>({ name: "a" });
+    const built = vi.fn();
+    const root = h(
+      "div",
+      null,
+      when(user, () => {
+        built();
+        return h(
+          "span",
+          null,
+          text(() => user()?.name ?? ""),
+        );
+      }),
+    );
+    expect(built).toHaveBeenCalledTimes(1);
+    expect(root.querySelector("span")?.textContent).toBe("a");
+
+    // New object, still truthy: the subtree must stay (fine-grained), only the inner binding updates.
+    const span = root.querySelector("span");
+    user({ name: "b" });
+    expect(built).toHaveBeenCalledTimes(1);
+    expect(root.querySelector("span")).toBe(span); // same node, not recreated
+    expect(span?.textContent).toBe("b");
+
+    user(null); // falsy: now it tears down
+    expect(root.querySelector("span")).toBeNull();
+    user({ name: "c" }); // truthy again: rebuilt once
+    expect(built).toHaveBeenCalledTimes(2);
+    expect(root.querySelector("span")?.textContent).toBe("c");
+  });
+
+  it("disposes the branch's effects when it is swapped out", () => {
+    const open = state(true);
+    const runs = vi.fn();
+    const tick = state(0);
+    const root = h(
+      "div",
+      null,
+      when(open, () =>
+        h(
+          "span",
+          null,
+          text(() => {
+            runs();
+            return String(tick());
+          }),
+        ),
+      ),
+    );
+    expect(runs).toHaveBeenCalledTimes(1);
+    open(false); // branch removed -> its text effect disposed
+    runs.mockClear();
+    tick(1); // would re-run the disposed effect if it leaked
+    expect(runs).not.toHaveBeenCalled();
+    void root;
+  });
+
+  it("match swaps by key and falls back", () => {
+    const tab = state<"info" | "graph" | "trace">("info");
+    const root = h(
+      "div",
+      null,
+      match(
+        tab,
+        {
+          info: () => h("span", { class: "v" }, "info"),
+          graph: () => h("span", { class: "v" }, "graph"),
+        },
+        () => h("span", { class: "v" }, "none"),
+      ),
+    );
+    expect(root.querySelector(".v")?.textContent).toBe("info");
+    tab("graph");
+    expect(root.querySelector(".v")?.textContent).toBe("graph");
+    tab("trace"); // no case -> fallback
+    expect(root.querySelector(".v")?.textContent).toBe("none");
+  });
+
+  it("removing the host disposes the dynamic slot's effect", () => {
+    const open = state(true);
+    const sel = vi.fn(() => open());
+    const host = h(
+      "div",
+      null,
+      when(sel, () => h("span", null, "x")),
+    );
+    document.body.append(host);
+    expect(sel).toHaveBeenCalled();
+    sel.mockClear();
+    remove(host); // tears down the slot effect
+    open(false); // slot effect, if alive, would re-read sel
+    expect(sel).not.toHaveBeenCalled();
   });
 });
