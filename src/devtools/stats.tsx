@@ -30,6 +30,7 @@ const SPARK_N = 48;
 const SPARK_W = 58;
 const SPARK_LINE = 11;
 const SPARK_H = SPARK_LINE * 2;
+const SPARK_C = SPARK_H / 2; // shared center line: writes deflect up, DOM updates down
 const SPARK_RAMP: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
   [0.4, 0.03],
@@ -358,15 +359,16 @@ function buildHisto(): HTMLElement {
   );
 }
 
-function plotPoints(data: number[], bandTop: number): string {
+// Deflect from the shared center line: dir −1 sends writes up, dir +1 sends DOM updates down. Each
+// series is normalized to its own recent peak so both halves stay legible.
+function plotPoints(data: number[], dir: -1 | 1): string {
   const max = Math.max(1, ...data);
   const step = data.length > 1 ? SPARK_W / (data.length - 1) : 0;
-  const baseline = bandTop + SPARK_LINE - 1;
   const span = SPARK_LINE - 2;
   return data
     .map(
       (v, i) =>
-        `${(i * step).toFixed(1)},${(baseline - (v / max) * span).toFixed(1)}`,
+        `${(i * step).toFixed(1)},${(SPARK_C + dir * (v / max) * span).toFixed(1)}`,
     )
     .join(" ");
 }
@@ -400,17 +402,17 @@ function buildSpark(): HTMLElement {
   bindAttr(
     inLine,
     "points",
-    pulse(() => plotPoints(sparkIn, 0)),
+    pulse(() => plotPoints(sparkIn, -1)),
   );
   bindAttr(
     outLine,
     "points",
-    pulse(() => plotPoints(sparkOut, SPARK_LINE)),
+    pulse(() => plotPoints(sparkOut, 1)),
   );
   return (
     <span
       class="li-spark"
-      title="rendering pipeline — writes in (green) vs DOM updates out (red)"
+      title="rendering pipeline — writes in (green ↑) vs DOM updates out (red ↓)"
     >
       <svg
         width={SPARK_W}
@@ -436,6 +438,13 @@ function buildSpark(): HTMLElement {
           width={SPARK_W}
           height={SPARK_LINE}
           fill={`url(#${PANEL_ID}-spk-wg)`}
+        />
+        <line
+          class="li-spk-axis"
+          x1={0}
+          y1={SPARK_C}
+          x2={SPARK_W}
+          y2={SPARK_C}
         />
         {inLine}
         {outLine}
