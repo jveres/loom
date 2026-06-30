@@ -1547,20 +1547,24 @@ describe("loom scope bookkeeping", () => {
   // release the EffectNode so it can be GC'd, not retain it in scope.effects until the scope stops.
   // The marker is reachable only through the effect's fn closure, so it survives a forced GC iff the
   // node is still retained. stopEffect now swap-removes from scope.effects, so it's collectable.
-  // (Suite runs with --expose-gc via the test script.)
-  it("releases a manually-stopped effect from its long-lived scope's bookkeeping", async () => {
-    let ref!: WeakRef<object>;
-    const s = scope(() => {
-      const marker = {};
-      const stop = effect(() => void marker);
-      ref = new WeakRef(marker);
-      stop(); // manual stop while the scope stays alive
-    });
-    for (let i = 0; i < 6; i++) {
-      globalThis.gc?.();
-      await new Promise((r) => setTimeout(r, 0));
-    }
-    expect(ref.deref()).toBeUndefined();
-    s.stop();
-  });
+  // Needs a real forced GC (the `test` script sets NODE_OPTIONS=--expose-gc); skip rather than run a
+  // non-deterministic assertion when vitest is invoked without it (e.g. a bare `npx vitest run`).
+  it.skipIf(typeof globalThis.gc !== "function")(
+    "releases a manually-stopped effect from its long-lived scope's bookkeeping",
+    async () => {
+      let ref!: WeakRef<object>;
+      const s = scope(() => {
+        const marker = {};
+        const stop = effect(() => void marker);
+        ref = new WeakRef(marker);
+        stop(); // manual stop while the scope stays alive
+      });
+      for (let i = 0; i < 6; i++) {
+        globalThis.gc?.();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      expect(ref.deref()).toBeUndefined();
+      s.stop();
+    },
+  );
 });
