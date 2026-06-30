@@ -648,6 +648,14 @@ const rows = state<readonly Row[]>([]);
 across updates. Reach for `list(container, …)` instead when you already hold the
 container element (or need the `reorder` / `animate` options).
 
+Both `each` and `list` render a row **once per key** — like the conditional
+helpers, they reconcile structure, not row contents. A row whose key is unchanged
+is reused as-is; its `render` does not re-run when the item behind that key is
+replaced. So make the row read live state through its own bindings (`{() =>
+row.title}`, `class={{ done: () => row.done }}`), or, if a row is a static
+snapshot, fold the fields it shows into the `key` so a changed field produces a
+new key and rebuilds the row.
+
 `when`, `match`, and `each` must each be placed as a child of a Loom element
 (that is what wires the slot); they are not standalone mount points.
 
