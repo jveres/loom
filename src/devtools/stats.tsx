@@ -31,6 +31,8 @@ const SPARK_W = 58;
 const SPARK_LINE = 11;
 const SPARK_H = SPARK_LINE * 2;
 const SPARK_C = SPARK_H / 2; // shared center line: writes deflect up, DOM updates down
+const SPARK_DECAY = 0.9; // per-tick gain decay (~1s): the auto-scale eases down instead of popping
+const SPARK_FLOOR = 8; // min normalizing peak (events/tick) so faint bursts read, idle stays flat
 const SPARK_RAMP: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
   [0.4, 0.03],
@@ -105,9 +107,13 @@ let nodeScopes = 0;
 let nodeChannels = 0;
 let nodeUnread = 0;
 
-// Rendering-pipeline sparkline series: writes in (top) vs DOM updates out (bottom), per poll.
+// Rendering-pipeline sparkline series: writes up vs DOM updates down. The buffers hold the gain-
+// applied amplitudes (0..1, normalized at write-time against a decaying peak — see SPARK_DECAY), so
+// old samples keep their recorded height and the scale eases rather than popping when chaos stops.
 const sparkIn: number[] = [];
 const sparkOut: number[] = [];
+let sparkPeakIn = SPARK_FLOOR;
+let sparkPeakOut = SPARK_FLOOR;
 
 /* ---- binding helpers ---- */
 function bindAttr(node: Element, name: string, read: () => string): void {
@@ -359,16 +365,15 @@ function buildHisto(): HTMLElement {
   );
 }
 
-// Deflect from the shared center line: dir −1 sends writes up, dir +1 sends DOM updates down. Each
-// series is normalized to its own recent peak so both halves stay legible.
+// Deflect from the shared center line: dir −1 sends writes up, dir +1 sends DOM updates down. The
+// samples are already gain-normalized to 0..1 (see the poll), so just scale them across the half.
 function plotPoints(data: number[], dir: -1 | 1): string {
-  const max = Math.max(1, ...data);
   const step = data.length > 1 ? SPARK_W / (data.length - 1) : 0;
   const span = SPARK_LINE - 2;
   return data
     .map(
       (v, i) =>
-        `${(i * step).toFixed(1)},${(SPARK_C + dir * (v / max) * span).toFixed(1)}`,
+        `${(i * step).toFixed(1)},${(SPARK_C + dir * v * span).toFixed(1)}`,
     )
     .join(" ");
 }
@@ -711,9 +716,13 @@ function poll(): number {
     lastFlushBatch = lastFlush.batchSize;
     lastFlushMs = lastFlush.durationMs;
   }
-  // Sparkline = rendering-pipeline utilization: writes entering vs effect runs produced.
-  sparkIn.push(dw);
-  sparkOut.push(deff);
+  // Sparkline = rendering-pipeline utilization: writes entering vs effect runs produced. Each side
+  // tracks a peak that jumps to new highs but decays smoothly, and the sample is stored already
+  // normalized against it — so the auto-scale glides down after a burst instead of snapping.
+  sparkPeakIn = Math.max(dw, sparkPeakIn * SPARK_DECAY, SPARK_FLOOR);
+  sparkPeakOut = Math.max(deff, sparkPeakOut * SPARK_DECAY, SPARK_FLOOR);
+  sparkIn.push(dw / sparkPeakIn);
+  sparkOut.push(deff / sparkPeakOut);
   if (sparkIn.length > SPARK_N) sparkIn.shift();
   if (sparkOut.length > SPARK_N) sparkOut.shift();
 
@@ -910,4 +919,6 @@ export function stopStats(): void {
   nodeSources = nodeScopes = nodeChannels = nodeUnread = 0;
   sparkIn.length = 0;
   sparkOut.length = 0;
+  sparkPeakIn = SPARK_FLOOR;
+  sparkPeakOut = SPARK_FLOOR;
 }
