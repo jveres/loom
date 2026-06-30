@@ -14,7 +14,7 @@ import {
   source,
   untrack,
 } from "loom";
-import { text } from "loom/dom";
+import { type Child, text, when } from "loom/dom";
 import { events, inspectResources } from "loom/observe";
 import { bind, PANEL_OPTS } from "./bindings.js";
 import { PANEL_ID } from "./css.js";
@@ -267,11 +267,29 @@ const connectLongTasks = observerSource((set) => {
   return obs;
 });
 
-function gaugeClass(base: string): string {
-  return `${base} ${healthReady ? `h-${healthKey}` : "li-loading"}`;
-}
 /* ---- SVG widgets ---- */
-function buildGauge(): HTMLElement {
+// The health gauge's arc + number. Until the first FPS sample arrives (`healthReady`) we show a
+// loading skeleton; `when` swaps it for the live, score-bound arc once — keeping the conditional in
+// one place instead of smeared across every binding, and leaving the static track + label untouched.
+function gaugeSkeleton(): Child {
+  return [
+    <circle
+      class="li-garc li-loading"
+      cx={44}
+      cy={44}
+      r={GAUGE_R}
+      fill="none"
+      stroke-width={9}
+      stroke-linecap="round"
+      transform="rotate(135 44 44)"
+      stroke-dasharray={`0.1 ${GAUGE_C}`}
+    />,
+    <text class="li-gnum li-loading" x={44} y={48} text-anchor="middle">
+      100
+    </text>,
+  ];
+}
+function gaugeLive(): Child {
   const arc = (
     <circle
       class="li-garc"
@@ -282,35 +300,33 @@ function buildGauge(): HTMLElement {
       stroke-width={9}
       stroke-linecap="round"
       transform="rotate(135 44 44)"
-      stroke-dasharray={`0 ${GAUGE_C}`}
     />
   );
-  const num = <text class="li-gnum" x={44} y={48} text-anchor="middle" />;
   bindAttr(
     arc,
     "stroke-dasharray",
-    pulse(() =>
-      healthReady
-        ? `${(GAUGE_ARC * score) / 100} ${GAUGE_C}`
-        : `0.1 ${GAUGE_C}`,
-    ),
+    pulse(() => `${(GAUGE_ARC * score) / 100} ${GAUGE_C}`),
   );
   bindAttr(
     arc,
     "class",
-    pulse(() => gaugeClass("li-garc")),
+    pulse(() => `li-garc h-${healthKey}`),
   );
+  const num = <text class="li-gnum" x={44} y={48} text-anchor="middle" />;
   num.append(
     text(
-      pulse(() => (healthReady ? String(score) : "100")),
+      pulse(() => String(score)),
       PANEL_OPTS,
     ),
   );
   bindAttr(
     num,
     "class",
-    pulse(() => gaugeClass("li-gnum")),
+    pulse(() => `li-gnum h-${healthKey}`),
   );
+  return [arc, num];
+}
+function buildGauge(): HTMLElement {
   return (
     <svg
       width={88}
@@ -330,8 +346,11 @@ function buildGauge(): HTMLElement {
         transform="rotate(135 44 44)"
         stroke-dasharray={`${GAUGE_ARC} ${GAUGE_C}`}
       />
-      {arc}
-      {num}
+      {when(
+        pulse(() => healthReady),
+        gaugeLive,
+        gaugeSkeleton,
+      )}
       <text class="li-glbl" x={44} y={61} text-anchor="middle">
         HEALTH
       </text>
