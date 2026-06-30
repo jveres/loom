@@ -551,6 +551,61 @@ Use these entrypoints for browser JSX:
 - `loom/jsx-runtime` powers browser JSX.
 - `loom/jsx-dev-runtime` powers browser JSX in development mode.
 
+### Conditional rendering
+
+JSX runs **once** and returns live DOM nodes, so the React habits for branching
+do not update. A bare `{open() && <Panel />}` evaluates a single time when the
+node is built; wrapping it in a function — `{() => open() && <Panel />}` — does
+**not** fix it, because a function child is bound as reactive **text** (it would
+stringify the element). What stays reactive in JSX is the leaf bindings: text,
+attributes, classes, and styles.
+
+So pick by what you actually need:
+
+**Show / hide** — keep the subtree mounted and toggle visibility with a reactive
+class or style binding. Cheapest; state inside the subtree is preserved while
+hidden.
+
+```tsx
+const open = state(true);
+
+<section style={{ display: () => (open() ? null : "none") }}>
+  <Details />
+</section>;
+```
+
+**Mount / unmount, or swap A ↔ B** — drive a keyed `list()` whose source is the
+single current branch. Changing the key disposes the old subtree (and its owned
+effects) and builds the new one. Use a 0-or-1-length array to mount/unmount, or a
+branch id to switch between views.
+
+```tsx
+import { computed, state } from "loom";
+import { list } from "loom/dom";
+
+const tab = state<"info" | "graph">("info");
+
+const slot = <div /> as HTMLElement;
+list(
+  slot,
+  computed(() => [tab()]), // one item: the current branch
+  {
+    key: (t) => t, // key by branch → switching tears down + rebuilds
+    render: (t) => (t === "info" ? <Info /> : <Graph />),
+  },
+);
+```
+
+For mount-on-condition, make the source empty when the condition is false:
+
+```tsx
+list(
+  slot,
+  computed(() => (open() ? ["panel"] : [])),
+  { key: (k) => k, render: () => <Panel /> },
+);
+```
+
 ### SSR and SSG
 
 Use `loom/html` when you want static HTML for server-side rendering or
