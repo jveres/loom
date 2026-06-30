@@ -374,8 +374,10 @@ function plotPoints(data: number[], dir: -1 | 1): string {
 }
 
 function buildSpark(): HTMLElement {
-  const grad = (id: string, cls: string): HTMLElement => (
-    <linearGradient id={id} x1={0} y1={0} x2={0} y2={1}>
+  // `flip` reverses the vertical ramp so the dense end sits at the center axis for both halves
+  // (top half fades up, bottom half fades down) — the gradient mirrors around the center line too.
+  const grad = (id: string, cls: string, flip = false): HTMLElement => (
+    <linearGradient id={id} x1={0} y1={flip ? 1 : 0} x2={0} y2={flip ? 0 : 1}>
       {SPARK_RAMP.map(([offset, opacity]) => (
         <stop offset={offset} class={cls} stop-opacity={opacity} />
       ))}
@@ -423,7 +425,7 @@ function buildSpark(): HTMLElement {
       >
         <defs>
           {grad(`${PANEL_ID}-spk-rg`, "li-spk-cr")}
-          {grad(`${PANEL_ID}-spk-wg`, "li-spk-cw")}
+          {grad(`${PANEL_ID}-spk-wg`, "li-spk-cw", true)}
         </defs>
         <rect
           x={0}
