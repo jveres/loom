@@ -399,7 +399,10 @@ The DOM entrypoint exports these functions:
 - `attr(name, read)` creates an explicit reactive attribute binding.
 - `classed(name, read)` creates an explicit reactive class binding.
 - `style(name, read)` creates an explicit reactive style binding.
-- `list(container, read, options)` reconciles a keyed list.
+- `list(container, read, options)` reconciles a keyed list into a container.
+- `each(items, render, key)` is the inline keyed list — the same reconciliation
+  as `list()` but returned as a child expression (see
+  [Conditional rendering](#conditional-rendering)).
 - `when(cond, render, fallback?)` renders a subtree keyed on the truthiness of
   `cond` (see [Conditional rendering](#conditional-rendering)).
 - `match(selector, cases, fallback?)` renders a subtree keyed on `selector()` —
@@ -621,8 +624,32 @@ const tab = state<"info" | "graph" | "trace">("info");
 </main>;
 ```
 
-Both must be placed as a child of a Loom element (that is what wires the slot);
-they are not standalone mount points.
+For a **keyed list** as a child expression, use `each(items, render, key)` — the
+same reconciliation as `list()` (existing rows are moved, not rebuilt; missing
+keys are removed and their effects disposed) but inline, without a container
+reference:
+
+```tsx
+import { state } from "loom";
+import { each } from "loom/dom";
+
+const rows = state<readonly Row[]>([]);
+
+<ul>
+  {each(
+    rows,
+    (row) => <li class={{ done: () => row.done }}>{() => row.title}</li>,
+    (row) => row.id,
+  )}
+</ul>;
+```
+
+`render(item, key)` must return a single Element; `key(item)` identifies rows
+across updates. Reach for `list(container, …)` instead when you already hold the
+container element (or need the `reorder` / `animate` options).
+
+`when`, `match`, and `each` must each be placed as a child of a Loom element
+(that is what wires the slot); they are not standalone mount points.
 
 ### SSR and SSG
 

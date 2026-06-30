@@ -2,6 +2,7 @@ import {
   type EffectOptions,
   effect,
   type Read,
+  type State,
   type Stop,
   untrack,
 } from "../loom.js";
@@ -18,14 +19,14 @@ export type Child =
   | readonly Child[];
 
 /**
- * A keyed dynamic-child descriptor produced by {@link when} / {@link match}. Place it as a child of a
- * Loom element (JSX or `h()`); `appendChild` turns it into an anchored slot that rebuilds its subtree
- * only when `key()` changes. Opaque to callers — build one with `when`/`match`, don't hand-construct.
+ * An anchored-slot descriptor produced by {@link when} / {@link match} / {@link each}. Place it as a
+ * child of a Loom element (JSX or `h()`); `appendChild` drops a trailing comment anchor and calls
+ * `mount(anchor)`, which wires the slot's effect and returns its disposer. Opaque to callers — build
+ * one with `when`/`match`/`each`, don't hand-construct.
  */
 export interface DynamicChild {
   readonly __loomDynamic: true;
-  readonly key: Read<string>;
-  readonly pick: (key: string) => Child;
+  readonly mount: (anchor: Comment) => Stop;
 }
 
 export interface ClassBinding {
@@ -242,11 +243,35 @@ export function list<T>(
   return stopList;
 }
 
+// Single-branch slot: an effect keyed off `key()`. On a key change the previous subtree is removed —
+// disposing its owned effects — and `pick(key)` is built **untracked** before the anchor, so only the
+// key subscribes the slot, not whatever the branch content reads.
 function dynamic(
   key: Read<string>,
   pick: (key: string) => Child,
 ): DynamicChild {
-  return { __loomDynamic: true, key, pick };
+  return {
+    __loomDynamic: true,
+    mount(anchor) {
+      let mounted: Node[] = [];
+      let currentKey: string | undefined;
+      return untrack(() =>
+        effect(
+          () => {
+            const k = key();
+            if (k === currentKey) return;
+            currentKey = k;
+            for (const node of mounted) remove(node);
+            const frag = document.createDocumentFragment();
+            untrack(() => appendChild(frag, pick(k)));
+            mounted = [...frag.childNodes];
+            anchor.parentNode?.insertBefore(frag, anchor);
+          },
+          slotOpts(anchor, "dom.dynamic"),
+        ),
+      );
+    },
+  };
 }
 
 /**
@@ -285,6 +310,67 @@ export function match(
       return branch ? branch() : null;
     },
   );
+}
+
+/**
+ * Inline keyed list. Reconciles `items()` against an anchor — the `list()` companion for when you want
+ * a keyed list as a child expression rather than against a container: `{each(rows, r => <Row />, r =>
+ * r.id)}`. `render(item, key)` must return a single Element (its owned effects are disposed when the
+ * item leaves); `key(item)` identifies it across updates so existing rows are moved, not rebuilt. Like
+ * `list()`, it reorders by key and throws on a duplicate key. Place the result as a child of a Loom
+ * element.
+ */
+export function each<T>(
+  // State is spelled out alongside Read because its dual call signature otherwise blocks T inference
+  // (a plain Read/computed infers fine; a state/fields cell would fall back to unknown).
+  items: State<readonly T[]> | Read<readonly T[]>,
+  render: (item: NoInfer<T>, key: string) => Element,
+  key: (item: NoInfer<T>) => string | number,
+): Child {
+  return {
+    __loomDynamic: true,
+    mount(anchor) {
+      const nodes = new Map<string, Element>();
+      return untrack(() =>
+        effect(
+          () => {
+            const list = items();
+            const seen = new Set<string>();
+            // Create new rows, reuse existing ones, and collect the desired order.
+            const ordered: Element[] = [];
+            for (const item of list) {
+              const k = String(key(item));
+              if (seen.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
+              seen.add(k);
+              let node = nodes.get(k);
+              if (!node) {
+                node = render(item, k);
+                node.setAttribute("data-loom-key", k);
+                nodes.set(k, node);
+              }
+              ordered.push(node);
+            }
+            // Drop stale rows first (disposing their effects) so they don't provoke spurious moves.
+            for (const [k, node] of nodes) {
+              if (seen.has(k)) continue;
+              remove(node);
+              nodes.delete(k);
+            }
+            // Position in order: walk back-to-front, inserting each before a cursor that ends at the
+            // anchor; the nextSibling guard skips rows already in place, so only moved keys touch the DOM.
+            let next: Node = anchor;
+            for (let i = ordered.length - 1; i >= 0; i--) {
+              const node = ordered[i] as Element;
+              if (node.nextSibling !== next)
+                anchor.parentNode?.insertBefore(node, next);
+              next = node;
+            }
+          },
+          slotOpts(anchor, "dom.each"),
+        ),
+      );
+    },
+  };
 }
 
 export function dispose(root: Node): void {
@@ -401,7 +487,7 @@ function appendChild(parent: Node, child: Child): void {
     return;
   }
   if (isDynamic(child)) {
-    mountDynamic(parent, child);
+    mountSlot(parent, child);
     return;
   }
   if (child == null || child === true || child === false) return;
@@ -423,32 +509,19 @@ function isDynamic(child: Child): child is DynamicChild {
 }
 
 // Drive a {@link DynamicChild}: append a trailing comment anchor (now, while `parent` exists, so there
-// is no detached-node timing gap), then key a single effect off `key()`. On a key change the previous
-// subtree is removed — disposing its owned effects — and `pick(key)` is built **untracked** before the
-// anchor, so only the key subscribes the slot, not whatever the branch content reads. The effect is
-// owned by the anchor, so removing the parent subtree tears it down.
-function mountDynamic(parent: Node, desc: DynamicChild): void {
-  const anchor = document.createComment("loom-dyn");
+// is no detached-node timing gap), wire the slot's effect via `mount(anchor)`, and own its disposer on
+// the anchor so removing the parent subtree tears it down.
+function mountSlot(parent: Node, desc: DynamicChild): void {
+  const anchor = document.createComment("loom-slot");
   parent.appendChild(anchor);
-  let mounted: Node[] = [];
-  let currentKey: string | undefined;
-  const opts: EffectOptions =
-    parent instanceof Element
-      ? { label: "dom.dynamic", target: parent }
-      : { label: "dom.dynamic" };
-  const stop = untrack(() =>
-    effect(() => {
-      const key = desc.key();
-      if (key === currentKey) return;
-      currentKey = key;
-      for (const node of mounted) remove(node);
-      const frag = document.createDocumentFragment();
-      untrack(() => appendChild(frag, desc.pick(key)));
-      mounted = [...frag.childNodes];
-      anchor.parentNode?.insertBefore(frag, anchor);
-    }, opts),
-  );
-  own(anchor, stop);
+  own(anchor, desc.mount(anchor));
+}
+
+// Effect options for a slot: label it, and target its parent element (when there is one) so the
+// inspector can attribute the work — mirrors what list() passes for its container.
+function slotOpts(anchor: Comment, label: string): EffectOptions {
+  const parent = anchor.parentNode;
+  return parent instanceof Element ? { label, target: parent } : { label };
 }
 
 function applyClassProp(node: Element, value: ClassProp): void {

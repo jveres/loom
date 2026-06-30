@@ -5,6 +5,7 @@ import {
   attr,
   classed,
   dispose,
+  each,
   h,
   list,
   match,
@@ -574,5 +575,124 @@ describe("loom DOM when/match", () => {
     remove(host); // tears down the slot effect
     open(false); // slot effect, if alive, would re-read sel
     expect(sel).not.toHaveBeenCalled();
+  });
+});
+
+describe("loom DOM each", () => {
+  const ids = (root: Element): string[] =>
+    [...root.children].map((n) => n.getAttribute("data-loom-key") ?? "");
+
+  it("renders, reorders (reusing nodes), inserts, and removes by key", () => {
+    const rows = state<readonly { id: string }[]>([{ id: "a" }, { id: "b" }]);
+    const root = h(
+      "ul",
+      null,
+      each(
+        rows,
+        (r) => h("li", null, r.id),
+        (r) => r.id,
+      ),
+    ) as HTMLElement;
+    expect(ids(root)).toEqual(["a", "b"]);
+    const a = root.querySelector('[data-loom-key="a"]');
+    const b = root.querySelector('[data-loom-key="b"]');
+
+    rows([{ id: "b" }, { id: "a" }]); // reorder: same nodes, moved
+    expect(ids(root)).toEqual(["b", "a"]);
+    expect(root.querySelector('[data-loom-key="a"]')).toBe(a);
+    expect(root.querySelector('[data-loom-key="b"]')).toBe(b);
+
+    rows([{ id: "b" }, { id: "c" }, { id: "a" }]); // insert in the middle
+    expect(ids(root)).toEqual(["b", "c", "a"]);
+    expect(root.querySelector('[data-loom-key="a"]')).toBe(a); // a preserved
+
+    rows([{ id: "c" }]); // remove a and b
+    expect(ids(root)).toEqual(["c"]);
+  });
+
+  it("keeps surrounding siblings and order around the slot", () => {
+    const rows = state<readonly { id: string }[]>([{ id: "x" }]);
+    const root = h("ul", null, [
+      h("li", { class: "head" }, "head"),
+      each(
+        rows,
+        (r) => h("li", null, r.id),
+        (r) => r.id,
+      ),
+      h("li", { class: "foot" }, "foot"),
+    ]) as HTMLElement;
+    expect(root.firstElementChild?.className).toBe("head");
+    expect(root.lastElementChild?.className).toBe("foot");
+    rows([{ id: "x" }, { id: "y" }]);
+    // head, x, y, foot
+    expect([...root.children].map((n) => n.textContent)).toEqual([
+      "head",
+      "x",
+      "y",
+      "foot",
+    ]);
+  });
+
+  it("disposes a removed row's effects", () => {
+    const rows = state<readonly { id: string }[]>([{ id: "a" }]);
+    const tick = state(0);
+    const runs = vi.fn();
+    const root = h(
+      "ul",
+      null,
+      each(
+        rows,
+        (r) =>
+          h(
+            "li",
+            null,
+            text(() => {
+              runs();
+              return `${r.id}${tick()}`;
+            }),
+          ),
+        (r) => r.id,
+      ),
+    ) as HTMLElement;
+    expect(runs).toHaveBeenCalledTimes(1);
+    rows([]); // row removed -> its text effect disposed
+    runs.mockClear();
+    tick(1);
+    expect(runs).not.toHaveBeenCalled();
+    void root;
+  });
+
+  it("throws on a duplicate key", () => {
+    const rows = state<readonly { id: string }[]>([{ id: "a" }, { id: "a" }]);
+    expect(() =>
+      h(
+        "ul",
+        null,
+        each(
+          rows,
+          (r) => h("li", null, r.id),
+          (r) => r.id,
+        ),
+      ),
+    ).toThrow(/Duplicate Loom key/);
+  });
+
+  it("removing the host disposes the each effect", () => {
+    const rows = state<readonly { id: string }[]>([{ id: "a" }]);
+    const reader = vi.fn(() => rows());
+    const host = h(
+      "ul",
+      null,
+      each(
+        reader,
+        (r) => h("li", null, r.id),
+        (r) => r.id,
+      ),
+    ) as HTMLElement;
+    document.body.append(host);
+    reader.mockClear();
+    remove(host);
+    rows([{ id: "a" }, { id: "b" }]); // effect, if alive, would re-read
+    expect(reader).not.toHaveBeenCalled();
   });
 });
