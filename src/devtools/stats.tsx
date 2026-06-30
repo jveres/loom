@@ -32,8 +32,14 @@ const SPARK_LINE = 11;
 const SPARK_H = SPARK_LINE * 2;
 const SPARK_C = SPARK_H / 2; // center: writes deflect up, DOM updates down (equals SPARK_LINE here)
 const SPARK_GAP = 1; // rest each trace a hair off-center so they don't merge into one line when flat
-const SPARK_DECAY = 0.9; // per-tick gain decay (~1s): the auto-scale eases down instead of popping
-const SPARK_FLOOR = 8; // min normalizing peak (events/tick) so faint bursts read, idle stays flat
+// Fixed log magnitude scale: amplitude tracks absolute load, so light vs heavy activity look
+// different (relative increase is visible) while the log keeps faint bursts readable and the loud
+// end from clipping. REF = where activity starts to register, CEIL = the load that fills the band.
+const SPARK_REF = 10;
+const SPARK_CEIL = 900;
+const SPARK_LOG_MAX = Math.log1p(SPARK_CEIL / SPARK_REF);
+const sparkAmp = (events: number): number =>
+  Math.min(1, Math.log1p(events / SPARK_REF) / SPARK_LOG_MAX);
 const SPARK_RAMP: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
   [0.4, 0.03],
@@ -108,13 +114,10 @@ let nodeScopes = 0;
 let nodeChannels = 0;
 let nodeUnread = 0;
 
-// Rendering-pipeline sparkline series: writes up vs DOM updates down. The buffers hold the gain-
-// applied amplitudes (0..1, normalized at write-time against a decaying peak — see SPARK_DECAY), so
-// old samples keep their recorded height and the scale eases rather than popping when chaos stops.
+// Rendering-pipeline sparkline series: writes up vs DOM updates down. The buffers hold log-scaled
+// amplitudes (0..1, see sparkAmp) so the trace height reflects how much work is actually flowing.
 const sparkIn: number[] = [];
 const sparkOut: number[] = [];
-let sparkPeakIn = SPARK_FLOOR;
-let sparkPeakOut = SPARK_FLOOR;
 
 /* ---- binding helpers ---- */
 function bindAttr(node: Element, name: string, read: () => string): void {
@@ -368,15 +371,21 @@ function buildHisto(): HTMLElement {
 
 // Deflect from the center: dir −1 sends writes up, dir +1 sends DOM updates down, each resting a
 // SPARK_GAP off-center so the flat traces stay separate. Samples are already gain-normalized to 0..1.
-function plotPoints(data: number[], dir: -1 | 1): string {
+function plotPoints(data: number[], dir: -1 | 1, close = false): string {
   const step = data.length > 1 ? SPARK_W / (data.length - 1) : 0;
   const span = SPARK_LINE - 2 - SPARK_GAP;
-  return data
+  const pts = data
     .map(
       (v, i) =>
         `${(i * step).toFixed(1)},${(SPARK_C + dir * (SPARK_GAP + v * span)).toFixed(1)}`,
     )
     .join(" ");
+  if (!close || pts === "") return pts;
+  // close the polygon to the true center (not the gapped rest line) so the two halves meet there —
+  // the lines stay separated by SPARK_GAP, but the fills leave no empty band down the middle.
+  const base = SPARK_C.toFixed(1);
+  const lastX = (data.length > 1 ? SPARK_W : 0).toFixed(1);
+  return `0,${base} ${pts} ${lastX},${base}`;
 }
 
 function buildSpark(): HTMLElement {
@@ -389,34 +398,35 @@ function buildSpark(): HTMLElement {
       ))}
     </linearGradient>
   );
-  const inLine = (
-    <polyline
-      class="li-spk-up"
-      fill="none"
-      stroke-width={1}
-      stroke-linejoin="round"
-      stroke-linecap="round"
-    />
-  );
-  const outLine = (
-    <polyline
-      class="li-spk-down"
-      fill="none"
-      stroke-width={1}
-      stroke-linejoin="round"
-      stroke-linecap="round"
-    />
-  );
-  bindAttr(
-    inLine,
-    "points",
-    pulse(() => plotPoints(sparkIn, -1)),
-  );
-  bindAttr(
-    outLine,
-    "points",
-    pulse(() => plotPoints(sparkOut, 1)),
-  );
+  // Each half = a gradient area that grows with activity, plus the trace line on top.
+  const half = (
+    data: number[],
+    dir: -1 | 1,
+    cls: string,
+    fill: string,
+  ): HTMLElement[] => {
+    const area = <polygon stroke="none" fill={`url(#${fill})`} />;
+    const line = (
+      <polyline
+        class={cls}
+        fill="none"
+        stroke-width={1}
+        stroke-linejoin="round"
+        stroke-linecap="round"
+      />
+    );
+    bindAttr(
+      area,
+      "points",
+      pulse(() => plotPoints(data, dir, true)),
+    );
+    bindAttr(
+      line,
+      "points",
+      pulse(() => plotPoints(data, dir)),
+    );
+    return [area, line];
+  };
   return (
     <span
       class="li-spark"
@@ -433,22 +443,8 @@ function buildSpark(): HTMLElement {
           {grad(`${PANEL_ID}-spk-up`, "li-spk-up")}
           {grad(`${PANEL_ID}-spk-down`, "li-spk-down", true)}
         </defs>
-        <rect
-          x={0}
-          y={0}
-          width={SPARK_W}
-          height={SPARK_LINE}
-          fill={`url(#${PANEL_ID}-spk-up)`}
-        />
-        <rect
-          x={0}
-          y={SPARK_LINE}
-          width={SPARK_W}
-          height={SPARK_LINE}
-          fill={`url(#${PANEL_ID}-spk-down)`}
-        />
-        {inLine}
-        {outLine}
+        {half(sparkIn, -1, "li-spk-up", `${PANEL_ID}-spk-up`)}
+        {half(sparkOut, 1, "li-spk-down", `${PANEL_ID}-spk-down`)}
       </svg>
     </span>
   );
@@ -717,13 +713,10 @@ function poll(): number {
     lastFlushBatch = lastFlush.batchSize;
     lastFlushMs = lastFlush.durationMs;
   }
-  // Sparkline = rendering-pipeline utilization: writes entering vs effect runs produced. Each side
-  // tracks a peak that jumps to new highs but decays smoothly, and the sample is stored already
-  // normalized against it — so the auto-scale glides down after a burst instead of snapping.
-  sparkPeakIn = Math.max(dw, sparkPeakIn * SPARK_DECAY, SPARK_FLOOR);
-  sparkPeakOut = Math.max(deff, sparkPeakOut * SPARK_DECAY, SPARK_FLOOR);
-  sparkIn.push(dw / sparkPeakIn);
-  sparkOut.push(deff / sparkPeakOut);
+  // Sparkline = rendering-pipeline utilization: writes entering vs effect runs produced, log-scaled
+  // so heavier load reads taller than lighter load (relative activity stays visible).
+  sparkIn.push(sparkAmp(dw));
+  sparkOut.push(sparkAmp(deff));
   if (sparkIn.length > SPARK_N) sparkIn.shift();
   if (sparkOut.length > SPARK_N) sparkOut.shift();
 
@@ -920,6 +913,4 @@ export function stopStats(): void {
   nodeSources = nodeScopes = nodeChannels = nodeUnread = 0;
   sparkIn.length = 0;
   sparkOut.length = 0;
-  sparkPeakIn = SPARK_FLOOR;
-  sparkPeakOut = SPARK_FLOOR;
 }
