@@ -71,7 +71,10 @@ export namespace JSX {
     br: ElementProps<HTMLBRElement>;
     button: ElementProps<HTMLButtonElement>;
     code: ElementProps<HTMLElement>;
+    dd: ElementProps<HTMLElement>;
     div: ElementProps<HTMLDivElement>;
+    dl: ElementProps<HTMLDListElement>;
+    dt: ElementProps<HTMLElement>;
     em: ElementProps<HTMLElement>;
     footer: ElementProps<HTMLElement>;
     header: ElementProps<HTMLElement>;
