@@ -441,13 +441,6 @@ function buildSpark(): HTMLElement {
           height={SPARK_LINE}
           fill={`url(#${PANEL_ID}-spk-wg)`}
         />
-        <line
-          class="li-spk-axis"
-          x1={0}
-          y1={SPARK_C}
-          x2={SPARK_W}
-          y2={SPARK_C}
-        />
         {inLine}
         {outLine}
       </svg>

@@ -810,10 +810,6 @@
   .li-spk-cw {
     stop-color: var(--li-bool);
   }
-  .li-spk-axis {
-    stroke: var(--li-border);
-    stroke-width: 1;
-  }
 }
 
 #loom-inspector-menu {
