@@ -804,11 +804,15 @@
   .li-spark svg {
     margin: 0;
   }
-  .li-spk-cr {
+  /* up = writes (green), down = DOM updates (red); one token drives both the gradient fill and the
+     trace stroke so the line themes with light/dark like the rest of the panel. */
+  .li-spk-up {
     stop-color: var(--li-num);
+    stroke: var(--li-num);
   }
-  .li-spk-cw {
+  .li-spk-down {
     stop-color: var(--li-bool);
+    stroke: var(--li-bool);
   }
 }
 

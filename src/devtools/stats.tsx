@@ -30,7 +30,8 @@ const SPARK_N = 48;
 const SPARK_W = 58;
 const SPARK_LINE = 11;
 const SPARK_H = SPARK_LINE * 2;
-const SPARK_C = SPARK_H / 2; // shared center line: writes deflect up, DOM updates down
+const SPARK_C = SPARK_H / 2; // center: writes deflect up, DOM updates down (equals SPARK_LINE here)
+const SPARK_GAP = 1; // rest each trace a hair off-center so they don't merge into one line when flat
 const SPARK_DECAY = 0.9; // per-tick gain decay (~1s): the auto-scale eases down instead of popping
 const SPARK_FLOOR = 8; // min normalizing peak (events/tick) so faint bursts read, idle stays flat
 const SPARK_RAMP: ReadonlyArray<readonly [number, number]> = [
@@ -365,15 +366,15 @@ function buildHisto(): HTMLElement {
   );
 }
 
-// Deflect from the shared center line: dir −1 sends writes up, dir +1 sends DOM updates down. The
-// samples are already gain-normalized to 0..1 (see the poll), so just scale them across the half.
+// Deflect from the center: dir −1 sends writes up, dir +1 sends DOM updates down, each resting a
+// SPARK_GAP off-center so the flat traces stay separate. Samples are already gain-normalized to 0..1.
 function plotPoints(data: number[], dir: -1 | 1): string {
   const step = data.length > 1 ? SPARK_W / (data.length - 1) : 0;
-  const span = SPARK_LINE - 2;
+  const span = SPARK_LINE - 2 - SPARK_GAP;
   return data
     .map(
       (v, i) =>
-        `${(i * step).toFixed(1)},${(SPARK_C + dir * v * span).toFixed(1)}`,
+        `${(i * step).toFixed(1)},${(SPARK_C + dir * (SPARK_GAP + v * span)).toFixed(1)}`,
     )
     .join(" ");
 }
@@ -390,8 +391,8 @@ function buildSpark(): HTMLElement {
   );
   const inLine = (
     <polyline
+      class="li-spk-up"
       fill="none"
-      stroke="#5fd39a"
       stroke-width={1}
       stroke-linejoin="round"
       stroke-linecap="round"
@@ -399,8 +400,8 @@ function buildSpark(): HTMLElement {
   );
   const outLine = (
     <polyline
+      class="li-spk-down"
       fill="none"
-      stroke="#ff6b81"
       stroke-width={1}
       stroke-linejoin="round"
       stroke-linecap="round"
@@ -429,22 +430,22 @@ function buildSpark(): HTMLElement {
         aria-label="Rendering pipeline utilization"
       >
         <defs>
-          {grad(`${PANEL_ID}-spk-rg`, "li-spk-cr")}
-          {grad(`${PANEL_ID}-spk-wg`, "li-spk-cw", true)}
+          {grad(`${PANEL_ID}-spk-up`, "li-spk-up")}
+          {grad(`${PANEL_ID}-spk-down`, "li-spk-down", true)}
         </defs>
         <rect
           x={0}
           y={0}
           width={SPARK_W}
           height={SPARK_LINE}
-          fill={`url(#${PANEL_ID}-spk-rg)`}
+          fill={`url(#${PANEL_ID}-spk-up)`}
         />
         <rect
           x={0}
           y={SPARK_LINE}
           width={SPARK_W}
           height={SPARK_LINE}
-          fill={`url(#${PANEL_ID}-spk-wg)`}
+          fill={`url(#${PANEL_ID}-spk-down)`}
         />
         {inLine}
         {outLine}
