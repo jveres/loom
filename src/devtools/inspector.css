@@ -808,6 +808,10 @@
   }
   /* up = writes (green), down = DOM updates (red); one token drives both the gradient fill and the
      trace stroke so the line themes with light/dark like the rest of the panel. */
+  /* scrolling time grid — faint hairlines so the window reads as live even when the traces are flat */
+  .li-spk-grid {
+    stroke: var(--li-border-soft);
+  }
   .li-spk-up {
     stop-color: var(--li-num);
     stroke: var(--li-num);

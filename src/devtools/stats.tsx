@@ -32,6 +32,8 @@ const SPARK_LINE = 11;
 const SPARK_H = SPARK_LINE * 2;
 const SPARK_C = SPARK_H / 2; // center: writes deflect up, DOM updates down (equals SPARK_LINE here)
 const SPARK_GAP = 1; // rest each trace a hair off-center so they don't merge into one line when flat
+const SPARK_STEP = SPARK_N > 1 ? SPARK_W / (SPARK_N - 1) : 0; // px one sample occupies (= scroll/tick)
+const SPARK_GRID = 9; // px between the faint vertical time ticks that scroll the window even when idle
 // Fixed log magnitude scale: amplitude tracks absolute load, so light vs heavy activity look
 // different (relative increase is visible) while the log keeps faint bursts readable and the loud
 // end from clipping. REF = where activity starts to register, CEIL = the load that fills the band.
@@ -388,6 +390,18 @@ function plotPoints(data: number[], dir: -1 | 1, close = false): string {
   return `0,${base} ${pts} ${lastX},${base}`;
 }
 
+// A faint time grid of vertical hairlines that scrolls left at the sample cadence (one SPARK_STEP per
+// tick, recycling every SPARK_GRID). It rides metricSeq, not the data, so the window reads as a live
+// sliding window even when both traces are flat at idle — without faking any activity.
+function gridPath(seq: number): string {
+  const phase = (seq * SPARK_STEP) % SPARK_GRID;
+  let d = "";
+  for (let x = SPARK_W - phase; x > -0.5; x -= SPARK_GRID) {
+    d += `M${x.toFixed(1)} 0V${SPARK_H} `;
+  }
+  return d.trimEnd();
+}
+
 function buildSpark(): HTMLElement {
   // `flip` reverses the vertical ramp so the dense end sits at the center axis for both halves
   // (top half fades up, bottom half fades down) — the gradient mirrors around the center line too.
@@ -427,6 +441,14 @@ function buildSpark(): HTMLElement {
     );
     return [area, line];
   };
+  const grid = (
+    <path class="li-spk-grid" fill="none" stroke-width={1} />
+  ) as Element;
+  bindAttr(
+    grid,
+    "d",
+    pulse(() => gridPath(metricSeq)),
+  );
   return (
     <span
       class="li-spark"
@@ -443,6 +465,7 @@ function buildSpark(): HTMLElement {
           {grad(`${PANEL_ID}-spk-up`, "li-spk-up")}
           {grad(`${PANEL_ID}-spk-down`, "li-spk-down", true)}
         </defs>
+        {grid}
         {half(sparkIn, -1, "li-spk-up", `${PANEL_ID}-spk-up`)}
         {half(sparkOut, 1, "li-spk-down", `${PANEL_ID}-spk-down`)}
       </svg>
