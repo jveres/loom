@@ -164,10 +164,12 @@ The core exports these types:
 - `EffectFn` is a reusable effect callback type.
 - `ErrorHandler` is the `configure({ onError })` boundary signature.
 - `Fields<T>` maps enumerable string keys to `State<T[K]>`.
-- `InspectNode` describes a graph node (also the `configure({ onError })` node
-  param); `InspectSnapshot`, `ResourceCounts` (the `inspect()` /
-  `inspectResources()` result shapes), and `NodeKind` (`InspectNode.kind`'s
-  `"state" | "computed" | "effect"` union) come with `loom/observe`.
+- `NodeInfo` is the lean node shape (`id` / `kind` / `label`) the
+  `configure({ onError })` boundary receives to name the offending node. The full
+  `InspectNode`, `InspectSnapshot`, `ResourceCounts` (the `inspect()` /
+  `inspectResources()` result shapes), and `NodeKind` (the
+  `"state" | "computed" | "effect"` union) come with `loom/observe` — where
+  `InspectNode extends NodeInfo`.
 - `Channel` is a named channel; `Meter` drains channels;
   `Frame` is a per-channel `{ count, dropped, samples }`; `MeterAggregation` is a
   meter's view (`"count" | "samples"`); `ChannelOptions` configures

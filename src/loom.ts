@@ -28,7 +28,7 @@ export interface Scope {
 export type EffectFn = () => void;
 // Global effect error boundary (see configure). Receives the throw and, when inspection is on, the
 // offending node. Without one set, a throwing effect propagates to whatever triggered the run.
-export type ErrorHandler = (error: unknown, node?: InspectNode) => void;
+export type ErrorHandler = (error: unknown, node?: NodeInfo) => void;
 // Wire an external producer to `set`; return a teardown run when the source goes unobserved.
 export type SourceConnect<T> = (set: (value: T) => void) => Stop;
 export type NodeKind = "state" | "computed" | "effect";
@@ -67,10 +67,16 @@ export type DeferScheduler = (
   maxStale: number,
 ) => () => void;
 
-export interface InspectNode {
+// The identifying fields of a reactive node — the lean shape a `configure({ onError })` boundary gets
+// to name the culprit, without pulling the full inspect surface (loom/observe) into the core import.
+export interface NodeInfo {
   readonly id: number;
   readonly kind: NodeKind;
   readonly label: string;
+}
+
+// The full graph-node record produced by inspect() / inspectResources() (the loom/observe surface).
+export interface InspectNode extends NodeInfo {
   readonly internal: boolean;
   readonly deps: readonly number[];
   readonly subs: readonly number[];
