@@ -9,6 +9,18 @@
     "types": ["node"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "paths": {
+      "loom": ["./src/index.ts"],
+      "loom/observe": ["./src/observe.ts"],
+      "loom/dom": ["./src/dom/index.ts"],
+      "loom/dom/virtual-list": ["./src/dom/virtual-list.ts"],
+      "loom/devtools": ["./src/devtools/index.ts"],
+      "loom/html": ["./src/html/index.ts"],
+      "loom/jsx-runtime": ["./src/dom/jsx-runtime.ts"],
+      "loom/jsx-dev-runtime": ["./src/dom/jsx-runtime.ts"],
+      "loom/html/jsx-runtime": ["./src/html/jsx-runtime.ts"],
+      "loom/html/jsx-dev-runtime": ["./src/html/jsx-runtime.ts"]
+    },
     "allowImportingTsExtensions": false,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,

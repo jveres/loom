@@ -1,9 +1,11 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
+import { loomAliases } from "./loom.aliases.js";
 
 const root = import.meta.dirname;
 
 export default defineConfig({
+  resolve: { alias: loomAliases },
   build: {
     copyPublicDir: false,
     emptyOutDir: true,

@@ -11,6 +11,12 @@
     "url": "git+https://github.com/jveres/loom.git"
   },
   "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "NODE_OPTIONS=--expose-gc vitest run",
     "check": "tsc --noEmit",
@@ -18,20 +24,51 @@
     "format": "biome format --write .",
     "bench": "vitest bench --run",
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
-    "build:loom": "vite build --config vite.loom.config.ts"
+    "build": "vite build --config vite.loom.config.ts && tsc -p tsconfig.build.json",
+    "build:demo": "vite build",
+    "prepare": "pnpm run build"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./observe": "./src/observe.ts",
-    "./dom": "./src/dom/index.ts",
-    "./dom/virtual-list": "./src/dom/virtual-list.ts",
-    "./devtools": "./src/devtools/index.ts",
-    "./jsx-runtime": "./src/dom/jsx-runtime.ts",
-    "./jsx-dev-runtime": "./src/dom/jsx-runtime.ts",
-    "./html": "./src/html/index.ts",
-    "./html/jsx-runtime": "./src/html/jsx-runtime.ts",
-    "./html/jsx-dev-runtime": "./src/html/jsx-runtime.ts"
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/loom/loom.js"
+    },
+    "./observe": {
+      "types": "./dist/types/observe.d.ts",
+      "default": "./dist/loom/observe.js"
+    },
+    "./dom": {
+      "types": "./dist/types/dom/index.d.ts",
+      "default": "./dist/loom/dom.js"
+    },
+    "./dom/virtual-list": {
+      "types": "./dist/types/dom/virtual-list.d.ts",
+      "default": "./dist/loom/dom/virtual-list.js"
+    },
+    "./devtools": {
+      "types": "./dist/types/devtools/index.d.ts",
+      "default": "./dist/loom/devtools.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/types/dom/jsx-runtime.d.ts",
+      "default": "./dist/loom/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/types/dom/jsx-runtime.d.ts",
+      "default": "./dist/loom/jsx-runtime.js"
+    },
+    "./html": {
+      "types": "./dist/types/html/index.d.ts",
+      "default": "./dist/loom/html.js"
+    },
+    "./html/jsx-runtime": {
+      "types": "./dist/types/html/jsx-runtime.d.ts",
+      "default": "./dist/loom/html/jsx-runtime.js"
+    },
+    "./html/jsx-dev-runtime": {
+      "types": "./dist/types/html/jsx-runtime.d.ts",
+      "default": "./dist/loom/html/jsx-runtime.js"
+    }
   },
   "dependencies": {
     "alien-signals": "3.2.1"
