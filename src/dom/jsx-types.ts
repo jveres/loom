@@ -36,6 +36,8 @@ type ElementProps<TElement extends HTMLElement> = Props &
     children?: Child;
     htmlFor?: string;
     key?: string | number;
+    // Cleanup run when the node is torn down the Loom way (remove()/dispose()); not a DOM event.
+    onunmount?: () => void;
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;
   };
@@ -46,6 +48,8 @@ type SvgProps<TElement extends SVGElement> = Props &
   EventProps<TElement> & {
     children?: Child;
     key?: string | number;
+    // Cleanup run when the node is torn down the Loom way (remove()/dispose()); not a DOM event.
+    onunmount?: () => void;
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;
   };

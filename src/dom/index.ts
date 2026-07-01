@@ -466,6 +466,14 @@ function applyProps(node: Element, props: Props): void {
       applyStyleProp(node, value as StyleProp);
       continue;
     }
+    // Loom lifecycle hook (not a DOM event): a cleanup run when the node is torn down the Loom way
+    // (`remove()` / `dispose()`, or an ancestor slot swapping it out). Grouped with the other
+    // Loom-owned props above, not the DOM `on*` listeners below — it rides the node-owned disposer
+    // channel (same as the reactive bindings), so it fires exactly when they do.
+    if (name === "onunmount" && typeof value === "function") {
+      own(node, value as Stop);
+      continue;
+    }
     if (isAttrBinding(value)) {
       bindAttr(node, brand<PropBinding>(value));
       continue;

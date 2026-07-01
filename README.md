@@ -457,6 +457,20 @@ It fires on release when the pointer hasn't moved more than ~10px from the press
 reach for `ontap` only in the rare continuous-mutation case. `tap(node, handler)`
 is the same logic for imperative (non-JSX) call sites.
 
+**`onunmount` — a lifecycle hook, not a DOM event.** It runs a cleanup when the
+node is torn down the Loom way — `remove()` / `dispose()`, or an ancestor
+`when` / `match` / `each` slot swapping it out — riding the same node-owned
+disposer channel as the reactive bindings, so it fires exactly when they do
+(no `MutationObserver`). Use it to tie an external resource to a node's lifetime:
+
+```tsx
+<div onunmount={() => socket.close()}>{() => status()}</div>
+```
+
+It does **not** fire on a raw `node.remove()` / `replaceChildren()` that bypasses
+Loom's teardown — same caveat as every Loom binding. For grouping many effects,
+prefer a `scope()`; `onunmount` is the per-node escape hatch.
+
 `list()` reorders keyed nodes by default. Pass `reorder: () => false` when an
 external layout system positions existing keyed nodes and only needs Loom to
 append new keys and remove missing keys.

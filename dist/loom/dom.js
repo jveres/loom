@@ -159,6 +159,10 @@ function C(e, t) {
 				j(e, i);
 				continue;
 			}
+			if (r === "onunmount" && typeof i == "function") {
+				x(e, i);
+				continue;
+			}
 			if (H(i)) {
 				P(e, n(i));
 				continue;

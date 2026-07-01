@@ -696,3 +696,37 @@ describe("loom DOM each", () => {
     expect(reader).not.toHaveBeenCalled();
   });
 });
+
+describe("loom DOM onunmount", () => {
+  it("runs the onunmount cleanup when the node is removed the Loom way", () => {
+    const cleanup = vi.fn();
+    const host = h("div", null, h("span", { onunmount: cleanup }, "x"));
+    document.body.append(host);
+    expect(cleanup).not.toHaveBeenCalled();
+    remove(host); // disposes the subtree -> the owned onunmount fires
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires when an ancestor slot swaps the node out (when/each)", () => {
+    const open = state(true);
+    const cleanup = vi.fn();
+    const root = h(
+      "div",
+      null,
+      when(open, () => h("p", { onunmount: cleanup }, "panel")),
+    );
+    expect(cleanup).not.toHaveBeenCalled();
+    open(false); // when removes the branch subtree
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    void root;
+  });
+
+  it("is a lifecycle hook, not a DOM event (no listener added)", () => {
+    const cleanup = vi.fn();
+    const el = h("button", { onunmount: cleanup });
+    el.dispatchEvent(new Event("unmount")); // no such DOM event is wired
+    expect(cleanup).not.toHaveBeenCalled();
+    remove(el);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+});
