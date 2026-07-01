@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint + format
+        run: pnpm run lint
+
+      - name: Type-check
+        run: pnpm run check
+
+      - name: Test
+        run: pnpm test
+
+      # The compiled dist is committed (so a GitHub install needs no build step).
+      # Rebuild it and fail if it drifts from what's checked in — i.e. src changed
+      # without a matching `pnpm run build` + commit.
+      - name: dist is up to date
+        run: |
+          pnpm run build
+          if ! git diff --exit-code -- dist; then
+            echo "::error::dist is stale — run 'pnpm run build' and commit the dist/ changes"
+            exit 1
+          fi
