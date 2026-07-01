@@ -191,6 +191,38 @@ export function style(name: string, read: Read<unknown>): StyleBinding {
   } satisfies PropBinding);
 }
 
+// Shared keyed reconcile for list()/each(): create or reuse each item's element (stamping its
+// `data-loom-key`), collect them in item order, and drop keys that vanished (disposing their owned
+// effects). Positioning the result — into a container's children or around an anchor — is the caller's
+// job, which is the only thing the two entry points differ on.
+function reconcileKeyed<T>(
+  items: readonly T[],
+  nodes: Map<string, Element>,
+  key: (item: T) => string | number,
+  render: (item: T, key: string) => Element,
+): Element[] {
+  const seen = new Set<string>();
+  const ordered: Element[] = [];
+  for (const item of items) {
+    const k = String(key(item));
+    if (seen.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
+    seen.add(k);
+    let node = nodes.get(k);
+    if (!node) {
+      node = render(item, k);
+      node.setAttribute("data-loom-key", k);
+      nodes.set(k, node);
+    }
+    ordered.push(node);
+  }
+  for (const [k, node] of nodes) {
+    if (seen.has(k)) continue;
+    remove(node);
+    nodes.delete(k);
+  }
+  return ordered;
+}
+
 export function list<T>(
   container: Element,
   read: Read<readonly T[]>,
@@ -200,40 +232,28 @@ export function list<T>(
   const stop = untrack(() =>
     effect(
       () => {
-        const items = read();
         const shouldReorder = options.reorder?.() !== false;
         const animate = shouldReorder && options.animate?.() === true;
         const before = animate ? snapshot(nodes) : undefined;
-        const seen = new Set<string>();
-        let cursor = shouldReorder ? container.firstChild : undefined;
-
-        for (const item of items) {
-          const itemKey = String(options.key(item));
-          if (seen.has(itemKey))
-            throw new Error(`Duplicate Loom key "${itemKey}".`);
-          seen.add(itemKey);
-
-          let node = nodes.get(itemKey);
-          if (!node) {
-            node = options.render(item, itemKey);
-            node.setAttribute("data-loom-key", itemKey);
-            nodes.set(itemKey, node);
-          }
-
-          if (shouldReorder) {
+        const ordered = reconcileKeyed(
+          read(),
+          nodes,
+          options.key,
+          options.render,
+        );
+        if (shouldReorder) {
+          // Reorder existing keys into item order; the identity check skips already-placed nodes.
+          let cursor = container.firstChild;
+          for (const node of ordered) {
             if (node !== cursor) container.insertBefore(node, cursor ?? null);
             cursor = node.nextSibling;
-          } else if (!node.parentNode) {
-            container.appendChild(node);
+          }
+        } else {
+          // Externally positioned: only append the newly created keys, leave the rest in place.
+          for (const node of ordered) {
+            if (!node.parentNode) container.appendChild(node);
           }
         }
-
-        for (const [itemKey, node] of nodes) {
-          if (seen.has(itemKey)) continue;
-          remove(node);
-          nodes.delete(itemKey);
-        }
-
         if (before) animateMoved(before, nodes);
       },
       { label: "dom.list", target: container },
@@ -340,28 +360,7 @@ export function each<T>(
       return untrack(() =>
         effect(
           () => {
-            const list = items();
-            const seen = new Set<string>();
-            // Create new rows, reuse existing ones, and collect the desired order.
-            const ordered: Element[] = [];
-            for (const item of list) {
-              const k = String(key(item));
-              if (seen.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
-              seen.add(k);
-              let node = nodes.get(k);
-              if (!node) {
-                node = render(item, k);
-                node.setAttribute("data-loom-key", k);
-                nodes.set(k, node);
-              }
-              ordered.push(node);
-            }
-            // Drop stale rows first (disposing their effects) so they don't provoke spurious moves.
-            for (const [k, node] of nodes) {
-              if (seen.has(k)) continue;
-              remove(node);
-              nodes.delete(k);
-            }
+            const ordered = reconcileKeyed(items(), nodes, key, render);
             // Position in order: walk back-to-front, inserting each before a cursor that ends at the
             // anchor; the nextSibling guard skips rows already in place, so only moved keys touch the DOM.
             let next: Node = anchor;
