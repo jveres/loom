@@ -60,16 +60,18 @@ real DOM node, with reactive reads wired in place.
 
 ## Install
 
-Loom is installed straight from GitHub (it is not published to npm):
+Loom is installed straight from GitHub (it is not published to npm). Use **pnpm**
+— Loom builds its `dist` from a `prepare` hook on install, and that hook runs
+`pnpm`:
 
 ```sh
-npm install github:jveres/loom
+pnpm add github:jveres/loom
 ```
 
 Pin to a tag or commit for reproducible builds:
 
 ```sh
-npm install github:jveres/loom#v0.1.0
+pnpm add github:jveres/loom#v0.1.0
 ```
 
 It then imports as `loom` (and `loom/observe`, `loom/dom`, …).
