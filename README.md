@@ -149,16 +149,16 @@ The core exports these functions:
   `"count"`, the default, or `"samples"`); `read()` returns a Frame per channel
   (`{ count, dropped, samples }`) since the last read. A meter is a scope
   resource, so it detaches on `scope.pause()`.
-- `configure({ inspect, onError, deferScheduler, deferTimeout })` sets runtime options. `inspect` toggles the
+- `configure({ inspect, onError, deferScheduler })` sets runtime options. `inspect` toggles the
   inspection layer — **off by default**, so node creation allocates no metadata
   (zero cost); turn it on once at startup, before creating the nodes you want
   visible, when you need tooling. `onError` installs a global effect error
-  boundary (see [Error handling](#error-handling)); `deferScheduler` /
-  `deferTimeout` tune the deferred-effect lane (see [Deferred effects](#deferred-effects)).
+  boundary (see [Error handling](#error-handling)); `deferScheduler` overrides the
+  deferred-effect lane's scheduler (see [Deferred effects](#deferred-effects)).
 
 > `channel` and `meter` are generic core primitives. **Watching Loom's *own* internals**
 > — the `events` registry (the runtime's built-in streams) and the graph-snapshot tools
-> `inspect` / `inspectResources` / `depsOf` — is a separate opt-in surface,
+> `inspect` / `inspectResources` — is a separate opt-in surface,
 > [`loom/observe`](#observability). Keeping it out of the core means the default
 > `loom` import stays lean: reactivity, lifecycle, and `channel`/`meter` only.
 
@@ -331,7 +331,7 @@ telemetry, debounced persistence, secondary UI, or a tool's own rendering.
 
 ```ts
 effect(() => save(doc()), { defer: true, maxStale: 2000 });
-configure({ deferScheduler, deferTimeout }); // override the lane's scheduler / default floor (200ms)
+configure({ deferScheduler }); // override the lane's scheduler (e.g. synchronous in tests)
 ```
 
 - **Coalesced — latest value, not every transition.** Many changes before the next drain collapse
@@ -686,7 +686,7 @@ const rows = state<readonly Row[]>([]);
 
 `render(item, key)` must return a single Element; `key(item)` identifies rows
 across updates. Reach for `list(container, …)` instead when you already hold the
-container element (or need the `reorder` / `animate` options).
+container element (or need the `reorder` option).
 
 Both `each` and `list` render a row **once per key** — like the conditional
 helpers, they reconcile structure, not row contents. A row whose key is unchanged
@@ -785,7 +785,6 @@ zero. The rest of `loom/observe` snapshots the reactive graph:
   sources, scopes, channels, unread }` — one cheap walk, no per-node allocation.
   `views` are the DOM bindings (effects bound to a DOM node via `target`); `unread` is the
   count of states/computeds nothing currently reads (a rising count hints at a leak).
-- `depsOf(read | stop)` returns a node's inspected dependencies.
 
 ### Inspector
 
@@ -910,7 +909,7 @@ only a predicted-not-taken branch when nothing is metering them; records are
 written into a pre-allocated ring. Inspection is opt-in
 (`configure({ inspect: true })`): while it is off, nodes carry no metadata at
 all; while it is on, each node carries a lightweight metadata record so
-`inspect()` and `depsOf()` work without any further setup.
+`inspect()` works without any further setup.
 
 ### Hot path
 

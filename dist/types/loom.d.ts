@@ -28,8 +28,8 @@ export interface EffectOptions extends NodeOptions {
     readonly defer?: boolean;
     /**
      * Deferred lane only: the guaranteed-refresh floor in ms — runs when idle, but at least this often
-     * under sustained load. Default: configure({ deferTimeout }) (200ms). Best-effort, not hard
-     * real-time: an app task longer than this delays everything.
+     * under sustained load. Default 200ms. Best-effort, not hard real-time: an app task longer than
+     * this delays everything.
      */
     readonly maxStale?: number;
 }
@@ -154,7 +154,7 @@ export declare const events: {
  * Configure the runtime.
  *
  * `inspect` toggles the always-off-by-default inspection layer: while it is off, node creation
- * allocates no metadata and `inspect()`/`depsOf()`/`inspectResources()` and the inspector see
+ * allocates no metadata and `inspect()`/`inspectResources()` and the inspector see
  * nothing — true zero cost. Turn it on (typically once at startup, before creating the nodes you
  * want visible) when you need tooling; nodes created while it was off stay invisible.
  *
@@ -168,8 +168,6 @@ export declare function configure(options: {
     readonly onError?: ErrorHandler | undefined;
     /** Override the deferred-effect scheduler (e.g. synchronous in tests, no-op on the server). */
     readonly deferScheduler?: DeferScheduler;
-    /** Default `maxStale` (ms) for deferred effects that don't set their own. Default 200. */
-    readonly deferTimeout?: number;
 }): void;
 /**
  * Snapshot the reactive graph. With `{ active: true }`, skip state/computed cells that have no
@@ -192,5 +190,4 @@ export interface ResourceCounts {
     readonly unread: number;
 }
 export declare function inspectResources(): ResourceCounts;
-export declare function depsOf(source: Read<unknown> | Stop): readonly InspectNode[];
 export {};

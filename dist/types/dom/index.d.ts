@@ -26,7 +26,6 @@ export type Props = Record<string, unknown> & {
 export interface ListOptions<T> {
     readonly key: (item: T) => string | number;
     readonly render: (item: T, key: string) => Element;
-    readonly animate?: Read<boolean>;
     readonly reorder?: Read<boolean>;
 }
 export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: Props | null, children?: Child): HTMLElementTagNameMap[K];

@@ -1,4 +1,4 @@
-import { o as e, v as t } from "./loom-CX7vngEs.js";
+import { _ as e, a as t } from "./loom-4S2e7SFf.js";
 //#region src/dom/index.ts
 var n = (e) => e, r = /* @__PURE__ */ new WeakMap(), i = "http://www.w3.org/2000/svg", a = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
 function o(e, t = null, n) {
@@ -7,7 +7,7 @@ function o(e, t = null, n) {
 }
 function s(n, r) {
 	let i = document.createTextNode(""), a = "";
-	return x(i, t(() => e(() => {
+	return x(i, e(() => t(() => {
 		let e = B(n());
 		e !== a && (a = e, i.data = e);
 	}, {
@@ -50,13 +50,12 @@ function d(e, t, n, r) {
 	return a;
 }
 function f(n, r, i) {
-	let a = /* @__PURE__ */ new Map(), o = t(() => e(() => {
-		let e = i.reorder?.() !== !1, t = e && i.animate?.() === !0 ? J(a) : void 0, o = d(r(), a, i.key, i.render);
+	let a = /* @__PURE__ */ new Map(), o = e(() => t(() => {
+		let e = i.reorder?.() !== !1, t = d(r(), a, i.key, i.render);
 		if (e) {
 			let e = n.firstChild;
-			for (let t of o) t !== e && n.insertBefore(t, e ?? null), e = t.nextSibling;
-		} else for (let e of o) e.parentNode || n.appendChild(e);
-		t && Y(t, a);
+			for (let r of t) r !== e && n.insertBefore(r, e ?? null), e = r.nextSibling;
+		} else for (let e of t) e.parentNode || n.appendChild(e);
 	}, {
 		label: "dom.list",
 		target: n
@@ -72,13 +71,13 @@ function p(r, i) {
 		__loomDynamic: !0,
 		mount(n) {
 			let a = [], o;
-			return t(() => e(() => {
-				let e = r();
-				if (e === o) return;
-				o = e;
+			return e(() => t(() => {
+				let t = r();
+				if (t === o) return;
+				o = t;
 				for (let e of a) v(e);
 				let s = document.createDocumentFragment();
-				t(() => w(s, i(e))), a = [...s.childNodes], n.parentNode?.insertBefore(s, n);
+				e(() => w(s, i(t))), a = [...s.childNodes], n.parentNode?.insertBefore(s, n);
 			}, D(n, "dom.dynamic")));
 		}
 	});
@@ -97,7 +96,7 @@ function g(r, i, a) {
 		__loomDynamic: !0,
 		mount(n) {
 			let o = /* @__PURE__ */ new Map();
-			return t(() => e(() => {
+			return e(() => t(() => {
 				let e = d(r(), o, a, i), t = n;
 				for (let r = e.length - 1; r >= 0; r--) {
 					let i = e[r];
@@ -280,7 +279,7 @@ function M(e, t, n) {
 }
 function N(n, r) {
 	let i = A(n, r.name);
-	x(n, t(() => e(() => {
+	x(n, e(() => t(() => {
 		let e = !!r.read();
 		e !== i && (i = e, n.classList.toggle(r.name, e));
 	}, {
@@ -290,7 +289,7 @@ function N(n, r) {
 }
 function P(n, r) {
 	let i;
-	x(n, t(() => e(() => {
+	x(n, e(() => t(() => {
 		let e = R(r.name, r.read());
 		e !== i && (i = e, L(n, r.name, e));
 	}, {
@@ -300,7 +299,7 @@ function P(n, r) {
 }
 function F(n, r) {
 	let i, a = n.style;
-	x(n, t(() => e(() => {
+	x(n, e(() => t(() => {
 		let e = R(r.name, r.read());
 		e !== i && (i = e, e === null ? a.removeProperty(r.name) : a.setProperty(r.name, e));
 	}, {
@@ -343,22 +342,6 @@ function K(e) {
 }
 function q(e, t) {
 	return typeof e == "object" && !!e && e.kind === t && typeof e.name == "string" && typeof e.read == "function";
-}
-function J(e) {
-	let t = /* @__PURE__ */ new Map();
-	for (let n of e.values()) n.isConnected && t.set(n, n.getBoundingClientRect());
-	return t;
-}
-function Y(e, t) {
-	for (let n of t.values()) {
-		let t = e.get(n);
-		if (!t || typeof n.animate != "function") continue;
-		let r = n.getBoundingClientRect(), i = t.left - r.left, a = t.top - r.top;
-		Math.abs(i) < .5 && Math.abs(a) < .5 || n.animate([{ transform: `translate(${i}px, ${a}px)` }, { transform: "translate(0, 0)" }], {
-			duration: 220,
-			easing: "cubic-bezier(.2,.8,.2,1)"
-		});
-	}
 }
 //#endregion
 export { c as attr, l as classed, _ as dispose, g as each, o as h, f as list, h as match, v as remove, u as style, b as tap, s as text, m as when };

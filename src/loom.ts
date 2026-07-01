@@ -51,8 +51,8 @@ export interface EffectOptions extends NodeOptions {
   readonly defer?: boolean;
   /**
    * Deferred lane only: the guaranteed-refresh floor in ms — runs when idle, but at least this often
-   * under sustained load. Default: configure({ deferTimeout }) (200ms). Best-effort, not hard
-   * real-time: an app task longer than this delays everything.
+   * under sustained load. Default 200ms. Best-effort, not hard real-time: an app task longer than
+   * this delays everything.
    */
   readonly maxStale?: number;
 }
@@ -198,7 +198,7 @@ let deferHead = 0;
 let drainScheduled = false;
 let drainDeadline = Number.POSITIVE_INFINITY; // absolute time (now()+maxStale) the pending drain fires by
 let drainCancel: (() => void) | undefined;
-let deferTimeout = 200; // global default maxStale (ms); overridable via configure()
+const deferTimeout = 200; // default maxStale (ms) for a deferred effect that doesn't set its own
 let deferScheduler: DeferScheduler = defaultDeferScheduler;
 const DEFER_BUDGET_MS = 5; // a forced (no-idle) drain runs at most ~this long, then yields
 let inspectId = 0;
@@ -211,7 +211,7 @@ let inspectEnabled = false;
 let onError: ErrorHandler | undefined;
 const inspectRefs = new Map<number, WeakRef<NodeBase>>();
 // Each public accessor (a state source, computed read, or effect stop) carries a hidden handle to
-// its node via this private symbol — so depsOf()/trigger() resolve a node in O(1) without the
+// its node via this private symbol — so trigger() resolves a node in O(1) without the
 // per-create WeakMap registration create-heavy workloads would otherwise pay even with inspection off.
 const NODE = Symbol("loom.node");
 type NodeHandle = { [NODE]?: NodeBase | undefined };
@@ -961,7 +961,7 @@ export const events = {
  * Configure the runtime.
  *
  * `inspect` toggles the always-off-by-default inspection layer: while it is off, node creation
- * allocates no metadata and `inspect()`/`depsOf()`/`inspectResources()` and the inspector see
+ * allocates no metadata and `inspect()`/`inspectResources()` and the inspector see
  * nothing — true zero cost. Turn it on (typically once at startup, before creating the nodes you
  * want visible) when you need tooling; nodes created while it was off stay invisible.
  *
@@ -975,14 +975,11 @@ export function configure(options: {
   readonly onError?: ErrorHandler | undefined;
   /** Override the deferred-effect scheduler (e.g. synchronous in tests, no-op on the server). */
   readonly deferScheduler?: DeferScheduler;
-  /** Default `maxStale` (ms) for deferred effects that don't set their own. Default 200. */
-  readonly deferTimeout?: number;
 }): void {
   if (options.inspect !== undefined) inspectEnabled = options.inspect;
   if ("onError" in options) onError = options.onError;
   if (options.deferScheduler !== undefined)
     deferScheduler = options.deferScheduler;
-  if (options.deferTimeout !== undefined) deferTimeout = options.deferTimeout;
 }
 
 /**
@@ -1071,19 +1068,6 @@ export function inspectResources(): ResourceCounts {
   };
 }
 
-export function depsOf(source: Read<unknown> | Stop): readonly InspectNode[] {
-  const node = nodeForSource(source);
-  if (!node) return [];
-
-  const deps: InspectNode[] = [];
-  for (let item = node.deps; item !== undefined; item = item.nextDep) {
-    const dep = item.dep as NodeBase;
-    const meta = dep.meta;
-    if (meta && inspectRefs.has(meta.id)) deps.push(inspectNode(dep, meta));
-  }
-  return deps;
-}
-
 // Merge two option sets, letting the second (more specific) win; either may be undefined.
 function mergeOptions<T extends NodeOptions>(
   defaults: NodeOptions | undefined,
@@ -1133,10 +1117,6 @@ function fieldOptions(
   return options.internal !== undefined
     ? { ...out, internal: options.internal }
     : out;
-}
-
-function nodeForSource(source: Read<unknown> | Stop): NodeBase | undefined {
-  return nodeOf(source as object);
 }
 
 function inspectNode(node: NodeBase, meta: InspectMeta): InspectNode {

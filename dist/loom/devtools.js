@@ -1,13 +1,13 @@
-import { d as e, g as t, h as n, i as r, l as i, m as a, o, p as s, s as c, u as l, v as u } from "./loom-CX7vngEs.js";
+import { _ as e, a as t, c as n, f as r, h as i, i as a, l as o, m as s, o as c, p as l, u } from "./loom-4S2e7SFf.js";
 import { tap as d, text as f, when as ee } from "./dom.js";
 import { virtualList as te } from "./dom/virtual-list.js";
 import { jsx as p, jsxs as m } from "./jsx-runtime.js";
 //#region src/devtools/bindings.ts
 var h = { internal: !0 }, ne = [];
-function re(e, t) {
-	ne.push(o(e, t ? {
+function re(e, n) {
+	ne.push(t(e, n ? {
 		...h,
-		...t
+		...n
 	} : h));
 }
 function g() {
@@ -132,7 +132,7 @@ function E(e, t) {
 	}
 }
 function He(e) {
-	x = new Map(i({ active: !0 }).nodes.map((e) => [e.id, e])), E(T(e), !0);
+	x = new Map(n({ active: !0 }).nodes.map((e) => [e.id, e])), E(T(e), !0);
 }
 function Ue(e) {
 	e.classList.remove("li-flash"), e.offsetWidth, e.classList.add("li-flash");
@@ -255,20 +255,20 @@ function $e() {
 }
 function et() {
 	if (!b) return;
-	let e = i({ active: !0 }).nodes;
+	let e = n({ active: !0 }).nodes;
 	x = new Map(e.map((e) => [e.id, e]));
-	let t = /* @__PURE__ */ new Map(), n = [];
-	for (let r of e) if (!(r.internal || r.kind === "effect")) if (r.group !== void 0) {
-		let e = t.get(r.group);
-		e ? e.push(r) : t.set(r.group, [r]);
-	} else n.push(r);
+	let t = /* @__PURE__ */ new Map(), r = [];
+	for (let n of e) if (!(n.internal || n.kind === "effect")) if (n.group !== void 0) {
+		let e = t.get(n.group);
+		e ? e.push(n) : t.set(n.group, [n]);
+	} else r.push(n);
 	S = [];
 	for (let [e, n] of t) n.sort((e, t) => (e.key ?? e.label).localeCompare(t.key ?? t.label)), S.push({
 		gid: e,
 		label: Ge(e, n),
 		cells: n
 	});
-	C = n, Ae = je, b.setItems($e()), Ae = !1, je = !1;
+	C = r, Ae = je, b.setItems($e()), Ae = !1, je = !1;
 }
 function tt() {
 	E([], !1);
@@ -404,7 +404,7 @@ function Ct() {
 	}), pt;
 }
 function wt() {
-	O !== "reads" && !dt && (dt = e([c.write], "samples")), O !== "writes" && !ft && (ft = e([c.read], "samples"));
+	O !== "reads" && !dt && (dt = u([c.write], "samples")), O !== "writes" && !ft && (ft = u([c.read], "samples"));
 }
 function Tt() {
 	dt?.stop(), dt = null, ft?.stop(), ft = null;
@@ -484,7 +484,7 @@ function Nt(e, t, n) {
 }
 function Pt() {
 	let e = /* @__PURE__ */ new Map();
-	for (let t of i().nodes) e.set(t.id, t.label);
+	for (let t of n().nodes) e.set(t.id, t.label);
 	return e;
 }
 function Ft(e, t) {
@@ -903,7 +903,7 @@ function pr() {
 function mr() {
 	let e = !rn();
 	if (nn() === "stats" && e) {
-		let e = l();
+		let e = o();
 		Ln = e.states, Rn = e.computeds, zn = e.effects, Bn = e.views, Vn = e.sources, Hn = e.scopes, Un = e.channels, Wn = e.unread;
 	} else nn() === "graph" && e ? nt() : nn() === "trace" && e && kt();
 }
@@ -936,26 +936,26 @@ function gr() {
 	on = requestAnimationFrame(e);
 }
 function _r(t) {
-	nn = t.activeTab, rn = t.isMinimized, ln = e([
+	nn = t.activeTab, rn = t.isMinimized, ln = u([
 		c.read,
 		c.write,
 		c.compute,
 		c.effect,
 		c.create,
 		c.dispose
-	]), un = e([c.flush], "samples"), z = s(pr, $t, h), re(() => {
-		z?.(), u(mr);
+	]), un = u([c.flush], "samples"), z = r(pr, $t, h), re(() => {
+		z?.(), e(mr);
 	}, {
 		defer: !0,
 		maxStale: $t
 	});
-	let r;
-	sn = a(() => {
-		On = n(Zn, 0, h), kn = n(Qn, 0, h), An = n($n, 0, h), jn = n(tr, 0, h), dr() && (Mn = s(() => dr()?.usedJSHeapSize ?? 0, 5e3, h)), r = lr();
+	let n;
+	sn = l(() => {
+		On = s(Zn, 0, h), kn = s(Qn, 0, h), An = s($n, 0, h), jn = s(tr, 0, h), dr() && (Mn = r(() => dr()?.usedJSHeapSize ?? 0, 5e3, h)), n = lr();
 	}, h);
 	let i = cr();
 	return gr(), {
-		statsPane: r,
+		statsPane: n,
 		sparkEl: i
 	};
 }
@@ -1102,34 +1102,34 @@ function Kr(e) {
 }
 function qr(e = document.body) {
 	if (Y || typeof document > "u") return;
-	if (r({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
+	if (a({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
 		let e = document.createElement("style");
 		e.id = `${_}-css`, e.textContent = ie, document.head.append(e);
 	}
-	Q = t("stats", h);
-	let n = Ir(), i = /* @__PURE__ */ p("span", { class: "li-menu-val" }), o = () => {
-		Y?.setAttribute("data-theme", n), Cr?.setAttribute("data-theme", n), i.innerHTML = oe(xr[n], 13), s.title = `Theme: ${n} (click to cycle)`;
-	}, s = /* @__PURE__ */ m("button", {
+	Q = i("stats", h);
+	let t = Ir(), n = /* @__PURE__ */ p("span", { class: "li-menu-val" }), r = () => {
+		Y?.setAttribute("data-theme", t), Cr?.setAttribute("data-theme", t), n.innerHTML = oe(xr[t], 13), o.title = `Theme: ${t} (click to cycle)`;
+	}, o = /* @__PURE__ */ m("button", {
 		type: "button",
 		class: "li-menu-item",
 		title: "Click to change theme",
-		children: [/* @__PURE__ */ p("span", { children: "Theme" }), i]
+		children: [/* @__PURE__ */ p("span", { children: "Theme" }), n]
 	});
-	d(s, () => {
+	d(o, () => {
 		let e = [
 			"system",
 			"light",
 			"dark"
 		];
-		n = e[(e.indexOf(n) + 1) % e.length] ?? "system", kr(Ar, n), o();
+		t = e[(e.indexOf(t) + 1) % e.length] ?? "system", kr(Ar, t), r();
 	});
-	let c = /* @__PURE__ */ p("div", {
+	let s = /* @__PURE__ */ p("div", {
 		class: "li-menu",
 		hidden: !0
 	});
-	c.id = `${_}-menu`, c.append(s), Cr = c;
-	let l = Lr(), u = /* @__PURE__ */ p("span", { class: "li-menu-val" }), f = () => {
-		u.textContent = `${l / 1e3}k`, Ot(l);
+	s.id = `${_}-menu`, s.append(o), Cr = s;
+	let c = Lr(), u = /* @__PURE__ */ p("span", { class: "li-menu-val" }), f = () => {
+		u.textContent = `${c / 1e3}k`, Ot(c);
 	}, ee = /* @__PURE__ */ m("button", {
 		type: "button",
 		class: "li-menu-item",
@@ -1137,10 +1137,10 @@ function qr(e = document.body) {
 		children: [/* @__PURE__ */ p("span", { children: "Log size" }), u]
 	});
 	d(ee, () => {
-		l = Fr[(Fr.indexOf(l) + 1) % Fr.length] ?? 1e3, kr(Pr, String(l)), f();
-	}), c.append(ee), f();
+		c = Fr[(Fr.indexOf(c) + 1) % Fr.length] ?? 1e3, kr(Pr, String(c)), f();
+	}), s.append(ee), f();
 	let te = () => {
-		c.hidden = !0;
+		s.hidden = !0;
 	}, ne = /* @__PURE__ */ m("button", {
 		type: "button",
 		class: "li-menu-item",
@@ -1152,21 +1152,21 @@ function qr(e = document.body) {
 	});
 	d(ne, () => {
 		te(), Jr();
-	}), c.append(ne);
+	}), s.append(ne);
 	let g = /* @__PURE__ */ p("button", {
 		type: "button",
 		title: "Settings"
 	});
 	g.append(Kr(fe)), d(g, (e) => {
-		if (e.stopPropagation(), !c.hidden) {
+		if (e.stopPropagation(), !s.hidden) {
 			te();
 			return;
 		}
-		c.hidden = !1;
-		let t = g.getBoundingClientRect(), n = c.getBoundingClientRect(), r = t.left;
+		s.hidden = !1;
+		let t = g.getBoundingClientRect(), n = s.getBoundingClientRect(), r = t.left;
 		r + n.width > window.innerWidth - 8 && (r = t.right - n.width);
 		let i = t.bottom;
-		i + n.height > window.innerHeight - 8 && (i = t.top - n.height), c.style.left = `${Math.max(8, r)}px`, c.style.top = `${Math.max(8, i)}px`;
+		i + n.height > window.innerHeight - 8 && (i = t.top - n.height), s.style.left = `${Math.max(8, r)}px`, s.style.top = `${Math.max(8, i)}px`;
 	});
 	let v = /* @__PURE__ */ p("button", { type: "button" }), ae = (e) => {
 		v.title = e ? "Expand" : "Collapse", v.replaceChildren(Kr(e ? ce : se));
@@ -1187,7 +1187,7 @@ function qr(e = document.body) {
 			v
 		]
 	}), de, pe;
-	Z = a(() => {
+	Z = l(() => {
 		let e = _r({
 			activeTab: () => Q?.(),
 			isMinimized: () => Y?.classList.contains("li-min") ?? !1
@@ -1236,9 +1236,9 @@ function qr(e = document.body) {
 		_e,
 		X,
 		ve
-	] }), Y.id = _, le && Y.classList.add("li-min"), o(), Wr(ue, Y), Gr(ve, Y), wr = (e) => {
-		!c.hidden && !c.contains(e.target) && e.target !== g && te();
-	}, document.addEventListener("pointerdown", wr), e.append(Y), document.body.append(c), Vr && (Y.style.width = `${Math.max(240, Math.min(Vr.width, window.innerWidth - 16))}px`, Y.style.height = `${Math.max(160, Math.min(Vr.height, window.innerHeight - 16))}px`), Br) {
+	] }), Y.id = _, le && Y.classList.add("li-min"), r(), Wr(ue, Y), Gr(ve, Y), wr = (e) => {
+		!s.hidden && !s.contains(e.target) && e.target !== g && te();
+	}, document.addEventListener("pointerdown", wr), e.append(Y), document.body.append(s), Vr && (Y.style.width = `${Math.max(240, Math.min(Vr.width, window.innerWidth - 16))}px`, Y.style.height = `${Math.max(160, Math.min(Vr.height, window.innerHeight - 16))}px`), Br) {
 		let { left: e, top: t } = Ur(Y, Br.left, Br.top);
 		Y.style.left = `${e}px`, Y.style.top = `${t}px`, Y.style.right = "auto", Y.style.bottom = "auto";
 	}

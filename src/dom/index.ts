@@ -72,7 +72,6 @@ export type Props = Record<string, unknown> & {
 export interface ListOptions<T> {
   readonly key: (item: T) => string | number;
   readonly render: (item: T, key: string) => Element;
-  readonly animate?: Read<boolean>;
   readonly reorder?: Read<boolean>;
 }
 
@@ -233,8 +232,6 @@ export function list<T>(
     effect(
       () => {
         const shouldReorder = options.reorder?.() !== false;
-        const animate = shouldReorder && options.animate?.() === true;
-        const before = animate ? snapshot(nodes) : undefined;
         const ordered = reconcileKeyed(
           read(),
           nodes,
@@ -254,7 +251,6 @@ export function list<T>(
             if (!node.parentNode) container.appendChild(node);
           }
         }
-        if (before) animateMoved(before, nodes);
       },
       { label: "dom.list", target: container },
     ),
@@ -734,33 +730,4 @@ function isBinding<TKind extends "attr" | "class" | "style">(
     typeof (value as { readonly name?: unknown }).name === "string" &&
     typeof (value as { readonly read?: unknown }).read === "function"
   );
-}
-
-function snapshot(nodes: Map<string, Element>): Map<Element, DOMRectReadOnly> {
-  const rects = new Map<Element, DOMRectReadOnly>();
-  for (const node of nodes.values()) {
-    if (node.isConnected) rects.set(node, node.getBoundingClientRect());
-  }
-  return rects;
-}
-
-function animateMoved(
-  before: Map<Element, DOMRectReadOnly>,
-  nodes: Map<string, Element>,
-): void {
-  for (const node of nodes.values()) {
-    const first = before.get(node);
-    if (!first || typeof node.animate !== "function") continue;
-    const last = node.getBoundingClientRect();
-    const dx = first.left - last.left;
-    const dy = first.top - last.top;
-    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
-    node.animate(
-      [
-        { transform: `translate(${dx}px, ${dy}px)` },
-        { transform: "translate(0, 0)" },
-      ],
-      { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
-    );
-  }
 }

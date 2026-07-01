@@ -307,35 +307,6 @@ describe("loom DOM list edge cases", () => {
       list(root, rows, { key: (row) => row.id, render: renderRow }),
     ).toThrow(/Duplicate Loom key/);
   });
-
-  it("runs FLIP animations for moved nodes when enabled", () => {
-    const animate = vi.fn();
-    const root = document.createElement("section");
-    document.body.appendChild(root);
-    const makeRow = (row: Row): Element => {
-      const node = document.createElement("div");
-      node.textContent = row.id;
-      // Position derived from current index so before/after rects differ on reorder.
-      node.getBoundingClientRect = () => {
-        const idx = node.parentNode
-          ? [...(node.parentNode as Element).children].indexOf(node)
-          : 0;
-        return { left: idx * 100, top: 0 } as DOMRect;
-      };
-      (node as unknown as { animate: typeof animate }).animate = animate;
-      return node;
-    };
-    const rows = state<readonly Row[]>([{ id: "a" }, { id: "b" }]);
-    const stop = list(root, rows, {
-      key: (row) => row.id,
-      render: makeRow,
-      animate: () => true,
-    });
-
-    rows([{ id: "b" }, { id: "a" }]); // both move -> animate called
-    expect(animate).toHaveBeenCalled();
-    stop();
-  });
 });
 
 describe("loom DOM branch coverage", () => {
@@ -400,49 +371,6 @@ describe("loom DOM branch coverage", () => {
     expect(el2.style.opacity).toBe("");
     sv("0.5");
     expect(el2.style.opacity).toBe("0.5");
-  });
-
-  it("FLIP skips unmoved nodes and a disconnected snapshot", () => {
-    const animate = vi.fn();
-    const mk = (row: Row): Element => {
-      const node = document.createElement("div");
-      node.textContent = row.id;
-      node.getBoundingClientRect = () => {
-        const idx = node.parentNode
-          ? [...(node.parentNode as Element).children].indexOf(node)
-          : 0;
-        return { left: idx * 100, top: 0 } as DOMRect;
-      };
-      (node as unknown as { animate: typeof animate }).animate = animate;
-      return node;
-    };
-
-    // Connected: [a,b,c] -> [a,c,b] keeps `a` put (no move -> skip) while b,c move.
-    const root = document.createElement("section");
-    document.body.appendChild(root);
-    const rows = state<readonly Row[]>([{ id: "a" }, { id: "b" }, { id: "c" }]);
-    const stop = list(root, rows, {
-      key: (r) => r.id,
-      render: mk,
-      animate: () => true,
-    });
-    animate.mockClear();
-    rows([{ id: "a" }, { id: "c" }, { id: "b" }]);
-    expect(animate).toHaveBeenCalledTimes(2); // b and c, not a
-    stop();
-
-    // Disconnected container: snapshot finds no connected nodes -> no animation.
-    const off = document.createElement("section");
-    const offRows = state<readonly Row[]>([{ id: "a" }, { id: "b" }]);
-    const stopOff = list(off, offRows, {
-      key: (r) => r.id,
-      render: mk,
-      animate: () => true,
-    });
-    animate.mockClear();
-    offRows([{ id: "b" }, { id: "a" }]);
-    expect(animate).not.toHaveBeenCalled();
-    stopOff();
   });
 });
 

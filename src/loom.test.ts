@@ -4,7 +4,6 @@ import {
   channel,
   computed,
   configure,
-  depsOf,
   type EffectFn,
   effect,
   events,
@@ -25,7 +24,7 @@ import {
   update,
 } from "./loom.js";
 
-// Inspection is opt-in (off by default). Most tests assert on inspect()/depsOf()/channel internal
+// Inspection is opt-in (off by default). Most tests assert on inspect()/channel internal
 // filtering, so default it on per-test; the dedicated test below flips it off and relies on this
 // to restore it for the next test.
 beforeEach(() => {
@@ -200,10 +199,6 @@ describe("loom core", () => {
     );
 
     expect(seen).toBe(2);
-    expect(depsOf(doubled).map((node) => node.label)).toEqual([
-      "inspect.count",
-    ]);
-    expect(depsOf(stop).map((node) => node.label)).toEqual(["inspect.doubled"]);
 
     count(2);
 
@@ -1337,15 +1332,13 @@ describe("loom coverage", () => {
     s3();
   });
 
-  it("inspect and depsOf expose the graph", () => {
+  it("inspect exposes the graph", () => {
     const a = state(1, { label: "a" });
     const c = computed(() => a() + 1);
     const stop = effect(() => c());
     const snap = inspect();
     expect(snap.nodes.some((n) => n.label === "a")).toBe(true);
-    expect(depsOf(c).some((n) => n.label === "a")).toBe(true);
-    expect(depsOf(stop).length).toBeGreaterThan(0);
-    expect(depsOf((() => 0) as never)).toEqual([]); // unknown source
+    expect(snap.nodes.some((n) => n.deps.length > 0)).toBe(true);
     stop();
   });
 });
@@ -1442,7 +1435,6 @@ describe("loom deferred effects", () => {
       fire = null;
       f(() => true);
     }
-    configure({ deferTimeout: 200 }); // reset the global default if a test changed it
   });
 
   it("runs the first pass synchronously but defers re-runs, coalesced to the latest value", () => {
@@ -1475,10 +1467,9 @@ describe("loom deferred effects", () => {
     stop();
   });
 
-  it("uses configure({ deferTimeout }) as the default maxStale, overridable per effect", () => {
+  it("uses the default maxStale (200), overridable per effect", () => {
     let captured = -1;
     configure({
-      deferTimeout: 321,
       deferScheduler: (drain, maxStale) => {
         captured = maxStale;
         fire = drain;
@@ -1488,7 +1479,7 @@ describe("loom deferred effects", () => {
     const a = state(0);
     const stopA = effect(() => a(), { defer: true });
     a(1);
-    expect(captured).toBe(321); // the global default
+    expect(captured).toBe(200); // the default floor
     fire?.(() => true);
     const b = state(0);
     const stopB = effect(() => b(), { defer: true, maxStale: 50 });
