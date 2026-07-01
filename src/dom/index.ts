@@ -40,6 +40,11 @@ interface SlotDescriptor {
   readonly mount: (anchor: Comment) => Stop;
 }
 
+// The one trust boundary between a descriptor's real shape and its opaque public handle. Phantom
+// brands have no runtime form, so this reinterpret can't be checked — it's a single `as` from `object`
+// (not a double cast), kept here so no other call site reaches across the seam.
+const brand = <T extends object>(descriptor: object): T => descriptor as T;
+
 type ClassProp =
   | string
   | ClassBinding
@@ -167,27 +172,23 @@ export function text(read: Read<unknown>, options?: EffectOptions): Text {
 }
 
 export function attr(name: string, read: Read<unknown>): AttrBinding {
-  return {
-    kind: "attr",
-    name,
-    read,
-  } satisfies PropBinding as unknown as AttrBinding;
+  return brand<AttrBinding>({ kind: "attr", name, read } satisfies PropBinding);
 }
 
 export function classed(name: string, read: Read<unknown>): ClassBinding {
-  return {
+  return brand<ClassBinding>({
     kind: "class",
     name,
     read,
-  } satisfies PropBinding as unknown as ClassBinding;
+  } satisfies PropBinding);
 }
 
 export function style(name: string, read: Read<unknown>): StyleBinding {
-  return {
+  return brand<StyleBinding>({
     kind: "style",
     name,
     read,
-  } satisfies PropBinding as unknown as StyleBinding;
+  } satisfies PropBinding);
 }
 
 export function list<T>(
@@ -255,7 +256,7 @@ function dynamic(
   key: Read<string>,
   pick: (key: string) => Child,
 ): DynamicChild {
-  return {
+  return brand<DynamicChild>({
     __loomDynamic: true,
     mount(anchor) {
       let mounted: Node[] = [];
@@ -276,7 +277,7 @@ function dynamic(
         ),
       );
     },
-  } satisfies SlotDescriptor as unknown as DynamicChild;
+  } satisfies SlotDescriptor);
 }
 
 /**
@@ -332,7 +333,7 @@ export function each<T>(
   render: (item: NoInfer<T>, key: string) => Element,
   key: (item: NoInfer<T>) => string | number,
 ): Child {
-  return {
+  return brand<DynamicChild>({
     __loomDynamic: true,
     mount(anchor) {
       const nodes = new Map<string, Element>();
@@ -375,7 +376,7 @@ export function each<T>(
         ),
       );
     },
-  } satisfies SlotDescriptor as unknown as DynamicChild;
+  } satisfies SlotDescriptor);
 }
 
 export function dispose(root: Node): void {
@@ -467,7 +468,7 @@ function applyProps(node: Element, props: Props): void {
       continue;
     }
     if (isAttrBinding(value)) {
-      bindAttr(node, value as unknown as PropBinding);
+      bindAttr(node, brand<PropBinding>(value));
       continue;
     }
     if (name === "ontap" && typeof value === "function") {
@@ -519,7 +520,7 @@ function isDynamic(child: Child): child is DynamicChild {
 function mountSlot(parent: Node, desc: DynamicChild): void {
   const anchor = document.createComment("loom-slot");
   parent.appendChild(anchor);
-  own(anchor, (desc as unknown as SlotDescriptor).mount(anchor));
+  own(anchor, brand<SlotDescriptor>(desc).mount(anchor));
 }
 
 // Effect options for a slot: label it, and target its parent element (when there is one) so the
@@ -540,7 +541,7 @@ function applyClassProp(node: Element, value: ClassProp): void {
     return;
   }
   if (isClassBinding(value)) {
-    bindClass(node, value as unknown as PropBinding);
+    bindClass(node, brand<PropBinding>(value));
     return;
   }
   if (!isPlainRecord(value)) return;
@@ -574,7 +575,7 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     return;
   }
   if (isStyleBinding(value)) {
-    bindStyle(node, value as unknown as PropBinding);
+    bindStyle(node, brand<PropBinding>(value));
     return;
   }
   if (!isPlainRecord(value)) return;
