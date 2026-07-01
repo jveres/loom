@@ -60,12 +60,13 @@ real DOM node, with reactive reads wired in place.
 
 ## Install
 
-Loom is installed straight from GitHub (it is not published to npm). Use **pnpm**
-— Loom builds its `dist` from a `prepare` hook on install, and that hook runs
-`pnpm`:
+Loom is installed straight from GitHub (it is not published to npm). The compiled
+`dist` (ES bundles + `.d.ts`) is committed, so the install runs no build step and
+works with any package manager:
 
 ```sh
 pnpm add github:jveres/loom
+# or: npm install github:jveres/loom
 ```
 
 Pin to a tag or commit for reproducible builds:
@@ -934,11 +935,11 @@ pnpm run dev     # dev server
 pnpm run build   # dist/loom (ES bundles) + dist/types (.d.ts)
 ```
 
-`pnpm run build` compiles the publishable `dist` that the `exports` map points
-at; `github:jveres/loom` runs it automatically on install via `prepare`. While
-developing Loom itself, its own `loom` / `loom/*` imports resolve to `src`
-instead (a shared alias in `loom.aliases.ts`, plus `tsconfig` `paths`), so
-`check` / `test` / `dev` never need a build.
+`pnpm run build` compiles the `dist` that the `exports` map points at. **`dist`
+is committed** (so a GitHub install needs no build step), so rebuild and commit
+it whenever you change `src`. While developing Loom itself, its own `loom` /
+`loom/*` imports resolve to `src` instead (a shared alias in `loom.aliases.ts`,
+plus `tsconfig` `paths`), so `check` / `test` / `dev` never need a build.
 
 With the dev server running, open `/demo/` for the realtime UI demo or `/bench/`
 for the browser benchmark. The demo is a realtime stress UI written in Loom JSX:
