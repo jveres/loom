@@ -1,19 +1,20 @@
 import { h as e } from "./dom.js";
+import { t } from "./jsx-props-0B9e31e8.js";
 //#region src/dom/jsx-runtime.ts
-function t(e, t, n) {
-	return a(e, t);
+function n(e, t, n) {
+	return o(e, t);
 }
-var n = t;
-function r(e) {
+var r = n;
+function i(e) {
 	return e?.children ?? [];
 }
-function i(e, t, n, r, i, o) {
-	return a(e, t);
+function a(e, t, n, r, i, a) {
+	return o(e, t);
 }
-function a(e, t) {
-	return typeof e == "function" ? e(s(t)) : o(e, t);
+function o(e, n) {
+	return typeof e == "function" ? e(t(n)) : s(e, n);
 }
-function o(t, n) {
+function s(t, n) {
 	if (!n) return e(t);
 	let r = n.children;
 	if (!("children" in n || "htmlFor" in n || "key" in n)) return e(t, n);
@@ -21,10 +22,5 @@ function o(t, n) {
 	for (let e in n) !Object.hasOwn(n, e) || e === "children" || e === "key" || (e === "htmlFor" ? i.for = n[e] : i[e] = n[e]);
 	return e(t, i, r);
 }
-function s(e) {
-	let t = {};
-	if (e) for (let n in e) !Object.hasOwn(e, n) || n === "key" || (t[n] = e[n]);
-	return t;
-}
 //#endregion
-export { r as Fragment, t as jsx, i as jsxDEV, n as jsxs };
+export { i as Fragment, n as jsx, a as jsxDEV, r as jsxs };

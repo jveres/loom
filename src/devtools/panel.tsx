@@ -167,6 +167,21 @@ function clampOnScreen(
   };
 }
 
+function bindPointerDrag(
+  handle: HTMLElement,
+  onMove: (event: PointerEvent) => void,
+  onUp: () => void,
+): () => void {
+  handle.addEventListener("pointermove", onMove);
+  handle.addEventListener("pointerup", onUp);
+  handle.addEventListener("pointercancel", onUp);
+  return () => {
+    handle.removeEventListener("pointermove", onMove);
+    handle.removeEventListener("pointerup", onUp);
+    handle.removeEventListener("pointercancel", onUp);
+  };
+}
+
 function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
   handle.addEventListener("pointerdown", (e) => {
     if ((e.target as HTMLElement | null)?.closest("button")) return;
@@ -184,6 +199,7 @@ function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
     handle.style.cursor = "grabbing";
     const prevUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
+    let unbindDrag = (): void => {};
     const onMove = (ev: PointerEvent): void => {
       const { left, top } = clampPanel(
         target,
@@ -200,13 +216,9 @@ function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
       handle.style.cursor = "";
       document.body.style.userSelect = prevUserSelect;
       if (panelPos) lsSet(POS_KEY, JSON.stringify(panelPos));
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", onUp);
-      handle.removeEventListener("pointercancel", onUp);
+      unbindDrag();
     };
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", onUp);
-    handle.addEventListener("pointercancel", onUp);
+    unbindDrag = bindPointerDrag(handle, onMove, onUp);
   });
 }
 
@@ -226,6 +238,7 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
     handle.setPointerCapture?.(e.pointerId);
     const prevUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
+    let unbindDrag = (): void => {};
     const onMove = (ev: PointerEvent): void => {
       const w = snapPx(
         Math.max(
@@ -253,13 +266,9 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
       handle.releasePointerCapture?.(e.pointerId);
       document.body.style.userSelect = prevUserSelect;
       if (panelSize) lsSet(SIZE_KEY, JSON.stringify(panelSize));
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", onUp);
-      handle.removeEventListener("pointercancel", onUp);
+      unbindDrag();
     };
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", onUp);
-    handle.addEventListener("pointercancel", onUp);
+    unbindDrag = bindPointerDrag(handle, onMove, onUp);
   });
 }
 

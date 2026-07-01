@@ -1,4 +1,4 @@
-import { _ as e, a as t, c as n, f as r, h as i, i as a, l as o, m as s, o as c, p as l, u } from "./loom-4S2e7SFf.js";
+import { _ as e, a as t, c as n, f as r, h as i, i as a, l as o, m as s, o as c, p as l, u } from "./loom-Do0VWekd.js";
 import { tap as d, text as f, when as ee } from "./dom.js";
 import { virtualList as te } from "./dom/virtual-list.js";
 import { jsx as p, jsxs as m } from "./jsx-runtime.js";
@@ -1056,7 +1056,12 @@ function Ur(e, t, n) {
 		top: $(Math.max(0, Math.min(n, i)))
 	};
 }
-function Wr(e, t) {
+function Wr(e, t, n) {
+	return e.addEventListener("pointermove", t), e.addEventListener("pointerup", n), e.addEventListener("pointercancel", n), () => {
+		e.removeEventListener("pointermove", t), e.removeEventListener("pointerup", n), e.removeEventListener("pointercancel", n);
+	};
+}
+function Gr(e, t) {
 	e.addEventListener("pointerdown", (n) => {
 		if (n.target?.closest("button")) return;
 		n.preventDefault();
@@ -1064,19 +1069,19 @@ function Wr(e, t) {
 		t.style.left = `${$(i)}px`, t.style.top = `${$(a)}px`, t.style.right = "auto", t.style.bottom = "auto", e.setPointerCapture?.(n.pointerId), e.style.cursor = "grabbing";
 		let c = document.body.style.userSelect;
 		document.body.style.userSelect = "none";
-		let l = (n) => {
+		let l = () => {};
+		l = Wr(e, (n) => {
 			let { left: r, top: c } = Hr(t, e.offsetHeight || 40, i + n.clientX - o, a + n.clientY - s);
 			t.style.left = `${r}px`, t.style.top = `${c}px`, Br = {
 				left: r,
 				top: c
 			};
-		}, u = () => {
-			e.releasePointerCapture?.(n.pointerId), e.style.cursor = "", document.body.style.userSelect = c, Br && kr(Mr, JSON.stringify(Br)), e.removeEventListener("pointermove", l), e.removeEventListener("pointerup", u), e.removeEventListener("pointercancel", u);
-		};
-		e.addEventListener("pointermove", l), e.addEventListener("pointerup", u), e.addEventListener("pointercancel", u);
+		}, () => {
+			e.releasePointerCapture?.(n.pointerId), e.style.cursor = "", document.body.style.userSelect = c, Br && kr(Mr, JSON.stringify(Br)), l();
+		});
 	});
 }
-function Gr(e, t) {
+function Kr(e, t) {
 	e.addEventListener("pointerdown", (n) => {
 		n.preventDefault(), n.stopPropagation();
 		let r = t.getBoundingClientRect();
@@ -1085,22 +1090,22 @@ function Gr(e, t) {
 		e.setPointerCapture?.(n.pointerId);
 		let c = document.body.style.userSelect;
 		document.body.style.userSelect = "none";
-		let l = (e) => {
+		let l = () => {};
+		l = Wr(e, (e) => {
 			let n = $(Math.max(240, Math.min(window.innerWidth - r.left - 8, i + e.clientX - o))), c = $(Math.max(160, Math.min(window.innerHeight - r.top - 8, a + e.clientY - s)));
 			t.style.width = `${n}px`, t.style.height = `${c}px`, Vr = {
 				width: n,
 				height: c
 			};
-		}, u = () => {
-			e.releasePointerCapture?.(n.pointerId), document.body.style.userSelect = c, Vr && kr(Nr, JSON.stringify(Vr)), e.removeEventListener("pointermove", l), e.removeEventListener("pointerup", u), e.removeEventListener("pointercancel", u);
-		};
-		e.addEventListener("pointermove", l), e.addEventListener("pointerup", u), e.addEventListener("pointercancel", u);
+		}, () => {
+			e.releasePointerCapture?.(n.pointerId), document.body.style.userSelect = c, Vr && kr(Nr, JSON.stringify(Vr)), l();
+		});
 	});
 }
-function Kr(e) {
+function qr(e) {
 	return xe(`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="-8.571 -8.571 41.143 41.143" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${e}</svg>`);
 }
-function qr(e = document.body) {
+function Jr(e = document.body) {
 	if (Y || typeof document > "u") return;
 	if (a({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
 		let e = document.createElement("style");
@@ -1151,13 +1156,13 @@ function qr(e = document.body) {
 		})]
 	});
 	d(ne, () => {
-		te(), Jr();
+		te(), Yr();
 	}), s.append(ne);
 	let g = /* @__PURE__ */ p("button", {
 		type: "button",
 		title: "Settings"
 	});
-	g.append(Kr(fe)), d(g, (e) => {
+	g.append(qr(fe)), d(g, (e) => {
 		if (e.stopPropagation(), !s.hidden) {
 			te();
 			return;
@@ -1169,7 +1174,7 @@ function qr(e = document.body) {
 		i + n.height > window.innerHeight - 8 && (i = t.top - n.height), s.style.left = `${Math.max(8, r)}px`, s.style.top = `${Math.max(8, i)}px`;
 	});
 	let v = /* @__PURE__ */ p("button", { type: "button" }), ae = (e) => {
-		v.title = e ? "Expand" : "Collapse", v.replaceChildren(Kr(e ? ce : se));
+		v.title = e ? "Expand" : "Collapse", v.replaceChildren(qr(e ? ce : se));
 	}, le = Or(jr) === "1";
 	ae(le), d(v, () => {
 		let e = !!Y?.classList.toggle("li-min");
@@ -1236,7 +1241,7 @@ function qr(e = document.body) {
 		_e,
 		X,
 		ve
-	] }), Y.id = _, le && Y.classList.add("li-min"), r(), Wr(ue, Y), Gr(ve, Y), wr = (e) => {
+	] }), Y.id = _, le && Y.classList.add("li-min"), r(), Gr(ue, Y), Kr(ve, Y), wr = (e) => {
 		!s.hidden && !s.contains(e.target) && e.target !== g && te();
 	}, document.addEventListener("pointerdown", wr), e.append(Y), document.body.append(s), Vr && (Y.style.width = `${Math.max(240, Math.min(Vr.width, window.innerWidth - 16))}px`, Y.style.height = `${Math.max(160, Math.min(Vr.height, window.innerHeight - 16))}px`), Br) {
 		let { left: e, top: t } = Ur(Y, Br.left, Br.top);
@@ -1261,16 +1266,16 @@ function qr(e = document.body) {
 		for (let e of Tr) e.refresh();
 	}), Tr.push(st(X, "y"), st(ge, "x"));
 }
-function Jr() {
+function Yr() {
 	br();
 	for (let e of Tr) e.dispose();
 	Tr.length = 0, g(), Z?.stop(), Z = null, wr && document.removeEventListener("pointerdown", wr), wr = null, Cr?.remove(), Cr = null, Y?.remove(), Y = null, X = null, Q = null, Er.clear(), Dr = null, ot(), jt();
 }
-function Yr() {
+function Xr() {
 	return Y !== null;
 }
-function Xr(e = document.body) {
-	Y ? Jr() : qr(e);
+function Zr(e = document.body) {
+	Y ? Yr() : Jr(e);
 }
 //#endregion
-export { Yr as inspectorMounted, qr as mountInspector, Xr as toggleInspector, Jr as unmountInspector };
+export { Xr as inspectorMounted, Jr as mountInspector, Zr as toggleInspector, Yr as unmountInspector };

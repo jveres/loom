@@ -33,8 +33,9 @@ interface CardModel {
   pending: number;
 }
 
+type CardCells = { readonly [K in keyof CardModel]: Cell<CardModel[K]> };
 type LoomCard = Fields<CardModel>;
-type AlienCard = { readonly [K in keyof CardModel]: Cell<CardModel[K]> };
+type AlienCard = CardCells;
 
 interface CardRef<T> {
   readonly model: T;
@@ -96,10 +97,7 @@ function runLoomChaos(): void {
   for (let frame = 0; frame < FRAME_COUNT; frame++) {
     batch(() => {
       for (const op of TRAFFIC[frame] as readonly TrafficOp[]) {
-        applyLoomTraffic(
-          cards[op.card % cards.length] as CardRef<LoomCard>,
-          op,
-        );
+        applyTraffic(cards[op.card % cards.length] as CardRef<LoomCard>, op);
       }
       for (const op of AI[frame] as readonly AiOp[]) {
         if (op.kind === 0) {
@@ -137,10 +135,7 @@ function runAlienChaos(): void {
   for (let frame = 0; frame < FRAME_COUNT; frame++) {
     startBatch();
     for (const op of TRAFFIC[frame] as readonly TrafficOp[]) {
-      applyAlienTraffic(
-        cards[op.card % cards.length] as CardRef<AlienCard>,
-        op,
-      );
+      applyTraffic(cards[op.card % cards.length] as CardRef<AlienCard>, op);
     }
     for (const op of AI[frame] as readonly AiOp[]) {
       if (op.kind === 0) {
@@ -178,10 +173,7 @@ function runLoomManualChaos(): void {
   for (let frame = 0; frame < FRAME_COUNT; frame++) {
     batch(() => {
       for (const op of TRAFFIC[frame] as readonly TrafficOp[]) {
-        applyLoomTraffic(
-          cards[op.card % cards.length] as CardRef<LoomCard>,
-          op,
-        );
+        applyTraffic(cards[op.card % cards.length] as CardRef<LoomCard>, op);
       }
       for (const op of AI[frame] as readonly AiOp[]) {
         if (op.kind === 0) {
@@ -307,16 +299,7 @@ function bindAlienCardViews(model: AlienCard): Array<() => void> {
   ];
 }
 
-function applyLoomTraffic(card: CardRef<LoomCard>, op: TrafficOp): void {
-  const model = card.model;
-  if (op.kind === 0) model.likes(model.likes() + op.amount);
-  else if (op.kind === 1) model.views(model.views() + op.amount);
-  else if (op.kind === 2)
-    model.readers(Math.max(0, model.readers() + op.dir * op.amount));
-  else if (model.hot()) model.trend(model.trend() + op.amount);
-}
-
-function applyAlienTraffic(card: CardRef<AlienCard>, op: TrafficOp): void {
+function applyTraffic(card: CardRef<CardCells>, op: TrafficOp): void {
   const model = card.model;
   if (op.kind === 0) model.likes(model.likes() + op.amount);
   else if (op.kind === 1) model.views(model.views() + op.amount);

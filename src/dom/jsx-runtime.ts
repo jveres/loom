@@ -1,3 +1,4 @@
+import { propsWithoutKey } from "../jsx-props.js";
 import { type Child, h, type Props } from "./index.js";
 
 export type { JSX } from "./jsx-types.js";
@@ -72,18 +73,4 @@ function createIntrinsicElement(type: string, props: JsxProps): Element {
   }
 
   return h(type, elementProps, children);
-}
-
-// Copy own enumerable props, dropping the `key` the JSX transform passes separately.
-function propsWithoutKey(
-  props: Record<string, unknown> | null | undefined,
-): Record<string, unknown> {
-  const next: Record<string, unknown> = {};
-  if (props) {
-    for (const name in props) {
-      if (!Object.hasOwn(props, name) || name === "key") continue;
-      next[name] = props[name];
-    }
-  }
-  return next;
 }

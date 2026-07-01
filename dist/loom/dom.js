@@ -1,4 +1,4 @@
-import { _ as e, a as t } from "./loom-4S2e7SFf.js";
+import { _ as e, a as t } from "./loom-Do0VWekd.js";
 //#region src/dom/index.ts
 var n = (e) => e, r = /* @__PURE__ */ new WeakMap(), i = "http://www.w3.org/2000/svg", a = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
 function o(e, t = null, n) {
@@ -8,7 +8,7 @@ function o(e, t = null, n) {
 function s(n, r) {
 	let i = document.createTextNode(""), a = "";
 	return x(i, e(() => t(() => {
-		let e = B(n());
+		let e = V(n());
 		e !== a && (a = e, i.data = e);
 	}, {
 		label: "dom.text",
@@ -145,7 +145,7 @@ function C(e, t) {
 	for (let r in t) {
 		if (!Object.hasOwn(t, r)) continue;
 		let i = t[r];
-		if (!(i == null || i === !1 && !z(r))) {
+		if (!(i == null || i === !1 && !B(r))) {
 			if (r === "key") {
 				e.setAttribute("data-loom-key", String(i));
 				continue;
@@ -162,7 +162,7 @@ function C(e, t) {
 				x(e, i);
 				continue;
 			}
-			if (H(i)) {
+			if (U(i)) {
 				P(e, n(i));
 				continue;
 			}
@@ -171,7 +171,7 @@ function C(e, t) {
 				continue;
 			}
 			if (r.startsWith("on") && typeof i == "function") {
-				e.addEventListener(V(r), i);
+				e.addEventListener(H(r), i);
 				continue;
 			}
 			if (typeof i == "function") {
@@ -182,7 +182,7 @@ function C(e, t) {
 				});
 				continue;
 			}
-			I(e, r, i);
+			L(e, r, i);
 		}
 	}
 }
@@ -227,11 +227,11 @@ function O(e, t) {
 			k(e, t);
 			return;
 		}
-		if (U(t)) {
+		if (W(t)) {
 			N(e, n(t));
 			return;
 		}
-		if (G(t)) for (let n in t) Object.hasOwn(t, n) && M(e, n, t[n]);
+		if (K(t)) for (let n in t) Object.hasOwn(t, n) && M(e, n, t[n]);
 	}
 }
 function k(e, t) {
@@ -254,15 +254,15 @@ function j(e, t) {
 		e.setAttribute("style", t);
 		return;
 	}
-	if (W(t)) {
+	if (G(t)) {
 		F(e, n(t));
 		return;
 	}
-	if (!G(t)) return;
+	if (!K(t)) return;
 	let r = e.style;
 	for (let n in t) {
 		if (!Object.hasOwn(t, n)) continue;
-		let i = t[n], a = K(n);
+		let i = t[n], a = q(n);
 		typeof i == "function" ? F(e, {
 			kind: "style",
 			name: a,
@@ -277,70 +277,62 @@ function M(e, t, n) {
 		read: n
 	}) : n && e.classList.add(t);
 }
-function N(n, r) {
-	let i = A(n, r.name);
+function N(e, t) {
+	I(e, `dom.class.${t.name}`, () => !!t.read(), (n) => e.classList.toggle(t.name, n), A(e, t.name));
+}
+function P(e, t) {
+	I(e, `dom.attr.${t.name}`, () => z(t.name, t.read()), (n) => R(e, t.name, n));
+}
+function F(e, t) {
+	let n = e.style;
+	I(e, `dom.style.${t.name}`, () => z(t.name, t.read()), (e) => {
+		e === null ? n.removeProperty(t.name) : n.setProperty(t.name, e);
+	});
+}
+function I(n, r, i, a, o) {
+	let s = o;
 	x(n, e(() => t(() => {
-		let e = !!r.read();
-		e !== i && (i = e, n.classList.toggle(r.name, e));
+		let e = i();
+		e !== s && (s = e, a(e));
 	}, {
-		label: `dom.class.${r.name}`,
+		label: r,
 		target: n
 	})));
-}
-function P(n, r) {
-	let i;
-	x(n, e(() => t(() => {
-		let e = R(r.name, r.read());
-		e !== i && (i = e, L(n, r.name, e));
-	}, {
-		label: `dom.attr.${r.name}`,
-		target: n
-	})));
-}
-function F(n, r) {
-	let i, a = n.style;
-	x(n, e(() => t(() => {
-		let e = R(r.name, r.read());
-		e !== i && (i = e, e === null ? a.removeProperty(r.name) : a.setProperty(r.name, e));
-	}, {
-		label: `dom.style.${r.name}`,
-		target: n
-	})));
-}
-function I(e, t, n) {
-	L(e, t, R(t, n));
 }
 function L(e, t, n) {
+	R(e, t, z(t, n));
+}
+function R(e, t, n) {
 	n === null ? e.removeAttribute(t) : e.setAttribute(t, n);
 }
-function R(e, t) {
-	return z(e) && typeof t == "boolean" ? String(t) : t == null || t === !1 ? null : t === !0 ? "" : String(t);
-}
-function z(e) {
-	return e.startsWith("aria-");
+function z(e, t) {
+	return B(e) && typeof t == "boolean" ? String(t) : t == null || t === !1 ? null : t === !0 ? "" : String(t);
 }
 function B(e) {
-	return e == null || e === !1 ? "" : String(e);
+	return e.startsWith("aria-");
 }
 function V(e) {
-	return e.slice(2).toLowerCase();
+	return e == null || e === !1 ? "" : String(e);
 }
 function H(e) {
-	return q(e, "attr");
+	return e.slice(2).toLowerCase();
 }
 function U(e) {
-	return q(e, "class");
+	return J(e, "attr");
 }
 function W(e) {
-	return q(e, "style");
+	return J(e, "class");
 }
 function G(e) {
-	return typeof e == "object" && !!e && !Array.isArray(e);
+	return J(e, "style");
 }
 function K(e) {
+	return typeof e == "object" && !!e && !Array.isArray(e);
+}
+function q(e) {
 	return e.replace(/[A-Z]/g, (e) => `-${e.toLowerCase()}`);
 }
-function q(e, t) {
+function J(e, t) {
 	return typeof e == "object" && !!e && e.kind === t && typeof e.name == "string" && typeof e.read == "function";
 }
 //#endregion

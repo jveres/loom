@@ -13,7 +13,7 @@
 <p align="center">
   <a href="./LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-green"></a>
   <img alt="status: alpha" src="https://img.shields.io/badge/status-alpha-orange">
-  <img alt="gzip ~5 kB" src="https://img.shields.io/badge/gzip-~5%20kB-blue">
+  <img alt="gzip ~6 kB" src="https://img.shields.io/badge/gzip-~6%20kB-blue">
   <img alt="TypeScript" src="https://img.shields.io/badge/types-TypeScript-3178c6">
   <img alt="built on alien-signals" src="https://img.shields.io/badge/built%20on-alien--signals-8957e5">
 </p>
@@ -26,7 +26,7 @@
 - **Runtime, not compiled.** Plain functions and live DOM nodes — no build-step
   transform and no virtual-DOM diff. JSX returns real elements.
 - **Near-native speed.** Built on [`alien-signals`](https://github.com/stackblitz/alien-signals);
-  the per-operation read/write/effect path stays within `~1.03x`–`~1.07x` of the
+  the per-operation read/write/effect path stays within `~1.03x`–`~1.05x` of the
   raw primitives on the chaos benchmark. That thin margin is the always-on channel
   instrumentation; inspection (the heavier per-node metadata) is off by default.
 - **Callable cells.** `count()` reads, `count(1)` writes — the whole state model
@@ -245,9 +245,9 @@ and disconnects on last, so the producer only runs while observed.
 ```ts
 import { effect, polled, source } from "loom";
 
-// Eager: sample performance.now() every 250ms (unchanged samples don't re-run readers).
+// Eager: sample Date.now() every 250ms (unchanged samples don't re-run readers).
 const clock = polled(() => Date.now(), 250);
-const stopClock = effect(() => console.log(clock.read()));
+const stopClock = effect(() => console.log(clock()));
 // ... later: stopClock(); clock.stop();
 
 // Lazy: a media query that only listens while something reads it.
@@ -324,26 +324,29 @@ observability it reports — without passing options to each one.
 
 ### Deferred effects
 
-Pass `{ defer: true }` to run an effect's **re-runs** off the critical path — idle-first and
-coalesced — instead of in the synchronous flush. The first run stays synchronous (deps are tracked,
-the initial output is immediate); only re-runs defer. Use it for non-frame-critical reactive work:
+Pass `{ defer: true }` to run an effect's **re-runs** off the critical
+path — idle-first and coalesced — instead of in the synchronous flush. The
+first run stays synchronous (deps are tracked, the initial output is
+immediate); only re-runs defer. Use it for non-frame-critical reactive work:
 telemetry, debounced persistence, secondary UI, or a tool's own rendering.
 
 ```ts
 effect(() => save(doc()), { defer: true, maxStale: 2000 });
-configure({ deferScheduler }); // override the lane's scheduler (e.g. synchronous in tests)
+configure({ deferScheduler }); // override the lane's scheduler; for example, synchronous in tests
 ```
 
-- **Coalesced — latest value, not every transition.** Many changes before the next drain collapse
-  into **one** run at the latest value; for every-transition, use a `channel`.
-- **`maxStale`** (ms) is the guaranteed-refresh floor — idle-first, but at least this often under
-  load. It is **best-effort, not hard real-time**: a single app task longer than `maxStale` delays
-  everything (the lane bounds Loom's contribution, not the app's long tasks).
+- **Coalesced — latest value, not every transition.** Many changes before the
+  next drain collapse into **one** run at the latest value; for
+  every-transition, use a `channel`.
+- **`maxStale`** (ms) is the guaranteed-refresh floor — idle-first, but at least
+  this often under load. It is **best-effort, not hard real-time**: a single app
+  task longer than `maxStale` delays everything (the lane bounds Loom's
+  contribution, not the app's long tasks).
 - **Scope-aware** — a paused scope doesn't drain its deferred effects; resume re-runs them.
 - Deferred effects are **sinks** (render / log / persist), not links in a derivation chain.
 
-The synchronous, glitch-free default is untouched — this is a separate lane, not concurrency in the
-core.
+The synchronous, glitch-free default is untouched — this is a separate lane,
+not concurrency in the core.
 
 ### Error handling
 
@@ -422,12 +425,14 @@ The DOM entrypoint exports these functions:
 - `remove(node)` disposes a node subtree and removes it from the DOM.
 - `tap(node, handler)` binds a robust tap (see below).
 
-These split into two families by where they go. **Child bindings** produce nodes
-to place among children — `text`, and the structural `list` / `each` / `when` /
-`match`. **Prop bindings** — `attr` / `classed` / `style` — return opaque
-descriptors you pass as a prop *value* (`h("a", { class: classed("on", isOn) })`);
-the handles are opaque, built only by these factories. (In JSX you rarely need
-them: a reactive read as a child, class-map value, or attribute is enough.)
+These split by where they go. **Child bindings** produce nodes or slot
+descriptors to place among children — `text`, `each`, `when`, and `match`.
+`list()` is the imperative container reconciler when you already have a host
+element. **Prop bindings** — `attr` / `classed` / `style` — return opaque
+descriptors you pass as a prop *value*
+(`h("a", { class: classed("on", isOn) })`); the handles are opaque, built only
+by these factories. (In JSX you rarely need them: a reactive read as a child,
+class-map value, or attribute is enough.)
 
 Loom is a thin layer over the DOM, so event props use **the DOM's own lowercase
 names** — `onclick`, `oninput`, `onpointerup`, `onkeydown` — not React's
@@ -670,15 +675,21 @@ keys are removed and their effects disposed) but inline, without a container
 reference:
 
 ```tsx
-import { state } from "loom";
+import { type State, state } from "loom";
 import { each } from "loom/dom";
+
+interface Row {
+  readonly id: string;
+  readonly title: State<string>;
+  readonly done: State<boolean>;
+}
 
 const rows = state<readonly Row[]>([]);
 
 <ul>
   {each(
     rows,
-    (row) => <li class={{ done: () => row.done }}>{() => row.title}</li>,
+    (row) => <li class={{ done: row.done }}>{row.title}</li>,
     (row) => row.id,
   )}
 </ul>;
@@ -691,10 +702,10 @@ container element (or need the `reorder` option).
 Both `each` and `list` render a row **once per key** — like the conditional
 helpers, they reconcile structure, not row contents. A row whose key is unchanged
 is reused as-is; its `render` does not re-run when the item behind that key is
-replaced. So make the row read live state through its own bindings (`{() =>
-row.title}`, `class={{ done: () => row.done }}`), or, if a row is a static
-snapshot, fold the fields it shows into the `key` so a changed field produces a
-new key and rebuilds the row.
+replaced. So make the row model expose Loom reads/cells and pass those reads into
+bindings (`{row.title}`, `class={{ done: row.done }}`), or, if a row is a
+static snapshot, fold the fields it shows into the `key` so a changed field
+produces a new key and rebuilds the row.
 
 `when`, `match`, and `each` must each be placed as a child of a Loom element
 (that is what wires the slot); they are not standalone mount points.
@@ -761,7 +772,7 @@ import { events } from "loom/observe"; // loom's own built-in streams
 
 // Rates — the "count" view (default), allocation-free:
 const rates = meter([events.write, events.effect]);
-// Records — the "samples" view: e.g. each flush's batch size + duration:
+// Records — the "samples" view; for example, each flush's batch size + duration:
 const flushes = meter([events.flush], "samples");
 setInterval(() => {
   console.log("writes/s≈", rates.read()["loom:write"].count * 4);
@@ -812,7 +823,9 @@ The panel has three tabs:
 </p>
 
 <p align="center">
-  <em><strong>Info</strong> — FPS, web-vitals and live pipeline rates · <strong>Graph</strong> — state cells grouped by source with current values · <strong>Trace</strong> — the live event stream, pausable and filterable.</em>
+  <em><strong>Info</strong> — FPS, web-vitals and live pipeline rates ·
+  <strong>Graph</strong> — state cells grouped by source with current values ·
+  <strong>Trace</strong> — the live event stream, pausable and filterable.</em>
 </p>
 
 ```ts
@@ -882,11 +895,11 @@ full-chaos workload (`vitest bench`). It runs three variants on the same machine
 `alien native` (native `alien-signals` cells).
 
 ```sh
-npm run bench
+pnpm run bench
 ```
 
 With inspection off (the default), Loom runs within `~1.03x` (manual cells) to
-`~1.07x` (`fields()`) of native `alien-signals`. The per-operation
+`~1.05x` (`fields()`) of native `alien-signals`. The per-operation
 read/write/effect hot paths carry only branch-predicted channel guards and
 otherwise match the native primitives — see [Design notes](#design-notes) for the
 attribution. Enabling inspection (`configure({ inspect: true })`) adds one
@@ -924,7 +937,7 @@ read/write/compute/effect/create/dispose site. A controlled experiment (strippin
 just the state-path guards and re-running the chaos bench) attributes ~3% to it on
 the manual-cells path: the cost of keeping observability always available with
 zero allocation when idle. With the guards in place Loom lands within `~1.03x`
-–`~1.07x` of native, and that margin *is* the channel layer, not overhead to
+–`~1.05x` of native, and that margin *is* the channel layer, not overhead to
 optimize away.
 
 Two things are intentionally left as-is: the read/write rest parameter (shared
@@ -960,16 +973,18 @@ it exercises state cells, object fields, computed values, effects, keyed list
 reconciliation, direct JSX text/attribute/class bindings, cleanup through DOM
 disposal, and the browser JSX runtime.
 
-The browser benchmark (`/bench/`) is a [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark)-style
-keyed-table suite that times Loom against a hand-written vanilla-DOM baseline on
-the same operations — create 1k/10k rows, append 1k, update every 10th, swap,
-select, remove, and clear. **Run** reports each operation's median time and the
-Loom/vanilla ratio (plus a geo-mean) against indicative published slowdowns for
-other frameworks; **Profile** re-runs Loom in a split mode that separates
-synchronous reconciliation work from forced browser layout, so you can see which
-of the two dominates a given operation. Compare ratios, not absolute milliseconds —
-they are machine-specific. This is the in-browser counterpart to the CLI
-`pnpm run bench` (the `bench/*.bench.ts` chaos, micro, and hot-path suites).
+The browser benchmark (`/bench/`) is a
+[js-framework-benchmark](https://github.com/krausest/js-framework-benchmark)-style
+keyed-table suite that times Loom against a hand-written vanilla-DOM baseline
+on the same operations — create 1k/10k rows, append 1k, update every 10th,
+swap, select, remove, and clear. **Run** reports each operation's median time
+and the Loom/vanilla ratio (plus a geo-mean) against indicative published
+slowdowns for other frameworks; **Profile** re-runs Loom in a split mode that
+separates synchronous reconciliation work from forced browser layout, so you can
+see which of the two dominates a given operation. Compare ratios, not absolute
+milliseconds — they are machine-specific. This is the in-browser counterpart to
+the CLI `pnpm run bench` (the `bench/*.bench.ts` chaos, micro, and hot-path
+suites).
 
 ## License
 

@@ -783,8 +783,8 @@ function recordChannel(
 }
 
 // Record a read on the read channel — the cell, the reader (the running effect/computed) that
-// consumed it, and when. Callers gate on `readCh.meters !== 0 && !internal` so the idle path stays a
-// branch; `meta === undefined` (inspection off for this cell) just counts.
+// consumed it, and when. Callers gate on `readCh.samples !== 0`; `meta === undefined`
+// (inspection off for this cell) just counts.
 function recordRead(node: NodeBase, sub: NodeBase): void {
   const meta = node.meta;
   if (meta !== undefined)
@@ -797,6 +797,14 @@ function recordRead(node: NodeBase, sub: NodeBase): void {
       undefined,
     );
   else readCh.seq++;
+}
+
+function trackRead(node: NodeBase, sub: NodeBase): void {
+  link(node, sub, cycle);
+  if (readCh.meters !== 0 && node.meta?.internal !== true) {
+    if (readCh.samples !== 0) recordRead(node, sub);
+    else readCh.seq++;
+  }
 }
 
 function channelOf(node: ChannelNode): Channel {
@@ -1325,13 +1333,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   }
 
   const sub = activeSub;
-  if (sub !== undefined) {
-    link(this, sub, cycle);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) {
-      if (readCh.samples !== 0) recordRead(this, sub);
-      else readCh.seq++; // count only — no samples consumer (the Trace) wants detail
-    }
-  }
+  if (sub !== undefined) trackRead(this, sub);
   return this.currentValue;
 }
 
@@ -1346,12 +1348,8 @@ function sourceOper<T>(this: SourceNode<T>): T {
   const sub = activeSub;
   if (sub !== undefined) {
     const first = this.subs === undefined;
-    link(this, sub, cycle);
+    trackRead(this, sub);
     if (first && !this.active) connectSource(this);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) {
-      if (readCh.samples !== 0) recordRead(this, sub);
-      else readCh.seq++; // count only — no samples consumer (the Trace) wants detail
-    }
   }
   return this.currentValue;
 }
@@ -1394,13 +1392,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
   }
 
   const sub = activeSub;
-  if (sub !== undefined) {
-    link(this, sub, cycle);
-    if (readCh.meters !== 0 && this.meta?.internal !== true) {
-      if (readCh.samples !== 0) recordRead(this, sub);
-      else readCh.seq++; // count only — no samples consumer (the Trace) wants detail
-    }
-  }
+  if (sub !== undefined) trackRead(this, sub);
   return this.value as T;
 }
 

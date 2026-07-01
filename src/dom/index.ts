@@ -608,57 +608,55 @@ function applyClassMapValue(node: Element, name: string, value: unknown): void {
 }
 
 function bindClass(node: Element, binding: PropBinding): void {
-  let previous = hasClassName(node, binding.name);
-  const stop = untrack(() =>
-    effect(
-      () => {
-        const next = Boolean(binding.read());
-        if (next === previous) return;
-        previous = next;
-        node.classList.toggle(binding.name, next);
-      },
-      {
-        label: `dom.class.${binding.name}`,
-        target: node,
-      },
-    ),
+  bindReactiveValue(
+    node,
+    `dom.class.${binding.name}`,
+    () => Boolean(binding.read()),
+    (next) => node.classList.toggle(binding.name, next),
+    hasClassName(node, binding.name),
   );
-  own(node, stop);
 }
 
 function bindAttr(node: Element, binding: PropBinding): void {
-  let previous: string | null | undefined;
-  const stop = untrack(() =>
-    effect(
-      () => {
-        const next = attrValue(binding.name, binding.read());
-        if (next === previous) return;
-        previous = next;
-        setAttrValue(node, binding.name, next);
-      },
-      {
-        label: `dom.attr.${binding.name}`,
-        target: node,
-      },
-    ),
+  bindReactiveValue(
+    node,
+    `dom.attr.${binding.name}`,
+    () => attrValue(binding.name, binding.read()),
+    (next) => setAttrValue(node, binding.name, next),
   );
-  own(node, stop);
 }
 
 function bindStyle(node: Element, binding: PropBinding): void {
-  let previous: string | null | undefined;
   const styleDecl = (node as HTMLElement).style;
+  bindReactiveValue(
+    node,
+    `dom.style.${binding.name}`,
+    () => attrValue(binding.name, binding.read()),
+    (next) => {
+      if (next === null) styleDecl.removeProperty(binding.name);
+      else styleDecl.setProperty(binding.name, next);
+    },
+  );
+}
+
+function bindReactiveValue<T>(
+  node: Element,
+  label: string,
+  read: () => T,
+  apply: (value: T) => void,
+  initial?: T,
+): void {
+  let previous = initial;
   const stop = untrack(() =>
     effect(
       () => {
-        const next = attrValue(binding.name, binding.read());
+        const next = read();
         if (next === previous) return;
         previous = next;
-        if (next === null) styleDecl.removeProperty(binding.name);
-        else styleDecl.setProperty(binding.name, next);
+        apply(next);
       },
       {
-        label: `dom.style.${binding.name}`,
+        label,
         target: node,
       },
     ),
