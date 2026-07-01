@@ -135,7 +135,7 @@ function bindAttr(node: Element, name: string, read: () => string): void {
 // Read the heartbeat (so the binding re-runs each poll) then return the current value.
 function pulse<T>(read: () => T): () => T {
   return () => {
-    heartbeat?.read();
+    heartbeat?.();
     return read();
   };
 }
@@ -364,7 +364,7 @@ function buildHisto(): HTMLElement {
     bars.push(<rect x={i + 0.1} width={0.8} y={20} height={0} />);
   }
   bind(() => {
-    heartbeat?.read();
+    heartbeat?.();
     const off = bars.length - frameMs.length;
     for (let i = 0; i < bars.length; i++) {
       const bar = bars[i];
@@ -723,7 +723,7 @@ function buildHeapStat(): HTMLElement {
   return stat(
     "heap",
     () => {
-      const bytes = heapSource?.read() ?? 0;
+      const bytes = heapSource?.() ?? 0;
       return bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "—";
     },
     "lo",
@@ -890,7 +890,7 @@ export function wireStats(opts: {
   // panel scope, so it pauses with minimize like the heartbeat.
   bind(
     () => {
-      heartbeat?.read();
+      heartbeat?.();
       untrack(renderActiveTab);
     },
     { defer: true, maxStale: POLL_MS },

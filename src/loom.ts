@@ -509,15 +509,14 @@ function flushScope(node: ScopeNode): void {
   for (const child of node.children) flushScope(child);
 }
 
-export interface Polled<T> {
-  readonly read: Read<T>;
-  readonly stop: Stop;
-}
+// A polled source is a callable reactive read (like `state`/`computed`/`source`) that also carries a
+// `stop` to clear its interval — so `p()` reads and `p.stop()` tears down.
+export type Polled<T> = Read<T> & { readonly stop: Stop };
 
 /**
  * A reactive source that re-samples `sample()` every `ms` milliseconds into a value-deduped
- * signal. Bindings reading `.read()` re-run only when the sampled value actually changes — so
- * it bridges imperative or external data (clocks, `performance` counters, polled APIs, media
+ * signal. Bindings reading the source (`p()`) re-run only when the sampled value actually changes —
+ * so it bridges imperative or external data (clocks, `performance` counters, polled APIs, media
  * state) into the reactive graph without a hand-rolled heartbeat. Call `.stop()` to clear the
  * timer. The backing state honours `options` (e.g. `{ internal: true }`).
  */
@@ -550,7 +549,7 @@ export function polled<T>(
     },
     stop: clear,
   });
-  return { read: () => cell(), stop: clear };
+  return Object.assign((): T => cell(), { stop: clear });
 }
 
 export function trigger(source: Read<unknown>): void {
@@ -807,6 +806,13 @@ function channelOf(node: ChannelNode): Channel {
 }
 
 export function channel(name: string, options?: ChannelOptions): Channel {
+  // `loom:` is reserved for the runtime's own built-in event channels (the `events` registry behind
+  // loom/observe), which share this registry. Reject it so app channels can't collide with internals.
+  if (name.startsWith("loom:")) {
+    throw new Error(
+      `Channel name "${name}" uses the reserved "loom:" prefix (built-in runtime channels).`,
+    );
+  }
   let node = channelRegistry.get(name);
   if (node === undefined) {
     node = createChannelNode(name, options);

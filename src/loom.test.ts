@@ -556,6 +556,12 @@ describe("loom channels", () => {
     ).toThrow(/different options/);
   });
 
+  it("rejects the reserved loom: prefix for app channels", () => {
+    expect(() => channel("loom:write")).toThrow(/reserved "loom:" prefix/);
+    expect(() => channel("loom:custom")).toThrow(/reserved/);
+    expect(() => channel("app:loom:x")).not.toThrow(); // only a leading loom: is reserved
+  });
+
   it("rejects out-of-range capacity instead of hanging the pow2 loop", () => {
     expect(() => channel("test:bigcap", { capacity: 2 ** 31 })).toThrow(
       /capacity/,
@@ -606,15 +612,15 @@ describe("loom polled", () => {
     vi.useFakeTimers();
     let value = 0;
     const p = polled(() => value, 100);
-    expect(p.read()).toBe(0);
+    expect(p()).toBe(0);
 
     value = 1;
     vi.advanceTimersByTime(100);
-    expect(p.read()).toBe(1);
+    expect(p()).toBe(1);
 
     value = 2;
     vi.advanceTimersByTime(250); // two ticks (100, 200), both read 2
-    expect(p.read()).toBe(2);
+    expect(p()).toBe(2);
 
     p.stop();
   });
@@ -626,7 +632,7 @@ describe("loom polled", () => {
     let seen: number | undefined;
     const p = polled(() => value, 100);
     const stop = effect(() => {
-      seen = p.read();
+      seen = p();
       runs++;
     });
     expect(runs).toBe(1);
@@ -654,7 +660,7 @@ describe("loom polled", () => {
 
     value = 9;
     vi.advanceTimersByTime(500);
-    expect(p.read()).toBe(0);
+    expect(p()).toBe(0);
   });
 
   it("honours state options: an internal polled is excluded from the channels", () => {
@@ -667,7 +673,7 @@ describe("loom polled", () => {
 
     value = 1;
     vi.advanceTimersByTime(100);
-    expect(internalSource.read()).toBe(1); // value updated
+    expect(internalSource()).toBe(1); // value updated
     expect(m.read()["loom:write"]?.count).toBe(0); // ...but the internal write is not counted
 
     internalSource.stop();
