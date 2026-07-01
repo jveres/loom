@@ -18,33 +18,26 @@ export type Child =
   | undefined
   | readonly Child[];
 
-/**
- * An anchored-slot descriptor produced by {@link when} / {@link match} / {@link each}. Place it as a
- * child of a Loom element (JSX or `h()`); `appendChild` drops a trailing comment anchor and calls
- * `mount(anchor)`, which wires the slot's effect and returns its disposer. Opaque to callers — build
- * one with `when`/`match`/`each`, don't hand-construct.
- */
-export interface DynamicChild {
+// Opaque handles returned by the binding/slot factories (`attr`/`classed`/`style` and
+// `when`/`match`/`each`). Their runtime shape is an internal detail — callers only receive one to
+// hand straight back into JSX or `h()` — so the public types are branded with a private symbol and
+// expose no structure. Build them with the factories; never hand-construct. `DynamicChild` is also a
+// member of {@link Child}.
+declare const BINDING: unique symbol;
+export type AttrBinding = { readonly [BINDING]: "attr" };
+export type ClassBinding = { readonly [BINDING]: "class" };
+export type StyleBinding = { readonly [BINDING]: "style" };
+export type DynamicChild = { readonly [BINDING]: "dynamic" };
+
+// The real shapes behind those handles, private to this module.
+interface PropBinding {
+  readonly kind: "attr" | "class" | "style";
+  readonly name: string;
+  readonly read: Read<unknown>;
+}
+interface SlotDescriptor {
   readonly __loomDynamic: true;
   readonly mount: (anchor: Comment) => Stop;
-}
-
-export interface ClassBinding {
-  readonly kind: "class";
-  readonly name: string;
-  readonly read: Read<unknown>;
-}
-
-export interface AttrBinding {
-  readonly kind: "attr";
-  readonly name: string;
-  readonly read: Read<unknown>;
-}
-
-export interface StyleBinding {
-  readonly kind: "style";
-  readonly name: string;
-  readonly read: Read<unknown>;
 }
 
 type ClassProp =
@@ -174,15 +167,27 @@ export function text(read: Read<unknown>, options?: EffectOptions): Text {
 }
 
 export function attr(name: string, read: Read<unknown>): AttrBinding {
-  return { kind: "attr", name, read };
+  return {
+    kind: "attr",
+    name,
+    read,
+  } satisfies PropBinding as unknown as AttrBinding;
 }
 
 export function classed(name: string, read: Read<unknown>): ClassBinding {
-  return { kind: "class", name, read };
+  return {
+    kind: "class",
+    name,
+    read,
+  } satisfies PropBinding as unknown as ClassBinding;
 }
 
 export function style(name: string, read: Read<unknown>): StyleBinding {
-  return { kind: "style", name, read };
+  return {
+    kind: "style",
+    name,
+    read,
+  } satisfies PropBinding as unknown as StyleBinding;
 }
 
 export function list<T>(
@@ -271,7 +276,7 @@ function dynamic(
         ),
       );
     },
-  };
+  } satisfies SlotDescriptor as unknown as DynamicChild;
 }
 
 /**
@@ -370,7 +375,7 @@ export function each<T>(
         ),
       );
     },
-  };
+  } satisfies SlotDescriptor as unknown as DynamicChild;
 }
 
 export function dispose(root: Node): void {
@@ -462,7 +467,7 @@ function applyProps(node: Element, props: Props): void {
       continue;
     }
     if (isAttrBinding(value)) {
-      bindAttr(node, value);
+      bindAttr(node, value as unknown as PropBinding);
       continue;
     }
     if (name === "ontap" && typeof value === "function") {
@@ -474,7 +479,7 @@ function applyProps(node: Element, props: Props): void {
       continue;
     }
     if (typeof value === "function") {
-      bindAttr(node, attr(name, value as Read<unknown>));
+      bindAttr(node, { kind: "attr", name, read: value as Read<unknown> });
       continue;
     }
     setAttr(node, name, value);
@@ -504,17 +509,17 @@ function isDynamic(child: Child): child is DynamicChild {
   return (
     typeof child === "object" &&
     child !== null &&
-    (child as Partial<DynamicChild>).__loomDynamic === true
+    (child as { readonly __loomDynamic?: unknown }).__loomDynamic === true
   );
 }
 
-// Drive a {@link DynamicChild}: append a trailing comment anchor (now, while `parent` exists, so there
-// is no detached-node timing gap), wire the slot's effect via `mount(anchor)`, and own its disposer on
-// the anchor so removing the parent subtree tears it down.
+// Drive a slot: append a trailing comment anchor (now, while `parent` exists, so there is no
+// detached-node timing gap), wire the slot's effect via `mount(anchor)`, and own its disposer on the
+// anchor so removing the parent subtree tears it down.
 function mountSlot(parent: Node, desc: DynamicChild): void {
   const anchor = document.createComment("loom-slot");
   parent.appendChild(anchor);
-  own(anchor, desc.mount(anchor));
+  own(anchor, (desc as unknown as SlotDescriptor).mount(anchor));
 }
 
 // Effect options for a slot: label it, and target its parent element (when there is one) so the
@@ -535,7 +540,7 @@ function applyClassProp(node: Element, value: ClassProp): void {
     return;
   }
   if (isClassBinding(value)) {
-    bindClass(node, value);
+    bindClass(node, value as unknown as PropBinding);
     return;
   }
   if (!isPlainRecord(value)) return;
@@ -569,7 +574,7 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     return;
   }
   if (isStyleBinding(value)) {
-    bindStyle(node, value);
+    bindStyle(node, value as unknown as PropBinding);
     return;
   }
   if (!isPlainRecord(value)) return;
@@ -579,7 +584,11 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     const styleValue = value[name];
     const property = styleName(name);
     if (typeof styleValue === "function") {
-      bindStyle(node, style(property, styleValue as Read<unknown>));
+      bindStyle(node, {
+        kind: "style",
+        name: property,
+        read: styleValue as Read<unknown>,
+      });
     } else if (styleValue != null) {
       styleDecl.setProperty(property, String(styleValue));
     }
@@ -588,13 +597,13 @@ function applyStyleProp(node: Element, value: StyleProp): void {
 
 function applyClassMapValue(node: Element, name: string, value: unknown): void {
   if (typeof value === "function") {
-    bindClass(node, classed(name, value as Read<unknown>));
+    bindClass(node, { kind: "class", name, read: value as Read<unknown> });
   } else if (value) {
     node.classList.add(name);
   }
 }
 
-function bindClass(node: Element, binding: ClassBinding): void {
+function bindClass(node: Element, binding: PropBinding): void {
   let previous = hasClassName(node, binding.name);
   const stop = untrack(() =>
     effect(
@@ -613,7 +622,7 @@ function bindClass(node: Element, binding: ClassBinding): void {
   own(node, stop);
 }
 
-function bindAttr(node: Element, binding: AttrBinding): void {
+function bindAttr(node: Element, binding: PropBinding): void {
   let previous: string | null | undefined;
   const stop = untrack(() =>
     effect(
@@ -632,7 +641,7 @@ function bindAttr(node: Element, binding: AttrBinding): void {
   own(node, stop);
 }
 
-function bindStyle(node: Element, binding: StyleBinding): void {
+function bindStyle(node: Element, binding: PropBinding): void {
   let previous: string | null | undefined;
   const styleDecl = (node as HTMLElement).style;
   const stop = untrack(() =>
