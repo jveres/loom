@@ -10,7 +10,7 @@ import {
   type ListSource,
   type VirtualList,
   virtualList,
-} from "../dom/vlist.js";
+} from "../dom/virtual-list.js";
 import { formatValue, valueClass } from "./format.js";
 import {
   ICON_BOUND,

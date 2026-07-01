@@ -453,7 +453,7 @@ list(container, rows, {
 });
 ```
 
-For long lists, `loom/dom/vlist` is a standalone fixed-row-height
+For long lists, `loom/dom/virtual-list` is a standalone fixed-row-height
 virtualizer — only the rows in (and just around) the viewport stay in the DOM.
 `virtualList(options)` takes a `VirtualListOptions` (`{ rowHeight, key, render,
 overscan? }`) and windows against an existing scroll container, returning a

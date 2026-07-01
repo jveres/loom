@@ -9,7 +9,7 @@
 import { type Meter, meter } from "loom";
 import { tap } from "loom/dom";
 import { events, inspect } from "loom/observe";
-import { type VirtualList, virtualList } from "../dom/vlist.js";
+import { type VirtualList, virtualList } from "../dom/virtual-list.js";
 import { formatValue, valueClass } from "./format.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
 import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";

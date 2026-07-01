@@ -25,7 +25,7 @@
     ".": "./src/index.ts",
     "./observe": "./src/observe.ts",
     "./dom": "./src/dom/index.ts",
-    "./dom/vlist": "./src/dom/vlist.ts",
+    "./dom/virtual-list": "./src/dom/virtual-list.ts",
     "./devtools": "./src/devtools/index.ts",
     "./jsx-runtime": "./src/dom/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/dom/jsx-runtime.ts",
