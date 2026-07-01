@@ -21,7 +21,14 @@ const safeAttrNamePattern = /^[A-Za-z_:][A-Za-z0-9:._-]*$/;
 const safeCssPropPattern =
   /^(-{2}[A-Za-z][A-Za-z0-9-]*|-?[A-Za-z][A-Za-z0-9-]*)$/;
 const unsafeUrlPattern =
-  /^(?:\s*)(?:javascript:|vbscript:|data:text\/html|data:text\/xml|data:application\/xhtml\+xml|data:image\/svg)/i;
+  /^(?:javascript:|vbscript:|data:text\/html|data:text\/xml|data:application\/xhtml\+xml|data:image\/svg)/i;
+// Browsers strip ASCII tab/newline/CR from anywhere in a URL and trim leading C0 controls/spaces
+// before resolving the scheme, so `jav\tascript:` or `\x01javascript:` parse as `javascript:`. The
+// scheme filter (used below) must test against the same normalized form or those tricks smuggle a
+// dangerous scheme past it, so we strip this whole range first — matching C0 controls here is
+// deliberate, not the mistake the lint guards against.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: see above — intentional.
+const urlControlChars = /[\u0000-\u0020]/g;
 
 const urlAttrs = new Set([
   "href",
@@ -61,7 +68,7 @@ export function jsx(
   props: JsxProps,
   _key?: string | number,
 ): Html {
-  return createJsx(type, props);
+  return createJsx(type, props, false);
 }
 
 export const jsxs: typeof jsx = jsx;
@@ -80,18 +87,18 @@ export function jsxDEV(
   _source?: unknown,
   _self?: unknown,
 ): Html {
-  return createJsx(type, props);
+  return createJsx(type, props, true);
 }
 
-function createJsx(type: JsxType, props: JsxProps): Html {
+function createJsx(type: JsxType, props: JsxProps, dev: boolean): Html {
   if (typeof type === "function") {
-    return unsafeHtml(renderToString(type(propsWithoutKey(props) as object)));
+    return unsafeHtml(renderToString(type(propsWithoutKey(props))));
   }
 
-  return renderElement(type, props);
+  return renderElement(type, props, dev);
 }
 
-function renderElement(type: string, props: JsxProps): Html {
+function renderElement(type: string, props: JsxProps, dev: boolean): Html {
   if (!safeTagNamePattern.test(type)) {
     throw new Error(`Invalid HTML tag name "${type}".`);
   }
@@ -105,7 +112,7 @@ function renderElement(type: string, props: JsxProps): Html {
         children = props[name] as HtmlChild;
         continue;
       }
-      out += renderAttribute(name, props[name]);
+      out += renderAttribute(type, name, props[name], dev);
     }
   }
   out += ">";
@@ -118,7 +125,20 @@ function renderElement(type: string, props: JsxProps): Html {
   return unsafeHtml(out);
 }
 
-function renderAttribute(name: string, value: unknown): string {
+// A silently-dropped attribute is invisible in the rendered string, so the dev runtime (jsxDEV)
+// warns for the two drops that almost always mean a bug — a malformed attribute name and a
+// dangerous URL scheme that got stripped. The by-design drops (nullish/false values, reserved
+// keys, `on*` handlers that SSR can't attach) stay silent to avoid noise on legitimate markup.
+function warnDropped(tag: string, name: string, reason: string): void {
+  console.warn(`[loom/html] dropped <${tag}> attribute "${name}": ${reason}`);
+}
+
+function renderAttribute(
+  tag: string,
+  name: string,
+  value: unknown,
+  dev: boolean,
+): string {
   if (
     value == null ||
     value === false ||
@@ -135,7 +155,10 @@ function renderAttribute(name: string, value: unknown): string {
   if (attrName === "className") attrName = "class";
   if (attrName === "htmlFor") attrName = "for";
   if (attrName.startsWith("on")) return "";
-  if (!safeAttrNamePattern.test(attrName)) return "";
+  if (!safeAttrNamePattern.test(attrName)) {
+    if (dev) warnDropped(tag, name, "not a valid HTML attribute name");
+    return "";
+  }
 
   if (attrName === "class") attrValue = normalizeClass(attrValue);
   if (attrName === "style" && attrValue && typeof attrValue === "object") {
@@ -145,7 +168,13 @@ function renderAttribute(name: string, value: unknown): string {
   if (attrValue === true) return ` ${attrName}`;
 
   const stringValue = String(attrValue);
-  if (isUrlAttr(attrName) && unsafeUrlPattern.test(stringValue)) return "";
+  if (
+    isUrlAttr(attrName) &&
+    unsafeUrlPattern.test(stringValue.replace(urlControlChars, ""))
+  ) {
+    if (dev) warnDropped(tag, name, "unsafe URL scheme");
+    return "";
+  }
 
   return ` ${attrName}="${escapeAttribute(stringValue)}"`;
 }
@@ -175,7 +204,11 @@ function serializeStyle(value: Record<string, unknown>): string {
     if (rawValue == null || !safeCssPropPattern.test(name)) continue;
 
     const cssValue = String(rawValue).replace(/["<>{};]/g, "");
-    if (/expression\(/i.test(cssValue) || /^\s*javascript:/i.test(cssValue)) {
+    // Test the scheme guard against a control-char-stripped copy, same as the URL-attribute path —
+    // otherwise `jav\tascript:` slips through here too (lower risk, since CSS url() schemes don't
+    // execute in modern browsers, but the evasion shape is identical).
+    const scheme = cssValue.replace(urlControlChars, "");
+    if (/expression\(/i.test(scheme) || /^\s*javascript:/i.test(scheme)) {
       continue;
     }
 

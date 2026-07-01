@@ -1,5 +1,5 @@
 /** @jsxImportSource loom/html */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { html, renderToString, unsafeHtml } from "./index.js";
 import { Fragment, jsx, jsxDEV, jsxs } from "./jsx-runtime.js";
 
@@ -67,6 +67,44 @@ describe("loom HTML JSX runtime", () => {
     expect(renderToString(out)).toBe(
       '<form style="color:red;font-size:12px">Link</form>',
     );
+  });
+
+  it("drops URL schemes disguised with control characters the browser strips", () => {
+    // Browsers strip ASCII tab/newline/CR from anywhere in a URL and trim leading C0 controls, so
+    // these all resolve to `javascript:` in the browser and must be dropped, not just the plain form.
+    const attrs = (props: Record<string, unknown>): string =>
+      renderToString(jsx("a", props));
+    expect(attrs({ href: "jav\tascript:alert(1)" })).toBe("<a></a>"); // embedded tab
+    expect(attrs({ href: "java\nscript:alert(1)" })).toBe("<a></a>"); // embedded newline
+    expect(attrs({ href: "java\rscript:alert(1)" })).toBe("<a></a>"); // embedded CR
+    expect(attrs({ href: "\u0001javascript:alert(1)" })).toBe("<a></a>"); // leading control
+    expect(attrs({ href: "  javascript:alert(1)" })).toBe("<a></a>"); // leading spaces
+    // A legitimate URL is untouched (the check only strips a copy used for the scheme test).
+    expect(attrs({ href: "/path?a=1&b=2" })).toBe(
+      '<a href="/path?a=1&amp;b=2"></a>',
+    );
+  });
+
+  it("jsxDEV warns on likely-bug attribute drops but stays silent on by-design ones", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // Malformed name and unsafe scheme warn (and are still dropped from the output)...
+      expect(renderToString(jsxDEV("a", { "bad name": "x" }))).toBe("<a></a>");
+      expect(renderToString(jsxDEV("a", { href: "javascript:alert(1)" }))).toBe(
+        "<a></a>",
+      );
+      expect(warn).toHaveBeenCalledTimes(2);
+      // ...but the by-design drops (on* handlers, reserved keys) are silent.
+      warn.mockClear();
+      renderToString(jsxDEV("button", { onclick: () => {}, key: "k" }));
+      expect(warn).not.toHaveBeenCalled();
+      // And jsx (production) never warns.
+      warn.mockClear();
+      renderToString(jsx("a", { "bad name": "x", href: "javascript:1" }));
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("renders via jsx/jsxs directly and on the null-props/void paths", () => {

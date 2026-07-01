@@ -84,6 +84,9 @@ export interface InspectNode extends NodeInfo {
   readonly disposed: boolean;
   readonly target?: object;
   readonly value?: unknown;
+  // The live setter for a state cell, for tooling that writes back (the inspector). Deliberately
+  // erased to State<unknown>: the concrete T is unrecoverable at snapshot time, so a write here is
+  // unchecked by construction — callers own that unsoundness.
   readonly source?: State<unknown>;
   // Cells from one fields() call share a `group` id; `key` is the property name within it.
   readonly group?: number;
@@ -94,7 +97,9 @@ export interface InspectSnapshot {
   readonly nodes: readonly InspectNode[];
 }
 
-type CleanupEffectFn = () => Stop;
+// An effect body that returns a cleanup run before each re-run and on dispose (the shape the first
+// effect() overload documents). Exported so callers can name the contract, not just satisfy it.
+export type CleanupEffectFn = () => Stop;
 type InternalEffectFn = EffectFn | CleanupEffectFn;
 
 type FieldKey<T extends object> = Extract<keyof T, string>;
@@ -861,16 +866,20 @@ export function channel(name: string, options?: ChannelOptions): Channel {
     channelRegistry.set(name, node);
   } else if (options !== undefined) {
     const cap = toPow2(options.capacity ?? 0);
-    if (
-      cap !== node.cap ||
-      (options.fields ?? []).join() !== node.fields.join()
-    ) {
+    if (cap !== node.cap || !sameFields(options.fields ?? [], node.fields)) {
       throw new Error(
         `Channel "${name}" already declared with different options.`,
       );
     }
   }
   return channelOf(node);
+}
+
+// Element-wise field comparison: a `.join()` compare would treat ["a,b"] and ["a","b"] as equal.
+function sameFields(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 export function meter(
@@ -881,6 +890,8 @@ export function meter(
   const members: Array<{ readonly node: ChannelNode; cursor: number }> = [];
   for (const ch of channels) {
     const node = channelRegistry.get(ch.name);
+    // Unregistered name (a hand-rolled/stale Channel object) is tolerated by design — it simply
+    // never appears in read() rather than throwing. See the "ignores channels it doesn't know" test.
     if (node !== undefined) members.push({ node, cursor: node.seq });
   }
   let attached = false;
@@ -943,7 +954,12 @@ export function meter(
 
 // The runtime's built-in channels, exposed publicly as `events` (via loom/observe). The core
 // records to these inline at the hot-path sites; they stay no-ops until a meter attaches. Records
-// non-internal nodes only, so the idle baseline is zero.
+// non-internal nodes only *when inspection is on* — the `internal` flag lives in a node's inspect
+// meta, which isn't allocated while inspection is off (registerNode returns early). So with
+// inspection off, the gate can't see the flag and internal nodes are counted too. Loom creates no
+// internal nodes at rest, so the idle baseline is still zero; but a meter attached alongside an
+// app's own `{ internal: true }` nodes while inspection is off will include them. Turn inspection on
+// (configure({ inspect: true })) for the internal-exclusion contract to hold.
 // read carries detail (which cell, the reader that read it, when) so a "samples" meter can stream
 // reads (the Trace tab); a "count" meter (the read rate) ignores the ring. Reads are the
 // highest-frequency event, so the per-read recording is paid only while metered and stays zero-alloc.
@@ -993,6 +1009,42 @@ export const events = {
   dispose: /* @__PURE__ */ channelOf(disposeCh),
 } as const;
 
+// The record shape each built-in detail channel writes into a Frame's `samples`, keyed by the
+// channel's declared `fields`. The Meter API is generic, so `Frame.samples` is typed
+// `Record<string, unknown>`; a consumer (the inspector) narrows a known channel's samples to one of
+// these with `sampleOf`. Keep these in lockstep with the `fields` arrays passed to
+// createChannelNode above — they are the single named contract the devtools reads against.
+export interface ReadSample {
+  readonly id: number;
+  readonly by: number | undefined;
+  readonly t: number;
+}
+export interface WriteSample {
+  readonly id: number;
+  readonly prev: unknown;
+  readonly next: unknown;
+  readonly by: number | undefined;
+  readonly t: number;
+}
+export interface FlushSample {
+  readonly batchSize: number;
+  readonly durationMs: number;
+}
+
+// Narrow a metered channel's untyped sample records to their known payload shape. The generic Meter
+// can't do this at the type level (channels are dynamic), so this is the one sanctioned, centralized
+// reinterpret — consumers name the shape here instead of re-asserting a literal at each read site.
+// A present record narrows to T; a possibly-missing one (e.g. samples.at(-1)) carries the undefined.
+export function sampleOf<T>(sample: Readonly<Record<string, unknown>>): T;
+export function sampleOf<T>(
+  sample: Readonly<Record<string, unknown>> | undefined,
+): T | undefined;
+export function sampleOf<T>(
+  sample: Readonly<Record<string, unknown>> | undefined,
+): T | undefined {
+  return sample as T | undefined;
+}
+
 /**
  * Configure the runtime.
  *
@@ -1006,12 +1058,14 @@ export const events = {
  * With one, the throw is routed to the handler and the flush continues with the other effects. Pass
  * `undefined` to remove it.
  */
-export function configure(options: {
+export interface ConfigureOptions {
   readonly inspect?: boolean;
   readonly onError?: ErrorHandler | undefined;
   /** Override the deferred-effect scheduler (e.g. synchronous in tests, no-op on the server). */
   readonly deferScheduler?: DeferScheduler;
-}): void {
+}
+
+export function configure(options: ConfigureOptions): void {
   if (options.inspect !== undefined) inspectEnabled = options.inspect;
   if ("onError" in options) onError = options.onError;
   if (options.deferScheduler !== undefined)
@@ -1104,11 +1158,13 @@ export function inspectResources(): ResourceCounts {
   };
 }
 
-// Merge two option sets, letting the second (more specific) win; either may be undefined.
-function mergeOptions<T extends NodeOptions>(
+// Merge two option sets, letting the second (more specific) win; either may be undefined. The union
+// return (not a generic) preserves EffectOptions' `target` through the merge, which registerNode
+// narrows with an `in` guard — the old `<T> => T | NodeOptions` signature widened that away.
+function mergeOptions(
   defaults: NodeOptions | undefined,
-  own: T | undefined,
-): T | NodeOptions | undefined {
+  own: NodeOptions | EffectOptions | undefined,
+): NodeOptions | EffectOptions | undefined {
   if (defaults === undefined) return own;
   if (own === undefined) return defaults;
   return { ...defaults, ...own };

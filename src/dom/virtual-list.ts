@@ -71,7 +71,10 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
     if (end > total) end = total;
     const live = new Set<string | number>();
     for (let i = start; i < end; i++) {
-      const item = items.at(i) as T;
+      // `at` is caller-supplied on ListSource; a lazy source whose length/at disagree could return
+      // undefined inside the window. Skip rather than feed undefined to key()/render() typed as T.
+      const item = items.at(i);
+      if (item === undefined) continue;
       const k = options.key(item);
       live.add(k);
       const existing = mounted.get(k) ?? null;

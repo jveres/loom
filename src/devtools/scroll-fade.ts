@@ -1,11 +1,18 @@
+// The handle wireScrollFade returns: refresh() for content changes the ResizeObserver can't see, and
+// dispose() to detach. Named so its two consumers (panel body, Trace list) share one shape.
+export interface ScrollFade {
+  refresh(): void;
+  dispose(): void;
+}
+
 // A soft edge fade for a scroll container, masking only as far as content is actually clipped (so a
 // fully-scrolled edge is sharp). Drives two CSS custom properties the `.li-fade-y` / `.li-fade-x`
 // mask reads; rAF-throttled, auto-refreshing on scroll and resize. Shared by the panel body and the
-// Trace list. Returns refresh() (for content changes the ResizeObserver can't see) and dispose().
+// Trace list.
 export function wireScrollFade(
   scroller: HTMLElement,
   axis: "x" | "y",
-): { refresh: () => void; dispose: () => void } {
+): ScrollFade {
   const FADE = 16;
   const DEAD = 6;
   let frame = 0;

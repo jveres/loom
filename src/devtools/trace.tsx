@@ -8,18 +8,30 @@
 // Panel seams: buildTracePane / renderTrace / showTrace / teardownTrace.
 import { type Meter, meter } from "loom";
 import { tap } from "loom/dom";
-import { events, inspect } from "loom/observe";
+import {
+  events,
+  inspect,
+  type ReadSample,
+  sampleOf,
+  type WriteSample,
+} from "loom/observe";
 import { type VirtualList, virtualList } from "../dom/virtual-list.js";
 import { formatValue, valueClass } from "./format.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
 import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
-import { wireScrollFade } from "./scroll-fade.js";
+import { type ScrollFade, wireScrollFade } from "./scroll-fade.js";
 
 const TRACE_ROW_H = 22; // uniform row height (must match the .li-tr CSS)
 const VALUE_MAX = 200; // cap a recorded value's text so a giant string can't bloat the DOM/tooltip
 let windowSize = 1000; // how many events the log keeps; set from the inspector menu
 
-type TraceMode = "writes" | "reads" | "all";
+// The stream modes, in menu order. The <option>s and the type both derive from this, so they can't
+// drift; isTraceMode guards the change handler's string back into the union.
+const TRACE_MODES = ["writes", "reads", "all"] as const;
+type TraceMode = (typeof TRACE_MODES)[number];
+function isTraceMode(value: string): value is TraceMode {
+  return (TRACE_MODES as readonly string[]).includes(value);
+}
 
 type TraceRow = {
   readonly seq: number; // unique, monotonic — the vlist key (the log shifts as it prepends)
@@ -41,7 +53,7 @@ let readMeter: Meter | null = null;
 let traceMode: TraceMode = "all";
 let traceRoot: HTMLElement | null = null;
 let traceScroll: HTMLElement | null = null;
-let traceFade: { refresh: () => void; dispose: () => void } | null = null;
+let traceFade: ScrollFade | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
 let liveDot: HTMLElement | null = null;
 let traceLog: TraceRow[] = []; // newest-first, capped at windowSize
@@ -116,14 +128,14 @@ export function buildTracePane(): HTMLElement {
 
   const modeSel = (
     <select class="li-tr-mode" title="Which events to stream">
-      <option value="writes">writes</option>
-      <option value="reads">reads</option>
-      <option value="all">all</option>
+      {TRACE_MODES.map((m) => (
+        <option value={m}>{m}</option>
+      ))}
     </select>
   ) as HTMLSelectElement;
   modeSel.value = traceMode; // reflect the default ("all")
   modeSel.addEventListener("change", () => {
-    traceMode = modeSel.value as TraceMode;
+    if (isTraceMode(modeSel.value)) traceMode = modeSel.value;
     applyMode();
   });
 
@@ -146,13 +158,14 @@ export function buildTracePane(): HTMLElement {
     applyView();
   });
 
-  traceScroll = (<div class="li-tr-scroll li-fade-y" />) as HTMLElement;
+  traceScroll = <div class="li-tr-scroll li-fade-y" />;
   traceScroll.append(traceVList.el);
   traceFade = wireScrollFade(traceScroll, "y"); // same edge fade as the panel body
   // Hover a row to outline the DOM node(s) that cell drives — same overlay the Graph uses. Delegated
   // (rows are reused) and guarded so moving within a row doesn't re-snapshot.
   traceScroll.addEventListener("pointerover", (e) => {
-    const row = (e.target as Element).closest?.(".li-tr") as HTMLElement | null;
+    const target = e.target instanceof Element ? e.target : null;
+    const row = target?.closest(".li-tr") as HTMLElement | null;
     const id = row?.dataset["id"];
     if (id !== undefined && Number(id) !== lastHoverId) {
       lastHoverId = Number(id);
@@ -166,7 +179,8 @@ export function buildTracePane(): HTMLElement {
   // Tap a cell name to jump to it in the Graph tab (tap, not click — click is dropped under load on
   // iOS; tap's slop also ignores a scroll drag).
   tap(traceScroll, (e) => {
-    const name = (e.target as Element).closest?.(".li-tr-name");
+    const target = e.target instanceof Element ? e.target : null;
+    const name = target?.closest(".li-tr-name");
     const row = name?.closest(".li-tr") as HTMLElement | null;
     const id = row?.dataset["id"];
     if (id === undefined) return;
@@ -244,7 +258,9 @@ export function renderTrace(): void {
   if (fresh.length === 0) return;
   // Interleave the two rings by their recorded timestamp when streaming both.
   if (traceMode === "all")
-    fresh.sort((a, b) => (a.s["t"] as number) - (b.s["t"] as number));
+    fresh.sort(
+      (a, b) => sampleOf<ReadSample>(a.s).t - sampleOf<ReadSample>(b.s).t,
+    );
   const labels = labelMap();
   const prevTop = (traceFilter ? filterLog : traceLog)[0]?.seq ?? -1;
   for (const { s, kind } of fresh) {
@@ -318,12 +334,14 @@ function makeRow(
   kind: "read" | "write",
   labels: Map<number, string>,
 ): TraceRow {
-  const id = s["id"] as number;
+  // read and write samples share id/t/by; ReadSample names exactly those common fields.
+  const common = sampleOf<ReadSample>(s);
+  const id = common.id;
   const name = labels.get(id) ?? `#${id}`;
-  const timeText = trTime(s["t"] as number);
-  const source = s["by"];
+  const timeText = trTime(common.t);
+  const source = common.by;
   const srcName =
-    source !== undefined ? (labels.get(source as number) ?? `#${source}`) : "";
+    source !== undefined ? (labels.get(source) ?? `#${source}`) : "";
   const srcText = srcName ? `by ${srcName}` : "";
   if (kind === "read") {
     return {
@@ -340,8 +358,9 @@ function makeRow(
       full: `${name} — read ${srcText || "(external)"}`,
     };
   }
-  const prevText = formatValue(s["prev"], VALUE_MAX);
-  const nextText = formatValue(s["next"], VALUE_MAX);
+  const write = sampleOf<WriteSample>(s);
+  const prevText = formatValue(write.prev, VALUE_MAX);
+  const nextText = formatValue(write.next, VALUE_MAX);
   return {
     seq: rowSeq++,
     id,
@@ -349,9 +368,9 @@ function makeRow(
     timeText,
     name,
     prevText,
-    prevCls: valueClass(s["prev"]),
+    prevCls: valueClass(write.prev),
     nextText,
-    nextCls: valueClass(s["next"]),
+    nextCls: valueClass(write.next),
     srcText,
     full: `${name}: ${prevText} → ${nextText} ${srcText || "(external)"}`,
   };

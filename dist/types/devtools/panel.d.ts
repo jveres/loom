@@ -1,3 +1,4 @@
+export type TabId = "stats" | "graph" | "trace";
 /** Mount the floating inspector panel (dev only). Idempotent; a no-op until called. */
 export declare function mountInspector(target?: Element): void;
 /** Remove the panel and stop all observation/timers. Safe to call when not mounted. */

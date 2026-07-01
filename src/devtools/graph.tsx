@@ -287,7 +287,7 @@ function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
   const count = (
     <span class="li-gns-c">{`(${item.count})`}</span>
   ) as HTMLElement;
-  const labelEl = (<span class="li-gns-lbl">{item.label}</span>) as HTMLElement;
+  const labelEl = <span class="li-gns-lbl">{item.label}</span>;
   const chev = icon(ICON_CHEVRON, 11);
   chev.classList.add("li-chev");
   // Locate button: scrolls the group's rendered output into view. A span (not the bare svg, which is
@@ -333,7 +333,7 @@ function gUpdateHeader(
 
 function gCreateCell(item: GraphItem & { kind: "cell" }): HTMLElement {
   const n = item.node;
-  const val = (<span class="li-gval" />) as HTMLElement;
+  const val = <span class="li-gval" />;
   const bound = gBound(n);
   const ic = icon(
     n.kind === "computed" ? ICON_COMPUTED : bound ? ICON_BOUND : ICON_UNBOUND,

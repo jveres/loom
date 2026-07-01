@@ -62,6 +62,14 @@ type StyleProp =
   | undefined
   | readonly StyleProp[];
 
+// An element with an inline `style` — both HTMLElement and SVGElement satisfy this, so style
+// bindings state it rather than a false HTMLElement claim (a truly style-less Element would throw).
+type StyledElement = Element & ElementCSSInlineStyle;
+
+// Deliberately open: the typed props below (class/style/key) are for editor help and reactive-value
+// handling, but the `Record<string, unknown>` index accepts any attribute name/value. Loom is a thin
+// layer over setAttribute, so applyProps validates and applies at runtime rather than the type
+// enforcing an exhaustive per-element attribute model; a typo'd attribute is set as-is, not rejected.
 export type Props = Record<string, unknown> & {
   class?: ClassProp;
   className?: ClassProp;
@@ -582,7 +590,7 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     return;
   }
   if (!isPlainRecord(value)) return;
-  const styleDecl = (node as HTMLElement).style;
+  const styleDecl = (node as StyledElement).style;
   for (const name in value) {
     if (!Object.hasOwn(value, name)) continue;
     const styleValue = value[name];
@@ -627,7 +635,7 @@ function bindAttr(node: Element, binding: PropBinding): void {
 }
 
 function bindStyle(node: Element, binding: PropBinding): void {
-  const styleDecl = (node as HTMLElement).style;
+  const styleDecl = (node as StyledElement).style;
   bindReactiveValue(
     node,
     `dom.style.${binding.name}`,

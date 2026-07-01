@@ -49,7 +49,7 @@ export function jsxDEV(
 
 function createJsx(type: JsxType, props: JsxProps): Child {
   if (typeof type === "function") {
-    return type(propsWithoutKey(props) as object);
+    return type(propsWithoutKey(props));
   }
 
   return createIntrinsicElement(type, props);

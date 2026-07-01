@@ -1,4 +1,4 @@
-import { _ as e, a as t } from "./loom-DryOfVx_.js";
+import { a as e, v as t } from "./loom-DqpZlg-5.js";
 //#region src/dom/index.ts
 var n = (e) => e, r = /* @__PURE__ */ new WeakMap(), i = "http://www.w3.org/2000/svg", a = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
 function o(e, t = null, n) {
@@ -7,7 +7,7 @@ function o(e, t = null, n) {
 }
 function s(n, r) {
 	let i = document.createTextNode(""), a = "";
-	return x(i, e(() => t(() => {
+	return x(i, t(() => e(() => {
 		let e = V(n());
 		e !== a && (a = e, i.data = e);
 	}, {
@@ -50,7 +50,7 @@ function d(e, t, n, r) {
 	return a;
 }
 function f(n, r, i) {
-	let a = /* @__PURE__ */ new Map(), o = e(() => t(() => {
+	let a = /* @__PURE__ */ new Map(), o = t(() => e(() => {
 		let e = i.reorder?.() !== !1, t = d(r(), a, i.key, i.render);
 		if (e) {
 			let e = n.firstChild;
@@ -71,13 +71,13 @@ function p(r, i) {
 		__loomDynamic: !0,
 		mount(n) {
 			let a = [], o;
-			return e(() => t(() => {
-				let t = r();
-				if (t === o) return;
-				o = t;
+			return t(() => e(() => {
+				let e = r();
+				if (e === o) return;
+				o = e;
 				for (let e of a) v(e);
 				let s = document.createDocumentFragment();
-				e(() => w(s, i(t))), a = [...s.childNodes], n.parentNode?.insertBefore(s, n);
+				t(() => w(s, i(e))), a = [...s.childNodes], n.parentNode?.insertBefore(s, n);
 			}, D(n, "dom.dynamic")));
 		}
 	});
@@ -96,7 +96,7 @@ function g(r, i, a) {
 		__loomDynamic: !0,
 		mount(n) {
 			let o = /* @__PURE__ */ new Map();
-			return e(() => t(() => {
+			return t(() => e(() => {
 				let e = d(r(), o, a, i), t = n;
 				for (let r = e.length - 1; r >= 0; r--) {
 					let i = e[r];
@@ -291,7 +291,7 @@ function F(e, t) {
 }
 function I(n, r, i, a, o) {
 	let s = o;
-	x(n, e(() => t(() => {
+	x(n, t(() => e(() => {
 		let e = i();
 		e !== s && (s = e, a(e));
 	}, {

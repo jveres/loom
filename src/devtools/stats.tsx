@@ -15,10 +15,16 @@ import {
   untrack,
 } from "loom";
 import { type Child, text, when } from "loom/dom";
-import { events, inspectResources } from "loom/observe";
+import {
+  events,
+  type FlushSample,
+  inspectResources,
+  sampleOf,
+} from "loom/observe";
 import { bind, PANEL_OPTS } from "./bindings.js";
 import { PANEL_ID } from "./css.js";
 import { renderGraphThrottled } from "./graph.js";
+import type { TabId } from "./panel.js";
 import { renderTrace } from "./trace.js";
 
 /* ---- geometry ---- */
@@ -55,7 +61,7 @@ const LAG_MS = 200;
 
 /* ---- module state ---- */
 // Set by wireStats so renderActiveTab() can read the active tab + minimized state without importing it.
-let activeTabFn: () => string | undefined = () => undefined;
+let activeTabFn: () => TabId | undefined = () => undefined;
 let isMinimizedFn: () => boolean = () => false;
 
 let heartbeat: Polled<number> | null = null;
@@ -499,7 +505,7 @@ function stat(
   cls = "",
   title = "",
 ): HTMLElement {
-  const val = (<span class={`li-stat-v ${cls}`} />) as HTMLElement;
+  const val = <span class={`li-stat-v ${cls}`} />;
   val.append(text(pulse(get), PANEL_OPTS));
   return (
     <div class="li-stat">
@@ -551,7 +557,7 @@ const TIP = {
 } as const;
 
 function buildStatsPane(): HTMLElement {
-  const fpsValue = (<span class="li-perfh-fps" />) as HTMLElement;
+  const fpsValue = <span class="li-perfh-fps" />;
   fpsValue.append(
     text(
       pulse(() => (fpsReady ? `${Math.round(fps)} fps` : "— fps")),
@@ -564,7 +570,7 @@ function buildStatsPane(): HTMLElement {
     pulse(() => `li-perfh-fps ${fpsKey}`),
   );
 
-  const hlabel = (<div class="li-hlabel" title={TIP.health} />) as HTMLElement;
+  const hlabel = <div class="li-hlabel" title={TIP.health} />;
   hlabel.append(
     text(
       pulse(() => (fpsReady ? health(fps).label.toUpperCase() : "LOADING")),
@@ -748,9 +754,7 @@ function poll(): number {
   createRate = ema(createRate, dcr);
   disposeRate = ema(disposeRate, ddi);
   flushRate = ema(flushRate, flushFrame?.count ?? 0);
-  const lastFlush = flushFrame?.samples.at(-1) as
-    | { batchSize: number; durationMs: number }
-    | undefined;
+  const lastFlush = sampleOf<FlushSample>(flushFrame?.samples.at(-1));
   if (lastFlush !== undefined) {
     lastFlushBatch = lastFlush.batchSize;
     lastFlushMs = lastFlush.durationMs;
@@ -869,7 +873,7 @@ interface StatsPanes {
 // resources (detach on minimize); the web-vital sources + the Info pane go in a nested scope that
 // pauses when the Info tab isn't active. Returns the Info pane and the (always-live) header spark.
 export function wireStats(opts: {
-  activeTab: () => string | undefined;
+  activeTab: () => TabId | undefined;
   isMinimized: () => boolean;
 }): StatsPanes {
   activeTabFn = opts.activeTab;
@@ -895,6 +899,8 @@ export function wireStats(opts: {
     },
     { defer: true, maxStale: POLL_MS },
   );
+  // Definite-assignment: scope() runs its callback synchronously, so statsPane is set before the
+  // scope() call returns and before it's read at the end of wireStats.
   let statsPane!: HTMLElement;
   statsScope = scope(() => {
     clsSource = source(connectCls, 0, PANEL_OPTS);
@@ -950,7 +956,10 @@ export function stopStats(): void {
   fpsAcc = fpsFrames = lastFrameT = lastFrameMs = 0;
   frameMs.length = 0;
   lag = lagPeak = 0;
+  lagWasHidden = false;
   healthReady = false;
+  score = 100;
+  healthKey = fpsKey = "";
   nodeStates = nodeComputeds = nodeEffects = nodeViews = 0;
   nodeSources = nodeScopes = nodeChannels = nodeUnread = 0;
   sparkIn.length = 0;

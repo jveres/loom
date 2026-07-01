@@ -1,9 +1,10 @@
+import type { TabId } from "./panel.js";
 interface StatsPanes {
     readonly statsPane: HTMLElement;
     readonly sparkEl: HTMLElement;
 }
 export declare function wireStats(opts: {
-    activeTab: () => string | undefined;
+    activeTab: () => TabId | undefined;
     isMinimized: () => boolean;
 }): StatsPanes;
 export declare function pauseStats(): void;

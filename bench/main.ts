@@ -551,29 +551,45 @@ function renderResults(
   loom: ReadonlyMap<string, number>,
   vanilla: ReadonlyMap<string, number>,
 ): void {
-  const rows = operations.map((operation) => {
+  const measured = operations.map((operation) => {
     const loomTime = requiredResult(loom, operation.name);
     const vanillaTime = requiredResult(vanilla, operation.name);
-    const ratio = loomTime / vanillaTime;
-    return `<tr><td>${operation.name}</td><td>${format(loomTime)}</td><td>${format(
+    return {
+      name: operation.name,
+      loomTime,
       vanillaTime,
-    )}</td><td class="ratio ${ratioClass(ratio)}">${ratio.toFixed(
-      2,
-    )}x</td></tr>`;
+      ratio: ratioOf(loomTime, vanillaTime),
+    };
   });
-  const meanRatio = Math.exp(
-    operations.reduce((sum, operation) => {
-      const loomTime = requiredResult(loom, operation.name);
-      const vanillaTime = requiredResult(vanilla, operation.name);
-      return sum + Math.log(loomTime / vanillaTime);
-    }, 0) / operations.length,
+  const rows = measured.map(({ name, loomTime, vanillaTime, ratio }) => {
+    const cell =
+      ratio === undefined
+        ? `<td class="ratio">&mdash;</td>`
+        : `<td class="ratio ${ratioClass(ratio)}">${ratio.toFixed(2)}x</td>`;
+    return `<tr><td>${name}</td><td>${format(loomTime)}</td><td>${format(
+      vanillaTime,
+    )}</td>${cell}</tr>`;
+  });
+  const logRatios = measured.flatMap(({ ratio }) =>
+    ratio === undefined ? [] : [Math.log(ratio)],
   );
+  const meanRatio =
+    logRatios.length > 0
+      ? Math.exp(
+          logRatios.reduce((sum, value) => sum + value, 0) / logRatios.length,
+        )
+      : undefined;
+  const meanCell =
+    meanRatio === undefined
+      ? `<td class="ratio"><b>&mdash;</b></td>`
+      : `<td class="ratio ${ratioClass(meanRatio)}"><b>${meanRatio.toFixed(
+          2,
+        )}x</b></td>`;
+  const excluded = measured.length - logRatios.length;
 
   resultsBody.innerHTML = `<tr><th>operation</th><th>Loom</th><th>Vanilla</th><th>Loom/van</th></tr>${rows.join(
     "",
-  )}<tr><td><b>geo-mean ratio</b></td><td></td><td></td><td class="ratio ${ratioClass(
-    meanRatio,
-  )}"><b>${meanRatio.toFixed(2)}x</b></td></tr>`;
+  )}<tr><td><b>geo-mean ratio</b></td><td></td><td></td>${meanCell}</tr>`;
   referenceBody.innerHTML =
     "<tr><th>published slowdown vs vanilla</th><th></th></tr>" +
     "<tr><td>Solid</td><td>~1.05-1.15x</td></tr>" +
@@ -583,7 +599,12 @@ function renderResults(
   noteNode.innerHTML =
     "Loom vs a hand-written vanilla keyed baseline on this machine. " +
     "The published rows are indicative ranges from js-framework-benchmark; " +
-    "compare ratios, not absolute milliseconds.";
+    "compare ratios, not absolute milliseconds." +
+    (excluded > 0
+      ? ` ${excluded} operation${excluded === 1 ? "" : "s"} ran below the ` +
+        "timer's resolution (0.0ms median) and are shown as &mdash;, " +
+        "excluded from the geo-mean."
+      : "");
 }
 
 function renderSplitResults(split: ReadonlyMap<string, SplitTiming>): void {
@@ -627,6 +648,14 @@ function requiredSplit(
   const value = results.get(name);
   if (value === undefined) throw new Error(`Missing split result for ${name}.`);
   return value;
+}
+
+// A 0.0 median means the operation ran below the clock's resolution (browsers coarsen
+// performance.now(), some to a full 1ms) — a ratio against it is meaningless (0 → Infinity and
+// log(0) → -Infinity would poison the geo-mean), so such rows carry no ratio.
+function ratioOf(loomTime: number, vanillaTime: number): number | undefined {
+  if (loomTime <= 0 || vanillaTime <= 0) return undefined;
+  return loomTime / vanillaTime;
 }
 
 function ratioClass(value: number): string {

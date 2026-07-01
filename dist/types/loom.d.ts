@@ -59,7 +59,7 @@ export interface InspectNode extends NodeInfo {
 export interface InspectSnapshot {
     readonly nodes: readonly InspectNode[];
 }
-type CleanupEffectFn = () => Stop;
+export type CleanupEffectFn = () => Stop;
 type FieldKey<T extends object> = Extract<keyof T, string>;
 export type Fields<T extends object> = {
     readonly [K in FieldKey<T>]: State<T[K]>;
@@ -150,6 +150,24 @@ export declare const events: {
     readonly create: Channel;
     readonly dispose: Channel;
 };
+export interface ReadSample {
+    readonly id: number;
+    readonly by: number | undefined;
+    readonly t: number;
+}
+export interface WriteSample {
+    readonly id: number;
+    readonly prev: unknown;
+    readonly next: unknown;
+    readonly by: number | undefined;
+    readonly t: number;
+}
+export interface FlushSample {
+    readonly batchSize: number;
+    readonly durationMs: number;
+}
+export declare function sampleOf<T>(sample: Readonly<Record<string, unknown>>): T;
+export declare function sampleOf<T>(sample: Readonly<Record<string, unknown>> | undefined): T | undefined;
 /**
  * Configure the runtime.
  *
@@ -163,12 +181,13 @@ export declare const events: {
  * With one, the throw is routed to the handler and the flush continues with the other effects. Pass
  * `undefined` to remove it.
  */
-export declare function configure(options: {
+export interface ConfigureOptions {
     readonly inspect?: boolean;
     readonly onError?: ErrorHandler | undefined;
     /** Override the deferred-effect scheduler (e.g. synchronous in tests, no-op on the server). */
     readonly deferScheduler?: DeferScheduler;
-}): void;
+}
+export declare function configure(options: ConfigureOptions): void;
 /**
  * Snapshot the reactive graph. With `{ active: true }`, skip state/computed cells that have no
  * subscribers — these are either idle (nothing reads them) or "ghosts": cells of a removed object

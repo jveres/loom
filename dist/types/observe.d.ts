@@ -1,2 +1,2 @@
-export type { InspectNode, InspectSnapshot, NodeKind, ResourceCounts, } from "./loom.js";
-export { events, inspect, inspectResources } from "./loom.js";
+export type { FlushSample, InspectNode, InspectSnapshot, NodeKind, ReadSample, ResourceCounts, WriteSample, } from "./loom.js";
+export { events, inspect, inspectResources, sampleOf } from "./loom.js";

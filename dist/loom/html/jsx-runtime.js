@@ -1,7 +1,7 @@
 import { t as e } from "../jsx-props-0B9e31e8.js";
 import { escapeAttribute as t, renderToString as n, unsafeHtml as r } from "../html.js";
 //#region src/html/jsx-runtime.ts
-var i = /^[A-Za-z][A-Za-z0-9:._-]*$/, a = /^[A-Za-z_:][A-Za-z0-9:._-]*$/, o = /^(-{2}[A-Za-z][A-Za-z0-9-]*|-?[A-Za-z][A-Za-z0-9-]*)$/, s = /^(?:\s*)(?:javascript:|vbscript:|data:text\/html|data:text\/xml|data:application\/xhtml\+xml|data:image\/svg)/i, c = /* @__PURE__ */ new Set([
+var i = /^[A-Za-z][A-Za-z0-9:._-]*$/, a = /^[A-Za-z_:][A-Za-z0-9:._-]*$/, o = /^(-{2}[A-Za-z][A-Za-z0-9-]*|-?[A-Za-z][A-Za-z0-9-]*)$/, s = /^(?:javascript:|vbscript:|data:text\/html|data:text\/xml|data:application\/xhtml\+xml|data:image\/svg)/i, c = /[\u0000-\u0020]/g, l = /* @__PURE__ */ new Set([
 	"href",
 	"src",
 	"action",
@@ -9,7 +9,7 @@ var i = /^[A-Za-z][A-Za-z0-9:._-]*$/, a = /^[A-Za-z_:][A-Za-z0-9:._-]*$/, o = /^
 	"cite",
 	"data",
 	"poster"
-]), l = /* @__PURE__ */ new Set([
+]), u = /* @__PURE__ */ new Set([
 	"area",
 	"base",
 	"br",
@@ -25,67 +25,71 @@ var i = /^[A-Za-z][A-Za-z0-9:._-]*$/, a = /^[A-Za-z_:][A-Za-z0-9:._-]*$/, o = /^
 	"track",
 	"wbr"
 ]);
-function u(e, t, n) {
-	return m(e, t);
+function d(e, t, n) {
+	return h(e, t, !1);
 }
-var d = u;
-function f(e) {
+var f = d;
+function p(e) {
 	return r(n(e?.children));
 }
-function p(e, t, n, r, i, a) {
-	return m(e, t);
+function m(e, t, n, r, i, a) {
+	return h(e, t, !0);
 }
-function m(t, i) {
-	return typeof t == "function" ? r(n(t(e(i)))) : h(t, i);
+function h(t, i, a) {
+	return typeof t == "function" ? r(n(t(e(i)))) : g(t, i, a);
 }
-function h(e, t) {
+function g(e, t, a) {
 	if (!i.test(e)) throw Error(`Invalid HTML tag name "${e}".`);
-	let a = `<${e}`, o;
+	let o = `<${e}`, s;
 	if (t) {
-		for (let e in t) if (Object.hasOwn(t, e)) {
-			if (e === "children") {
-				o = t[e];
+		for (let n in t) if (Object.hasOwn(t, n)) {
+			if (n === "children") {
+				s = t[n];
 				continue;
 			}
-			a += g(e, t[e]);
+			o += v(e, n, t[n], a);
 		}
 	}
-	return a += ">", l.has(e) || (a += n(o), a += `</${e}>`), r(a);
+	return o += ">", u.has(e) || (o += n(s), o += `</${e}>`), r(o);
 }
-function g(e, n) {
-	if (n == null || n === !1 || e === "key" || e === "__proto__" || e === "constructor" || e === "prototype") return "";
-	let r = e, i = n;
-	if (r === "className" && (r = "class"), r === "htmlFor" && (r = "for"), r.startsWith("on") || !a.test(r)) return "";
-	if (r === "class" && (i = _(i)), r === "style" && i && typeof i == "object" && (i = v(i)), i === !0) return ` ${r}`;
-	let o = String(i);
-	return b(r) && s.test(o) ? "" : ` ${r}="${t(o)}"`;
+function _(e, t, n) {
+	console.warn(`[loom/html] dropped <${e}> attribute "${t}": ${n}`);
 }
-function _(e) {
+function v(e, n, r, i) {
+	if (r == null || r === !1 || n === "key" || n === "__proto__" || n === "constructor" || n === "prototype") return "";
+	let o = n, l = r;
+	if (o === "className" && (o = "class"), o === "htmlFor" && (o = "for"), o.startsWith("on")) return "";
+	if (!a.test(o)) return i && _(e, n, "not a valid HTML attribute name"), "";
+	if (o === "class" && (l = y(l)), o === "style" && l && typeof l == "object" && (l = b(l)), l === !0) return ` ${o}`;
+	let u = String(l);
+	return S(o) && s.test(u.replace(c, "")) ? (i && _(e, n, "unsafe URL scheme"), "") : ` ${o}="${t(u)}"`;
+}
+function y(e) {
 	if (Array.isArray(e)) {
 		let t = [];
 		for (let n of e) {
 			if (!n) continue;
-			let e = _(n);
+			let e = y(n);
 			e && t.push(e);
 		}
 		return t.join(" ");
 	}
 	return e && typeof e == "object" ? Object.entries(e).filter(([, e]) => !!e).map(([e]) => e).join(" ") : String(e);
 }
-function v(e) {
+function b(e) {
 	let t = [];
 	for (let [n, r] of Object.entries(e)) {
 		if (r == null || !o.test(n)) continue;
-		let e = String(r).replace(/["<>{};]/g, "");
-		/expression\(/i.test(e) || /^\s*javascript:/i.test(e) || t.push(`${y(n)}:${e}`);
+		let e = String(r).replace(/["<>{};]/g, ""), i = e.replace(c, "");
+		/expression\(/i.test(i) || /^\s*javascript:/i.test(i) || t.push(`${x(n)}:${e}`);
 	}
 	return t.join(";");
 }
-function y(e) {
+function x(e) {
 	return e.startsWith("--") ? e : e.replace(/[A-Z]/g, (e) => `-${e.toLowerCase()}`);
 }
-function b(e) {
-	return c.has(e) || /:(href|src|action|formaction|cite|data|poster)$/.test(e);
+function S(e) {
+	return l.has(e) || /:(href|src|action|formaction|cite|data|poster)$/.test(e);
 }
 //#endregion
-export { f as Fragment, u as jsx, p as jsxDEV, d as jsxs };
+export { p as Fragment, d as jsx, m as jsxDEV, f as jsxs };

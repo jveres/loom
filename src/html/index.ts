@@ -15,6 +15,9 @@ export type HtmlChild =
   | readonly HtmlChild[];
 
 export function unsafeHtml(value: string): Html {
+  // The one construction site for an Html value. `htmlMarker` is a runtime brand isHtml() checks
+  // for; it can't be typed as a property (it's a `Symbol.for`, not a `unique symbol`), so this
+  // single localized `as Html` is the trust boundary — mirrors the `brand()` seam in loom/dom.
   return {
     [htmlMarker]: true,
     value,
@@ -54,8 +57,11 @@ export function isHtml(value: unknown): value is Html {
   );
 }
 
-// Keep this map's keys in sync with the character class in escapeText's regex.
-const ENTITIES: Readonly<Record<string, string>> = {
+// The characters escapeText replaces. The map below is typed by this union, so the compiler enforces
+// that every one has an entity — keep this union and the regex character class in sync (both list
+// the same five characters) and a missing mapping becomes a type error rather than a silent hole.
+type EntityChar = "&" | "<" | ">" | '"' | "'";
+const ENTITIES: Readonly<Record<EntityChar, string>> = {
   "&": "&amp;",
   "<": "&lt;",
   ">": "&gt;",
@@ -64,7 +70,9 @@ const ENTITIES: Readonly<Record<string, string>> = {
 };
 
 export function escapeText(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => ENTITIES[char] as string);
+  // The regex matches only EntityChar, so the cast is a guarded narrowing (and indexing a finite-key
+  // record yields string, never undefined) — no `as string` on a possibly-missing lookup.
+  return value.replace(/[&<>"']/g, (char) => ENTITIES[char as EntityChar]);
 }
 
 // Quoted-attribute escaping needs the same entities as text content (escaping

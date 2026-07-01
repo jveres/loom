@@ -26,7 +26,7 @@ import {
   loomLogo,
   svgMarkup,
 } from "./icons.js";
-import { wireScrollFade } from "./scroll-fade.js";
+import { type ScrollFade, wireScrollFade } from "./scroll-fade.js";
 import { pauseStats, resumeStats, stopStats, wireStats } from "./stats.js";
 import {
   buildTracePane,
@@ -47,7 +47,7 @@ const THEME_ICONS: Record<Theme, string> = {
 
 /* ============================================================ module state ========= */
 
-type TabId = "stats" | "graph" | "trace";
+export type TabId = "stats" | "graph" | "trace";
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: "stats", label: "Info" },
   { id: "graph", label: "Graph" },
@@ -58,7 +58,7 @@ let panel: HTMLElement | null = null;
 let menuEl: HTMLElement | null = null;
 let bodyEl: HTMLElement | null = null;
 let closeMenuOnOutside: ((e: Event) => void) | null = null;
-const scrollFades: { refresh: () => void; dispose: () => void }[] = [];
+const scrollFades: ScrollFade[] = [];
 // Scopes for collective pause: the whole panel (paused when minimized) and, nested inside it, the
 // stats tab (paused when it isn't the active tab) — so a hidden subtree does no reactive work.
 let inspectorScope: Scope | null = null;
@@ -306,7 +306,7 @@ export function mountInspector(target: Element = document.body): void {
   ui = state<TabId>("stats", PANEL_OPTS);
 
   let theme = loadTheme();
-  const themeVal = (<span class="li-menu-val" />) as HTMLElement;
+  const themeVal = <span class="li-menu-val" />;
   const applyTheme = (): void => {
     panel?.setAttribute("data-theme", theme);
     menuEl?.setAttribute("data-theme", theme);
@@ -325,14 +325,14 @@ export function mountInspector(target: Element = document.body): void {
     lsSet(THEME_KEY, theme);
     applyTheme();
   });
-  const menu = (<div class="li-menu" hidden />) as HTMLElement;
+  const menu = <div class="li-menu" hidden />;
   menu.id = `${PANEL_ID}-menu`;
   menu.append(themeItem);
   menuEl = menu;
 
   // Trace-log window size — cycle 1k / 5k / 25k (how many events the Trace tab keeps).
   let logSize = loadLogSize();
-  const sizeVal = (<span class="li-menu-val" />) as HTMLElement;
+  const sizeVal = <span class="li-menu-val" />;
   const applyLogSize = (): void => {
     sizeVal.textContent = `${logSize / 1000}k`;
     setTraceWindow(logSize);
@@ -436,6 +436,8 @@ export function mountInspector(target: Element = document.body): void {
   // minimize), the vitals + heap timer in the stats scope (they feed only the stats tab, so their
   // observers/timer suspend when it's hidden and reconnect — buffered — on return). The spark sits
   // in the outer scope so it stays live across tab switches.
+  // Definite-assignment: scope() runs its callback synchronously (see loom's scope()), so both are
+  // assigned before the scope() call returns and before either is read below.
   let statsPane!: HTMLElement;
   let sparkEl!: HTMLElement;
   inspectorScope = scope(() => {
@@ -451,7 +453,7 @@ export function mountInspector(target: Element = document.body): void {
   // Panes: Info (stats), Graph, and Trace are each their own module.
   const panes = new Map<TabId, HTMLElement>();
   const tabBtns = new Map<TabId, HTMLElement>();
-  bodyEl = (<div class="li-body li-fade-y" />) as HTMLElement;
+  bodyEl = <div class="li-body li-fade-y" />;
   for (const t of TABS) {
     const pane =
       t.id === "stats"
@@ -468,7 +470,7 @@ export function mountInspector(target: Element = document.body): void {
     revealCell(id);
   });
 
-  const tabscroll = (<div class="li-tabscroll" />) as HTMLElement;
+  const tabscroll = <div class="li-tabscroll" />;
   for (const t of TABS) {
     const btn = (
       <button type="button" class="li-tab">
@@ -516,7 +518,12 @@ export function mountInspector(target: Element = document.body): void {
   makeDraggable(bar, panel);
   makeResizable(resize, panel);
   closeMenuOnOutside = (e: Event): void => {
-    if (!menu.hidden && !menu.contains(e.target as Node) && e.target !== gear)
+    const target = e.target instanceof Node ? e.target : null;
+    if (
+      !menu.hidden &&
+      (target === null || !menu.contains(target)) &&
+      e.target !== gear
+    )
       closeMenu();
   };
   document.addEventListener("pointerdown", closeMenuOnOutside);

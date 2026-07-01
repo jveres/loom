@@ -15,7 +15,9 @@ function e(e) {
 		f > u && (f = u);
 		let p = /* @__PURE__ */ new Set();
 		for (let n = d; n < f; n++) {
-			let i = a.at(n), s = e.key(i);
+			let i = a.at(n);
+			if (i === void 0) continue;
+			let s = e.key(i);
 			p.add(s);
 			let c = o.get(s) ?? null, l = e.render(i, c);
 			l.style.transform = `translateY(${n * t}px)`, c === null ? (r.append(l), o.set(s, l)) : l !== c && (c.replaceWith(l), o.set(s, l));

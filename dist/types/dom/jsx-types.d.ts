@@ -7,38 +7,57 @@ interface DomEventMap {
     blur: FocusEvent;
     change: Event;
     click: MouseEvent;
+    contextmenu: MouseEvent;
     dblclick: MouseEvent;
+    drag: DragEvent;
+    dragend: DragEvent;
+    dragenter: DragEvent;
+    dragleave: DragEvent;
+    dragover: DragEvent;
+    dragstart: DragEvent;
+    drop: DragEvent;
     focus: FocusEvent;
+    focusin: FocusEvent;
+    focusout: FocusEvent;
     input: InputEvent;
     keydown: KeyboardEvent;
+    keypress: KeyboardEvent;
     keyup: KeyboardEvent;
     mousedown: MouseEvent;
+    mouseenter: MouseEvent;
+    mouseleave: MouseEvent;
+    mousemove: MouseEvent;
+    mouseout: MouseEvent;
+    mouseover: MouseEvent;
     mouseup: MouseEvent;
     pointercancel: PointerEvent;
     pointerdown: PointerEvent;
+    pointerenter: PointerEvent;
+    pointerleave: PointerEvent;
     pointermove: PointerEvent;
     pointerup: PointerEvent;
+    scroll: Event;
     submit: SubmitEvent;
     tap: PointerEvent;
+    touchcancel: TouchEvent;
+    touchend: TouchEvent;
+    touchmove: TouchEvent;
+    touchstart: TouchEvent;
+    wheel: WheelEvent;
 }
 type EventProps<TElement extends Element> = {
     [K in keyof DomEventMap as `on${K & string}`]?: EventHandler<TElement, DomEventMap[K]>;
 };
-type ElementProps<TElement extends HTMLElement> = Props & EventProps<TElement> & {
+type SharedProps<TElement extends Element> = Props & EventProps<TElement> & {
     children?: Child;
+    onunmount?: () => void;
+    [name: `aria-${string}`]: unknown;
+    [name: `data-${string}`]: unknown;
+};
+type ElementProps<TElement extends HTMLElement> = SharedProps<TElement> & {
     htmlFor?: string;
-    key?: string | number;
-    onunmount?: () => void;
-    [name: `aria-${string}`]: unknown;
-    [name: `data-${string}`]: unknown;
 };
-type SvgProps<TElement extends SVGElement> = Props & EventProps<TElement> & {
-    children?: Child;
-    key?: string | number;
-    onunmount?: () => void;
-    [name: `aria-${string}`]: unknown;
-    [name: `data-${string}`]: unknown;
-};
+type SvgProps<TElement extends SVGElement> = SharedProps<TElement>;
 export declare namespace JSX {
     type Element = HTMLElement;
     type ElementType = string | Component;

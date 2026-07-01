@@ -11,19 +11,43 @@ interface DomEventMap {
   blur: FocusEvent;
   change: Event;
   click: MouseEvent;
+  contextmenu: MouseEvent;
   dblclick: MouseEvent;
+  drag: DragEvent;
+  dragend: DragEvent;
+  dragenter: DragEvent;
+  dragleave: DragEvent;
+  dragover: DragEvent;
+  dragstart: DragEvent;
+  drop: DragEvent;
   focus: FocusEvent;
+  focusin: FocusEvent;
+  focusout: FocusEvent;
   input: InputEvent;
   keydown: KeyboardEvent;
+  keypress: KeyboardEvent;
   keyup: KeyboardEvent;
   mousedown: MouseEvent;
+  mouseenter: MouseEvent;
+  mouseleave: MouseEvent;
+  mousemove: MouseEvent;
+  mouseout: MouseEvent;
+  mouseover: MouseEvent;
   mouseup: MouseEvent;
   pointercancel: PointerEvent;
   pointerdown: PointerEvent;
+  pointerenter: PointerEvent;
+  pointerleave: PointerEvent;
   pointermove: PointerEvent;
   pointerup: PointerEvent;
+  scroll: Event;
   submit: SubmitEvent;
   tap: PointerEvent;
+  touchcancel: TouchEvent;
+  touchend: TouchEvent;
+  touchmove: TouchEvent;
+  touchstart: TouchEvent;
+  wheel: WheelEvent;
 }
 type EventProps<TElement extends Element> = {
   [K in keyof DomEventMap as `on${K & string}`]?: EventHandler<
@@ -31,30 +55,32 @@ type EventProps<TElement extends Element> = {
     DomEventMap[K]
   >;
 };
-type ElementProps<TElement extends HTMLElement> = Props &
+// The fields every element's props share, regardless of HTML vs SVG (Props already carries key/class/
+// style). ElementProps and SvgProps differ only in `htmlFor`, so both build on this to avoid drift.
+type SharedProps<TElement extends Element> = Props &
   EventProps<TElement> & {
     children?: Child;
-    htmlFor?: string;
-    key?: string | number;
     // Cleanup run when the node is torn down the Loom way (remove()/dispose()); not a DOM event.
     onunmount?: () => void;
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;
   };
+type ElementProps<TElement extends HTMLElement> = SharedProps<TElement> & {
+  htmlFor?: string;
+};
 // SVG attributes are largely hyphenated (stroke-width) or camelCase (viewBox); the
 // `Record<string, unknown>` index in Props already admits both, so SVG props only need the
 // shared structural fields plus SVG-typed events.
-type SvgProps<TElement extends SVGElement> = Props &
-  EventProps<TElement> & {
-    children?: Child;
-    key?: string | number;
-    // Cleanup run when the node is torn down the Loom way (remove()/dispose()); not a DOM event.
-    onunmount?: () => void;
-    [name: `aria-${string}`]: unknown;
-    [name: `data-${string}`]: unknown;
-  };
+type SvgProps<TElement extends SVGElement> = SharedProps<TElement>;
 
 export namespace JSX {
+  // Deliberate pragmatism: every JSX expression types as HTMLElement, including SVG (`<svg>`,
+  // `<circle>`) and components (which may return text/null/arrays). A truthful `HTMLElement |
+  // SVGElement | Child` union would type as the common base `Element` at every `return <jsx>` and so
+  // force narrowing casts through every builder, the panel wiring, and each `.style`/`.offsetHeight`
+  // access — trading a rare, localized SVG cast for pervasive ones. Consumers of SVG-specific APIs
+  // (rare here) cast at the point of use instead; `jsx()`'s overloads still return precise element
+  // types when called directly. Same tradeoff React/Preact make with an opaque JSX.Element.
   export type Element = HTMLElement;
   export type ElementType = string | Component;
 
