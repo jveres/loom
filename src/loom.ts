@@ -142,6 +142,10 @@ interface EffectNode extends NodeBase {
   deferred: boolean; // route re-runs to the deferred lane instead of the synchronous flush
   deferredQueued: boolean; // currently in deferredQueue (O(1) dedup, replaces an includes() scan)
   maxStale: number; // deferred lane: guaranteed-refresh floor in ms
+  // Deferred lane: absolute fire-by time (now()+maxStale) stamped at enqueue. A leftover from a
+  // budget-exhausted drain reschedules with the time REMAINING to this, not a fresh maxStale — so
+  // sustained load can't stretch staleness past the documented floor.
+  deferDeadline: number;
 }
 
 // A non-effect resource owned by a scope (a polled timer, a lazy source's connection): suspended
@@ -160,6 +164,9 @@ interface ScopeNode {
   readonly resources: ScopeResource[];
   readonly children: ScopeNode[];
   readonly parent: ScopeNode | undefined;
+  // This scope's slot in parent.children — so stopping a child swap-removes in O(1) instead of an
+  // indexOf scan + splice (O(siblings) per stop, quadratic across a churned sibling set).
+  childIndex: number;
   // Default node options (internal/label) applied to everything created in the scope,
   // already merged with any ancestor scope's defaults.
   readonly options: NodeOptions | undefined;
@@ -210,13 +217,24 @@ let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off 
 let inspectEnabled = false;
 let onError: ErrorHandler | undefined;
 const inspectRefs = new Map<number, WeakRef<NodeBase>>();
+// Reclaims a churned node's registry entry as soon as GC collects it — inspect()'s lazy pruning
+// only runs on pulls, so inspection left on without an inspector polling would otherwise
+// accumulate dead WeakRefs indefinitely. Inspection-mode only (registered in registerNode).
+const inspectReaper: FinalizationRegistry<number> | undefined =
+  typeof FinalizationRegistry === "undefined"
+    ? undefined
+    : new FinalizationRegistry((id) => {
+        inspectRefs.delete(id);
+      });
 // Each public accessor (a state source, computed read, or effect stop) carries a hidden handle to
 // its node via this private symbol — so trigger() resolves a node in O(1) without the
 // per-create WeakMap registration create-heavy workloads would otherwise pay even with inspection off.
 const NODE = Symbol("loom.node");
 type NodeHandle = { [NODE]?: NodeBase | undefined };
 function tagNode(accessor: object, node: NodeBase): void {
-  Object.defineProperty(accessor, NODE, { value: node });
+  // A plain store, not defineProperty — ~5x cheaper, and this runs on every create. The key is a
+  // private unexported symbol, so enumerability is invisible outside getOwnPropertySymbols.
+  (accessor as NodeHandle)[NODE] = node;
 }
 function nodeOf(accessor: object): NodeBase | undefined {
   return (accessor as NodeHandle)[NODE];
@@ -409,6 +427,7 @@ export function scope(fn: () => void, options?: NodeOptions): Scope {
     resources: [],
     children: [],
     parent: activeScope,
+    childIndex: activeScope !== undefined ? activeScope.children.length : -1,
     // Inherit the parent scope's defaults, letting this scope's own options override.
     options: mergeOptions(activeScope?.options, options),
     paused: false,
@@ -462,9 +481,18 @@ function stopScope(node: ScopeNode): void {
   node.resources.length = 0;
   const parent = node.parent;
   // When the parent is tearing us down it clears its own list, so only self-detach otherwise.
+  // Swap-remove via childIndex (mirroring stopEffect's scope.effects handling) keeps each stop O(1).
   if (parent !== undefined && !parent.stopped) {
-    const index = parent.children.indexOf(node);
-    if (index >= 0) parent.children.splice(index, 1);
+    const children = parent.children;
+    const i = node.childIndex;
+    const last = children.length - 1;
+    if (i >= 0 && i <= last) {
+      const moved = children[last] as ScopeNode;
+      children[i] = moved;
+      moved.childIndex = i;
+      children.pop();
+    }
+    node.childIndex = -1;
   }
 }
 
@@ -1111,6 +1139,7 @@ function registerNode(
   };
   node.meta = meta;
   inspectRefs.set(id, new WeakRef(node));
+  inspectReaper?.register(node, id);
   return meta;
 }
 
@@ -1204,9 +1233,10 @@ function nodeValue(node: NodeBase): unknown {
   }
 }
 
-function now(): number {
-  return typeof performance === "undefined" ? Date.now() : performance.now();
-}
+// Resolved once at module load — this sits on the deferred-lane scheduling paths, so no per-call
+// typeof-global check. Never called during module init, so the const's position is safe.
+const now: () => number =
+  typeof performance === "undefined" ? Date.now : () => performance.now();
 
 function createStateNode<T>(initial: T): StateNode<T> {
   return nodeShape<StateNode<T>>({
@@ -1262,6 +1292,7 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
     deferred: false,
     deferredQueued: false,
     maxStale: 0,
+    deferDeadline: 0,
     meta: undefined,
     subs: undefined,
     subsTail: undefined,
@@ -1553,26 +1584,28 @@ function defaultDeferScheduler(
 }
 
 // Add a deferred effect to the lane (clearing Watching, as queueEffect does, so the system won't
-// re-notify until it runs) and ensure a drain is scheduled to fire within its maxStale. Dedup the
-// queue: flushScope can re-offer a still-dirty effect that's already queued (pause→resume mid-flight).
+// re-notify until it runs) and ensure a drain is scheduled to fire by its deadline. Dedup the
+// queue: flushScope can re-offer a still-dirty effect that's already queued (pause→resume
+// mid-flight) — an already-queued effect's deadline is covered by the drain scheduled when it was
+// enqueued (or by the end-of-drain reschedule), so the re-offer path stays clock-free.
 function deferEffect(node: EffectNode): void {
   node.flags &= ~Watching;
-  if (!node.deferredQueued) {
-    node.deferredQueued = true;
-    deferredQueue.push(node);
-  }
-  scheduleDrain(node.maxStale);
+  if (node.deferredQueued) return;
+  node.deferredQueued = true;
+  deferredQueue.push(node);
+  const deadline = now() + node.maxStale;
+  node.deferDeadline = deadline;
+  scheduleDrain(deadline, node.maxStale);
 }
 
-function scheduleDrain(maxStale: number): void {
-  // Compare absolute fire-by times: a pending drain that already fires in time stands; a tighter
-  // floor (accounting for the time the pending drain has already waited) replaces it.
-  const deadline = now() + maxStale;
+// Compare absolute fire-by times: a pending drain that already fires in time stands; a tighter
+// deadline replaces it. `timeout` is the relative floor handed to the scheduler.
+function scheduleDrain(deadline: number, timeout: number): void {
   if (drainScheduled && drainDeadline <= deadline) return;
   drainCancel?.();
   drainScheduled = true;
   drainDeadline = deadline;
-  drainCancel = deferScheduler(drainDeferred, maxStale);
+  drainCancel = deferScheduler(drainDeferred, timeout);
 }
 
 // Run queued deferred effects while there's budget; reschedule any leftover. Each runs via runEffect
@@ -1595,12 +1628,15 @@ function drainDeferred(hasBudget: () => boolean): void {
     deferredQueue.length = 0;
     deferHead = 0;
   } else {
+    // Leftovers keep their enqueue-time deadlines: reschedule with the time remaining to the
+    // soonest one, not a fresh maxStale.
     let soonest = Number.POSITIVE_INFINITY;
     for (let i = deferHead; i < deferredQueue.length; i++) {
       const n = deferredQueue[i];
-      if (n !== undefined && n.maxStale < soonest) soonest = n.maxStale;
+      if (n !== undefined && n.deferDeadline < soonest)
+        soonest = n.deferDeadline;
     }
-    scheduleDrain(soonest);
+    scheduleDrain(soonest, Math.max(0, soonest - now()));
   }
 }
 

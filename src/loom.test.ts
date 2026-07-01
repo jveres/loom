@@ -1255,22 +1255,27 @@ describe("loom coverage", () => {
     expect(keep).toHaveLength(4);
   });
 
-  it("now() falls back to Date.now when performance is missing", () => {
+  it("now() falls back to Date.now when performance is missing at load", async () => {
+    // The clock is resolved once at module load, so the fallback needs a fresh module instance
+    // imported while `performance` is absent — deleting it at runtime wouldn't be seen.
     const original = globalThis.performance;
     // @ts-expect-error force the fallback branch in now()
     globalThis.performance = undefined;
+    vi.resetModules();
     try {
-      const m = meter([events.flush]); // a flush meter makes now() run for the timing
-      const a = state(0);
-      const e = effect(() => {
+      const loom = await import("./loom.js");
+      const m = loom.meter([loom.events.flush]); // a flush meter makes now() run for the timing
+      const a = loom.state(0);
+      const e = loom.effect(() => {
         a();
       });
-      a(1); // flush with timing -> now() called while performance is undefined
+      a(1); // flush with timing -> now() runs on the Date.now fallback
       e();
       expect(m.read()["loom:flush"]?.count ?? 0).toBeGreaterThan(0);
       m.stop();
     } finally {
       globalThis.performance = original;
+      vi.resetModules();
     }
   });
 
@@ -1536,6 +1541,32 @@ describe("loom deferred effects", () => {
     fire?.(() => true);
     expect(ran).toEqual([0, 1, 2]); // the leftover ran next time
     for (const s of stops) s();
+  });
+
+  it("a budget-exhausted leftover reschedules with the time remaining, not a fresh maxStale", () => {
+    let captured = -1;
+    configure({
+      deferScheduler: (drain, maxStale) => {
+        captured = maxStale;
+        fire = drain;
+        return () => {};
+      },
+    });
+    let t = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => t);
+    try {
+      const a = state(0);
+      const stop = effect(() => a(), { defer: true });
+      a(1);
+      expect(captured).toBe(200); // scheduled with the full floor at enqueue
+      t = 150; // 150ms pass before the drain fires, with no budget to run anything
+      fire?.(() => false);
+      expect(captured).toBe(50); // the remainder of the original deadline — total staleness stays ≤ 200
+      fire?.(() => true);
+      stop();
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 
