@@ -1,6 +1,6 @@
 import { createReactiveSystem as e } from "alien-signals/system";
 //#region src/loom.ts
-var t = 1, n = 2, r = 16, i = 32, a = 64, o = 0, s = 0, c = 0, l = 0, u = 0, d, f, p = [], m = [], h = 0, g = !1, _ = Infinity, v, ee = 200, te = at, ne = 5, re = 0, ie = 0, y = 0, b = !1, x, S = /* @__PURE__ */ new Map(), ae = typeof FinalizationRegistry > "u" ? void 0 : new FinalizationRegistry((e) => {
+var t = 1, n = 2, r = 16, i = 32, a = 64, o = 0, s = 0, c = 0, l = 0, u = 0, d, f, p = [], m = [], h = 0, g = !1, _ = Infinity, v, ee = 200, te = it, ne = 5, re = 0, ie = 0, y = 0, b = !1, x, S = /* @__PURE__ */ new Map(), ae = typeof FinalizationRegistry > "u" ? void 0 : new FinalizationRegistry((e) => {
 	S.delete(e);
 }), oe = Symbol("loom.node");
 function C(e, t) {
@@ -12,14 +12,14 @@ function se(e) {
 var { link: ce, unlink: w, propagate: T, checkDirty: le, shallowPropagate: E } = e({
 	update(e) {
 		switch (K(e)) {
-			case "computed": return nt(e);
+			case "computed": return tt(e);
 			case "state": return X(e);
 			default: return e.flags = t, !0;
 		}
 	},
 	notify(e) {
 		let t = e;
-		t.scope !== void 0 && k(t.scope) || (t.deferred ? ot(t) : rt(t));
+		t.scope !== void 0 && k(t.scope) || xe(t);
 	},
 	unwatched(e) {
 		switch (K(e)) {
@@ -37,13 +37,13 @@ var { link: ce, unlink: w, propagate: T, checkDirty: le, shallowPropagate: E } =
 	}
 });
 function D(e, t) {
-	let n = qe(e), r = Qe.bind(n);
+	let n = Ke(e), r = Ze.bind(n);
 	n.source = r;
 	let i = G(n, "state", t);
 	return C(r, n), U.meters !== 0 && i?.internal !== !0 && U.seq++, r;
 }
 function ue(e, t, n) {
-	let r = Je(e, t), i = $e.bind(r), a = G(r, "state", n);
+	let r = qe(e, t), i = Qe.bind(r), a = G(r, "state", n);
 	C(i, r);
 	let o = r;
 	return f?.resources.push({
@@ -55,7 +55,7 @@ function ue(e, t, n) {
 function de(e) {
 	e.active = !0;
 	try {
-		e.disconnect = e.connect((t) => et(e, t));
+		e.disconnect = e.connect((t) => $e(e, t));
 	} catch (t) {
 		throw e.active = !1, t;
 	}
@@ -70,11 +70,11 @@ function fe(e) {
 	e.active || e.subs === void 0 || de(e);
 }
 function pe(e, t) {
-	let n = Ye(e), r = tt.bind(n), i = G(n, "computed", t);
+	let n = Je(e), r = et.bind(n), i = G(n, "computed", t);
 	return C(r, n), U.meters !== 0 && i?.internal !== !0 && U.seq++, r;
 }
 function me(e, t) {
-	let n = Xe(e);
+	let n = Ye(e);
 	f !== void 0 && (n.scope = f, n.scopeIndex = f.effects.length, f.effects.push(n)), t?.defer === !0 && (n.deferred = !0, n.maxStale = t.maxStale ?? ee);
 	let r = G(n, "effect", t);
 	U.meters !== 0 && r?.internal !== !0 && U.seq++;
@@ -82,7 +82,7 @@ function me(e, t) {
 	i !== void 0 && (ce(n, i, 0), i.flags |= a);
 	let o;
 	try {
-		s++, n.cleanup = lt(n.fn());
+		s++, n.cleanup = ct(n.fn());
 	} catch (e) {
 		o = { error: e };
 	} finally {
@@ -90,7 +90,7 @@ function me(e, t) {
 	}
 	if (o !== void 0) {
 		if (x === void 0) throw Q.call(n), o.error;
-		ut(o.error, n);
+		lt(o.error, n);
 	}
 	r && r.runs++, V.meters !== 0 && r?.internal !== !0 && V.seq++;
 	let c = Q.bind(n);
@@ -111,7 +111,7 @@ function ge(e, t) {
 		children: [],
 		parent: f,
 		childIndex: f === void 0 ? -1 : f.children.length,
-		options: ze(f?.options, t),
+		options: Ve(f?.options, t),
 		paused: !1,
 		pausedCount: f?.pausedCount ?? 0,
 		stopped: !1
@@ -128,8 +128,8 @@ function ge(e, t) {
 	}
 	return {
 		stop: () => j(n),
-		pause: () => _e(n),
-		resume: () => ve(n)
+		pause: () => ve(n),
+		resume: () => ye(n)
 	};
 }
 function k(e) {
@@ -149,34 +149,38 @@ function j(e) {
 	for (let t of e.resources) t.stop();
 	e.resources.length = 0;
 	let t = e.parent;
-	if (t !== void 0 && !t.stopped) {
-		let n = t.children, r = e.childIndex, i = n.length - 1;
-		if (r >= 0 && r <= i) {
-			let e = n[i];
-			n[r] = e, e.childIndex = r, n.pop();
-		}
-		e.childIndex = -1;
-	}
+	t !== void 0 && !t.stopped && (_e(t.children, e.childIndex, (e, t) => {
+		e.childIndex = t;
+	}), e.childIndex = -1);
 }
-function _e(e) {
+function _e(e, t, n) {
+	let r = e.length - 1;
+	if (t < 0 || t > r) return;
+	let i = e[r];
+	e[t] = i, n(i, t), e.pop();
+}
+function ve(e) {
 	if (e.paused) return;
 	let t = !k(e);
 	e.paused = !0, A(e, 1), t && M(e, (e) => e.pause());
 }
-function ve(e) {
-	e.paused && (e.paused = !1, A(e, -1), !k(e) && (M(e, (e) => e.resume()), ye(e), c === 0 && s === 0 && Z()));
+function ye(e) {
+	e.paused && (e.paused = !1, A(e, -1), !k(e) && (M(e, (e) => e.resume()), be(e), c === 0 && s === 0 && Z()));
 }
 function M(e, t) {
 	for (let n of e.resources) t(n);
 	for (let n of e.children) n.paused || M(n, t);
 }
-function ye(e) {
+function be(e) {
 	if (!k(e)) {
-		for (let t of e.effects) t.flags & 48 && (t.deferred ? ot(t) : rt(t));
-		for (let t of e.children) ye(t);
+		for (let t of e.effects) t.flags & 48 && xe(t);
+		for (let t of e.children) be(t);
 	}
 }
-function be(e, t, n) {
+function xe(e) {
+	e.deferred ? at(e) : nt(e);
+}
+function Se(e, t, n) {
 	let r = D(e(), n), i, a = () => {
 		i = setInterval(() => r(e()), t);
 	}, o = () => {
@@ -190,14 +194,14 @@ function be(e, t, n) {
 		stop: o
 	}), Object.assign(() => r(), { stop: o });
 }
-function xe(e) {
+function Ce(e) {
 	let t = se(e);
 	if (t !== void 0) {
 		let e = t.subs;
 		e !== void 0 && (T(e, s > 0), E(e)), c === 0 && Z();
 		return;
 	}
-	let n = Ze(), r = Y(n);
+	let n = Xe(), r = Y(n);
 	try {
 		e();
 	} finally {
@@ -212,7 +216,7 @@ function xe(e) {
 		c === 0 && Z();
 	}
 }
-function Se(e) {
+function we(e) {
 	let t = Y(void 0);
 	try {
 		return e();
@@ -220,17 +224,17 @@ function Se(e) {
 		Y(t);
 	}
 }
-function Ce(e, t) {
+function Te(e, t) {
 	e(t(e()));
 }
-function we(e, t) {
-	t(e()), xe(e);
+function Ee(e, t) {
+	t(e()), Ce(e);
 }
-function Te(e, t) {
-	if (!ht(e)) throw TypeError("fields() expects a plain object.");
+function De(e, t) {
+	if (!mt(e)) throw TypeError("fields() expects a plain object.");
 	let n = {}, r = Object.keys(e), i = b ? ++ie : 0;
 	for (let a = 0; a < r.length; a++) {
-		let o = r[a], s = D(e[o], Be(t, o));
+		let o = r[a], s = D(e[o], He(t, o));
 		if (i !== 0) {
 			let e = se(s)?.meta;
 			e && (e.group = i, e.key = o);
@@ -239,17 +243,17 @@ function Te(e, t) {
 	}
 	return n;
 }
-var N = /* @__PURE__ */ new Map(), Ee = [], De = 1 << 20, Oe = 5;
-function ke(e) {
+var N = /* @__PURE__ */ new Map(), Oe = [], ke = 1 << 20, Ae = 5;
+function je(e) {
 	if (e === 0) return 0;
-	if (!Number.isInteger(e) || e < 0 || e > De) throw RangeError(`Channel capacity must be an integer in [0, ${De}]; got ${e}.`);
+	if (!Number.isInteger(e) || e < 0 || e > ke) throw RangeError(`Channel capacity must be an integer in [0, ${ke}]; got ${e}.`);
 	let t = 1;
 	for (; t < e;) t <<= 1;
 	return t;
 }
 function P(e, t) {
-	let n = ke(t?.capacity ?? 0), r = t?.fields ?? [];
-	if (r.length > Oe) throw RangeError(`A channel records up to ${Oe} fields; "${e}" declares ${r.length}.`);
+	let n = je(t?.capacity ?? 0), r = t?.fields ?? [];
+	if (r.length > Ae) throw RangeError(`A channel records up to ${Ae} fields; "${e}" declares ${r.length}.`);
 	let i = [];
 	if (n > 0) for (let e = 0; e < r.length; e++) i.push(Array(n));
 	return {
@@ -279,12 +283,12 @@ function F(e, t, n, r, i, a) {
 	}
 	e.seq++;
 }
-function Ae(e, t) {
+function Me(e, t) {
 	let n = e.meta;
 	n === void 0 ? R.seq++ : F(R, n.id, t.meta?.id, Date.now(), void 0, void 0);
 }
 function I(e, t) {
-	ce(e, t, o), R.meters !== 0 && e.meta?.internal !== !0 && (R.samples === 0 ? R.seq++ : Ae(e, t));
+	ce(e, t, o), R.meters !== 0 && e.meta?.internal !== !0 && (R.samples === 0 ? R.seq++ : Me(e, t));
 }
 function L(e) {
 	return {
@@ -297,19 +301,19 @@ function L(e) {
 		}
 	};
 }
-function je(e, t) {
+function Ne(e, t) {
 	if (e.startsWith("loom:")) throw Error(`Channel name "${e}" uses the reserved "loom:" prefix (built-in runtime channels).`);
 	let n = N.get(e);
 	if (n === void 0) n = P(e, t), N.set(e, n);
-	else if (t !== void 0 && (ke(t.capacity ?? 0) !== n.cap || !Me(t.fields ?? [], n.fields))) throw Error(`Channel "${e}" already declared with different options.`);
+	else if (t !== void 0 && (je(t.capacity ?? 0) !== n.cap || !Pe(t.fields ?? [], n.fields))) throw Error(`Channel "${e}" already declared with different options.`);
 	return L(n);
 }
-function Me(e, t) {
+function Pe(e, t) {
 	if (e.length !== t.length) return !1;
 	for (let n = 0; n < e.length; n++) if (e[n] !== t[n]) return !1;
 	return !0;
 }
-function Ne(e, t = "count") {
+function Fe(e, t = "count") {
 	let n = t === "samples", r = [];
 	for (let t of e) {
 		let e = N.get(t.name);
@@ -337,7 +341,7 @@ function Ne(e, t = "count") {
 		read() {
 			let e = {};
 			for (let t of r) {
-				let r = t.node, i = r.seq, a = i - t.cursor, o = 0, s = Ee;
+				let r = t.node, i = r.seq, a = i - t.cursor, o = 0, s = Oe;
 				if (n && r.cap !== 0 && a > 0) {
 					let e = a < r.cap ? a : r.cap;
 					o = a - e;
@@ -389,7 +393,7 @@ for (let e of [
 	U,
 	W
 ]) N.set(e.name, e);
-var Pe = {
+var Ie = {
 	read: /* @__PURE__ */ L(R),
 	write: /* @__PURE__ */ L(z),
 	compute: /* @__PURE__ */ L(B),
@@ -398,13 +402,13 @@ var Pe = {
 	create: /* @__PURE__ */ L(U),
 	dispose: /* @__PURE__ */ L(W)
 };
-function Fe(e) {
+function Le(e) {
 	return e;
 }
-function Ie(e) {
+function Re(e) {
 	e.inspect !== void 0 && (b = e.inspect), "onError" in e && (x = e.onError), e.deferScheduler !== void 0 && (te = e.deferScheduler);
 }
-function Le(e) {
+function ze(e) {
 	let t = e?.active === !0, n = [];
 	for (let [e, r] of S) {
 		let i = r.deref();
@@ -413,11 +417,11 @@ function Le(e) {
 			continue;
 		}
 		let a = i.meta;
-		a && (t && a.kind !== "effect" && i.subs === void 0 || n.push(Ve(i, a)));
+		a && (t && a.kind !== "effect" && i.subs === void 0 || n.push(Ue(i, a)));
 	}
 	return { nodes: n };
 }
-function Re() {
+function Be() {
 	let e = 0, t = 0, n = 0, r = 0, i = 0, a = 0;
 	for (let [o, s] of S) {
 		let c = s.deref();
@@ -439,7 +443,7 @@ function Re() {
 		unread: a
 	};
 }
-function ze(e, t) {
+function Ve(e, t) {
 	return e === void 0 ? t : t === void 0 ? e : {
 		...e,
 		...t
@@ -447,7 +451,7 @@ function ze(e, t) {
 }
 function G(e, t, n) {
 	if (!b) return;
-	let r = ze(f?.options, n), i = ++re, a = {
+	let r = Ve(f?.options, n), i = ++re, a = {
 		id: i,
 		disposed: !1,
 		internal: r?.internal === !0,
@@ -458,7 +462,7 @@ function G(e, t, n) {
 	};
 	return e.meta = a, S.set(i, new WeakRef(e)), ae?.register(e, i), a;
 }
-function Be(e, t) {
+function He(e, t) {
 	if (!e) return;
 	let n = { label: e.label ? `${e.label}.${t}` : t };
 	return e.internal === void 0 ? n : {
@@ -466,46 +470,35 @@ function Be(e, t) {
 		internal: e.internal
 	};
 }
-function Ve(e, t) {
+function Ue(e, t) {
 	let n = {
 		id: t.id,
-		deps: We(e),
+		deps: We(e.deps, "nextDep", "dep"),
 		disposed: t.disposed,
 		internal: t.internal,
 		kind: t.kind,
 		label: t.label,
 		runs: t.runs,
-		subs: Ge(e)
-	}, r = Ue(e, t), i = t.target?.deref();
-	return He(n, r, i, Ke(e), t);
+		subs: We(e.subs, "nextSub", "sub")
+	}, r = t.kind === "state" ? e.source : void 0;
+	r !== void 0 && (n.source = r);
+	let i = t.target?.deref();
+	i !== void 0 && (n.target = i);
+	let a = Ge(e);
+	return a !== void 0 && (n.value = a), t.group !== void 0 && (n.group = t.group), t.key !== void 0 && (n.key = t.key), n;
 }
-function He(e, t, n, r, i) {
-	let a = { ...e };
-	return t !== void 0 && (a.source = t), n !== void 0 && (a.target = n), r !== void 0 && (a.value = r), i.group !== void 0 && (a.group = i.group), i.key !== void 0 && (a.key = i.key), a;
-}
-function Ue(e, t) {
-	if (t.kind === "state") return e.source;
-}
-function We(e) {
-	let t = [];
-	for (let n = e.deps; n !== void 0; n = n.nextDep) {
-		let e = n.dep.meta;
-		e && t.push(e.id);
+function We(e, t, n) {
+	let r = [];
+	for (let i = e; i !== void 0; i = i[t]) {
+		let e = i[n].meta;
+		e && r.push(e.id);
 	}
-	return t;
-}
-function Ge(e) {
-	let t = [];
-	for (let n = e.subs; n !== void 0; n = n.nextSub) {
-		let e = n.sub.meta;
-		e && t.push(e.id);
-	}
-	return t;
+	return r;
 }
 function K(e) {
 	return "getter" in e ? "computed" : "currentValue" in e ? "state" : "fn" in e ? "effect" : "watcher";
 }
-function Ke(e) {
+function Ge(e) {
 	switch (K(e)) {
 		case "state": return e.pendingValue;
 		case "computed": return e.value;
@@ -513,7 +506,7 @@ function Ke(e) {
 	}
 }
 var q = typeof performance > "u" ? Date.now : () => performance.now();
-function qe(e) {
+function Ke(e) {
 	return J({
 		currentValue: e,
 		meta: void 0,
@@ -524,7 +517,7 @@ function qe(e) {
 		flags: t
 	});
 }
-function Je(e, n) {
+function qe(e, n) {
 	return J({
 		currentValue: n,
 		pendingValue: n,
@@ -538,7 +531,7 @@ function Je(e, n) {
 		flags: t
 	});
 }
-function Ye(e) {
+function Je(e) {
 	return J({
 		value: void 0,
 		meta: void 0,
@@ -550,7 +543,7 @@ function Ye(e) {
 		getter: e
 	});
 }
-function Xe(e) {
+function Ye(e) {
 	return J({
 		fn: e,
 		cleanup: void 0,
@@ -568,7 +561,7 @@ function Xe(e) {
 		flags: 6
 	});
 }
-function Ze() {
+function Xe() {
 	return J({
 		deps: void 0,
 		depsTail: void 0,
@@ -583,7 +576,7 @@ function Y(e) {
 	let t = d;
 	return d = e, t;
 }
-function Qe(...e) {
+function Ze(...e) {
 	if (e.length) {
 		let t = e[0], n = this.pendingValue;
 		if (n !== t) {
@@ -603,7 +596,7 @@ function Qe(...e) {
 	let t = d;
 	return t !== void 0 && I(this, t), this.currentValue;
 }
-function $e() {
+function Qe() {
 	if (this.flags & r && X(this)) {
 		let e = this.subs;
 		e !== void 0 && E(e);
@@ -615,16 +608,16 @@ function $e() {
 	}
 	return this.currentValue;
 }
-function et(e, t) {
+function $e(e, t) {
 	if (e.pendingValue === t) return;
 	e.pendingValue = t, e.flags = 17;
 	let n = e.subs;
 	n !== void 0 && (T(n, s > 0), c === 0 && Z());
 }
-function tt() {
+function et() {
 	let e = this.flags, t = (e & r) !== 0;
 	if (!t && e & i && (t = le(this.deps, this), t || (this.flags = e & -33)), t) {
-		if (nt(this)) {
+		if (tt(this)) {
 			let e = this.subs;
 			e !== void 0 && E(e);
 		}
@@ -640,8 +633,8 @@ function tt() {
 	let n = d;
 	return n !== void 0 && I(this, n), this.value;
 }
-function nt(e) {
-	e.flags & a && pt(e), ft(e), e.flags = 5;
+function tt(e) {
+	e.flags & a && ft(e), dt(e), e.flags = 5;
 	let t = Y(e);
 	try {
 		o++;
@@ -650,7 +643,7 @@ function nt(e) {
 		let r = t !== n;
 		return r && B.meters !== 0 && e.meta?.internal !== !0 && B.seq++, r;
 	} finally {
-		d = t, e.flags &= -5, mt(e);
+		d = t, e.flags &= -5, pt(e);
 	}
 }
 function X(e) {
@@ -658,7 +651,7 @@ function X(e) {
 	let n = e.currentValue;
 	return e.currentValue = e.pendingValue, n !== e.currentValue;
 }
-function rt(e) {
+function nt(e) {
 	let t = e, r = u, i = r;
 	for (; t !== void 0 && (p[r++] = t, t.flags &= -3, t = t.subs?.sub, !(t === void 0 || !(t.flags & n))););
 	for (u = r; i < --r;) {
@@ -666,19 +659,19 @@ function rt(e) {
 		p[i++] = p[r], p[r] = e;
 	}
 }
-function it(e) {
+function rt(e) {
 	if (e.scope !== void 0 && k(e.scope)) return !1;
 	let t = e.flags;
 	if (t & r || t & i && le(e.deps, e)) {
-		if (t & a && pt(e), e.cleanup && (dt(e), !e.flags)) return !1;
-		ft(e), e.flags = 6;
+		if (t & a && ft(e), e.cleanup && (ut(e), !e.flags)) return !1;
+		dt(e), e.flags = 6;
 		let n = Y(e);
 		try {
-			o++, s++, e.cleanup = lt(e.fn());
+			o++, s++, e.cleanup = ct(e.fn());
 		} catch (t) {
-			ut(t, e);
+			lt(t, e);
 		} finally {
-			s--, d = n, e.flags &= -5, mt(e);
+			s--, d = n, e.flags &= -5, pt(e);
 		}
 		let r = e.meta;
 		return r && (r.runs++, V.meters !== 0 && r.internal !== !0 && V.seq++), r === void 0 || r.internal !== !0;
@@ -690,7 +683,7 @@ function Z() {
 	try {
 		for (; l < u;) {
 			let e = p[l];
-			p[l++] = void 0, e && it(e) && t++;
+			p[l++] = void 0, e && rt(e) && t++;
 		}
 	} finally {
 		for (; l < u;) {
@@ -700,7 +693,7 @@ function Z() {
 		l = 0, u = 0, t > 0 && H.meters !== 0 && F(H, t, e ? q() - e : 0, void 0, void 0, void 0);
 	}
 }
-function at(e, t) {
+function it(e, t) {
 	let n = globalThis;
 	if (typeof n.requestIdleCallback == "function") {
 		let r = n.requestIdleCallback((t) => {
@@ -715,19 +708,19 @@ function at(e, t) {
 	}, t);
 	return () => clearTimeout(r);
 }
-function ot(e) {
+function at(e) {
 	if (e.flags &= -3, e.deferredQueued) return;
 	e.deferredQueued = !0, m.push(e);
 	let t = q() + e.maxStale;
-	e.deferDeadline = t, st(t, e.maxStale);
+	e.deferDeadline = t, ot(t, e.maxStale);
 }
-function st(e, t) {
-	g && _ <= e || (v?.(), g = !0, _ = e, v = te(ct, t));
+function ot(e, t) {
+	g && _ <= e || (v?.(), g = !0, _ = e, v = te(st, t));
 }
-function ct(e) {
+function st(e) {
 	for (g = !1, _ = Infinity, v = void 0; h < m.length && e();) {
 		let e = m[h];
-		m[h] = void 0, h++, e !== void 0 && (e.deferredQueued = !1, e.flags !== 0 && it(e));
+		m[h] = void 0, h++, e !== void 0 && (e.deferredQueued = !1, e.flags !== 0 && rt(e));
 	}
 	if (h >= m.length) m.length = 0, h = 0;
 	else {
@@ -736,33 +729,27 @@ function ct(e) {
 			let n = m[t];
 			n !== void 0 && n.deferDeadline < e && (e = n.deferDeadline);
 		}
-		st(e, Math.max(0, e - q()));
+		ot(e, Math.max(0, e - q()));
 	}
 }
 function Q() {
 	let e = this.meta;
 	this.flags = 0, this.deferredQueued = !1;
 	let t = this.scope;
-	if (t !== void 0 && !t.stopped) {
-		let e = t.effects, n = this.scopeIndex, r = e.length - 1;
-		if (n >= 0 && n <= r) {
-			let t = e[r];
-			e[n] = t, t.scopeIndex = n, e.pop();
-		}
-		this.scope = void 0, this.scopeIndex = -1;
-	}
-	$(this);
+	t !== void 0 && !t.stopped && (_e(t.effects, this.scopeIndex, (e, t) => {
+		e.scopeIndex = t;
+	}), this.scope = void 0, this.scopeIndex = -1), $(this);
 	let n = this.subs;
-	n !== void 0 && w(n), this.cleanup && dt(this), !(!e || e.disposed) && (e.disposed = !0, S.delete(e.id), W.meters !== 0 && e.internal !== !0 && W.seq++);
+	n !== void 0 && w(n), this.cleanup && ut(this), !(!e || e.disposed) && (e.disposed = !0, S.delete(e.id), W.meters !== 0 && e.internal !== !0 && W.seq++);
 }
-function lt(e) {
+function ct(e) {
 	return typeof e == "function" ? e : void 0;
 }
-function ut(e, t) {
+function lt(e, t) {
 	if (x === void 0) throw e;
-	x(e, t.meta ? Ve(t, t.meta) : void 0);
+	x(e, t.meta ? Ue(t, t.meta) : void 0);
 }
-function dt(e) {
+function ut(e) {
 	let t = e.cleanup;
 	e.cleanup = void 0;
 	let n = Y(void 0);
@@ -772,10 +759,10 @@ function dt(e) {
 		d = n;
 	}
 }
-function ft(e) {
+function dt(e) {
 	e.depsTail = void 0;
 }
-function pt(e) {
+function ft(e) {
 	let t = e.depsTail;
 	for (; t !== void 0;) {
 		let n = t.prevDep, r = t.dep, i = K(r);
@@ -789,13 +776,13 @@ function $(e) {
 		w(t, e), t = n;
 	}
 }
-function mt(e) {
+function pt(e) {
 	let t = e.depsTail, n = t === void 0 ? e.deps : t.nextDep;
 	for (; n !== void 0;) n = w(n, e);
 }
-function ht(e) {
+function mt(e) {
 	let t = Object.getPrototypeOf(e);
 	return t === Object.prototype || t === null;
 }
 //#endregion
-export { xe as _, me as a, Le as c, we as d, be as f, D as g, ue as h, Ie as i, Re as l, ge as m, je as n, Pe as o, Fe as p, pe as r, Te as s, he as t, Ne as u, Se as v, Ce as y };
+export { Ce as _, me as a, ze as c, Ee as d, Se as f, D as g, ue as h, Re as i, Be as l, ge as m, Ne as n, Ie as o, Le as p, pe as r, De as s, he as t, Fe as u, we as v, Te as y };

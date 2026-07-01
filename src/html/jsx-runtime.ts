@@ -1,4 +1,4 @@
-import { propsWithoutKey } from "../jsx-props.js";
+import { cssPropName, propsWithoutKey } from "../jsx-props.js";
 import {
   escapeAttribute,
   type Html,
@@ -212,14 +212,9 @@ function serializeStyle(value: Record<string, unknown>): string {
       continue;
     }
 
-    parts.push(`${cssName(name)}:${cssValue}`);
+    parts.push(`${cssPropName(name)}:${cssValue}`);
   }
   return parts.join(";");
-}
-
-function cssName(name: string): string {
-  if (name.startsWith("--")) return name;
-  return name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
 
 function isUrlAttr(name: string): boolean {

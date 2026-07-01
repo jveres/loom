@@ -1,3 +1,4 @@
+import { cssPropName } from "../jsx-props.js";
 import {
   type EffectOptions,
   effect,
@@ -162,19 +163,16 @@ export function h(
 // it isn't observed by the inspector (which uses this to bind its own text without self-reporting).
 export function text(read: Read<unknown>, options?: EffectOptions): Text {
   const node = document.createTextNode("");
-  let previous = "";
-  const stop = untrack(() =>
-    effect(
-      () => {
-        const next = stringValue(read());
-        if (next === previous) return;
-        previous = next;
-        node.data = next;
-      },
-      { label: "dom.text", target: node, ...options },
-    ),
+  bindReactiveValue(
+    node,
+    "dom.text",
+    () => stringValue(read()),
+    (next) => {
+      node.data = next;
+    },
+    "",
+    options,
   );
-  own(node, stop);
   return node;
 }
 
@@ -455,7 +453,7 @@ function stopOwned(owned: OwnedEffect): void {
 
 function applyProps(node: Element, props: Props): void {
   for (const name in props) {
-    if (!Object.hasOwn(props, name)) continue;
+    if (!Object.hasOwn(props, name) || name === "children") continue;
     const value = props[name];
     if (value == null || (value === false && !isAriaAttr(name))) continue;
     if (name === "key") {
@@ -479,7 +477,8 @@ function applyProps(node: Element, props: Props): void {
       continue;
     }
     if (isAttrBinding(value)) {
-      bindAttr(node, brand<PropBinding>(value));
+      const binding = brand<PropBinding>(value);
+      bindAttr(node, binding.name, binding.read);
       continue;
     }
     if (name === "ontap" && typeof value === "function") {
@@ -491,7 +490,7 @@ function applyProps(node: Element, props: Props): void {
       continue;
     }
     if (typeof value === "function") {
-      bindAttr(node, { kind: "attr", name, read: value as Read<unknown> });
+      bindAttr(node, name, value as Read<unknown>);
       continue;
     }
     setAttr(node, name, value);
@@ -594,7 +593,7 @@ function applyStyleProp(node: Element, value: StyleProp): void {
   for (const name in value) {
     if (!Object.hasOwn(value, name)) continue;
     const styleValue = value[name];
-    const property = styleName(name);
+    const property = cssPropName(name);
     if (typeof styleValue === "function") {
       bindStyle(node, {
         kind: "style",
@@ -625,12 +624,26 @@ function bindClass(node: Element, binding: PropBinding): void {
   );
 }
 
-function bindAttr(node: Element, binding: PropBinding): void {
+/**
+ * Bind a reactive attribute on an existing element: `read()` re-runs as its dependencies change,
+ * and the attribute updates only when the resulting value actually differs (nullish/false removes
+ * it, true sets it empty — same coercion as a JSX attribute). The imperative sibling of `attr()`
+ * for call sites that hold the element directly; `options` relabels the binding or marks it
+ * `internal` (tooling built on loom — e.g. the inspector — binds without self-reporting).
+ */
+export function bindAttr(
+  node: Element,
+  name: string,
+  read: Read<unknown>,
+  options?: EffectOptions,
+): void {
   bindReactiveValue(
     node,
-    `dom.attr.${binding.name}`,
-    () => attrValue(binding.name, binding.read()),
-    (next) => setAttrValue(node, binding.name, next),
+    `dom.attr.${name}`,
+    () => attrValue(name, read()),
+    (next) => setAttrValue(node, name, next),
+    undefined,
+    options,
   );
 }
 
@@ -647,12 +660,16 @@ function bindStyle(node: Element, binding: PropBinding): void {
   );
 }
 
+// The one dedup-effect scaffold behind every binding (text/attr/class/style): run `read` in an
+// untracked-created effect, apply only on change, own the disposer on the node. `options` merges
+// over the defaults so a caller can relabel or mark the binding `internal`.
 function bindReactiveValue<T>(
-  node: Element,
+  node: Node,
   label: string,
   read: () => T,
   apply: (value: T) => void,
   initial?: T,
+  options?: EffectOptions,
 ): void {
   let previous = initial;
   const stop = untrack(() =>
@@ -663,10 +680,7 @@ function bindReactiveValue<T>(
         previous = next;
         apply(next);
       },
-      {
-        label,
-        target: node,
-      },
+      { label, target: node, ...options },
     ),
   );
   own(node, stop);
@@ -715,10 +729,6 @@ function isStyleBinding(value: unknown): value is StyleBinding {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function styleName(name: string): string {
-  return name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
 
 function isBinding<TKind extends "attr" | "class" | "style">(

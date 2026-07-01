@@ -58,10 +58,11 @@ function createJsx(type: JsxType, props: JsxProps): Child {
 function createIntrinsicElement(type: string, props: JsxProps): Element {
   if (!props) return h(type);
 
-  const children = props.children;
-  const hasSpecialProps =
-    "children" in props || "htmlFor" in props || "key" in props;
-  if (!hasSpecialProps) return h(type, props);
+  // Common case: applyProps skips `children` itself, so the props object passes through untouched.
+  // Only `htmlFor` (renamed to `for`) and a spread-in `key` (stripped) force a copy.
+  if (!("htmlFor" in props) && !("key" in props)) {
+    return h(type, props, props.children);
+  }
 
   const elementProps: Props & { for?: unknown } = {};
   for (const name in props) {
@@ -72,5 +73,5 @@ function createIntrinsicElement(type: string, props: JsxProps): Element {
     else elementProps[name] = props[name];
   }
 
-  return h(type, elementProps, children);
+  return h(type, elementProps, props.children);
 }

@@ -8,6 +8,7 @@
 // Panel seams: buildTracePane / renderTrace / showTrace / teardownTrace.
 import { type Meter, meter } from "loom";
 import { tap } from "loom/dom";
+import { type VirtualList, virtualList } from "loom/dom/virtual-list";
 import {
   events,
   inspect,
@@ -15,7 +16,6 @@ import {
   sampleOf,
   type WriteSample,
 } from "loom/observe";
-import { type VirtualList, virtualList } from "../dom/virtual-list.js";
 import { formatValue, valueClass } from "./format.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
 import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
@@ -261,14 +261,20 @@ export function renderTrace(): void {
     fresh.sort(
       (a, b) => sampleOf<ReadSample>(a.s).t - sampleOf<ReadSample>(b.s).t,
     );
-  const labels = labelMap();
+  labelsFresh = false; // let this drain re-snapshot the label map once if it meets a new node
   const prevTop = (traceFilter ? filterLog : traceLog)[0]?.seq ?? -1;
-  for (const { s, kind } of fresh) {
-    const row = makeRow(s, kind, labels);
-    traceLog.unshift(row);
+  // Build the new rows oldest→newest (seq must rise with recency), then prepend them in one splice —
+  // a per-row unshift would re-shift the whole log for every event (O(events × window)).
+  const newRows: TraceRow[] = [];
+  for (const { s, kind } of fresh) newRows.push(makeRow(s, kind));
+  newRows.reverse();
+  traceLog = newRows.concat(traceLog);
+  if (traceFilter) {
     // Accumulate matches into the filtered window too, so filtering keeps its own last-`windowSize`.
-    if (traceFilter && row.name.toLowerCase().includes(traceFilter))
-      filterLog.unshift(row);
+    const matches = newRows.filter((r) =>
+      r.name.toLowerCase().includes(traceFilter),
+    );
+    if (matches.length > 0) filterLog = matches.concat(filterLog);
   }
   if (traceLog.length > windowSize) traceLog.length = windowSize; // drop oldest past the window
   if (filterLog.length > windowSize) filterLog.length = windowSize;
@@ -299,6 +305,8 @@ export function teardownTrace(): void {
   liveDot = null;
   traceLog = [];
   filterLog = [];
+  labels.clear();
+  labelsFresh = false;
   lastTopSeq = -1;
   tracePaused = false;
   traceActive = false;
@@ -332,17 +340,14 @@ function applyView(): void {
 function makeRow(
   s: Readonly<Record<string, unknown>>,
   kind: "read" | "write",
-  labels: Map<number, string>,
 ): TraceRow {
   // read and write samples share id/t/by; ReadSample names exactly those common fields.
   const common = sampleOf<ReadSample>(s);
   const id = common.id;
-  const name = labels.get(id) ?? `#${id}`;
+  const name = labelOf(id);
   const timeText = trTime(common.t);
   const source = common.by;
-  const srcName =
-    source !== undefined ? (labels.get(source) ?? `#${source}`) : "";
-  const srcText = srcName ? `by ${srcName}` : "";
+  const srcText = source !== undefined ? `by ${labelOf(source)}` : "";
   if (kind === "read") {
     return {
       seq: rowSeq++,
@@ -376,12 +381,23 @@ function makeRow(
   };
 }
 
-// id → label for the current snapshot, so an event shows its cell/source name (disposed nodes fall
-// back to their id). Off the hot path — it runs on the heartbeat only while this tab is active.
-function labelMap(): Map<number, string> {
-  const m = new Map<number, string>();
-  for (const n of inspect().nodes) m.set(n.id, n.label);
-  return m;
+// id → label, so an event shows its cell/source name. Labels are immutable per node, so the map
+// persists across drains and is re-snapshotted — a full inspect() walk — at most once per drain,
+// and only when an event references an id it hasn't seen (a node created since the last snapshot).
+// A retained entry keeps naming a node after it's disposed; a never-seen id falls back to `#id`.
+const labels = new Map<number, string>();
+let labelsFresh = false; // has the current drain already re-snapshotted?
+
+function labelOf(id: number): string {
+  const hit = labels.get(id);
+  if (hit !== undefined) return hit;
+  if (!labelsFresh) {
+    labelsFresh = true;
+    for (const n of inspect().nodes) labels.set(n.id, n.label);
+    const found = labels.get(id);
+    if (found !== undefined) return found;
+  }
+  return `#${id}`;
 }
 
 function trRender(item: TraceRow, reuse: HTMLElement | null): HTMLElement {

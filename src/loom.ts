@@ -263,8 +263,7 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
       // Effects in a paused scope chain stay dirty and re-run on resume instead of queueing now.
       if (effectNode.scope !== undefined && scopePaused(effectNode.scope))
         return;
-      if (effectNode.deferred) deferEffect(effectNode);
-      else queueEffect(effectNode);
+      enqueueEffect(effectNode);
     },
     unwatched(node) {
       switch (kindOf(node)) {
@@ -488,17 +487,26 @@ function stopScope(node: ScopeNode): void {
   // When the parent is tearing us down it clears its own list, so only self-detach otherwise.
   // Swap-remove via childIndex (mirroring stopEffect's scope.effects handling) keeps each stop O(1).
   if (parent !== undefined && !parent.stopped) {
-    const children = parent.children;
-    const i = node.childIndex;
-    const last = children.length - 1;
-    if (i >= 0 && i <= last) {
-      const moved = children[last] as ScopeNode;
-      children[i] = moved;
+    swapRemove(parent.children, node.childIndex, (moved, i) => {
       moved.childIndex = i;
-      children.pop();
-    }
+    });
     node.childIndex = -1;
   }
+}
+
+// O(1) list removal: move the last element into slot `i` (telling it its new index via `reindex`)
+// and pop. Used by the scope-detach paths so a churned scope/effect set never pays an indexOf scan.
+function swapRemove<T>(
+  list: T[],
+  i: number,
+  reindex: (moved: T, index: number) => void,
+): void {
+  const last = list.length - 1;
+  if (i < 0 || i > last) return;
+  const moved = list[last] as T;
+  list[i] = moved;
+  reindex(moved, i);
+  list.pop();
 }
 
 function pauseScope(node: ScopeNode): void {
@@ -540,12 +548,16 @@ function walkResources(
 function flushScope(node: ScopeNode): void {
   if (scopePaused(node)) return;
   for (const effectNode of node.effects) {
-    if (effectNode.flags & (Dirty | Pending)) {
-      if (effectNode.deferred) deferEffect(effectNode);
-      else queueEffect(effectNode);
-    }
+    if (effectNode.flags & (Dirty | Pending)) enqueueEffect(effectNode);
   }
   for (const child of node.children) flushScope(child);
+}
+
+// Route an effect to its lane: deferred re-runs go off the critical path, the rest queue for the
+// synchronous flush.
+function enqueueEffect(node: EffectNode): void {
+  if (node.deferred) deferEffect(node);
+  else queueEffect(node);
 }
 
 // A polled source is a callable reactive read (like `state`/`computed`/`source`) that also carries a
@@ -1213,59 +1225,38 @@ function fieldOptions(
 }
 
 function inspectNode(node: NodeBase, meta: InspectMeta): InspectNode {
-  const base = {
+  const out: Writable<InspectNode> = {
     id: meta.id,
-    deps: idsFromDeps(node),
+    deps: linkedIds(node.deps, "nextDep", "dep"),
     disposed: meta.disposed,
     internal: meta.internal,
     kind: meta.kind,
     label: meta.label,
     runs: meta.runs,
-    subs: idsFromSubs(node),
+    subs: linkedIds(node.subs, "nextSub", "sub"),
   };
-  const source = sourceFromNode(node, meta);
-  const target = meta.target?.deref();
-  const value = nodeValue(node);
-  return inspectNodeWithOptionals(base, source, target, value, meta);
-}
-
-function inspectNodeWithOptionals(
-  base: Omit<InspectNode, "source" | "target" | "value" | "group" | "key">,
-  source: State<unknown> | undefined,
-  target: object | undefined,
-  value: unknown,
-  meta: InspectMeta,
-): InspectNode {
-  const out: Writable<InspectNode> = { ...base };
+  const source =
+    meta.kind === "state" ? (node as StateNode<unknown>).source : undefined;
   if (source !== undefined) out.source = source;
+  const target = meta.target?.deref();
   if (target !== undefined) out.target = target;
+  const value = nodeValue(node);
   if (value !== undefined) out.value = value;
   if (meta.group !== undefined) out.group = meta.group;
   if (meta.key !== undefined) out.key = meta.key;
   return out;
 }
 
-function sourceFromNode(
-  node: NodeBase,
-  meta: InspectMeta,
-): State<unknown> | undefined {
-  if (meta.kind !== "state") return undefined;
-  return (node as StateNode<unknown>).source;
-}
-
-function idsFromDeps(node: NodeBase): number[] {
+// Walk one side of a node's link list (deps via nextDep/dep, subs via nextSub/sub) collecting the
+// neighbors' inspect ids. Tooling-only path — never on the reactive hot path.
+function linkedIds(
+  head: Link | undefined,
+  next: "nextDep" | "nextSub",
+  peer: "dep" | "sub",
+): number[] {
   const ids: number[] = [];
-  for (let item = node.deps; item !== undefined; item = item.nextDep) {
-    const meta = (item.dep as NodeBase).meta;
-    if (meta) ids.push(meta.id);
-  }
-  return ids;
-}
-
-function idsFromSubs(node: NodeBase): number[] {
-  const ids: number[] = [];
-  for (let item = node.subs; item !== undefined; item = item.nextSub) {
-    const meta = (item.sub as NodeBase).meta;
+  for (let item = head; item !== undefined; item = item[next]) {
+    const meta = (item[peer] as NodeBase).meta;
     if (meta) ids.push(meta.id);
   }
   return ids;
@@ -1704,15 +1695,9 @@ function stopEffect(this: EffectNode): void {
   if (owner !== undefined && !owner.stopped) {
     // Swap-remove from scope.effects so a long-lived scope doesn't retain dead effects. Skipped while
     // the scope itself is stopping (stopScope iterates effects then clears the array wholesale).
-    const effects = owner.effects;
-    const i = this.scopeIndex;
-    const last = effects.length - 1;
-    if (i >= 0 && i <= last) {
-      const moved = effects[last] as EffectNode;
-      effects[i] = moved;
+    swapRemove(owner.effects, this.scopeIndex, (moved, i) => {
       moved.scopeIndex = i;
-      effects.pop();
-    }
+    });
     this.scope = undefined;
     this.scopeIndex = -1;
   }

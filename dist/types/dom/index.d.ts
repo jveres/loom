@@ -70,4 +70,12 @@ export declare function remove(node: Node): void;
  * which routes here; this export is for imperative call sites (e.g. the inspector).
  */
 export declare function tap(node: Element, handler: (event: PointerEvent) => void): void;
+/**
+ * Bind a reactive attribute on an existing element: `read()` re-runs as its dependencies change,
+ * and the attribute updates only when the resulting value actually differs (nullish/false removes
+ * it, true sets it empty — same coercion as a JSX attribute). The imperative sibling of `attr()`
+ * for call sites that hold the element directly; `options` relabels the binding or marks it
+ * `internal` (tooling built on loom — e.g. the inspector — binds without self-reporting).
+ */
+export declare function bindAttr(node: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
 export {};

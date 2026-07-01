@@ -5,12 +5,12 @@
 // cells at the root. Owns its module state; the panel drives it through five seams (buildGraphPane /
 // renderGraphThrottled / showGraph / clearGraphHighlight / teardownGraph).
 import type { State } from "loom";
-import { type InspectNode, inspect } from "loom/observe";
 import {
   type ListSource,
   type VirtualList,
   virtualList,
-} from "../dom/virtual-list.js";
+} from "loom/dom/virtual-list";
+import { type InspectNode, inspect } from "loom/observe";
 import { formatValue, valueClass } from "./format.js";
 import {
   ICON_BOUND,
@@ -39,6 +39,7 @@ type GraphItem =
     };
 let graphVList: VirtualList<GraphItem> | null = null;
 let graphById = new Map<number, InspectNode>();
+let graphByIdAt = 0; // performance.now() of the snapshot behind graphById (see highlightCell)
 let graphGroupsData: Array<{
   gid: number;
   label: string;
@@ -231,10 +232,15 @@ function gPaint(targets: Node[], on: boolean): void {
   }
 }
 // Outline the DOM node(s) a given cell drives — for callers outside the graph (the Trace tab).
-// Rebuilds the id→node map from a fresh snapshot since the graph itself may not have rendered;
-// clearGraphHighlight() removes it. A no-op highlight (no targets / unknown id) just clears.
+// The id→node map may be stale (the graph tab may not have rendered), so re-snapshot it — but at
+// most at the graph's own refresh cadence: sweeping the pointer down the trace list would otherwise
+// rebuild the whole graph snapshot once per row crossed. clearGraphHighlight() removes the overlay.
 export function highlightCell(id: number): void {
-  graphById = new Map(inspect({ active: true }).nodes.map((n) => [n.id, n]));
+  const t = performance.now();
+  if (t - graphByIdAt >= GRAPH_RENDER_MS) {
+    graphById = new Map(inspect({ active: true }).nodes.map((n) => [n.id, n]));
+    graphByIdAt = t;
+  }
   gPaint(gTargetsFor(id), true);
 }
 function gFlash(row: HTMLElement): void {
@@ -416,6 +422,7 @@ function renderGraph(): void {
   // of removed objects (alive until GC) that would otherwise balloon the tree under churn.
   const all = inspect({ active: true }).nodes;
   graphById = new Map(all.map((n) => [n.id, n]));
+  graphByIdAt = performance.now();
 
   // The tree holds state + computed cells only; views (effects) are reached by hover, not listed.
   const groups = new Map<number, InspectNode[]>();
@@ -509,4 +516,5 @@ export function teardownGraph(): void {
   graphSingles = [];
   graphCollapsed.clear();
   graphById = new Map();
+  graphByIdAt = 0;
 }

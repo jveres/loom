@@ -14,7 +14,7 @@ import {
   source,
   untrack,
 } from "loom";
-import { type Child, text, when } from "loom/dom";
+import { bindAttr as bindDomAttr, type Child, text, when } from "loom/dom";
 import {
   events,
   type FlushSample,
@@ -109,6 +109,7 @@ let heapSource: Polled<number> | null = null;
 // Derived health, recomputed each poll; the gauge / FPS / label bindings read these.
 let score = 100;
 let healthKey = "";
+let healthLabel = "";
 let healthReady = false;
 let fpsKey = "";
 
@@ -128,14 +129,16 @@ const sparkIn: number[] = [];
 const sparkOut: number[] = [];
 
 /* ---- binding helpers ---- */
+// The dom surface's dedup attribute binder, pre-branded internal so the inspector never observes
+// itself (same options text() gets at its call sites).
 function bindAttr(node: Element, name: string, read: () => string): void {
-  let prev: string | undefined;
-  bind(() => {
-    const next = read();
-    if (next === prev) return;
-    prev = next;
-    node.setAttribute(name, next);
-  });
+  bindDomAttr(node, name, read, PANEL_OPTS);
+}
+
+// Read a lazy web-vital source's value; reading it inside a binding is what wires its
+// PerformanceObserver on first use. 0 while the source isn't created yet.
+function vital(src: Read<number> | null): number {
+  return src?.() ?? 0;
 }
 
 // Read the heartbeat (so the binding re-runs each poll) then return the current value.
@@ -369,6 +372,9 @@ function buildHisto(): HTMLElement {
   for (let i = 0; i < FRAME_N; i++) {
     bars.push(<rect x={i + 0.1} width={0.8} y={20} height={0} />);
   }
+  // Everything a bar shows derives from its ms sample, so one number per bar dedups all three
+  // attribute writes — empty/steady bars (idle tails) cost nothing per tick.
+  const lastMs: number[] = new Array(FRAME_N).fill(-1);
   bind(() => {
     heartbeat?.();
     const off = bars.length - frameMs.length;
@@ -376,6 +382,8 @@ function buildHisto(): HTMLElement {
       const bar = bars[i];
       if (!bar) continue;
       const ms = i >= off ? (frameMs[i - off] ?? 0) : 0;
+      if (ms === lastMs[i]) continue;
+      lastMs[i] = ms;
       const hgt = Math.max(0, Math.min(20, (ms / 50) * 20));
       bar.setAttribute("y", String(20 - hgt));
       bar.setAttribute("height", String(hgt));
@@ -573,7 +581,7 @@ function buildStatsPane(): HTMLElement {
   const hlabel = <div class="li-hlabel" title={TIP.health} />;
   hlabel.append(
     text(
-      pulse(() => (fpsReady ? health(fps).label.toUpperCase() : "LOADING")),
+      pulse(() => (fpsReady ? healthLabel.toUpperCase() : "LOADING")),
       PANEL_OPTS,
     ),
   );
@@ -595,33 +603,28 @@ function buildStatsPane(): HTMLElement {
     </div>
   );
   // Main-thread blocking (long tasks) sits with lag as a responsiveness signal; lazy source.
-  const blockedValue = (): number => longTasksSource?.() ?? 0;
   side.append(
     vitalStat(
       "blocked",
       () => {
         if (!LONGTASKS_SUPPORTED) return "—";
-        const v = blockedValue();
+        const v = vital(longTasksSource);
         return v < 1000 ? `${v.toFixed(0)} ms` : `${(v / 1000).toFixed(1)} s`;
       },
       () => {
         if (!LONGTASKS_SUPPORTED) return "";
-        const v = blockedValue();
+        const v = vital(longTasksSource);
         return v <= 200 ? "h-ok" : v <= 600 ? "h-warn" : "h-bad";
       },
       TIP.blocked,
     ),
   );
-  // Reading these source values inside the bindings is what lazily wires their PerformanceObservers.
-  const clsValue = (): number => clsSource?.() ?? 0;
-  const lcpValue = (): number => lcpSource?.() ?? 0;
-  const inpValue = (): number => inpSource?.() ?? 0;
   side.append(
     vitalStat(
       "CLS",
-      () => clsValue().toFixed(2),
+      () => vital(clsSource).toFixed(2),
       () => {
-        const v = clsValue();
+        const v = vital(clsSource);
         return v < 0.1 ? "h-ok" : v < 0.25 ? "h-warn" : "h-bad";
       },
       TIP.cls,
@@ -630,16 +633,22 @@ function buildStatsPane(): HTMLElement {
   side.append(
     vitalStat(
       "LCP",
-      () => (lcpValue() ? `${(lcpValue() / 1000).toFixed(2)} s` : "—"),
-      () => vitalColor(lcpValue(), 2500, 4000),
+      () => {
+        const v = vital(lcpSource);
+        return v ? `${(v / 1000).toFixed(2)} s` : "—";
+      },
+      () => vitalColor(vital(lcpSource), 2500, 4000),
       TIP.lcp,
     ),
   );
   side.append(
     vitalStat(
       "INP",
-      () => (inpValue() ? `${inpValue().toFixed(0)} ms` : "—"),
-      () => vitalColor(inpValue(), 200, 500),
+      () => {
+        const v = vital(inpSource);
+        return v ? `${v.toFixed(0)} ms` : "—";
+      },
+      () => vitalColor(vital(inpSource), 200, 500),
       TIP.inp,
     ),
   );
@@ -773,6 +782,7 @@ function poll(): number {
     const h = health(fps);
     score = h.score;
     healthKey = h.key;
+    healthLabel = h.label;
     healthReady = true;
     fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
   }
@@ -959,7 +969,7 @@ export function stopStats(): void {
   lagWasHidden = false;
   healthReady = false;
   score = 100;
-  healthKey = fpsKey = "";
+  healthKey = healthLabel = fpsKey = "";
   nodeStates = nodeComputeds = nodeEffects = nodeViews = 0;
   nodeSources = nodeScopes = nodeChannels = nodeUnread = 0;
   sparkIn.length = 0;

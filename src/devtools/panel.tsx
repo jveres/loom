@@ -102,32 +102,29 @@ function loadLogSize(): number {
   const n = Number(lsGet(LOGSIZE_KEY));
   return LOG_SIZES.includes(n) ? n : 1000;
 }
-function loadPos(): { left: number; top: number } | null {
-  const raw = lsGet(POS_KEY);
+// A persisted numeric record (panel position/size): every named field must parse as a number, else
+// null (missing, malformed JSON, or a clobbered value all fall back to the defaults).
+function loadNumbers<K extends string>(
+  storageKey: string,
+  keys: readonly K[],
+): Record<K, number> | null {
+  const raw = lsGet(storageKey);
   if (!raw) return null;
   try {
     const v = JSON.parse(raw);
-    if (typeof v?.left === "number" && typeof v?.top === "number")
-      return { left: v.left, top: v.top };
+    const out = {} as Record<K, number>;
+    for (const key of keys) {
+      if (typeof v?.[key] !== "number") return null;
+      out[key] = v[key];
+    }
+    return out;
   } catch {
     /* malformed */
   }
   return null;
 }
-function loadSize(): { width: number; height: number } | null {
-  const raw = lsGet(SIZE_KEY);
-  if (!raw) return null;
-  try {
-    const v = JSON.parse(raw);
-    if (typeof v?.width === "number" && typeof v?.height === "number")
-      return { width: v.width, height: v.height };
-  } catch {
-    /* malformed */
-  }
-  return null;
-}
-let panelPos = loadPos();
-let panelSize = loadSize();
+let panelPos = loadNumbers(POS_KEY, ["left", "top"]);
+let panelSize = loadNumbers(SIZE_KEY, ["width", "height"]);
 
 /* ============================================================ chrome helpers ======= */
 
@@ -182,43 +179,62 @@ function bindPointerDrag(
   };
 }
 
+// The shared pointer-gesture session behind drag and resize: snapshot the rect, pin the panel to
+// left/top positioning (dragging/resizing can't work against right/bottom anchoring), capture the
+// pointer, and freeze text selection for the duration. `onMove` gets the pointerdown-time rect to do
+// its per-gesture math against; `onCommit` runs on release (persist the result, restore cursor).
+function startDragSession(
+  handle: HTMLElement,
+  target: HTMLElement,
+  e: PointerEvent,
+  onMove: (ev: PointerEvent, rect: DOMRect) => void,
+  onCommit: () => void,
+): void {
+  const rect = target.getBoundingClientRect();
+  target.style.left = `${snapPx(rect.left)}px`;
+  target.style.top = `${snapPx(rect.top)}px`;
+  target.style.right = "auto";
+  target.style.bottom = "auto";
+  handle.setPointerCapture?.(e.pointerId);
+  const prevUserSelect = document.body.style.userSelect;
+  document.body.style.userSelect = "none";
+  let unbindDrag = (): void => {};
+  const onUp = (): void => {
+    handle.releasePointerCapture?.(e.pointerId);
+    document.body.style.userSelect = prevUserSelect;
+    onCommit();
+    unbindDrag();
+  };
+  unbindDrag = bindPointerDrag(handle, (ev) => onMove(ev, rect), onUp);
+}
+
 function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
   handle.addEventListener("pointerdown", (e) => {
     if ((e.target as HTMLElement | null)?.closest("button")) return;
     e.preventDefault();
-    const rect = target.getBoundingClientRect();
-    const startLeft = rect.left;
-    const startTop = rect.top;
     const startX = e.clientX;
     const startY = e.clientY;
-    target.style.left = `${snapPx(startLeft)}px`;
-    target.style.top = `${snapPx(startTop)}px`;
-    target.style.right = "auto";
-    target.style.bottom = "auto";
-    handle.setPointerCapture?.(e.pointerId);
     handle.style.cursor = "grabbing";
-    const prevUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
-    let unbindDrag = (): void => {};
-    const onMove = (ev: PointerEvent): void => {
-      const { left, top } = clampPanel(
-        target,
-        handle.offsetHeight || 40,
-        startLeft + ev.clientX - startX,
-        startTop + ev.clientY - startY,
-      );
-      target.style.left = `${left}px`;
-      target.style.top = `${top}px`;
-      panelPos = { left, top };
-    };
-    const onUp = (): void => {
-      handle.releasePointerCapture?.(e.pointerId);
-      handle.style.cursor = "";
-      document.body.style.userSelect = prevUserSelect;
-      if (panelPos) lsSet(POS_KEY, JSON.stringify(panelPos));
-      unbindDrag();
-    };
-    unbindDrag = bindPointerDrag(handle, onMove, onUp);
+    startDragSession(
+      handle,
+      target,
+      e,
+      (ev, rect) => {
+        const { left, top } = clampPanel(
+          target,
+          handle.offsetHeight || 40,
+          rect.left + ev.clientX - startX,
+          rect.top + ev.clientY - startY,
+        );
+        target.style.left = `${left}px`;
+        target.style.top = `${top}px`;
+        panelPos = { left, top };
+      },
+      () => {
+        handle.style.cursor = "";
+        if (panelPos) lsSet(POS_KEY, JSON.stringify(panelPos));
+      },
+    );
   });
 }
 
@@ -226,49 +242,39 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
   handle.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const rect = target.getBoundingClientRect();
-    target.style.left = `${snapPx(rect.left)}px`;
-    target.style.top = `${snapPx(rect.top)}px`;
-    target.style.right = "auto";
-    target.style.bottom = "auto";
-    const startW = rect.width;
-    const startH = rect.height;
     const startX = e.clientX;
     const startY = e.clientY;
-    handle.setPointerCapture?.(e.pointerId);
-    const prevUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
-    let unbindDrag = (): void => {};
-    const onMove = (ev: PointerEvent): void => {
-      const w = snapPx(
-        Math.max(
-          240,
-          Math.min(
-            window.innerWidth - rect.left - 8,
-            startW + ev.clientX - startX,
+    startDragSession(
+      handle,
+      target,
+      e,
+      (ev, rect) => {
+        const w = snapPx(
+          Math.max(
+            240,
+            Math.min(
+              window.innerWidth - rect.left - 8,
+              rect.width + ev.clientX - startX,
+            ),
           ),
-        ),
-      );
-      const h = snapPx(
-        Math.max(
-          160,
-          Math.min(
-            window.innerHeight - rect.top - 8,
-            startH + ev.clientY - startY,
+        );
+        const h = snapPx(
+          Math.max(
+            160,
+            Math.min(
+              window.innerHeight - rect.top - 8,
+              rect.height + ev.clientY - startY,
+            ),
           ),
-        ),
-      );
-      target.style.width = `${w}px`;
-      target.style.height = `${h}px`;
-      panelSize = { width: w, height: h };
-    };
-    const onUp = (): void => {
-      handle.releasePointerCapture?.(e.pointerId);
-      document.body.style.userSelect = prevUserSelect;
-      if (panelSize) lsSet(SIZE_KEY, JSON.stringify(panelSize));
-      unbindDrag();
-    };
-    unbindDrag = bindPointerDrag(handle, onMove, onUp);
+        );
+        target.style.width = `${w}px`;
+        target.style.height = `${h}px`;
+        panelSize = { width: w, height: h };
+      },
+      () => {
+        if (panelSize) lsSet(SIZE_KEY, JSON.stringify(panelSize));
+      },
+    );
   });
 }
 
