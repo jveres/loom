@@ -122,10 +122,16 @@ The core exports these functions:
 - `trigger(read)` notifies subscribers after in-place mutation.
 - `update(source, fn)` writes `fn(source())` back to a state cell.
 - `mutate(source, fn)` mutates an object value and then triggers subscribers.
+
+> Writing an immutable value? Call the cell (`count(next)`) or `update` for a
+> functional set. Mutating an object/array in place? `mutate` (mutate + notify in
+> one) — or `trigger` when the mutation already happened elsewhere and you only
+> need to notify.
 - `polled(sample, ms, options?)` re-samples `sample()` every `ms` ms into a
   value-deduped reactive source; bindings re-run only when the value changes.
   Bridges imperative/external data (clocks, counters, polled APIs) into the
-  graph. Returns `{ read, stop }`.
+  graph. Returns a callable read with a `stop`: `p()` reads, `p.stop()` clears
+  the timer.
 - `source(connect, initial, options?)` creates a **lazy** external source:
   `connect(set)` runs when the source gains its first subscriber and the
   returned teardown runs when it loses its last, so the producer (event
@@ -159,7 +165,7 @@ The core exports these types:
 - `Read<T>` is a read function.
 - `Stop` is a disposer function.
 - `Scope` is a scope handle: `{ stop, pause, resume }`.
-- `Polled<T>` is a polled source: `{ read, stop }`.
+- `Polled<T>` is a callable polled source: `Read<T> & { stop }`.
 - `SourceConnect<T>` is a lazy source's `(set) => teardown` wiring function.
 - `EffectFn` is a reusable effect callback type.
 - `ErrorHandler` is the `configure({ onError })` boundary signature.
@@ -413,6 +419,13 @@ The DOM entrypoint exports these functions:
 - `remove(node)` disposes a node subtree and removes it from the DOM.
 - `tap(node, handler)` binds a robust tap (see below).
 
+These split into two families by where they go. **Child bindings** produce nodes
+to place among children — `text`, and the structural `list` / `each` / `when` /
+`match`. **Prop bindings** — `attr` / `classed` / `style` — return opaque
+descriptors you pass as a prop *value* (`h("a", { class: classed("on", isOn) })`);
+the handles are opaque, built only by these factories. (In JSX you rarely need
+them: a reactive read as a child, class-map value, or attribute is enough.)
+
 Loom is a thin layer over the DOM, so event props use **the DOM's own lowercase
 names** — `onclick`, `oninput`, `onpointerup`, `onkeydown` — not React's
 camelCase. Any `on<event>` function prop is wired with `addEventListener`, so you
@@ -460,6 +473,14 @@ overscan? }`) and windows against an existing scroll container, returning a
 `VirtualList` handle: `el` (mount it inside the scroller), `setItems(source)`,
 `refresh()`, `scrollToIndex(i)`, `scrollToEnd()`, and `destroy()` to tear it down. The inspector's
 graph tree is built on it.
+
+Two contracts the virtualizer relies on: **`render(item, reuse)` reuses rows** —
+it's called with `reuse = null` to build a row and with the existing element to
+update in place, so return the updated `reuse` rather than a fresh node (this is
+what keeps DOM churn flat as you scroll). And the elements it returns **must be
+absolutely positioned** within `el` (which the module sets to
+`position: relative`); it only sets each row's `transform`, so rows without
+absolute positioning stack in the wrong place.
 
 ### JSX
 
@@ -908,7 +929,14 @@ pnpm run lint    # biome
 pnpm test        # vitest
 pnpm run bench   # CLI benchmarks (chaos, micro, hot-path)
 pnpm run dev     # dev server
+pnpm run build   # dist/loom (ES bundles) + dist/types (.d.ts)
 ```
+
+`pnpm run build` compiles the publishable `dist` that the `exports` map points
+at; `github:jveres/loom` runs it automatically on install via `prepare`. While
+developing Loom itself, its own `loom` / `loom/*` imports resolve to `src`
+instead (a shared alias in `loom.aliases.ts`, plus `tsconfig` `paths`), so
+`check` / `test` / `dev` never need a build.
 
 With the dev server running, open `/demo/` for the realtime UI demo or `/bench/`
 for the browser benchmark. The demo is a realtime stress UI written in Loom JSX:
