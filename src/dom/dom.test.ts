@@ -50,6 +50,34 @@ describe("loom DOM list", () => {
     stop();
   });
 
+  it("moves existing keys with moveBefore when the platform has it", () => {
+    const root = document.createElement("section");
+    // happy-dom has no moveBefore; stub the atomic-move API so the preference is observable.
+    const moved: string[] = [];
+    (
+      root as unknown as { moveBefore: (n: Node, ref: Node | null) => void }
+    ).moveBefore = (node, ref) => {
+      moved.push((node as Element).getAttribute("data-loom-key") ?? "?");
+      root.insertBefore(node, ref);
+    };
+    const rows = state<readonly Row[]>([{ id: "a" }, { id: "b" }]);
+    const stop = list(root, rows, { key: (row) => row.id, render: renderRow });
+
+    // Initial render inserts new nodes — never via moveBefore (they aren't children yet).
+    expect(moved).toEqual([]);
+
+    rows([{ id: "b" }, { id: "a" }]);
+    expect(keys(root)).toEqual(["b", "a"]);
+    // The reorder of an existing child went through the state-preserving move.
+    expect(moved).toEqual(["b"]);
+
+    // A new key still takes insertBefore, existing moves keep using moveBefore.
+    rows([{ id: "c" }, { id: "a" }, { id: "b" }]);
+    expect(keys(root)).toEqual(["c", "a", "b"]);
+    expect(moved).toEqual(["b", "a"]);
+    stop();
+  });
+
   it("can skip keyed node reordering for externally positioned layouts", () => {
     const root = document.createElement("section");
     const rows = state<readonly Row[]>([{ id: "a" }, { id: "b" }]);

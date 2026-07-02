@@ -248,7 +248,7 @@ export function list<T>(
           // Reorder existing keys into item order; the identity check skips already-placed nodes.
           let cursor = container.firstChild;
           for (const node of ordered) {
-            if (node !== cursor) container.insertBefore(node, cursor ?? null);
+            if (node !== cursor) placeBefore(container, node, cursor ?? null);
             cursor = node.nextSibling;
           }
         } else {
@@ -368,8 +368,10 @@ export function each<T>(
             let next: Node = anchor;
             for (let i = ordered.length - 1; i >= 0; i--) {
               const node = ordered[i] as Element;
-              if (node.nextSibling !== next)
-                anchor.parentNode?.insertBefore(node, next);
+              if (node.nextSibling !== next) {
+                const parent = anchor.parentNode;
+                if (parent) placeBefore(parent, node, next);
+              }
               next = node;
             }
           },
@@ -378,6 +380,24 @@ export function each<T>(
       );
     },
   } satisfies SlotDescriptor);
+}
+
+// A ParentNode that may support the state-preserving move (Chrome 133+; spec "atomic move").
+type MovableParent = Node & {
+  moveBefore?: (node: Node, ref: Node | null) => void;
+};
+
+// Position `node` before `ref` inside `parent`. When the node is already a child of `parent` and
+// the platform has `moveBefore`, the move preserves state that a remove+insert resets — iframe
+// documents, focus, selection, playing media, running CSS animations. New or reparented nodes (and
+// older engines) take the classic insertBefore path.
+function placeBefore(parent: Node, node: Node, ref: Node | null): void {
+  const movable = parent as MovableParent;
+  if (movable.moveBefore !== undefined && node.parentNode === parent) {
+    movable.moveBefore(node, ref);
+  } else {
+    parent.insertBefore(node, ref);
+  }
 }
 
 export function dispose(root: Node): void {
