@@ -305,7 +305,7 @@ function j(e, t) {
 			e.appendChild(t);
 			return;
 		}
-		if (typeof t == "object" && Symbol.for("loom.html") in t) throw Error("A loom/html Html value was passed to loom/dom as a child. The SSR runtime's output is an HTML string, not a DOM node — check your jsxImportSource (loom vs loom/html) or render it via morph()/innerHTML instead.");
+		if (typeof t == "object" && Symbol.for("loom.html") in t) throw Error("loom/html Html value used as a loom/dom child — wrong jsxImportSource? Mount SSR strings via morph()/innerHTML.");
 		e.appendChild(document.createTextNode(String(t)));
 	}
 }

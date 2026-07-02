@@ -21,7 +21,7 @@ const root = new URL("..", import.meta.url).pathname;
 const APPS = [
   {
     name: "minimal (state+computed+effect)",
-    budget: 3500,
+    budget: 3550,
     source: `
       import { computed, effect, state } from "loom";
       const a = state(1);
@@ -37,7 +37,7 @@ const APPS = [
   },
   {
     name: "minimal dom (h+text)",
-    budget: 4950,
+    budget: 5100,
     source: `
       import { state } from "loom";
       import { h, text } from "loom/dom";

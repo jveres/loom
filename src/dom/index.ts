@@ -514,9 +514,7 @@ function appendChild(parent: Node, child: Child): void {
   // import from loom/html.
   if (typeof child === "object" && Symbol.for("loom.html") in child) {
     throw new Error(
-      "A loom/html Html value was passed to loom/dom as a child. The SSR runtime's output is an " +
-        "HTML string, not a DOM node — check your jsxImportSource (loom vs loom/html) or render " +
-        "it via morph()/innerHTML instead.",
+      "loom/html Html value used as a loom/dom child — wrong jsxImportSource? Mount SSR strings via morph()/innerHTML.",
     );
   }
   parent.appendChild(document.createTextNode(String(child)));
