@@ -2,7 +2,14 @@
 // deep proxy; list identity via .key(id). Arrow batches on a microtask — the runner's double-rAF
 // settle absorbs that fairly.
 import { html, reactive } from "@arrow-js/core";
-import type { Impl, Row } from "./data.js";
+import {
+  type Impl,
+  type Row,
+  SWAP_A,
+  SWAP_B,
+  UPDATE_STRIDE,
+  UPDATE_SUFFIX,
+} from "./data.js";
 
 interface ArrowData {
   rows: Row[];
@@ -28,17 +35,17 @@ export function arrowImpl(): Impl {
     },
     update() {
       const rows = data.rows;
-      for (let i = 0; i < rows.length; i += 10) {
+      for (let i = 0; i < rows.length; i += UPDATE_STRIDE) {
         const row = rows[i] as Row;
-        row.label += " !!!";
+        row.label += UPDATE_SUFFIX;
       }
     },
     swap() {
       const rows = data.rows;
-      if (rows.length < 999) return;
-      const a = rows[1] as Row;
-      rows[1] = rows[998] as Row;
-      rows[998] = a;
+      if (rows.length <= SWAP_B) return;
+      const a = rows[SWAP_A] as Row;
+      rows[SWAP_A] = rows[SWAP_B] as Row;
+      rows[SWAP_B] = a;
     },
     clear() {
       data.rows = [];

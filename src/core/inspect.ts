@@ -5,6 +5,7 @@
 
 import {
   ambientOptions,
+  type ComputedNode,
   type EffectOptions,
   type InspectMeta,
   installInspectHooks,
@@ -14,7 +15,6 @@ import {
   type NodeInfo,
   type NodeKind,
   type NodeOptions,
-  nodeValue,
   type State,
   type StateNode,
 } from "../loom.js";
@@ -212,7 +212,7 @@ function inspectNode(node: NodeBase, meta: InspectMeta): InspectNode {
   if (source !== undefined) out.source = source;
   const target = meta.target?.deref();
   if (target !== undefined) out.target = target;
-  const value = nodeValue(node);
+  const value = nodeValue(node, meta);
   if (value !== undefined) out.value = value;
   if (meta.group !== undefined) out.group = meta.group;
   if (meta.key !== undefined) out.key = meta.key;
@@ -232,4 +232,17 @@ function linkedIds(
     if (meta) ids.push(meta.id);
   }
   return ids;
+}
+
+// The snapshot's value read, discriminated by the registered kind (watchers are never registered,
+// so state/computed are the only value-bearing kinds here).
+function nodeValue(node: NodeBase, meta: InspectMeta): unknown {
+  switch (meta.kind) {
+    case "state":
+      return (node as StateNode<unknown>).pendingValue;
+    case "computed":
+      return (node as ComputedNode<unknown>).value;
+    default:
+      return undefined;
+  }
 }

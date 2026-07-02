@@ -3,6 +3,19 @@
 // Split from ./channels.ts so none of this bundles into apps that never meter anything.
 
 import { registerScopeResource } from "../loom.js";
+import {
+  type ChannelNode,
+  channelRegistry,
+  computeCh,
+  createCh,
+  disposeCh,
+  effectCh,
+  flushCh,
+  makeChannelNode,
+  readCh,
+  sampler,
+  writeCh,
+} from "./channels.js";
 
 // A detail ring is small (a recent-samples buffer); bound capacity well under 2^31 so the pow2 loop
 // can't overflow into an infinite loop, and reject clearly-invalid input on this public path.
@@ -36,17 +49,7 @@ function createChannelNode(
       `A channel records up to ${MAX_CHANNEL_FIELDS} fields; "${name}" declares ${fields.length}.`,
     );
   }
-  return {
-    name,
-    cap,
-    mask: cap > 0 ? cap - 1 : 0,
-    fields,
-    cols: undefined,
-    meters: 0,
-    samples: 0,
-    seq: 0,
-    head: 0,
-  };
+  return makeChannelNode(name, cap, fields);
 }
 
 // Allocate a channel's ring columns on first need (a samples meter attaching, or a first emit on a
@@ -88,19 +91,6 @@ function recordChannel(
 }
 // Loading this module upgrades the core's count-only fallback to the real ring writer.
 sampler.record = recordChannel;
-
-import {
-  type ChannelNode,
-  channelRegistry,
-  computeCh,
-  createCh,
-  disposeCh,
-  effectCh,
-  flushCh,
-  readCh,
-  sampler,
-  writeCh,
-} from "./channels.js";
 
 export interface ChannelOptions {
   /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */

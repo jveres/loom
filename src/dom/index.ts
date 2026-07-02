@@ -382,9 +382,11 @@ function positionOrdered(
   if (n === 0) return;
   const desired = new Map<Element, number>();
   for (let i = 0; i < n; i++) desired.set(ordered[i] as Element, i);
-  // The members' current DOM order, expressed as desired indexes.
+  // The members' current DOM order, expressed as desired indexes; track whether that order is
+  // already strictly increasing while building it.
   const seq: number[] = [];
   const seqNodes: Element[] = [];
+  let inOrder = true;
   for (
     let child = parent.firstChild;
     child !== null;
@@ -392,9 +394,22 @@ function positionOrdered(
   ) {
     const want = desired.get(child as Element);
     if (want !== undefined) {
+      if (want < (seq[seq.length - 1] ?? -1)) inOrder = false;
       seq.push(want);
       seqNodes.push(child as Element);
     }
+  }
+  // Fast path for the common cases (unchanged order, append-only): every present member already
+  // sits in relative order, so nothing moves — just insert the nodes that aren't children yet,
+  // skipping the whole LIS scaffold below.
+  if (inOrder) {
+    let next: Node | null = end;
+    for (let i = n - 1; i >= 0; i--) {
+      const node = ordered[i] as Element;
+      if (node.parentNode !== parent) placeBefore(parent, node, next);
+      next = node;
+    }
+    return;
   }
   // Longest increasing subsequence (patience sorting with parent links): these nodes are already
   // in relative order and never move.

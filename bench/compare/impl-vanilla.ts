@@ -1,5 +1,12 @@
 // Hand-written direct-DOM baseline: the floor every framework is measured against.
-import type { Impl, Row } from "./data.js";
+import {
+  type Impl,
+  type Row,
+  SWAP_A,
+  SWAP_B,
+  UPDATE_STRIDE,
+  UPDATE_SUFFIX,
+} from "./data.js";
 
 export function vanillaImpl(): Impl {
   let tbody: HTMLTableSectionElement;
@@ -33,26 +40,26 @@ export function vanillaImpl(): Impl {
       render();
     },
     update() {
-      for (let i = 0; i < rows.length; i += 10) {
+      for (let i = 0; i < rows.length; i += UPDATE_STRIDE) {
         const row = rows[i] as Row;
-        row.label += " !!!";
+        row.label += UPDATE_SUFFIX;
         const cell = trs[i]?.firstChild as HTMLTableCellElement | undefined;
         if (cell) cell.textContent = row.label;
       }
     },
     swap() {
-      if (rows.length < 999) return;
-      const a = rows[1] as Row;
-      const b = rows[998] as Row;
-      rows[1] = b;
-      rows[998] = a;
-      const trA = trs[1] as HTMLTableRowElement;
-      const trB = trs[998] as HTMLTableRowElement;
+      if (rows.length <= SWAP_B) return;
+      const a = rows[SWAP_A] as Row;
+      const b = rows[SWAP_B] as Row;
+      rows[SWAP_A] = b;
+      rows[SWAP_B] = a;
+      const trA = trs[SWAP_A] as HTMLTableRowElement;
+      const trB = trs[SWAP_B] as HTMLTableRowElement;
       const afterB = trB.nextSibling;
       tbody.insertBefore(trB, trA);
       tbody.insertBefore(trA, afterB);
-      trs[1] = trB;
-      trs[998] = trA;
+      trs[SWAP_A] = trB;
+      trs[SWAP_B] = trA;
     },
     clear() {
       rows = [];

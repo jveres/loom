@@ -42,14 +42,15 @@ export const sampler = {
   },
 };
 
-// A built-in channel node: `cap` values here are powers of two by construction, so this skips the
-// public path's toPow2 validation (which lives in ./meter.ts with channel()).
-function builtin(
+// The one construction site for the ChannelNode shape — the built-ins below and ./meter.ts's
+// public channel() both call it, so the literal can't drift between the two modules. `cap` must
+// already be a power of two (the public path validates via toPow2 first).
+export function makeChannelNode(
   name: string,
-  cap = 0,
-  fields: readonly string[] = [],
+  cap: number,
+  fields: readonly string[],
 ): ChannelNode {
-  const node: ChannelNode = {
+  return {
     name,
     cap,
     mask: cap > 0 ? cap - 1 : 0,
@@ -60,6 +61,15 @@ function builtin(
     seq: 0,
     head: 0,
   };
+}
+
+// A built-in channel node: cap values here are powers of two by construction.
+function builtin(
+  name: string,
+  cap = 0,
+  fields: readonly string[] = [],
+): ChannelNode {
+  const node = makeChannelNode(name, cap, fields);
   channelRegistry.set(name, node);
   return node;
 }

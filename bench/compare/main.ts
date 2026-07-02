@@ -48,7 +48,6 @@ function median(samples: number[]): number {
 
 // One op measured WARMUP+RUNS times; each iteration rebuilds the precondition unmeasured.
 async function bench(
-  _impl: Impl,
   op: string,
   precondition: () => void,
   action: () => void,
@@ -77,7 +76,6 @@ async function runImpl(factory: () => Impl): Promise<{
   const results: OpResult[] = [];
   results.push(
     await bench(
-      impl,
       "create-1k",
       () => impl.clear(),
       () => impl.create(buildRows(1000)),
@@ -85,7 +83,6 @@ async function runImpl(factory: () => Impl): Promise<{
   );
   results.push(
     await bench(
-      impl,
       "update-1k(10th)",
       () => impl.create(buildRows(1000)),
       () => impl.update(),
@@ -93,7 +90,6 @@ async function runImpl(factory: () => Impl): Promise<{
   );
   results.push(
     await bench(
-      impl,
       "swap-1k",
       () => impl.create(buildRows(1000)),
       () => impl.swap(),
@@ -101,7 +97,6 @@ async function runImpl(factory: () => Impl): Promise<{
   );
   results.push(
     await bench(
-      impl,
       "clear-1k",
       () => impl.create(buildRows(1000)),
       () => impl.clear(),
@@ -109,7 +104,6 @@ async function runImpl(factory: () => Impl): Promise<{
   );
   results.push(
     await bench(
-      impl,
       "create-10k",
       () => impl.clear(),
       () => impl.create(buildRows(10000)),

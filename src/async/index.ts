@@ -11,6 +11,7 @@ import {
   type State,
   type Stop,
   state,
+  trigger,
   untrack,
 } from "../loom.js";
 
@@ -44,10 +45,10 @@ export function resource<T>(
   const value: State<T | undefined> = state<T | undefined>(undefined, options);
   const loading = state(true, options);
   const error = state<unknown>(undefined, options);
-  const generation = state(0, options); // refresh()'s handle: a tracked dep the effect re-runs on
+  const pulse = state(0, options); // refresh()'s handle: a tracked dep the effect re-runs on
 
   const stop = effect(() => {
-    generation();
+    pulse();
     let live = true; // cleared before each re-run and on dispose — the stale-response guard
     const controller = new AbortController();
     loading(true);
@@ -80,10 +81,10 @@ export function resource<T>(
   }, options);
 
   return Object.assign(() => value(), {
-    loading: () => loading() as boolean,
+    loading: () => loading(),
     error: () => error(),
     refresh: () => {
-      generation(untrack(() => generation()) + 1);
+      trigger(pulse);
     },
     stop,
   });

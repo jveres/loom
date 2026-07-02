@@ -285,7 +285,8 @@ imported) for async data with fine-grained loading and error state:
   an `AbortSignal` that fires when this fetch becomes obsolete (a newer fetch
   started, or the resource was disposed) — forward it to `fetch()` and the
   obsolete request is cancelled on the wire, not just ignored, and its abort
-  rejection never surfaces through `error()`. `r()` reads the latest value
+  rejection never surfaces through `error()`. The returned handle is itself
+  callable — with `const r = resource(...)`: `r()` reads the latest value
   (`undefined` until the first settle), `r.loading()` and `r.error()` are
   fine-grained reads, `r.refresh()` forces a refetch, and `r.stop()` disposes
   (a resource created inside a scope stops with the scope). While a fetch is in

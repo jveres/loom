@@ -117,7 +117,7 @@ interface SourceNode<T> extends StateNode<T> {
   active: boolean;
 }
 
-interface ComputedNode<T> extends NodeBase {
+export interface ComputedNode<T> extends NodeBase {
   value: T | undefined;
   getter(previousValue?: T): T;
 }
@@ -767,22 +767,11 @@ function fieldOptions(
     : out;
 }
 
-export function kindOf(node: ReactiveNode): NodeKind | "watcher" {
+function kindOf(node: ReactiveNode): NodeKind | "watcher" {
   if ("getter" in node) return "computed";
   if ("currentValue" in node) return "state";
   if ("fn" in node) return "effect";
   return "watcher";
-}
-
-export function nodeValue(node: NodeBase): unknown {
-  switch (kindOf(node)) {
-    case "state":
-      return (node as StateNode<unknown>).pendingValue;
-    case "computed":
-      return (node as ComputedNode<unknown>).value;
-    default:
-      return undefined;
-  }
 }
 
 // Resolved once at module load — this sits on the deferred-lane scheduling paths, so no per-call

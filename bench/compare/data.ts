@@ -32,6 +32,13 @@ export function buildRows(count: number): Row[] {
   return rows;
 }
 
+// Op parameters, defined once so every implementation provably runs the same workload — a drifted
+// copy in one impl would silently make the frameworks incomparable.
+export const UPDATE_STRIDE = 10;
+export const UPDATE_SUFFIX = " !!!";
+export const SWAP_A = 1;
+export const SWAP_B = 998;
+
 // The command surface every implementation provides. The runner drives ONLY this interface, so all
 // frameworks execute the same ops on the same data.
 export interface Impl {
@@ -39,9 +46,9 @@ export interface Impl {
   mount(root: HTMLElement): void;
   /** Replace all rows. */
   create(rows: Row[]): void;
-  /** Append ' !!!' to every 10th row's label. */
+  /** Append UPDATE_SUFFIX to every UPDATE_STRIDE-th row's label. */
   update(): void;
-  /** Swap rows at index 1 and 998. */
+  /** Swap the rows at SWAP_A and SWAP_B. */
   swap(): void;
   /** Remove all rows. */
   clear(): void;

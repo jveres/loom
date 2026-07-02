@@ -2,7 +2,13 @@
 // fine-grained writes, reorders are keyed moves.
 import { type State, state } from "loom";
 import { h, list, text } from "loom/dom";
-import type { Impl } from "./data.js";
+import {
+  type Impl,
+  SWAP_A,
+  SWAP_B,
+  UPDATE_STRIDE,
+  UPDATE_SUFFIX,
+} from "./data.js";
 
 interface LoomRow {
   id: number;
@@ -35,17 +41,17 @@ export function loomImpl(): Impl {
       rowsCell(rows);
     },
     update() {
-      for (let i = 0; i < rows.length; i += 10) {
+      for (let i = 0; i < rows.length; i += UPDATE_STRIDE) {
         const row = rows[i] as LoomRow;
-        row.label(`${row.label()} !!!`);
+        row.label(`${row.label()}${UPDATE_SUFFIX}`);
       }
     },
     swap() {
-      if (rows.length < 999) return;
+      if (rows.length <= SWAP_B) return;
       const next = rows.slice();
-      const a = next[1] as LoomRow;
-      next[1] = next[998] as LoomRow;
-      next[998] = a;
+      const a = next[SWAP_A] as LoomRow;
+      next[SWAP_A] = next[SWAP_B] as LoomRow;
+      next[SWAP_B] = a;
       rows = next;
       rowsCell(next);
     },

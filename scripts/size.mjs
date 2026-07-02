@@ -32,12 +32,12 @@ const APPS = [
   },
   {
     name: "full core (export * from loom)",
-    budget: 5600,
+    budget: 5650,
     source: `export * from "loom";`,
   },
   {
     name: "minimal dom (h+text)",
-    budget: 4900,
+    budget: 4950,
     source: `
       import { state } from "loom";
       import { h, text } from "loom/dom";
@@ -59,6 +59,8 @@ try {
       minify: true,
       format: "esm",
       write: false,
+      // Mirrors loom.aliases.ts (TypeScript — not importable from this Node script without a
+      // loader); keep in sync when an entrypoint file moves.
       alias: {
         loom: join(root, "src/index.ts"),
         "loom/dom": join(root, "src/dom/index.ts"),

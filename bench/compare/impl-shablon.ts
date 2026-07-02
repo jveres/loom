@@ -4,7 +4,14 @@
 
 // @ts-expect-error shablon ships untyped JS source
 import { store, t } from "shablon";
-import type { Impl, Row } from "./data.js";
+import {
+  type Impl,
+  type Row,
+  SWAP_A,
+  SWAP_B,
+  UPDATE_STRIDE,
+  UPDATE_SUFFIX,
+} from "./data.js";
 
 export function shablonImpl(): Impl {
   let root: HTMLElement;
@@ -32,16 +39,16 @@ export function shablonImpl(): Impl {
     },
     update() {
       const rows = data.rows;
-      for (let i = 0; i < rows.length; i += 10) {
-        rows[i].label += " !!!";
+      for (let i = 0; i < rows.length; i += UPDATE_STRIDE) {
+        rows[i].label += UPDATE_SUFFIX;
       }
     },
     swap() {
       const rows = data.rows;
-      if (rows.length < 999) return;
-      const a = rows[1];
-      rows[1] = rows[998];
-      rows[998] = a;
+      if (rows.length <= SWAP_B) return;
+      const a = rows[SWAP_A];
+      rows[SWAP_A] = rows[SWAP_B];
+      rows[SWAP_B] = a;
     },
     clear() {
       data.rows = [];
