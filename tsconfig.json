@@ -12,6 +12,7 @@
     "paths": {
       "loom": ["./src/index.ts"],
       "loom/observe": ["./src/observe.ts"],
+      "loom/async": ["./src/async/index.ts"],
       "loom/dom": ["./src/dom/index.ts"],
       "loom/dom/virtual-list": ["./src/dom/virtual-list.ts"],
       "loom/devtools": ["./src/devtools/index.ts"],

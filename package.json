@@ -37,6 +37,10 @@
       "types": "./dist/types/observe.d.ts",
       "default": "./dist/loom/observe.js"
     },
+    "./async": {
+      "types": "./dist/types/async/index.d.ts",
+      "default": "./dist/loom/async.js"
+    },
     "./dom": {
       "types": "./dist/types/dom/index.d.ts",
       "default": "./dist/loom/dom.js"

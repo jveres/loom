@@ -8,6 +8,7 @@ const r = (p: string): string => resolve(import.meta.dirname, p);
 export const loomAliases = [
   { find: /^loom$/, replacement: r("src/index.ts") },
   { find: /^loom\/observe$/, replacement: r("src/observe.ts") },
+  { find: /^loom\/async$/, replacement: r("src/async/index.ts") },
   { find: /^loom\/dom$/, replacement: r("src/dom/index.ts") },
   {
     find: /^loom\/dom\/virtual-list$/,
