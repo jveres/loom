@@ -278,10 +278,14 @@ connect and disconnect with the panel — no manual teardown.
 `loom/async` is a small opt-in entrypoint (~0.3 kB gzip; costs nothing unless
 imported) for async data with fine-grained loading and error state:
 
-- `resource(fetcher, options?)` is an async computed: it runs `fetcher`
-  immediately and again whenever the fetcher's **synchronously tracked** reads
-  change (reads after the first `await` are outside the tracked run). The
-  previous value is passed to `fetcher` untracked. `r()` reads the latest value
+- `resource(fetcher, options?)` is an async computed: it runs
+  `fetcher(previous, signal)` immediately and again whenever the fetcher's
+  **synchronously tracked** reads change (reads after the first `await` are
+  outside the tracked run). The previous value is passed untracked; `signal` is
+  an `AbortSignal` that fires when this fetch becomes obsolete (a newer fetch
+  started, or the resource was disposed) — forward it to `fetch()` and the
+  obsolete request is cancelled on the wire, not just ignored, and its abort
+  rejection never surfaces through `error()`. `r()` reads the latest value
   (`undefined` until the first settle), `r.loading()` and `r.error()` are
   fine-grained reads, `r.refresh()` forces a refetch, and `r.stop()` disposes
   (a resource created inside a scope stops with the scope). While a fetch is in
@@ -293,8 +297,10 @@ import { effect, state } from "loom";
 import { resource } from "loom/async";
 
 const page = state(1);
-const users = resource(() =>
-  fetch(`/api/users?page=${page()}`).then((response) => response.json()),
+const users = resource((_previous, signal) =>
+  fetch(`/api/users?page=${page()}`, { signal }).then((response) =>
+    response.json(),
+  ),
 );
 
 effect(() => {
@@ -302,7 +308,7 @@ effect(() => {
   renderList(users() ?? []);
 });
 
-page(2); // tracked read changed -> automatic refetch, stale list stays visible
+page(2); // tracked read changed -> refetch; the page-1 request aborts, stale list stays visible
 ```
 
 ### Scopes

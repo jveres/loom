@@ -96,6 +96,54 @@ describe("loom/async resource", () => {
     r.stop();
   });
 
+  it("aborts the in-flight signal on refetch, without polluting error()", async () => {
+    const page = state(1);
+    const signals: AbortSignal[] = [];
+    const r = resource((_prev, signal) => {
+      page();
+      signals.push(signal);
+      // Reject on abort like fetch() does — the resource must swallow its own aborts.
+      return new Promise<number>((_resolve, reject) => {
+        signal.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      });
+    });
+
+    expect(signals[0]?.aborted).toBe(false);
+    page(2); // supersedes the first fetch
+    expect(signals[0]?.aborted).toBe(true); // ...which is cancelled, not just ignored
+    expect(signals[1]?.aborted).toBe(false);
+
+    await settle();
+    expect(r.error()).toBeUndefined(); // the self-inflicted AbortError never surfaces
+    expect(r.loading()).toBe(true); // still waiting on the live fetch
+    r.stop();
+  });
+
+  it("aborts the in-flight signal on stop()", () => {
+    const signals: AbortSignal[] = [];
+    const r = resource(
+      (_prev, signal) =>
+        new Promise<number>(() => {
+          signals.push(signal);
+        }),
+    );
+    expect(signals[0]?.aborted).toBe(false);
+    r.stop();
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it("still reports an external abort as an error", async () => {
+    const r = resource(() =>
+      Promise.reject(new DOMException("aborted", "AbortError")),
+    );
+    await settle();
+    // An abort the resource did NOT initiate is a real failure of this fetch — surfaced.
+    expect(r.error()).toBeInstanceOf(DOMException);
+    r.stop();
+  });
+
   it("stops with an owning scope and ignores late settles after disposal", async () => {
     const d = deferred<number>();
     let r!: ReturnType<typeof resource<number>>;
