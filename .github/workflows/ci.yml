@@ -31,6 +31,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Bundle-size budgets
+        run: pnpm size
+
       # The compiled dist is committed (so a GitHub install needs no build step).
       # Rebuild it and fail if it drifts from what's checked in — i.e. src changed
       # without a matching `pnpm run build` + commit.

@@ -1,7 +1,7 @@
 // Async addon (the `loom/async` entrypoint): a minimal reactive resource on top of the core
 // primitives. Deliberately not Solid 2.0's graph-status async — no transitions, no optimistic
-// lanes; just fine-grained value/loading/error reads with stale-response protection (see
-// docs/architecture-v2.md, stage 5). Nothing here touches the core, so apps that don't import it
+// lanes; just fine-grained value/loading/error reads with stale-response protection.
+// Nothing here touches the core, so apps that don't import it
 // bundle none of it.
 import {
   batch,

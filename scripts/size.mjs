@@ -1,6 +1,6 @@
-// Bundle-size gates (stage 2 of docs/architecture-v2.md): build three reference apps with esbuild
+// Bundle-size gates: build three reference apps with esbuild
 // and fail if their gzipped size exceeds the budget. Run with `pnpm size`; budgets move only with
-// a documented reason in the arch doc.
+// a documented reason in the commit message.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";

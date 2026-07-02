@@ -1,4 +1,4 @@
-// Comparative DOM bench (stage 0 of docs/architecture-v2.md): the same krausest-style ops driven
+// Comparative DOM bench: the same krausest-style ops driven
 // through every implementation's identical command surface. Results render into #results as a
 // table plus machine-readable JSON in #results-json (scraped by tooling).
 import { buildRows, type Impl, resetIds } from "./data.js";
