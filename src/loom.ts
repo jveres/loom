@@ -2,7 +2,7 @@ import {
   createReactiveSystem,
   type Link,
   type ReactiveNode,
-} from "alien-signals/system";
+} from "./core/graph.js";
 
 const Mutable = 1;
 const Watching = 2;

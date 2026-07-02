@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      alien-signals:
-        specifier: 3.2.1
-        version: 3.2.1
     devDependencies:
       '@biomejs/biome':
         specifier: 2.5.1
@@ -18,6 +14,9 @@ importers:
       '@types/node':
         specifier: ^26.0.1
         version: 26.0.1
+      alien-signals:
+        specifier: 3.2.1
+        version: 3.2.1
       typescript:
         specifier: 7.0.1-rc
         version: 7.0.1-rc

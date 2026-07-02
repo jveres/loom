@@ -30,6 +30,15 @@
           "style": { "noDescendingSpecificity": "off" }
         }
       }
+    },
+    {
+      "includes": ["src/core/graph.ts"],
+      "linter": {
+        "rules": {
+          "correctness": { "noConstantCondition": "off" },
+          "suspicious": { "noAssignInExpressions": "off" }
+        }
+      }
     }
   ]
 }

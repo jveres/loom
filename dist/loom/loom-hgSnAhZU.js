@@ -1,4 +1,120 @@
-import { createReactiveSystem as e } from "alien-signals/system";
+//#region src/core/graph.ts
+function e({ update: e, notify: t, unwatched: n }) {
+	return {
+		link: r,
+		unlink: i,
+		propagate: a,
+		checkDirty: o,
+		shallowPropagate: s
+	};
+	function r(e, t, n) {
+		let r = t.depsTail;
+		if (r !== void 0 && r.dep === e) return;
+		let i = r === void 0 ? t.deps : r.nextDep;
+		if (i !== void 0 && i.dep === e) {
+			i.version = n, t.depsTail = i;
+			return;
+		}
+		let a = e.subsTail;
+		if (a !== void 0 && a.version === n && a.sub === t) return;
+		let o = t.depsTail = e.subsTail = {
+			version: n,
+			dep: e,
+			sub: t,
+			prevDep: r,
+			nextDep: i,
+			prevSub: a,
+			nextSub: void 0
+		};
+		i !== void 0 && (i.prevDep = o), r === void 0 ? t.deps = o : r.nextDep = o, a === void 0 ? e.subs = o : a.nextSub = o;
+	}
+	function i(e, t = e.sub) {
+		let { dep: r, prevDep: i, nextDep: a, nextSub: o, prevSub: s } = e;
+		return a === void 0 ? t.depsTail = i : a.prevDep = i, i === void 0 ? t.deps = a : i.nextDep = a, o === void 0 ? r.subsTail = s : o.prevSub = s, s === void 0 ? (r.subs = o) === void 0 && n(r) : s.nextSub = o, a;
+	}
+	function a(e, n) {
+		let r = e.nextSub, i;
+		top: do {
+			let a = e.sub, o = a.flags;
+			if (o & 60 ? o & 12 ? o & 4 ? !(o & 48) && c(e, a) ? (a.flags = o | 40, o &= 1) : o = 0 : a.flags = o & -9 | 32 : o = 0 : (a.flags = o | 32, n && (a.flags |= 8)), o & 2 && t(a), o & 1) {
+				let t = a.subs;
+				if (t !== void 0) {
+					let n = (e = t).nextSub;
+					n !== void 0 && (i = {
+						value: r,
+						prev: i
+					}, r = n);
+					continue;
+				}
+			}
+			if ((e = r) !== void 0) {
+				r = e.nextSub;
+				continue;
+			}
+			for (; i !== void 0;) if (e = i.value, i = i.prev, e !== void 0) {
+				r = e.nextSub;
+				continue top;
+			}
+			break;
+		} while (!0);
+	}
+	function o(t, n) {
+		let r, i = 0, a = !1;
+		top: do {
+			let o = t.dep, c = o.flags;
+			if (n.flags & 16) a = !0;
+			else if ((c & 17) == 17) {
+				let t = o.subs;
+				e(o) && (t.nextSub !== void 0 && s(t), a = !0);
+			} else if ((c & 33) == 33) {
+				r = {
+					value: t,
+					prev: r
+				}, t = o.deps, n = o, ++i;
+				continue;
+			}
+			if (!a) {
+				let e = t.nextDep;
+				if (e !== void 0) {
+					t = e;
+					continue;
+				}
+			}
+			for (; i--;) {
+				if (t = r.value, r = r.prev, a) {
+					let r = n.subs;
+					if (e(n)) {
+						r.nextSub !== void 0 && s(r), n = t.sub;
+						continue;
+					}
+					a = !1;
+				} else n.flags &= -33;
+				n = t.sub;
+				let i = t.nextDep;
+				if (i !== void 0) {
+					t = i;
+					continue top;
+				}
+			}
+			return a && !!n.flags;
+		} while (!0);
+	}
+	function s(e) {
+		do {
+			let n = e.sub, r = n.flags;
+			(r & 48) == 32 && (n.flags = r | 16, (r & 6) == 2 && t(n));
+		} while ((e = e.nextSub) !== void 0);
+	}
+	function c(e, t) {
+		let n = t.depsTail;
+		for (; n !== void 0;) {
+			if (n === e) return !0;
+			n = n.prevDep;
+		}
+		return !1;
+	}
+}
+//#endregion
 //#region src/loom.ts
 var t = 1, n = 2, r = 16, i = 32, a = 64, o = 0, s = 0, c = 0, l = 0, u = 0, d, f, p = [], m = [], h = 0, g = !1, _ = Infinity, v, ee = 200, te = it, ne = 5, re = 0, ie = 0, y = 0, b = !1, x, S = /* @__PURE__ */ new Map(), ae = typeof FinalizationRegistry > "u" ? void 0 : new FinalizationRegistry((e) => {
 	S.delete(e);
