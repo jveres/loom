@@ -258,7 +258,7 @@ independent, skippable experiments.
 | Stage | Hypothesis | Gate |
 | --- | --- | --- |
 | 0 | Baselines are locked: current `pnpm bench` suites plus a krausest-style create/update/swap-rows harness against ArrowJS and Shablon | Partially done — runtime and bundle baselines are recorded above (July 2, 2026); remaining: the in-repo comparative DOM harness that reproduces the external 2x result |
-| 1 | Vendoring `alien-signals/system` is perf-neutral; direct calls beat the callback indirection | ≥0% on all suites to vendor; the indirection removal ships only if measurably positive |
+| 1 | Vendoring `alien-signals/system` is perf-neutral; direct calls beat the callback indirection | **Done** — vendored as `core/graph.ts`, loom-vs-native chaos ratio preserved (1.01x, two runs). The indirection removal was tested and **rejected**: importing the hooks across the loom↔graph module cycle measured ~2.2x slower on `write->effect x50k` (445 → 207 hz, rme ≤0.35%) — the factory's closure-captured hooks inline better than cross-cycle live bindings |
 | 2 | The internal module split changes nothing at runtime and shrinks per-entry bundles | Bench-neutral, `size-limit` gates green |
 | 3 | `loom/tmpl` template-clone creation beats `h()` on creation-heavy workloads | ≥20% on create-10k with zero update-path regression, else drop the entrypoint |
 | 4 | `moveBefore` + LIS in `each`/`list` is bench-neutral and preserves node state across moves | No regression on list suites; state preservation verified in-browser |
