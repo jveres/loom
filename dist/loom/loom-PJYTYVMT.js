@@ -430,13 +430,13 @@ function Be() {
 			continue;
 		}
 		let l = c.meta;
-		!l || l.internal || (l.kind === "computed" ? (t++, c.subs === void 0 && a++) : l.kind === "effect" ? l.target === void 0 ? n++ : r++ : "connect" in c ? i++ : (e++, c.subs === void 0 && a++));
+		!l || l.internal || (l.kind === "computed" ? (t++, c.subs === void 0 && a++) : l.kind === "effect" ? (n++, l.target !== void 0 && r++) : "connect" in c ? i++ : (e++, c.subs === void 0 && a++));
 	}
 	return {
 		states: e,
 		computeds: t,
 		effects: n,
-		views: r,
+		targetedEffects: r,
 		sources: i,
 		scopes: y,
 		channels: N.size,

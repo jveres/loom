@@ -488,16 +488,16 @@ describe("loom channels", () => {
     const s = scope(() => {
       keep.push(state(0));
       keep.push(computed(() => 1));
-      keep.push(effect(() => {})); // an app effect
-      keep.push(effect(() => {}, { target: {} })); // a view (effect bound to a DOM node)
+      keep.push(effect(() => {})); // a plain effect
+      keep.push(effect(() => {}, { target: {} })); // a targeted effect (attributed to an object)
       keep.push(source(() => () => {}, 0)); // a lazy source
     });
 
     const after = inspectResources();
     expect(after.states - before.states).toBe(1);
     expect(after.computeds - before.computeds).toBe(1);
-    expect(after.effects - before.effects).toBe(1); // app effect only
-    expect(after.views - before.views).toBe(1); // the effect with a target counted as a view
+    expect(after.effects - before.effects).toBe(2); // all effects, targeted included
+    expect(after.targetedEffects - before.targetedEffects).toBe(1); // the subset with a target
     expect(after.sources - before.sources).toBe(1); // counted apart from plain states
     expect(after.scopes - before.scopes).toBe(1);
     // the state + computed have no readers -> both counted unread

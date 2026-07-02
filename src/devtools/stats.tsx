@@ -1,7 +1,7 @@
 // Stats ("Info") tab + the whole metrics subsystem: the meter-driven reactive-pipeline rates, the
 // rAF frame-rate / lag probes, the web-vital PerformanceObserver sources, the live resource census,
-// and the gauge / histogram / sparkline widgets. Owns its module state and its own (pausable) scope;
-// the panel drives it through wireStats / pauseStats / resumeStats / stopStats.
+// and the gauge / histogram widgets. Owns its module state and its own (pausable) scope; the panel
+// drives it through wireStats / pauseStats / resumeStats / stopStats.
 import {
   type Meter,
   meter,
@@ -22,7 +22,6 @@ import {
   sampleOf,
 } from "loom/observe";
 import { bind, PANEL_OPTS } from "./bindings.js";
-import { PANEL_ID } from "./css.js";
 import { renderGraphThrottled } from "./graph.js";
 import type { TabId } from "./panel.js";
 import { renderTrace } from "./trace.js";
@@ -32,29 +31,6 @@ const FRAME_N = 138; // frame-time histogram samples (matches the demo overlay)
 const GAUGE_R = 34;
 const GAUGE_C = 2 * Math.PI * GAUGE_R;
 const GAUGE_ARC = GAUGE_C * 0.75; // 270° gauge
-const SPARK_N = 48;
-const SPARK_W = 58;
-const SPARK_LINE = 11;
-const SPARK_H = SPARK_LINE * 2;
-const SPARK_C = SPARK_H / 2; // center: writes deflect up, DOM updates down (equals SPARK_LINE here)
-const SPARK_GAP = 1; // rest each trace a hair off-center so they don't merge into one line when flat
-const SPARK_STEP = SPARK_N > 1 ? SPARK_W / (SPARK_N - 1) : 0; // px one sample occupies (= scroll/tick)
-const SPARK_GRID = 9; // px between the faint vertical time ticks that scroll the window even when idle
-// Fixed log magnitude scale: amplitude tracks absolute load, so light vs heavy activity look
-// different (relative increase is visible) while the log keeps faint bursts readable and the loud
-// end from clipping. REF = where activity starts to register, CEIL = the load that fills the band.
-const SPARK_REF = 10;
-const SPARK_CEIL = 900;
-const SPARK_LOG_MAX = Math.log1p(SPARK_CEIL / SPARK_REF);
-const sparkAmp = (events: number): number =>
-  Math.min(1, Math.log1p(events / SPARK_REF) / SPARK_LOG_MAX);
-const SPARK_RAMP: ReadonlyArray<readonly [number, number]> = [
-  [0, 0],
-  [0.4, 0.03],
-  [0.7, 0.11],
-  [0.88, 0.22],
-  [1, 0.34],
-];
 const POLL_MS = 120;
 const POLL_S = POLL_MS / 1000;
 const LAG_MS = 200;
@@ -69,8 +45,8 @@ let lagTimer: ReturnType<typeof setInterval> | null = null;
 let rafHandle: number | null = null;
 // The stats tab's scope: paused when its tab isn't the active one (so a hidden subtree does no work).
 let statsScope: Scope | null = null;
-// Advances every tick (regardless of tab) so the always-visible spark keeps moving; the value-dedup
-// leaves the display:none-hidden Info bindings asleep until that tab is shown.
+// Advances every tick — the heartbeat's changing value, so every pulse() binding re-runs per poll;
+// the value-dedup leaves the display:none-hidden Info bindings asleep until that tab is shown.
 let metricSeq = 0;
 
 // A pull-based meter on the runtime's built-in `events`; poll() drains it every tick for the
@@ -122,11 +98,6 @@ let nodeSources = 0;
 let nodeScopes = 0;
 let nodeChannels = 0;
 let nodeUnread = 0;
-
-// Rendering-pipeline sparkline series: writes up vs DOM updates down. The buffers hold log-scaled
-// amplitudes (0..1, see sparkAmp) so the trace height reflects how much work is actually flowing.
-const sparkIn: number[] = [];
-const sparkOut: number[] = [];
 
 /* ---- binding helpers ---- */
 // The dom surface's dedup attribute binder, pre-branded internal so the inspector never observes
@@ -404,108 +375,6 @@ function buildHisto(): HTMLElement {
   );
 }
 
-// Deflect from the center: dir −1 sends writes up, dir +1 sends DOM updates down, each resting a
-// SPARK_GAP off-center so the flat traces stay separate. Samples are already gain-normalized to 0..1.
-function plotPoints(data: number[], dir: -1 | 1, close = false): string {
-  const step = data.length > 1 ? SPARK_W / (data.length - 1) : 0;
-  const span = SPARK_LINE - 2 - SPARK_GAP;
-  const pts = data
-    .map(
-      (v, i) =>
-        `${(i * step).toFixed(1)},${(SPARK_C + dir * (SPARK_GAP + v * span)).toFixed(1)}`,
-    )
-    .join(" ");
-  if (!close || pts === "") return pts;
-  // close the polygon to the true center (not the gapped rest line) so the two halves meet there —
-  // the lines stay separated by SPARK_GAP, but the fills leave no empty band down the middle.
-  const base = SPARK_C.toFixed(1);
-  const lastX = (data.length > 1 ? SPARK_W : 0).toFixed(1);
-  return `0,${base} ${pts} ${lastX},${base}`;
-}
-
-// A faint time grid of vertical hairlines that scrolls left at the sample cadence (one SPARK_STEP per
-// tick, recycling every SPARK_GRID). It rides metricSeq, not the data, so the window reads as a live
-// sliding window even when both traces are flat at idle — without faking any activity.
-function gridPath(seq: number): string {
-  const phase = (seq * SPARK_STEP) % SPARK_GRID;
-  let d = "";
-  for (let x = SPARK_W - phase; x > -0.5; x -= SPARK_GRID) {
-    d += `M${x.toFixed(1)} 0V${SPARK_H} `;
-  }
-  return d.trimEnd();
-}
-
-function buildSpark(): HTMLElement {
-  // `flip` reverses the vertical ramp so the dense end sits at the center axis for both halves
-  // (top half fades up, bottom half fades down) — the gradient mirrors around the center line too.
-  const grad = (id: string, cls: string, flip = false): HTMLElement => (
-    <linearGradient id={id} x1={0} y1={flip ? 1 : 0} x2={0} y2={flip ? 0 : 1}>
-      {SPARK_RAMP.map(([offset, opacity]) => (
-        <stop offset={offset} class={cls} stop-opacity={opacity} />
-      ))}
-    </linearGradient>
-  );
-  // Each half = a gradient area that grows with activity, plus the trace line on top.
-  const half = (
-    data: number[],
-    dir: -1 | 1,
-    cls: string,
-    fill: string,
-  ): HTMLElement[] => {
-    const area = <polygon stroke="none" fill={`url(#${fill})`} />;
-    const line = (
-      <polyline
-        class={cls}
-        fill="none"
-        stroke-width={1}
-        stroke-linejoin="round"
-        stroke-linecap="round"
-      />
-    );
-    bindAttr(
-      area,
-      "points",
-      pulse(() => plotPoints(data, dir, true)),
-    );
-    bindAttr(
-      line,
-      "points",
-      pulse(() => plotPoints(data, dir)),
-    );
-    return [area, line];
-  };
-  const grid = (
-    <path class="li-spk-grid" fill="none" stroke-width={1} />
-  ) as Element;
-  bindAttr(
-    grid,
-    "d",
-    pulse(() => gridPath(metricSeq)),
-  );
-  return (
-    <span
-      class="li-spark"
-      title="rendering pipeline — writes in (green ↑) vs DOM updates out (red ↓)"
-    >
-      <svg
-        width={SPARK_W}
-        height={SPARK_H}
-        viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
-        role="img"
-        aria-label="Rendering pipeline utilization"
-      >
-        <defs>
-          {grad(`${PANEL_ID}-spk-up`, "li-spk-up")}
-          {grad(`${PANEL_ID}-spk-down`, "li-spk-down", true)}
-        </defs>
-        {grid}
-        {half(sparkIn, -1, "li-spk-up", `${PANEL_ID}-spk-up`)}
-        {half(sparkOut, 1, "li-spk-down", `${PANEL_ID}-spk-down`)}
-      </svg>
-    </span>
-  );
-}
-
 /* ---- stats tab ---- */
 function stat(
   label: string,
@@ -768,13 +637,6 @@ function poll(): number {
     lastFlushBatch = lastFlush.batchSize;
     lastFlushMs = lastFlush.durationMs;
   }
-  // Sparkline = rendering-pipeline utilization: writes entering vs effect runs produced, log-scaled
-  // so heavier load reads taller than lighter load (relative activity stays visible).
-  sparkIn.push(sparkAmp(dw));
-  sparkOut.push(sparkAmp(deff));
-  if (sparkIn.length > SPARK_N) sparkIn.shift();
-  if (sparkOut.length > SPARK_N) sparkOut.shift();
-
   if (!fpsReady) {
     healthReady = false;
     fpsKey = "";
@@ -787,8 +649,8 @@ function poll(): number {
     fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
   }
 
-  // The sequence advances every tick so the value bindings + the always-visible spark re-render. The
-  // heavy per-tab refresh is split into renderActiveTab() and driven off the critical path.
+  // The sequence advances every tick so the value bindings re-render. The heavy per-tab refresh is
+  // split into renderActiveTab() and driven off the critical path.
   return ++metricSeq;
 }
 
@@ -801,8 +663,10 @@ function renderActiveTab(): void {
     const c = inspectResources();
     nodeStates = c.states;
     nodeComputeds = c.computeds;
-    nodeEffects = c.effects;
-    nodeViews = c.views;
+    // The DOM reading of the core's generic census: a targeted effect is a rendering binding
+    // (loom/dom sets `target` on text/attr/class/style/list) — a "view"; the rest are app effects.
+    nodeEffects = c.effects - c.targetedEffects;
+    nodeViews = c.targetedEffects;
     nodeSources = c.sources;
     nodeScopes = c.scopes;
     nodeChannels = c.channels;
@@ -874,18 +738,13 @@ function startMetrics(): void {
 
 /* ---- seams the panel drives ---- */
 
-interface StatsPanes {
-  readonly statsPane: HTMLElement;
-  readonly sparkEl: HTMLElement;
-}
-
 // Wire the metrics subsystem. Called inside the panel's scope so the meter + heartbeat become its
 // resources (detach on minimize); the web-vital sources + the Info pane go in a nested scope that
-// pauses when the Info tab isn't active. Returns the Info pane and the (always-live) header spark.
+// pauses when the Info tab isn't active. Returns the Info pane.
 export function wireStats(opts: {
   activeTab: () => TabId | undefined;
   isMinimized: () => boolean;
-}): StatsPanes {
+}): HTMLElement {
   activeTabFn = opts.activeTab;
   isMinimizedFn = opts.isMinimized;
   metricsMeter = meter([
@@ -926,9 +785,8 @@ export function wireStats(opts: {
     }
     statsPane = buildStatsPane();
   }, PANEL_OPTS);
-  const sparkEl = buildSpark();
   startMetrics();
-  return { statsPane, sparkEl };
+  return statsPane;
 }
 
 export function pauseStats(): void {
@@ -972,6 +830,4 @@ export function stopStats(): void {
   healthKey = healthLabel = fpsKey = "";
   nodeStates = nodeComputeds = nodeEffects = nodeViews = 0;
   nodeSources = nodeScopes = nodeChannels = nodeUnread = 0;
-  sparkIn.length = 0;
-  sparkOut.length = 0;
 }

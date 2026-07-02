@@ -202,7 +202,7 @@ export interface ResourceCounts {
     readonly states: number;
     readonly computeds: number;
     readonly effects: number;
-    readonly views: number;
+    readonly targetedEffects: number;
     readonly sources: number;
     readonly scopes: number;
     readonly channels: number;

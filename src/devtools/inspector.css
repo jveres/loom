@@ -792,34 +792,6 @@
     color: var(--li-fg);
     background: var(--li-accent-soft);
   }
-  .li-spark {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    opacity: 0.82;
-    align-self: center;
-    padding-top: 2px;
-  }
-  .li-spark svg {
-    margin: 0;
-    background: var(--li-hover);
-    border-radius: 4px;
-  }
-  /* up = writes (green), down = DOM updates (red); one token drives both the gradient fill and the
-     trace stroke so the line themes with light/dark like the rest of the panel. */
-  /* scrolling time grid — faint hairlines so the window reads as live even when the traces are flat */
-  .li-spk-grid {
-    stroke: var(--li-border-soft);
-  }
-  .li-spk-up {
-    stop-color: var(--li-num);
-    stroke: var(--li-num);
-  }
-  .li-spk-down {
-    stop-color: var(--li-bool);
-    stroke: var(--li-bool);
-  }
 }
 
 #loom-inspector-menu {

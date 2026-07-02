@@ -1118,8 +1118,12 @@ export function inspect(options?: {
 export interface ResourceCounts {
   readonly states: number;
   readonly computeds: number;
+  // All live effects; `targetedEffects` is the subset that declared an EffectOptions.target —
+  // attribution to an external object. Surfaces tag their rendering bindings with it (loom/dom
+  // sets the bound DOM node), so tooling can read targeted effects as "views"; core doesn't
+  // assume that meaning.
   readonly effects: number;
-  readonly views: number;
+  readonly targetedEffects: number;
   readonly sources: number;
   readonly scopes: number;
   readonly channels: number;
@@ -1132,7 +1136,7 @@ export function inspectResources(): ResourceCounts {
   let states = 0;
   let computeds = 0;
   let effects = 0;
-  let views = 0;
+  let targetedEffects = 0;
   let sources = 0;
   let unread = 0;
   for (const [id, ref] of inspectRefs) {
@@ -1147,10 +1151,8 @@ export function inspectResources(): ResourceCounts {
       computeds++;
       if (node.subs === undefined) unread++;
     } else if (meta.kind === "effect") {
-      // An effect bound to a DOM node (loom/dom's text/attr/class/style/list bindings set `target`)
-      // is a view — the rendering output — counted apart from app effects.
-      if (meta.target !== undefined) views++;
-      else effects++;
+      effects++;
+      if (meta.target !== undefined) targetedEffects++;
     } else if ("connect" in node) {
       sources++; // a state-kind node backed by an external producer
     } else {
@@ -1162,7 +1164,7 @@ export function inspectResources(): ResourceCounts {
     states,
     computeds,
     effects,
-    views,
+    targetedEffects,
     sources,
     scopes: liveScopes,
     channels: channelRegistry.size,

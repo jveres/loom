@@ -438,21 +438,17 @@ export function mountInspector(target: Element = document.body): void {
   // stats pane gets its own nested scope so switching tabs pauses just it. The scope's options
   // mark everything created inside as internal/PANEL_ID — so the heartbeat, vitals, heap timer and
   // bindings inherit them without repeating the opts. Resources live in the scope that owns them:
-  // the heartbeat in the panel scope (it drives the always-visible spark and pauses only on
-  // minimize), the vitals + heap timer in the stats scope (they feed only the stats tab, so their
-  // observers/timer suspend when it's hidden and reconnect — buffered — on return). The spark sits
-  // in the outer scope so it stays live across tab switches.
-  // Definite-assignment: scope() runs its callback synchronously (see loom's scope()), so both are
-  // assigned before the scope() call returns and before either is read below.
+  // the heartbeat in the panel scope (it pauses only on minimize), the vitals + heap timer in the
+  // stats scope (they feed only the stats tab, so their observers/timer suspend when it's hidden
+  // and reconnect — buffered — on return).
+  // Definite-assignment: scope() runs its callback synchronously (see loom's scope()), so it is
+  // assigned before the scope() call returns and before it's read below.
   let statsPane!: HTMLElement;
-  let sparkEl!: HTMLElement;
   inspectorScope = scope(() => {
-    const panes = wireStats({
+    statsPane = wireStats({
       activeTab: () => ui?.(),
       isMinimized: () => panel?.classList.contains("li-min") ?? false,
     });
-    statsPane = panes.statsPane;
-    sparkEl = panes.sparkEl;
   }, PANEL_OPTS);
   if (startMin) inspectorScope.pause();
 
@@ -495,12 +491,7 @@ export function mountInspector(target: Element = document.body): void {
     tabBtns.set(t.id, btn);
     tabscroll.append(btn);
   }
-  const tabs = (
-    <div class="li-tabs">
-      {tabscroll}
-      {sparkEl}
-    </div>
-  );
+  const tabs = <div class="li-tabs">{tabscroll}</div>;
 
   const resize = (
     <div class="li-resize" title="Drag to resize">
