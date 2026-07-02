@@ -120,7 +120,7 @@ The core exports these functions:
   cell drives), or `{ defer: true, maxStale? }` to run re-runs off the critical
   path (see [Deferred effects](#deferred-effects)).
 - `batch(fn)` groups writes and flushes effects once after the batch.
-- `scope(fn, options?)` groups the effects (and `polled`/`source` resources)
+- `scope(fn, options?)` groups the effects (and `poll`/`source` resources)
   created inside `fn` so they can be disposed (`stop()`) or suspended (`pause()`
   / `resume()`) together. Scopes nest, and an effect runs only while no scope in
   its parent chain is paused. `options` (`internal` / `label`)
@@ -135,16 +135,16 @@ The core exports these functions:
 > functional set. Mutating an object/array in place? `mutate` (mutate + notify in
 > one) — or `trigger` when the mutation already happened elsewhere and you only
 > need to notify.
-- `polled(sample, ms, options?)` re-samples `sample()` every `ms` ms into a
-  value-deduped reactive source; bindings re-run only when the value changes.
-  Bridges imperative/external data (clocks, counters, polled APIs) into the
-  graph. Returns a callable read with a `stop`: `p()` reads, `p.stop()` clears
-  the timer.
-- `source(connect, initial, options?)` creates a **lazy** external source:
-  `connect(set)` runs when the source gains its first subscriber and the
-  returned teardown runs when it loses its last, so the producer (event
-  listener, timer, `PerformanceObserver`, socket) is only live while observed.
-  Returns a read function.
+- `poll(sample, ms, options?)` — the **pull** bridge for external data:
+  re-samples `sample()` every `ms` ms into a value-deduped read; bindings
+  re-run only when the value changed. Returns a callable read with a `stop`:
+  `p()` reads, `p.stop()` clears the timer. See
+  [External data](#external-data).
+- `source(connect, initial, options?)` — the **push** bridge: `connect(set)`
+  runs when the source gains its first subscriber and the returned teardown
+  runs when it loses its last, so the producer (event listener,
+  `PerformanceObserver`, socket) is only live while observed. Returns a read
+  function. See [External data](#external-data).
 - `fields(object, options?)` creates one state cell per enumerable string key.
 - `channel(name, options?)` declares a named channel — a **generic**, gated,
   overwriting ring buffer that records cheaply (no allocation until metered) and
@@ -175,7 +175,7 @@ The core exports these types:
 - `Read<T>` is a read function.
 - `Stop` is a disposer function.
 - `Scope` is a scope handle: `{ stop, pause, resume }`.
-- `Polled<T>` is a callable polled source: `Read<T> & { stop }`.
+- `Polled<T>` is `poll()`'s handle: `Read<T> & { stop }`.
 - `SourceConnect<T>` is a lazy source's `(set) => teardown` wiring function.
 - `EffectFn` is a reusable effect callback type.
 - `ErrorHandler` is the `configure({ onError })` boundary signature.
@@ -243,21 +243,37 @@ mutate(rows, (value) => {
 });
 ```
 
-### External sources
+### External data
 
-Bridge imperative or external data into the graph. `polled()` re-samples on an
-interval (eager, deduped); `source()` is lazy — it connects on first subscriber
-and disconnects on last, so the producer only runs while observed.
+Four bridges carry outside data into the graph, split by **how the data
+arrives**:
+
+| Your data arrives as… | Reach for | Mechanism |
+| --- | --- | --- |
+| a value you can read at any time | `poll(sample, ms)` | pull — loom samples it on an interval |
+| a producer that pushes values | `source(connect, initial)` | push — connects while observed |
+| an async request/response | `resource(fetcher)` ([loom/async](#async-resources)) | request — loading/error as reads |
+| discrete events to count or sample | `channel` + `meter` | events — gated ring, pull-drained |
+
+The pull bridge, `poll`, suits values that always exist and merely change —
+clocks, `performance` counters, media positions:
 
 ```ts
-import { effect, polled, source } from "loom";
+import { poll } from "loom";
 
-// Eager: sample Date.now() every 250ms (unchanged samples don't re-run readers).
-const clock = polled(() => Date.now(), 250);
-const stopClock = effect(() => console.log(clock()));
-// ... later: stopClock(); clock.stop();
+const heap = poll(() => performance.memory?.usedJSHeapSize ?? 0, 5000);
+// heap() reads; bindings re-run only when the sampled value changed
+```
 
-// Lazy: a media query that only listens while something reads it.
+The push bridge, `source`, is for producers that call *you* — event listeners,
+observers, sockets. It is lazy: `connect(set)` runs when the source gains its
+first subscriber and the returned teardown runs when it loses its last, so the
+producer is only live while something actually reads it:
+
+```ts
+import { effect, source } from "loom";
+
+// A media query that only listens while something reads it.
 const darkMode = source<boolean>((set) => {
   const mq = matchMedia("(prefers-color-scheme: dark)");
   const onChange = () => set(mq.matches);
@@ -269,9 +285,12 @@ const stop = effect(() => console.log("dark:", darkMode()));
 stop(); // last subscriber gone -> the listener is removed automatically
 ```
 
-The dev inspector uses both: a `polled()` heartbeat drives its per-tick metric
+The dev inspector uses both: a `poll()` heartbeat drives its per-tick metric
 math, and the CLS/LCP/INP web vitals are `source()`s whose `PerformanceObserver`s
-connect and disconnect with the panel — no manual teardown.
+connect and disconnect with the panel — no manual teardown. For the request
+bridge (async fetches with loading/error state) see
+[Async resources](#async-resources); for event streams see
+[Observability](#observability).
 
 ### Async resources
 
@@ -339,8 +358,8 @@ minimized) with a nested scope around the stats tab (paused when it isn't the
 active tab). Pausing the outer scope freezes everything; resuming it leaves the
 stats scope suspended if its tab is still hidden — no manual coordination.
 
-Scopes own resources, not just effects: a `polled()` or `source()` created inside
-a scope is suspended with it too. Pausing the scope clears a `polled()`'s timer
+Scopes own resources, not just effects: a `poll()` or `source()` created inside
+a scope is suspended with it too. Pausing the scope clears a `poll()`'s timer
 (resuming takes a fresh sample) and disconnects a `source()`'s producer even
 though its paused subscribers stay linked (resuming reconnects it); stopping the
 scope tears them all down. So a hidden subtree stops not only re-rendering but
@@ -857,7 +876,7 @@ zero. The rest of `loom/observe` snapshots the reactive graph:
 
 `loom/devtools` is a self-contained dev panel built entirely on the public
 surface (`inspect`, `inspectResources`, `meter`/`events`, `scope`,
-`polled`, `source`). Mount it to get a live, draggable, resizable overlay; it is
+`poll`, `source`). Mount it to get a live, draggable, resizable overlay; it is
 purely a consumer of the runtime, so the same data is available to any tooling
 you write yourself.
 
@@ -998,7 +1017,7 @@ from how the thing is used. In the core you **stop** processes: `effect()` and
 `list()` hand back a bare `Stop` function because the disposer is the only
 handle you need; `scope()` and `meter()` return objects because stopping is
 one of several operations (`stop`/`pause`/`resume`, `read`/`stop`); and
-`polled()` must stay callable, so its `stop` rides on the read
+`poll()` must stay callable, so its `stop` rides on the read
 (`Polled = Read & { stop }`). In `loom/dom` you **dispose** trees —
 `dispose(root)` tears down everything a subtree owns, `remove(node)` disposes
 and detaches. In `loom/devtools` you **mount** and **unmount** the panel. Same

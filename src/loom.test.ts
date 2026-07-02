@@ -10,7 +10,7 @@ import {
   fields,
   mutate,
   type Polled,
-  polled,
+  poll,
   type Scope,
   scope,
   source,
@@ -594,7 +594,7 @@ describe("loom channels", () => {
   });
 });
 
-describe("loom polled", () => {
+describe("loom poll", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -602,7 +602,7 @@ describe("loom polled", () => {
   it("samples immediately and re-samples on the interval", () => {
     vi.useFakeTimers();
     let value = 0;
-    const p = polled(() => value, 100);
+    const p = poll(() => value, 100);
     expect(p()).toBe(0);
 
     value = 1;
@@ -621,7 +621,7 @@ describe("loom polled", () => {
     let value = 0;
     let runs = 0;
     let seen: number | undefined;
-    const p = polled(() => value, 100);
+    const p = poll(() => value, 100);
     const stop = effect(() => {
       seen = p();
       runs++;
@@ -646,7 +646,7 @@ describe("loom polled", () => {
   it("stops sampling after stop()", () => {
     vi.useFakeTimers();
     let value = 0;
-    const p = polled(() => value, 100);
+    const p = poll(() => value, 100);
     p.stop();
 
     value = 9;
@@ -654,13 +654,13 @@ describe("loom polled", () => {
     expect(p()).toBe(0);
   });
 
-  it("honours state options: an internal polled is excluded from the channels", () => {
+  it("honours state options: an internal poll is excluded from the channels", () => {
     vi.useFakeTimers();
     const m = meter([events.write]);
 
     let value = 0;
     // The timer resamples regardless of subscribers, so no effect is needed to drive it.
-    const internalSource = polled(() => value, 100, { internal: true });
+    const internalSource = poll(() => value, 100, { internal: true });
 
     value = 1;
     vi.advanceTimersByTime(100);
@@ -913,12 +913,12 @@ describe("loom scope", () => {
     expect(runs).toBe(1); // nested effect disposed too
   });
 
-  it("suspends a polled() created inside the scope while paused", () => {
+  it("suspends a poll() created inside the scope while paused", () => {
     vi.useFakeTimers();
     let samples = 0;
     let p!: Polled<number>;
     const s = scope(() => {
-      p = polled(() => ++samples, 100, { internal: true });
+      p = poll(() => ++samples, 100, { internal: true });
     });
     expect(samples).toBe(1); // initial sample at creation
     vi.advanceTimersByTime(200);
@@ -937,11 +937,11 @@ describe("loom scope", () => {
     vi.useRealTimers();
   });
 
-  it("stop() clears a polled() timer created inside the scope", () => {
+  it("stop() clears a poll() timer created inside the scope", () => {
     vi.useFakeTimers();
     let samples = 0;
     scope(() => {
-      polled(() => ++samples, 100, { internal: true });
+      poll(() => ++samples, 100, { internal: true });
     }).stop();
     vi.advanceTimersByTime(300);
     expect(samples).toBe(1); // only the creation-time sample; timer cleared by stop()

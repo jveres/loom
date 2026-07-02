@@ -13,6 +13,7 @@ export declare const channelRegistry: Map<string, ChannelNode>;
 export declare const sampler: {
     record(node: ChannelNode, _a: unknown, _b: unknown, _c: unknown, _d: unknown, _e: unknown): void;
 };
+export declare function makeChannelNode(name: string, cap: number, fields: readonly string[]): ChannelNode;
 export declare const readCh: ChannelNode;
 export declare const writeCh: ChannelNode;
 export declare const computeCh: ChannelNode;

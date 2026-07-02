@@ -1,13 +1,13 @@
-import { a as e, f as t, g as n, h as r, i, m as a, v as o } from "./loom-v9Dpu4UJ.js";
-import { i as s, n as c, r as l } from "./meter-BIAFrHel.js";
-import { n as ee, t as u } from "./observe-4cSITidV.js";
+import { _ as e, a as t, d as n, h as r, i, m as a, p as o } from "./loom-IKcvaxMB.js";
+import { i as s, n as c, r as l } from "./meter-CmBLmy5r.js";
+import { n as ee, t as u } from "./observe-D9R1GbKs.js";
 import { bindAttr as te, tap as d, text as f, when as ne } from "./dom.js";
 import { virtualList as p } from "./dom/virtual-list.js";
 import { jsx as m, jsxs as h } from "./jsx-runtime.js";
 //#region src/devtools/bindings.ts
 var g = { internal: !0 }, _ = [];
-function re(t, n) {
-	_.push(e(t, n ? {
+function re(e, n) {
+	_.push(t(e, n ? {
 		...g,
 		...n
 	} : g));
@@ -738,7 +738,7 @@ var J = {
 	health: "Overall health (0–100) derived from FPS against a 55fps target.",
 	frames: "Recent per-frame render times; taller/red bars are slower frames.",
 	lag: "Main-thread lag: how late a fixed 200ms timer fires (now · peak). High = jank.",
-	heap: "JS heap used (Chrome only), re-sampled every 5s via polled().",
+	heap: "JS heap used (Chrome only), re-sampled every 5s via poll().",
 	cls: "Cumulative Layout Shift — unitless score (not pixels), worst session window (Core Web Vital).",
 	lcp: "Largest Contentful Paint — time to the largest paint (Core Web Vital).",
 	inp: "Interaction to Next Paint — worst interaction latency (Core Web Vital).",
@@ -757,7 +757,7 @@ var J = {
 	computeds: "Live computed values.",
 	effects: "Live app effects (your effect() calls), excluding DOM-binding views.",
 	views: "Live DOM bindings (text/attr/class/style/list) — the rendering output.",
-	sources: "Live lazy sources (source/polled) — external producers wired into the graph.",
+	sources: "Live lazy sources (source/poll) — external producers wired into the graph.",
 	scopes: "Live scopes grouping effects and resources.",
 	channels: "Registered channels — gated ring-buffer event streams for any use (7 built-in reactive ones + any the app declares).",
 	unread: "States/computeds nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked cells."
@@ -887,24 +887,24 @@ function cr() {
 	};
 	tn = requestAnimationFrame(e);
 }
-function lr(e) {
-	Qt = e.activeTab, $t = e.isMinimized, an = l([
+function lr(t) {
+	Qt = t.activeTab, $t = t.isMinimized, an = l([
 		c.read,
 		c.write,
 		c.compute,
 		c.effect,
 		c.create,
 		c.dispose
-	]), on = l([c.flush], "samples"), R = t(ar, Yt, g), re(() => {
-		R?.(), o(or);
+	]), on = l([c.flush], "samples"), R = n(ar, Yt, g), re(() => {
+		R?.(), e(or);
 	}, {
 		defer: !0,
 		maxStale: Yt
 	});
-	let n;
-	return nn = a(() => {
-		wn = r(Kn, 0, g), Tn = r(qn, 0, g), En = r(Jn, 0, g), Dn = r(Xn, 0, g), rr() && (On = t(() => rr()?.usedJSHeapSize ?? 0, 5e3, g)), n = tr();
-	}, g), cr(), n;
+	let r;
+	return nn = o(() => {
+		wn = a(Kn, 0, g), Tn = a(qn, 0, g), En = a(Jn, 0, g), Dn = a(Xn, 0, g), rr() && (On = n(() => rr()?.usedJSHeapSize ?? 0, 5e3, g)), r = tr();
+	}, g), cr(), r;
 }
 function ur() {
 	nn?.pause();
@@ -1047,14 +1047,14 @@ function Br(e = document.body) {
 		let e = document.createElement("style");
 		e.id = `${v}-css`, e.textContent = ae, document.head.append(e);
 	}
-	Q = n("stats", g);
-	let t = Or(), r = /* @__PURE__ */ m("span", { class: "li-menu-val" }), o = () => {
-		Y?.setAttribute("data-theme", t), hr?.setAttribute("data-theme", t), r.innerHTML = se(pr[t], 13), s.title = `Theme: ${t} (click to cycle)`;
+	Q = r("stats", g);
+	let t = Or(), n = /* @__PURE__ */ m("span", { class: "li-menu-val" }), a = () => {
+		Y?.setAttribute("data-theme", t), hr?.setAttribute("data-theme", t), n.innerHTML = se(pr[t], 13), s.title = `Theme: ${t} (click to cycle)`;
 	}, s = /* @__PURE__ */ h("button", {
 		type: "button",
 		class: "li-menu-item",
 		title: "Click to change theme",
-		children: [/* @__PURE__ */ m("span", { children: "Theme" }), r]
+		children: [/* @__PURE__ */ m("span", { children: "Theme" }), n]
 	});
 	d(s, () => {
 		let e = [
@@ -1062,7 +1062,7 @@ function Br(e = document.body) {
 			"light",
 			"dark"
 		];
-		t = e[(e.indexOf(t) + 1) % e.length] ?? "system", xr(Sr, t), o();
+		t = e[(e.indexOf(t) + 1) % e.length] ?? "system", xr(Sr, t), a();
 	});
 	let c = /* @__PURE__ */ m("div", {
 		class: "li-menu",
@@ -1128,7 +1128,7 @@ function Br(e = document.body) {
 			_
 		]
 	}), ue;
-	Z = a(() => {
+	Z = o(() => {
 		ue = lr({
 			activeTab: () => Q?.(),
 			isMinimized: () => Y?.classList.contains("li-min") ?? !1
@@ -1176,7 +1176,7 @@ function Br(e = document.body) {
 		he,
 		X,
 		ge
-	] }), Y.id = v, y && Y.classList.add("li-min"), o(), Lr(oe, Y), Rr(ge, Y), gr = (e) => {
+	] }), Y.id = v, y && Y.classList.add("li-min"), a(), Lr(oe, Y), Rr(ge, Y), gr = (e) => {
 		let t = e.target instanceof Node ? e.target : null;
 		!c.hidden && (t === null || !c.contains(t)) && e.target !== p && f();
 	}, document.addEventListener("pointerdown", gr), e.append(Y), document.body.append(c), Mr && (Y.style.width = `${Math.max(240, Math.min(Mr.width, window.innerWidth - 16))}px`, Y.style.height = `${Math.max(160, Math.min(Mr.height, window.innerHeight - 16))}px`), jr) {

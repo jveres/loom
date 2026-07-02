@@ -36,7 +36,7 @@ export {
   effect,
   fields,
   mutate,
-  polled,
+  poll,
   scope,
   source,
   state,

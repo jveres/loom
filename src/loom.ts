@@ -43,7 +43,7 @@ export type SourceConnect<T> = (set: (value: T) => void) => Stop;
 export type NodeKind = "state" | "computed" | "effect";
 
 // Shared creation options for every primitive. `effect` adds `target` (see EffectOptions); the
-// others (state/computed/fields/source/polled/scope) take NodeOptions directly.
+// others (state/computed/fields/source/poll/scope) take NodeOptions directly.
 export interface NodeOptions {
   readonly internal?: boolean;
   readonly label?: string;
@@ -138,7 +138,7 @@ interface EffectNode extends NodeBase {
   deferDeadline: number;
 }
 
-// A non-effect resource owned by a scope (a polled timer, a lazy source's connection): suspended
+// A non-effect resource owned by a scope (a poll timer, a lazy source's connection): suspended
 // and resumed with the scope's effects, and torn down when it stops.
 interface ScopeResource {
   pause(): void;
@@ -563,18 +563,19 @@ function enqueueEffect(node: EffectNode): void {
   else queueEffect(node);
 }
 
-// A polled source is a callable reactive read (like `state`/`computed`/`source`) that also carries a
+// A poll handle is a callable reactive read (like `state`/`computed`/`source`) that also carries a
 // `stop` to clear its interval — so `p()` reads and `p.stop()` tears down.
 export type Polled<T> = Read<T> & { readonly stop: Stop };
 
 /**
- * A reactive source that re-samples `sample()` every `ms` milliseconds into a value-deduped
- * signal. Bindings reading the source (`p()`) re-run only when the sampled value actually changes —
- * so it bridges imperative or external data (clocks, `performance` counters, polled APIs, media
- * state) into the reactive graph without a hand-rolled heartbeat. Call `.stop()` to clear the
- * timer. The backing state honours `options` (e.g. `{ internal: true }`).
+ * The **pull** bridge for external data: re-samples `sample()` every `ms` milliseconds into a
+ * value-deduped signal, for values you can read imperatively at any time (clocks, `performance`
+ * counters, media state). Bindings reading the poll (`p()`) re-run only when the sampled value
+ * actually changed. Call `.stop()` to clear the timer; created inside a scope, the timer suspends
+ * and resumes with it. The backing state honours `options` (e.g. `{ internal: true }`).
+ * Push-style producers want {@link source}; async request/response wants `resource` (loom/async).
  */
-export function polled<T>(
+export function poll<T>(
   sample: () => T,
   ms: number,
   options?: NodeOptions,

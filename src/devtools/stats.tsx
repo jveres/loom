@@ -6,7 +6,7 @@ import {
   type Meter,
   meter,
   type Polled,
-  polled,
+  poll,
   type Read,
   type Scope,
   type SourceConnect,
@@ -400,7 +400,7 @@ const TIP = {
   health: "Overall health (0–100) derived from FPS against a 55fps target.",
   frames: "Recent per-frame render times; taller/red bars are slower frames.",
   lag: "Main-thread lag: how late a fixed 200ms timer fires (now · peak). High = jank.",
-  heap: "JS heap used (Chrome only), re-sampled every 5s via polled().",
+  heap: "JS heap used (Chrome only), re-sampled every 5s via poll().",
   cls: "Cumulative Layout Shift — unitless score (not pixels), worst session window (Core Web Vital).",
   lcp: "Largest Contentful Paint — time to the largest paint (Core Web Vital).",
   inp: "Interaction to Next Paint — worst interaction latency (Core Web Vital).",
@@ -425,7 +425,7 @@ const TIP = {
   views:
     "Live DOM bindings (text/attr/class/style/list) — the rendering output.",
   sources:
-    "Live lazy sources (source/polled) — external producers wired into the graph.",
+    "Live lazy sources (source/poll) — external producers wired into the graph.",
   scopes: "Live scopes grouping effects and resources.",
   channels:
     "Registered channels — gated ring-buffer event streams for any use (7 built-in reactive ones + any the app declares).",
@@ -603,7 +603,7 @@ function heapMem(): { usedJSHeapSize: number } | undefined {
 }
 
 function buildHeapStat(): HTMLElement {
-  // Heap drifts slowly, so it's a polled() source (created in wireStats) sampled every 5s.
+  // Heap drifts slowly, so it's a poll() source (created in wireStats) sampled every 5s.
   return stat(
     "heap",
     () => {
@@ -616,7 +616,7 @@ function buildHeapStat(): HTMLElement {
 }
 
 /* ---- metrics loop ---- */
-function poll(): number {
+function pollTick(): number {
   const frame = metricsMeter?.read();
   const dr = frame?.["loom:read"]?.count ?? 0;
   const dw = frame?.["loom:write"]?.count ?? 0;
@@ -756,7 +756,7 @@ export function wireStats(opts: {
     events.dispose,
   ]); // default "count" view — rates only, no per-event allocation
   flushMeter = meter([events.flush], "samples"); // the one channel we read records from
-  heartbeat = polled(poll, POLL_MS, PANEL_OPTS);
+  heartbeat = poll(pollTick, POLL_MS, PANEL_OPTS);
   // The heavy per-tab refresh runs in the deferred lane — ticked by the heartbeat but off the
   // critical path (idle-first, ~POLL_MS floor), so under app load it yields instead of competing each
   // frame. untracked so it re-runs only on the tick, not on whatever the render reads. Owned by the
@@ -777,11 +777,7 @@ export function wireStats(opts: {
     inpSource = source(connectInp, 0, PANEL_OPTS);
     longTasksSource = source(connectLongTasks, 0, PANEL_OPTS);
     if (heapMem()) {
-      heapSource = polled(
-        () => heapMem()?.usedJSHeapSize ?? 0,
-        5000,
-        PANEL_OPTS,
-      );
+      heapSource = poll(() => heapMem()?.usedJSHeapSize ?? 0, 5000, PANEL_OPTS);
     }
     statsPane = buildStatsPane();
   }, PANEL_OPTS);

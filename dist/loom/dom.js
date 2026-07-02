@@ -1,4 +1,4 @@
-import { a as e, v as t } from "./loom-v9Dpu4UJ.js";
+import { _ as e, a as t } from "./loom-IKcvaxMB.js";
 import { t as n } from "./jsx-props-sAPN8GVq.js";
 //#region src/dom/index.ts
 var r = (e) => e, i = /* @__PURE__ */ new WeakMap(), a = "http://www.w3.org/2000/svg", o = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
@@ -46,7 +46,7 @@ function f(e, t, n, r) {
 	return a;
 }
 function p(n, r, i) {
-	let a = /* @__PURE__ */ new Map(), o = t(() => e(() => {
+	let a = /* @__PURE__ */ new Map(), o = e(() => t(() => {
 		let e = i.reorder?.() !== !1, t = f(r(), a, i.key, i.render);
 		if (e) v(n, t, null);
 		else for (let e of t) e.parentNode || n.appendChild(e);
@@ -65,13 +65,13 @@ function m(n, i) {
 		__loomDynamic: !0,
 		mount(r) {
 			let a = [], o;
-			return t(() => e(() => {
-				let e = n();
-				if (e === o) return;
-				o = e;
+			return e(() => t(() => {
+				let t = n();
+				if (t === o) return;
+				o = t;
 				for (let e of a) x(e);
 				let s = document.createDocumentFragment();
-				t(() => D(s, i(e))), a = [...s.childNodes], r.parentNode?.insertBefore(s, r);
+				e(() => D(s, i(t))), a = [...s.childNodes], r.parentNode?.insertBefore(s, r);
 			}, A(r, "dom.dynamic")));
 		}
 	});
@@ -90,7 +90,7 @@ function _(n, i, a) {
 		__loomDynamic: !0,
 		mount(r) {
 			let o = /* @__PURE__ */ new Map();
-			return t(() => e(() => {
+			return e(() => t(() => {
 				let e = f(n(), o, a, i), t = r.parentNode;
 				t && v(t, e, r);
 			}, A(r, "dom.each")));
@@ -102,25 +102,33 @@ function v(e, t, n) {
 	if (r === 0) return;
 	let i = /* @__PURE__ */ new Map();
 	for (let e = 0; e < r; e++) i.set(t[e], e);
-	let a = [], o = [];
+	let a = [], o = [], s = !0;
 	for (let t = e.firstChild; t !== null; t = t.nextSibling) {
 		let e = i.get(t);
-		e !== void 0 && (a.push(e), o.push(t));
+		e !== void 0 && (e < (a[a.length - 1] ?? -1) && (s = !1), a.push(e), o.push(t));
 	}
-	let s = /* @__PURE__ */ new Set(), c = [], l = [], u = Array(a.length).fill(-1);
+	if (s) {
+		let i = n;
+		for (let n = r - 1; n >= 0; n--) {
+			let r = t[n];
+			r.parentNode !== e && y(e, r, i), i = r;
+		}
+		return;
+	}
+	let c = /* @__PURE__ */ new Set(), l = [], u = [], d = Array(a.length).fill(-1);
 	for (let e = 0; e < a.length; e++) {
-		let t = a[e], n = 0, r = l.length;
+		let t = a[e], n = 0, r = u.length;
 		for (; n < r;) {
 			let e = n + r >> 1;
-			l[e] < t ? n = e + 1 : r = e;
+			u[e] < t ? n = e + 1 : r = e;
 		}
-		n > 0 && (u[e] = c[n - 1]), c[n] = e, l[n] = t;
+		n > 0 && (d[e] = l[n - 1]), l[n] = e, u[n] = t;
 	}
-	for (let e = c.length > 0 ? c[c.length - 1] : -1; e >= 0; e = u[e]) s.add(o[e]);
-	let d = n;
+	for (let e = l.length > 0 ? l[l.length - 1] : -1; e >= 0; e = d[e]) c.add(o[e]);
+	let f = n;
 	for (let n = r - 1; n >= 0; n--) {
 		let r = t[n];
-		s.has(r) || y(e, r, d), d = r;
+		c.has(r) || y(e, r, f), f = r;
 	}
 }
 function y(e, t, n) {
@@ -309,7 +317,7 @@ function R(e, t) {
 }
 function z(n, r, i, a, o, s) {
 	let c = o;
-	w(n, t(() => e(() => {
+	w(n, e(() => t(() => {
 		let e = i();
 		e !== c && (c = e, a(e));
 	}, {

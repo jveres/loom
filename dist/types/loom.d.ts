@@ -62,6 +62,10 @@ export interface StateNode<T> extends NodeBase {
     pendingValue: T;
     source?: State<unknown> | undefined;
 }
+export interface ComputedNode<T> extends NodeBase {
+    value: T | undefined;
+    getter(previousValue?: T): T;
+}
 interface ScopeResource {
     pause(): void;
     resume(): void;
@@ -114,13 +118,14 @@ export type Polled<T> = Read<T> & {
     readonly stop: Stop;
 };
 /**
- * A reactive source that re-samples `sample()` every `ms` milliseconds into a value-deduped
- * signal. Bindings reading the source (`p()`) re-run only when the sampled value actually changes —
- * so it bridges imperative or external data (clocks, `performance` counters, polled APIs, media
- * state) into the reactive graph without a hand-rolled heartbeat. Call `.stop()` to clear the
- * timer. The backing state honours `options` (e.g. `{ internal: true }`).
+ * The **pull** bridge for external data: re-samples `sample()` every `ms` milliseconds into a
+ * value-deduped signal, for values you can read imperatively at any time (clocks, `performance`
+ * counters, media state). Bindings reading the poll (`p()`) re-run only when the sampled value
+ * actually changed. Call `.stop()` to clear the timer; created inside a scope, the timer suspends
+ * and resumes with it. The backing state honours `options` (e.g. `{ internal: true }`).
+ * Push-style producers want {@link source}; async request/response wants `resource` (loom/async).
  */
-export declare function polled<T>(sample: () => T, ms: number, options?: NodeOptions): Polled<T>;
+export declare function poll<T>(sample: () => T, ms: number, options?: NodeOptions): Polled<T>;
 export declare function trigger(source: Read<unknown>): void;
 export declare function untrack<T>(fn: () => T): T;
 export declare function update<T>(source: State<T>, fn: (value: T) => T): void;
@@ -147,6 +152,4 @@ export interface ConfigureOptions {
 }
 export declare function configure(options: ConfigureOptions): void;
 export declare function mergeOptions(defaults: NodeOptions | undefined, own: NodeOptions | EffectOptions | undefined): NodeOptions | EffectOptions | undefined;
-export declare function kindOf(node: ReactiveNode): NodeKind | "watcher";
-export declare function nodeValue(node: NodeBase): unknown;
 export {};

@@ -14,8 +14,11 @@ export interface Resource<T> {
 /**
  * An async computed: runs `fetcher` immediately and again whenever its **synchronously tracked**
  * reads change (reads after the first `await`/`.then` are outside the tracked run — hoist them or
- * use {@link Resource.refresh}). The previous value is passed to `fetcher` untracked. While a fetch
- * is in flight the previous value and error stay readable (stale-while-revalidate); a re-fetch or
- * disposal drops the in-flight response, so out-of-order resolutions never clobber newer state.
+ * use {@link Resource.refresh}). The previous value is passed to `fetcher` untracked, and `signal`
+ * aborts when this fetch becomes obsolete (a newer fetch started, or the resource was disposed) —
+ * forward it to `fetch()` and the obsolete request is cancelled, not just ignored. While a fetch
+ * is in flight the previous value and error stay readable (stale-while-revalidate); a late
+ * response from an aborted or superseded fetch never clobbers newer state, and its abort rejection
+ * never surfaces through `error()`.
  */
-export declare function resource<T>(fetcher: (previous: T | undefined) => Promise<T>, options?: NodeOptions): Resource<T>;
+export declare function resource<T>(fetcher: (previous: T | undefined, signal: AbortSignal) => Promise<T>, options?: NodeOptions): Resource<T>;
