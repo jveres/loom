@@ -495,6 +495,8 @@ The DOM entrypoint exports these functions:
   the switch/case form.
 - `dispose(root)` disposes effects owned by a node subtree.
 - `remove(node)` disposes a node subtree and removes it from the DOM.
+- `morph(from, to, options?)` patches a live subtree to match a freshly built
+  one, preserving node identity where shapes align (see below).
 - `tap(node, handler)` binds a robust tap (see below).
 
 These split by where they go. **Child bindings** produce nodes or slot
@@ -576,6 +578,36 @@ what keeps DOM churn flat as you scroll). And the elements it returns **must be
 absolutely positioned** within `el` (which the module sets to
 `position: relative`); it only sets each row's `transform`, so rows without
 absolute positioning stack in the wrong place.
+
+#### Morphing static trees
+
+`morph(from, to, options?)` patches a live DOM subtree to match a freshly
+built one — the tool for server-rendered or string-built HTML that re-renders
+wholesale but must keep expensive node state alive (iframe documents, playing
+media, canvas contents, scroll positions, CSS animations):
+
+```ts
+import { morph } from "loom/dom";
+
+const next = document.createElement("main");
+next.innerHTML = await fetchRenderedHtml();
+morph(document.querySelector("main")!, next, {
+  key: (element) => element.getAttribute("data-key"), // optional
+});
+```
+
+Matching is positional by node type and tag; the optional `key` hook matches
+elements by a stable key across positions first (a keyed match still requires
+the same tag), and moves matched nodes with the same state-preserving
+`moveBefore` path as `list()`/`each()`. Duplicate keys throw, like the keyed
+list reconcilers. Attributes, text, and form state are synced — the focused
+element is never overwritten (including a focused radio's group siblings), and
+selects sync per-option so multi-selects survive.
+
+> **Note:** `morph` is for **static** trees only. It removes and adopts nodes
+> with raw DOM operations, so a subtree containing loom bindings (`text`,
+> `list`, `onunmount`, …) must be updated reactively or torn down with
+> `remove()` — morphing it would strand the bindings' effects.
 
 ### JSX
 

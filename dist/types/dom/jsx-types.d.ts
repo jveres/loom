@@ -72,6 +72,7 @@ export declare namespace JSX {
         article: ElementProps<HTMLElement>;
         aside: ElementProps<HTMLElement>;
         b: ElementProps<HTMLElement>;
+        blockquote: ElementProps<HTMLQuoteElement>;
         br: ElementProps<HTMLBRElement>;
         button: ElementProps<HTMLButtonElement>;
         code: ElementProps<HTMLElement>;
@@ -80,6 +81,8 @@ export declare namespace JSX {
         dl: ElementProps<HTMLDListElement>;
         dt: ElementProps<HTMLElement>;
         em: ElementProps<HTMLElement>;
+        figcaption: ElementProps<HTMLElement>;
+        figure: ElementProps<HTMLElement>;
         footer: ElementProps<HTMLElement>;
         header: ElementProps<HTMLElement>;
         h1: ElementProps<HTMLHeadingElement>;
@@ -90,6 +93,7 @@ export declare namespace JSX {
         h6: ElementProps<HTMLHeadingElement>;
         hr: ElementProps<HTMLHRElement>;
         i: ElementProps<HTMLElement>;
+        iframe: ElementProps<HTMLIFrameElement>;
         img: ElementProps<HTMLImageElement>;
         input: ElementProps<HTMLInputElement>;
         label: ElementProps<HTMLLabelElement>;
@@ -114,6 +118,7 @@ export declare namespace JSX {
         tr: ElementProps<HTMLTableRowElement>;
         u: ElementProps<HTMLElement>;
         ul: ElementProps<HTMLUListElement>;
+        video: ElementProps<HTMLVideoElement>;
         circle: SvgProps<SVGCircleElement>;
         clipPath: SvgProps<SVGClipPathElement>;
         defs: SvgProps<SVGDefsElement>;

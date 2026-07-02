@@ -1,7 +1,7 @@
 import { _ as e, a as t, d as n, h as r, i, m as a, p as o } from "./loom-IKcvaxMB.js";
 import { i as s, n as c, r as l } from "./meter-CmBLmy5r.js";
 import { n as ee, t as u } from "./observe-D9R1GbKs.js";
-import { bindAttr as te, tap as d, text as f, when as ne } from "./dom.js";
+import { d, f, n as te, p as ne } from "./dom-8A-oQtjO.js";
 import { virtualList as p } from "./dom/virtual-list.js";
 import { jsx as m, jsxs as h } from "./jsx-runtime.js";
 //#region src/devtools/bindings.ts
@@ -48,64 +48,64 @@ function Ce(e) {
 }
 //#endregion
 //#region src/devtools/graph.tsx
-var we = 300, Te = 22, Ee = 16, x = null, S = /* @__PURE__ */ new Map(), De = 0, Oe = [], ke = [], Ae = [], je = null, Me = -1, Ne = 0, Pe = !1, Fe = !1, C = /* @__PURE__ */ new Set(), Ie = -1;
-function Le() {
+var we = 300, Te = 22, Ee = 16, x = null, De = /* @__PURE__ */ new Map(), Oe = 0, S = [], C = [], ke = [], Ae = null, je = -1, Me = 0, Ne = !1, Pe = !1, w = /* @__PURE__ */ new Set(), Fe = -1;
+function Ie() {
 	return x = p({
 		rowHeight: Te,
 		key: (e) => e.kind === "header" ? `g${e.gid}` : e.node.id,
-		render: Xe
+		render: Ye
 	}), x.el.classList.add("li-pane", "li-graph"), x.el;
 }
-function Re(e) {
-	return w(e.id).length > 0;
+function Le(e) {
+	return T(e.id).length > 0;
 }
-function ze(e, t) {
+function Re(e, t) {
 	if (typeof t == "number") {
 		let n = Number(e);
 		return Number.isNaN(n) ? t : n;
 	}
 	return e;
 }
-function Be(e) {
+function ze(e) {
 	if (e.kind !== "state" || !e.source) return !1;
 	let t = e.value;
 	return t === null || typeof t == "number" || typeof t == "string" || typeof t == "boolean";
 }
-function Ve(e, t, n, r = !1) {
-	if (Me === n) return;
+function Be(e, t, n, r = !1) {
+	if (je === n) return;
 	let i = e.querySelector(".li-gval");
 	if (!i) return;
 	let a = y(t, Ee);
-	!r && !Pe && e.dataset.prev !== void 0 && e.dataset.prev !== a && qe(e), i.textContent = a, i.className = `li-gval${i.classList.contains("li-edit") ? " li-edit" : ""} ${oe(t)}`, e.dataset.prev = a;
+	!r && !Ne && e.dataset.prev !== void 0 && e.dataset.prev !== a && Ke(e), i.textContent = a, i.className = `li-gval${i.classList.contains("li-edit") ? " li-edit" : ""} ${oe(t)}`, e.dataset.prev = a;
 }
-function He(e, t, n, r) {
+function Ve(e, t, n, r) {
 	let i = t();
 	if (typeof i == "boolean") {
-		t(!i), Ve(r, t(), e, !0), Ue(e, r);
+		t(!i), Be(r, t(), e, !0), He(e, r);
 		return;
 	}
 	if (i !== null && typeof i != "number" && typeof i != "string") return;
 	let a = document.createElement("input");
-	a.className = "li-gedit", a.value = typeof i == "string" ? i : String(i), je = a, Me = e, n.replaceWith(a), a.focus(), a.select();
+	a.className = "li-gedit", a.value = typeof i == "string" ? i : String(i), Ae = a, je = e, n.replaceWith(a), a.focus(), a.select();
 	let o = () => {
-		je = null, Me = -1, a.parentNode && a.replaceWith(n);
+		Ae = null, je = -1, a.parentNode && a.replaceWith(n);
 	}, s = () => {
-		je === a && (t(ze(a.value, i)), o(), Ve(r, t(), e, !0), Ue(e, r));
+		Ae === a && (t(Re(a.value, i)), o(), Be(r, t(), e, !0), He(e, r));
 	};
 	a.onblur = s, a.onkeydown = (e) => {
 		e.key === "Enter" ? s() : e.key === "Escape" && o();
 	};
 }
-function Ue(e, t) {
-	t.matches(":hover") && T(w(e), !0);
+function He(e, t) {
+	t.matches(":hover") && E(T(e), !0);
 }
-function w(e) {
-	let t = [], n = /* @__PURE__ */ new Set([e]), r = S.get(e), i = r ? [...r.subs] : [];
+function T(e) {
+	let t = [], n = /* @__PURE__ */ new Set([e]), r = De.get(e), i = r ? [...r.subs] : [];
 	for (; i.length > 0;) {
 		let e = i.shift();
 		if (e === void 0 || n.has(e)) continue;
 		n.add(e);
-		let r = S.get(e);
+		let r = De.get(e);
 		if (r) if (r.kind === "effect") {
 			let e = r.target;
 			(e instanceof Element || e instanceof CharacterData) && t.push(e);
@@ -113,56 +113,56 @@ function w(e) {
 	}
 	return t;
 }
-function We(e) {
+function Ue(e) {
 	let t = [], n = /* @__PURE__ */ new Set();
-	for (let r of S.values()) if (r.group === e) for (let e of w(r.id)) n.has(e) || (n.add(e), t.push(e));
+	for (let r of De.values()) if (r.group === e) for (let e of T(r.id)) n.has(e) || (n.add(e), t.push(e));
 	return t;
 }
-function Ge(e) {
+function We(e) {
 	if (!e.isConnected) return null;
 	if (e instanceof Element) return e.getBoundingClientRect();
 	let t = document.createRange();
 	return t.selectNode(e), t.getBoundingClientRect();
 }
-function T(e, t) {
-	for (let e of Ae) e.remove();
-	if (Ae = [], t) for (let t of e) {
-		let e = Ge(t);
+function E(e, t) {
+	for (let e of ke) e.remove();
+	if (ke = [], t) for (let t of e) {
+		let e = We(t);
 		if (!e || e.width === 0 && e.height === 0) continue;
 		let n = document.createElement("div");
-		n.style.cssText = `position:fixed;left:${e.left}px;top:${e.top}px;width:${e.width}px;height:${e.height}px;border:1.5px solid #ff9500;border-radius:0;pointer-events:none;z-index:2147483646`, document.body.append(n), Ae.push(n);
+		n.style.cssText = `position:fixed;left:${e.left}px;top:${e.top}px;width:${e.width}px;height:${e.height}px;border:1.5px solid #ff9500;border-radius:0;pointer-events:none;z-index:2147483646`, document.body.append(n), ke.push(n);
 	}
 }
-function Ke(e) {
+function Ge(e) {
 	let t = performance.now();
-	t - De >= we && (S = new Map(u({ active: !0 }).nodes.map((e) => [e.id, e])), De = t), T(w(e), !0);
+	t - Oe >= we && (De = new Map(u({ active: !0 }).nodes.map((e) => [e.id, e])), Oe = t), E(T(e), !0);
 }
-function qe(e) {
+function Ke(e) {
 	e.classList.remove("li-flash"), e.offsetWidth, e.classList.add("li-flash");
 }
-function Je(e, t) {
+function qe(e, t) {
 	let n = e[0], r = n instanceof Element ? n : n?.parentElement ?? null;
 	if (!r) return;
-	T([], !1), r.scrollIntoView({
+	E([], !1), r.scrollIntoView({
 		block: "center",
 		inline: "nearest",
 		behavior: "smooth"
 	});
 	let i = !1, a = () => {
-		i || (i = !0, window.removeEventListener("scrollend", a), t() && T(e, !0));
+		i || (i = !0, window.removeEventListener("scrollend", a), t() && E(e, !0));
 	};
 	window.addEventListener("scrollend", a), window.setTimeout(a, 600);
 }
-function Ye(e, t) {
+function Je(e, t) {
 	let n = t[0], r = n ? n.label.lastIndexOf(".") : -1;
 	return n && r > 0 ? n.label.slice(0, r) : `fields #${e}`;
 }
-function Xe(e, t) {
-	if (e.kind === "header") return t ? Qe(t, e) : Ze(e);
-	let n = t ? et(t, e) : $e(e);
-	return e.node.id === Ie && (qe(n), Ie = -1), n;
+function Ye(e, t) {
+	if (e.kind === "header") return t ? Ze(t, e) : Xe(e);
+	let n = t ? $e(t, e) : Qe(e);
+	return e.node.id === Fe && (Ke(n), Fe = -1), n;
 }
-function Ze(e) {
+function Xe(e) {
 	let t = /* @__PURE__ */ m("span", {
 		class: "li-gns-c",
 		children: `(${e.count})`
@@ -185,20 +185,20 @@ function Ze(e) {
 			i
 		]
 	}), o = e.gid;
-	return C.has(o) && a.classList.add("collapsed"), a.onclick = () => {
-		C.has(o) ? C.delete(o) : C.add(o), x?.setItems(rt());
+	return w.has(o) && a.classList.add("collapsed"), a.onclick = () => {
+		w.has(o) ? w.delete(o) : w.add(o), x?.setItems(nt());
 	}, i.onclick = (e) => {
-		e.stopPropagation(), Je(We(o), () => a.matches(":hover"));
-	}, a.onmouseenter = () => T(We(o), !0), a.onmouseleave = () => T(We(o), !1), a;
+		e.stopPropagation(), qe(Ue(o), () => a.matches(":hover"));
+	}, a.onmouseenter = () => E(Ue(o), !0), a.onmouseleave = () => E(Ue(o), !1), a;
 }
-function Qe(e, t) {
+function Ze(e, t) {
 	let n = e.querySelector(".li-gns-c");
 	n && (n.textContent = `(${t.count})`);
 	let r = e.querySelector(".li-gns-lbl");
-	return r && (r.textContent = t.label), e.classList.toggle("collapsed", C.has(t.gid)), e;
+	return r && (r.textContent = t.label), e.classList.toggle("collapsed", w.has(t.gid)), e;
 }
-function $e(e) {
-	let t = e.node, n = /* @__PURE__ */ m("span", { class: "li-gval" }), r = Re(t), i = b(t.kind === "computed" ? ge : r ? me : he, 13);
+function Qe(e) {
+	let t = e.node, n = /* @__PURE__ */ m("span", { class: "li-gval" }), r = Le(t), i = b(t.kind === "computed" ? ge : r ? me : he, 13);
 	i.classList.add("li-gicon", r ? t.kind === "computed" ? "li-gi-computed" : "li-gi-state" : "li-gi-dim");
 	let a = /* @__PURE__ */ h("div", {
 		class: "li-grow",
@@ -211,31 +211,31 @@ function $e(e) {
 			n
 		]
 	});
-	if (e.child && a.classList.add("li-grow-child"), a.onmouseenter = () => T(w(t.id), !0), a.onmouseleave = () => T(w(t.id), !1), Be(t) && t.source) {
+	if (e.child && a.classList.add("li-grow-child"), a.onmouseenter = () => E(T(t.id), !0), a.onmouseleave = () => E(T(t.id), !1), ze(t) && t.source) {
 		n.classList.add("li-edit");
 		let e = t.source;
-		n.onclick = () => He(t.id, e, n, a);
+		n.onclick = () => Ve(t.id, e, n, a);
 	}
-	return Ve(a, t.value, t.id), a;
+	return Be(a, t.value, t.id), a;
 }
-function et(e, t) {
-	return Ve(e, t.node.value, t.node.id), e;
+function $e(e, t) {
+	return Be(e, t.node.value, t.node.id), e;
 }
-function tt() {
-	let e = ke.length;
-	for (let t of Oe) e += 1 + (C.has(t.gid) ? 0 : t.cells.length);
+function et() {
+	let e = C.length;
+	for (let t of S) e += 1 + (w.has(t.gid) ? 0 : t.cells.length);
 	return e;
 }
-function nt(e) {
+function tt(e) {
 	let t = e;
-	for (let e of Oe) {
+	for (let e of S) {
 		if (t === 0) return {
 			kind: "header",
 			gid: e.gid,
 			label: e.label,
 			count: e.cells.length
 		};
-		if (--t, !C.has(e.gid)) {
+		if (--t, !w.has(e.gid)) {
 			if (t < e.cells.length) return {
 				kind: "cell",
 				node: e.cells[t],
@@ -244,71 +244,71 @@ function nt(e) {
 			t -= e.cells.length;
 		}
 	}
-	return t < ke.length ? {
+	return t < C.length ? {
 		kind: "cell",
-		node: ke[t],
+		node: C[t],
 		child: !1
 	} : void 0;
 }
-function rt() {
+function nt() {
 	return {
-		length: tt(),
-		at: nt
+		length: et(),
+		at: tt
 	};
 }
-function it() {
+function rt() {
 	if (!x) return;
 	let e = u({ active: !0 }).nodes;
-	S = new Map(e.map((e) => [e.id, e])), De = performance.now();
+	De = new Map(e.map((e) => [e.id, e])), Oe = performance.now();
 	let t = /* @__PURE__ */ new Map(), n = [];
 	for (let r of e) if (!(r.internal || r.kind === "effect")) if (r.group !== void 0) {
 		let e = t.get(r.group);
 		e ? e.push(r) : t.set(r.group, [r]);
 	} else n.push(r);
-	Oe = [];
-	for (let [e, n] of t) n.sort((e, t) => (e.key ?? e.label).localeCompare(t.key ?? t.label)), Oe.push({
+	S = [];
+	for (let [e, n] of t) n.sort((e, t) => (e.key ?? e.label).localeCompare(t.key ?? t.label)), S.push({
 		gid: e,
-		label: Ye(e, n),
+		label: Je(e, n),
 		cells: n
 	});
-	ke = n, Pe = Fe, x.setItems(rt()), Pe = !1, Fe = !1;
+	C = n, Ne = Pe, x.setItems(nt()), Ne = !1, Pe = !1;
+}
+function it() {
+	E([], !1);
 }
 function at() {
-	T([], !1);
+	let e = performance.now();
+	e - Me >= we && (Me = e, rt());
 }
 function ot() {
-	let e = performance.now();
-	e - Ne >= we && (Ne = e, it());
-}
-function st() {
 	if (x) {
 		for (let e of x.el.querySelectorAll(".li-flash")) e.classList.remove("li-flash");
-		Fe = !0, x.refresh();
+		Pe = !0, x.refresh();
 	}
 }
-function ct(e) {
+function st(e) {
 	let t = 0;
-	for (let n of Oe) {
+	for (let n of S) {
 		let r = n.cells.findIndex((t) => t.id === e);
-		if (r >= 0) return C.has(n.gid) && (C.delete(n.gid), x?.setItems(rt())), t + 1 + r;
-		t += 1 + (C.has(n.gid) ? 0 : n.cells.length);
+		if (r >= 0) return w.has(n.gid) && (w.delete(n.gid), x?.setItems(nt())), t + 1 + r;
+		t += 1 + (w.has(n.gid) ? 0 : n.cells.length);
 	}
-	let n = ke.findIndex((t) => t.id === e);
+	let n = C.findIndex((t) => t.id === e);
 	return n >= 0 ? t + n : -1;
 }
-function lt(e) {
+function ct(e) {
 	if (x === null) return;
-	it();
-	let t = ct(e);
-	t < 0 || (Ie = e, x.scrollToIndex(t));
+	rt();
+	let t = st(e);
+	t < 0 || (Fe = e, x.scrollToIndex(t));
 }
-function ut() {
-	for (let e of Ae) e.remove();
-	Ae = [], je = null, Me = -1, x?.destroy(), x = null, Oe = [], ke = [], C.clear(), S = /* @__PURE__ */ new Map(), De = 0;
+function lt() {
+	for (let e of ke) e.remove();
+	ke = [], Ae = null, je = -1, x?.destroy(), x = null, S = [], C = [], w.clear(), De = /* @__PURE__ */ new Map(), Oe = 0;
 }
 //#endregion
 //#region src/devtools/scroll-fade.ts
-function dt(e, t) {
+function ut(e, t) {
 	let n = 0, r = () => {
 		n = 0;
 		let r = t === "x" ? e.clientWidth : e.clientHeight, i = t === "x" ? e.scrollWidth : e.scrollHeight, a = t === "x" ? e.scrollLeft : e.scrollTop, o = Math.max(0, i - r) - a;
@@ -327,37 +327,37 @@ function dt(e, t) {
 }
 //#endregion
 //#region src/devtools/trace.tsx
-var ft = 22, pt = 200, mt = 1e3, ht = [
+var dt = 22, ft = 200, pt = 1e3, mt = [
 	"writes",
 	"reads",
 	"all"
 ];
-function gt(e) {
-	return ht.includes(e);
+function ht(e) {
+	return mt.includes(e);
 }
-var E = null, _t = null, vt = null, D = "all", yt = null, O = null, bt = null, k = null, A = null, j = [], M = [], N = !1, P = !1, F = "", xt = 0, St = -1, I = -1, Ct = null;
+var D = null, gt = null, _t = null, O = "all", vt = null, k = null, yt = null, A = null, bt = null, j = [], M = [], N = !1, P = !1, F = "", xt = 0, St = -1, I = -1, Ct = null;
 function wt(e) {
 	Ct = e;
 }
 function Tt(e) {
-	A = e, Dt();
+	bt = e, Dt();
 }
 function Et(e) {
 	P !== e && (P = e, e ? (kt(), Pt()) : At(), Dt());
 }
 function Dt() {
-	A && (A.classList.toggle("inactive", !P), A.classList.toggle("off", N), A.title = P ? N ? "Paused" : "Live — capturing" : "Trace");
+	bt && (bt.classList.toggle("inactive", !P), bt.classList.toggle("off", N), bt.title = P ? N ? "Paused" : "Live — capturing" : "Trace");
 }
 function Ot() {
-	jt(), E = p({
-		rowHeight: ft,
+	jt(), D = p({
+		rowHeight: dt,
 		key: (e) => e.seq,
 		render: Ht
-	}), k = /* @__PURE__ */ m("button", {
+	}), A = /* @__PURE__ */ m("button", {
 		type: "button",
 		class: "li-tr-btn",
 		title: "Pause / resume the trace"
-	}), k.append(b(be, 12)), d(k, () => Lt(!N));
+	}), A.append(b(be, 12)), d(A, () => Lt(!N));
 	let e = /* @__PURE__ */ m("button", {
 		type: "button",
 		class: "li-tr-btn",
@@ -367,13 +367,13 @@ function Ot() {
 	let t = /* @__PURE__ */ m("select", {
 		class: "li-tr-mode",
 		title: "Which events to stream",
-		children: ht.map((e) => /* @__PURE__ */ m("option", {
+		children: mt.map((e) => /* @__PURE__ */ m("option", {
 			value: e,
 			children: e
 		}))
 	});
-	t.value = D, t.addEventListener("change", () => {
-		gt(t.value) && (D = t.value), jt();
+	t.value = O, t.addEventListener("change", () => {
+		ht(t.value) && (O = t.value), jt();
 	});
 	let n = /* @__PURE__ */ m("input", {
 		type: "text",
@@ -383,32 +383,32 @@ function Ot() {
 	});
 	return n.addEventListener("input", () => {
 		F = n.value.trim().toLowerCase(), M = F ? j.filter((e) => e.name.toLowerCase().includes(F)) : [], L();
-	}), O = /* @__PURE__ */ m("div", { class: "li-tr-scroll li-fade-y" }), O.append(E.el), bt = dt(O, "y"), O.addEventListener("pointerover", (e) => {
+	}), k = /* @__PURE__ */ m("div", { class: "li-tr-scroll li-fade-y" }), k.append(D.el), yt = ut(k, "y"), k.addEventListener("pointerover", (e) => {
 		let t = ((e.target instanceof Element ? e.target : null)?.closest(".li-tr"))?.dataset.id;
-		t !== void 0 && Number(t) !== I && (I = Number(t), Ke(I));
-	}), O.addEventListener("pointerleave", () => {
-		I = -1, at();
-	}), d(O, (e) => {
+		t !== void 0 && Number(t) !== I && (I = Number(t), Ge(I));
+	}), k.addEventListener("pointerleave", () => {
+		I = -1, it();
+	}), d(k, (e) => {
 		let t = (((e.target instanceof Element ? e.target : null)?.closest(".li-tr-name"))?.closest(".li-tr"))?.dataset.id;
-		t !== void 0 && (I = -1, at(), Ct?.(Number(t)));
-	}), yt = /* @__PURE__ */ h("div", {
+		t !== void 0 && (I = -1, it(), Ct?.(Number(t)));
+	}), vt = /* @__PURE__ */ h("div", {
 		class: "li-pane li-trace",
 		children: [/* @__PURE__ */ h("div", {
 			class: "li-tr-bar",
 			children: [
-				k,
+				A,
 				t,
 				n,
 				e
 			]
-		}), O]
-	}), yt;
+		}), k]
+	}), vt;
 }
 function kt() {
-	D !== "reads" && !_t && (_t = l([c.write], "samples")), D !== "writes" && !vt && (vt = l([c.read], "samples"));
+	O !== "reads" && !gt && (gt = l([c.write], "samples")), O !== "writes" && !_t && (_t = l([c.read], "samples"));
 }
 function At() {
-	_t?.stop(), _t = null, vt?.stop(), vt = null;
+	gt?.stop(), gt = null, _t?.stop(), _t = null;
 }
 function jt() {
 	At(), P && kt(), St = -1, L(), Pt();
@@ -417,42 +417,42 @@ function Mt() {
 	j = [], M = [], St = -1, L();
 }
 function Nt(e) {
-	mt = e, j.length > e && (j.length = e), M.length > e && (M.length = e), L();
+	pt = e, j.length > e && (j.length = e), M.length > e && (M.length = e), L();
 }
 function Pt() {
-	if (N || E === null) return;
-	let e = [], t = _t?.read()["loom:write"]?.samples;
+	if (N || D === null) return;
+	let e = [], t = gt?.read()["loom:write"]?.samples;
 	if (t) for (let n of t) e.push({
 		s: n,
 		kind: "write"
 	});
-	let n = vt?.read()["loom:read"]?.samples;
+	let n = _t?.read()["loom:read"]?.samples;
 	if (n) for (let t of n) e.push({
 		s: t,
 		kind: "read"
 	});
 	if (e.length === 0) return;
-	D === "all" && e.sort((e, t) => s(e.s).t - s(t.s).t), Bt = !1;
+	O === "all" && e.sort((e, t) => s(e.s).t - s(t.s).t), Bt = !1;
 	let r = (F ? M : j)[0]?.seq ?? -1, i = [];
 	for (let { s: t, kind: n } of e) i.push(Rt(t, n));
 	if (i.reverse(), j = i.concat(j), F) {
 		let e = i.filter((e) => e.name.toLowerCase().includes(F));
 		e.length > 0 && (M = e.concat(M));
 	}
-	j.length > mt && (j.length = mt), M.length > mt && (M.length = mt), St = ((F ? M : j)[0]?.seq ?? -1) === r ? -1 : r, L();
+	j.length > pt && (j.length = pt), M.length > pt && (M.length = pt), St = ((F ? M : j)[0]?.seq ?? -1) === r ? -1 : r, L();
 }
 function Ft() {
-	Pt(), L(), requestAnimationFrame(() => E?.refresh());
+	Pt(), L(), requestAnimationFrame(() => D?.refresh());
 }
 function It() {
-	At(), E = null, yt = null, O = null, bt?.dispose(), bt = null, k = null, A = null, j = [], M = [], zt.clear(), Bt = !1, St = -1, N = !1, P = !1, F = "", D = "all", I = -1, Ct = null;
+	At(), D = null, vt = null, k = null, yt?.dispose(), yt = null, A = null, bt = null, j = [], M = [], zt.clear(), Bt = !1, St = -1, N = !1, P = !1, F = "", O = "all", I = -1, Ct = null;
 }
 function Lt(e) {
-	N = e, k?.replaceChildren(b(e ? xe : be, 12)), Dt(), yt?.classList.toggle("li-tr-paused", e), e || Pt();
+	N = e, A?.replaceChildren(b(e ? xe : be, 12)), Dt(), vt?.classList.toggle("li-tr-paused", e), e || Pt();
 }
 function L() {
 	let e = F ? M : j;
-	E?.setItems(D === "all" ? e : e.filter((e) => e.kind === (D === "writes" ? "write" : "read"))), bt?.refresh();
+	D?.setItems(O === "all" ? e : e.filter((e) => e.kind === (O === "writes" ? "write" : "read"))), yt?.refresh();
 }
 function Rt(e, t) {
 	let n = s(e), r = n.id, i = Vt(r), a = Wt(n.t), o = n.by, c = o === void 0 ? "" : `by ${Vt(o)}`;
@@ -469,7 +469,7 @@ function Rt(e, t) {
 		srcText: c,
 		full: `${i} — read ${c || "(external)"}`
 	};
-	let l = s(e), ee = y(l.prev, pt), u = y(l.next, pt);
+	let l = s(e), ee = y(l.prev, ft), u = y(l.next, ft);
 	return {
 		seq: xt++,
 		id: r,
@@ -857,7 +857,7 @@ function or() {
 	if (Qt() === "stats" && e) {
 		let e = ee();
 		Pn = e.states, Fn = e.computeds, In = e.effects - e.targetedEffects, Ln = e.targetedEffects, Rn = e.sources, zn = e.scopes, Bn = e.channels, Vn = e.unread;
-	} else Qt() === "graph" && e ? ot() : Qt() === "trace" && e && Pt();
+	} else Qt() === "graph" && e ? at() : Qt() === "trace" && e && Pt();
 }
 function sr() {
 	document.hidden && (Cn = !0);
@@ -1071,16 +1071,16 @@ function Br(e = document.body) {
 	c.id = `${v}-menu`, c.append(s), hr = c;
 	let l = kr(), ee = /* @__PURE__ */ m("span", { class: "li-menu-val" }), u = () => {
 		ee.textContent = `${l / 1e3}k`, Nt(l);
-	}, te = /* @__PURE__ */ h("button", {
+	}, f = /* @__PURE__ */ h("button", {
 		type: "button",
 		class: "li-menu-item",
 		title: "Trace log size (click to cycle)",
 		children: [/* @__PURE__ */ m("span", { children: "Log size" }), ee]
 	});
-	d(te, () => {
+	d(f, () => {
 		l = Dr[(Dr.indexOf(l) + 1) % Dr.length] ?? 1e3, xr(Er, String(l)), u();
-	}), c.append(te), u();
-	let f = () => {
+	}), c.append(f), u();
+	let te = () => {
 		c.hidden = !0;
 	}, ne = /* @__PURE__ */ h("button", {
 		type: "button",
@@ -1092,7 +1092,7 @@ function Br(e = document.body) {
 		})]
 	});
 	d(ne, () => {
-		f(), Vr();
+		te(), Vr();
 	}), c.append(ne);
 	let p = /* @__PURE__ */ m("button", {
 		type: "button",
@@ -1100,7 +1100,7 @@ function Br(e = document.body) {
 	});
 	p.append(zr(pe)), d(p, (e) => {
 		if (e.stopPropagation(), !c.hidden) {
-			f();
+			te();
 			return;
 		}
 		c.hidden = !1;
@@ -1137,11 +1137,11 @@ function Br(e = document.body) {
 	let de = /* @__PURE__ */ new Map(), fe = /* @__PURE__ */ new Map();
 	X = /* @__PURE__ */ m("div", { class: "li-body li-fade-y" });
 	for (let e of mr) {
-		let t = e.id === "stats" ? ue : e.id === "graph" ? Le() : Ot();
+		let t = e.id === "stats" ? ue : e.id === "graph" ? Ie() : Ot();
 		de.set(e.id, t), X.append(t);
 	}
 	wt((e) => {
-		Q?.("graph"), lt(e);
+		Q?.("graph"), ct(e);
 	});
 	let me = /* @__PURE__ */ m("div", { class: "li-tabscroll" });
 	for (let e of mr) {
@@ -1178,14 +1178,14 @@ function Br(e = document.body) {
 		ge
 	] }), Y.id = v, y && Y.classList.add("li-min"), a(), Lr(oe, Y), Rr(ge, Y), gr = (e) => {
 		let t = e.target instanceof Node ? e.target : null;
-		!c.hidden && (t === null || !c.contains(t)) && e.target !== p && f();
+		!c.hidden && (t === null || !c.contains(t)) && e.target !== p && te();
 	}, document.addEventListener("pointerdown", gr), e.append(Y), document.body.append(c), Mr && (Y.style.width = `${Math.max(240, Math.min(Mr.width, window.innerWidth - 16))}px`, Y.style.height = `${Math.max(160, Math.min(Mr.height, window.innerHeight - 16))}px`), jr) {
 		let { left: e, top: t } = Pr(Y, jr.left, jr.top);
 		Y.style.left = `${e}px`, Y.style.top = `${t}px`, Y.style.right = "auto", Y.style.bottom = "auto";
 	}
 	re(() => {
 		let e = Q?.();
-		yr && yr !== e && X && vr.set(yr, X.scrollTop), e === "stats" ? dr() : ur(), e !== "graph" && at();
+		yr && yr !== e && X && vr.set(yr, X.scrollTop), e === "stats" ? dr() : ur(), e !== "graph" && it();
 		for (let t of mr) {
 			let n = t.id === e, r = de.get(t.id), i = fe.get(t.id);
 			r && (r.style.display = n ? "" : "none"), i && (i.classList.toggle("active", n), n && i.scrollIntoView({
@@ -1196,16 +1196,16 @@ function Br(e = document.body) {
 		}
 		if (e && X) {
 			let t = vr.get(e) ?? 0, n = Math.max(0, X.scrollHeight - X.clientHeight);
-			X.scrollTop = Math.min(t, n), e === "graph" ? st() : e === "trace" && Ft();
+			X.scrollTop = Math.min(t, n), e === "graph" ? ot() : e === "trace" && Ft();
 		}
 		Et(e === "trace" && Y?.classList.contains("li-min") !== !0), yr = e ?? null;
 		for (let e of _r) e.refresh();
-	}), _r.push(dt(X, "y"), dt(me, "x"));
+	}), _r.push(ut(X, "y"), ut(me, "x"));
 }
 function Vr() {
 	fr();
 	for (let e of _r) e.dispose();
-	_r.length = 0, ie(), Z?.stop(), Z = null, gr && document.removeEventListener("pointerdown", gr), gr = null, hr?.remove(), hr = null, Y?.remove(), Y = null, X = null, Q = null, vr.clear(), yr = null, ut(), It();
+	_r.length = 0, ie(), Z?.stop(), Z = null, gr && document.removeEventListener("pointerdown", gr), gr = null, hr?.remove(), hr = null, Y?.remove(), Y = null, X = null, Q = null, vr.clear(), yr = null, lt(), It();
 }
 function Hr() {
 	return Y !== null;

@@ -7,6 +7,7 @@ import {
   type Stop,
   untrack,
 } from "../loom.js";
+import { placeBefore } from "./place.js";
 
 export type Child =
   | Node
@@ -446,24 +447,6 @@ function positionOrdered(
   }
 }
 
-// A ParentNode that may support the state-preserving move (Chrome 133+; spec "atomic move").
-type MovableParent = Node & {
-  moveBefore?: (node: Node, ref: Node | null) => void;
-};
-
-// Position `node` before `ref` inside `parent`. When the node is already a child of `parent` and
-// the platform has `moveBefore`, the move preserves state that a remove+insert resets — iframe
-// documents, focus, selection, playing media, running CSS animations. New or reparented nodes (and
-// older engines) take the classic insertBefore path.
-function placeBefore(parent: Node, node: Node, ref: Node | null): void {
-  const movable = parent as MovableParent;
-  if (movable.moveBefore !== undefined && node.parentNode === parent) {
-    movable.moveBefore(node, ref);
-  } else {
-    parent.insertBefore(node, ref);
-  }
-}
-
 export function dispose(root: Node): void {
   const stack: Node[] = [root];
   for (let index = 0; index < stack.length; index++) {
@@ -831,3 +814,5 @@ function isBinding<TKind extends "attr" | "class" | "style">(
     typeof (value as { readonly read?: unknown }).read === "function"
   );
 }
+
+export { type MorphOptions, morph } from "./morph.js";

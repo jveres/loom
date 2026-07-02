@@ -78,4 +78,4 @@ export declare function tap(node: Element, handler: (event: PointerEvent) => voi
  * `internal` (tooling built on loom — e.g. the inspector — binds without self-reporting).
  */
 export declare function bindAttr(node: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
-export {};
+export { type MorphOptions, morph } from "./morph.js";
