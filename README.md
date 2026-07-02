@@ -413,6 +413,10 @@ The DOM entrypoint exports these functions:
 - `attr(name, read)` creates an explicit reactive attribute binding.
 - `classed(name, read)` creates an explicit reactive class binding.
 - `style(name, read)` creates an explicit reactive style binding.
+- `bindAttr(node, name, read, options?)` binds a reactive attribute on an
+  element you already hold — the imperative sibling of `attr()`. `options`
+  relabels the binding or marks it `internal` (tooling built on loom binds
+  without observing itself).
 - `list(container, read, options)` reconciles a keyed list into a container.
 - `each(items, render, key)` is the inline keyed list — the same reconciliation
   as `list()` but returned as a child expression (see
@@ -431,7 +435,8 @@ descriptors to place among children — `text`, `each`, `when`, and `match`.
 element. **Prop bindings** — `attr` / `classed` / `style` — return opaque
 descriptors you pass as a prop *value*
 (`h("a", { class: classed("on", isOn) })`); the handles are opaque, built only
-by these factories. (In JSX you rarely need them: a reactive read as a child,
+by these factories; `bindAttr()` is their imperative form when you already
+hold the element. (In JSX you rarely need them: a reactive read as a child,
 class-map value, or attribute is enough.)
 
 Loom is a thin layer over the DOM, so event props use **the DOM's own lowercase
@@ -792,10 +797,12 @@ zero. The rest of `loom/observe` snapshots the reactive graph:
   enabled via `configure({ inspect: true })`). Pass `{ active: true }` to skip
   state/computed cells with no subscribers — idle cells and "ghosts" (cells of a
   removed object, unreachable but not yet GC'd); effects are always kept.
-- `inspectResources()` returns a live census `{ states, computeds, effects, views,
-  sources, scopes, channels, unread }` — one cheap walk, no per-node allocation.
-  `views` are the DOM bindings (effects bound to a DOM node via `target`); `unread` is the
-  count of states/computeds nothing currently reads (a rising count hints at a leak).
+- `inspectResources()` returns a live census `{ states, computeds, effects,
+  targetedEffects, sources, scopes, channels, unread }` — one cheap walk, no
+  per-node allocation. `targetedEffects` is the subset of `effects` that declared
+  an `EffectOptions.target` (loom/dom's bindings set it to the bound DOM node, so
+  tooling like the inspector reads them as "views"); `unread` is the count of
+  states/computeds nothing currently reads (a rising count hints at a leak).
 
 ### Inspector
 
@@ -916,6 +923,10 @@ Loom uses `alien-signals` as the reactive graph implementation detail. The
 public API stays small: callable state cells, computed reads, effects, batching,
 manual triggers, object field cells, and an observability surface.
 
+The v2 direction — zero dependencies, per-entry tree-shaking, and a
+bench-gated experiment roadmap, grounded in research on ArrowJS, Shablon, and
+SolidJS 2.0 — is recorded in [docs/architecture-v2.md](docs/architecture-v2.md).
+
 The built-in event channels are gated by a per-channel meter count, so
 reads, writes, computed updates, and effect runs stay allocation-free and pay
 only a predicted-not-taken branch when nothing is metering them; records are
@@ -923,6 +934,20 @@ written into a pre-allocated ring. Inspection is opt-in
 (`configure({ inspect: true })`): while it is off, nodes carry no metadata at
 all; while it is on, each node carries a lightweight metadata record so
 `inspect()` works without any further setup.
+
+### Teardown
+
+The teardown vocabulary is layered deliberately, and each return shape follows
+from how the thing is used. In the core you **stop** processes: `effect()` and
+`list()` hand back a bare `Stop` function because the disposer is the only
+handle you need; `scope()` and `meter()` return objects because stopping is
+one of several operations (`stop`/`pause`/`resume`, `read`/`stop`); and
+`polled()` must stay callable, so its `stop` rides on the read
+(`Polled = Read & { stop }`). In `loom/dom` you **dispose** trees —
+`dispose(root)` tears down everything a subtree owns, `remove(node)` disposes
+and detaches. In `loom/devtools` you **mount** and **unmount** the panel. Same
+lifecycle, three altitudes: stop a process, dispose a tree, unmount a UI. New
+APIs should pick the shape their layer already uses.
 
 ### Hot path
 

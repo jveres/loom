@@ -7,6 +7,7 @@
 export type {
   Channel,
   ChannelOptions,
+  CleanupEffectFn,
   DeferScheduler,
   EffectFn,
   EffectOptions,
@@ -16,6 +17,7 @@ export type {
   Meter,
   MeterAggregation,
   NodeInfo,
+  NodeKind,
   NodeOptions,
   Polled,
   Read,
