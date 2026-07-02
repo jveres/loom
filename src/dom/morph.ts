@@ -6,8 +6,9 @@
 // Matching is positional by node type and tag, with an optional `key` hook
 // that matches elements by a stable key (e.g. a data attribute) before
 // position — the same idea as list()'s keyed reconcile, applied to a whole
-// subtree. Reordered keyed children move via the atomic-move path
-// (placeBefore), so a matched iframe survives even a reorder.
+// subtree. Reordered keyed children move via the shared LIS positioner
+// (positionOrdered), so a matched iframe survives even a far reorder — with
+// the minimum number of atomic moves.
 //
 // Scope: morph is for STATIC trees (server-rendered HTML, builders with no
 // event handlers or reactive bindings). It syncs attributes, text, and form
@@ -15,7 +16,7 @@
 // new tree — nodes adopted from `to` keep theirs, matched nodes keep their
 // original ones. Like list()/each(), a duplicate key (in either tree) throws.
 
-import { placeBefore } from "./place.js";
+import { positionOrdered } from "./place.js";
 
 export interface MorphOptions {
   /**
@@ -51,10 +52,16 @@ export function morph(
 }
 
 function syncAttributes(from: Element, to: Element): void {
-  for (const attr of Array.from(from.attributes)) {
-    if (!to.hasAttribute(attr.name)) from.removeAttribute(attr.name);
+  // Backwards index walk is removal-safe on the live NamedNodeMap — no snapshot allocations
+  // (this runs for every matched element on every morph).
+  const fromAttrs = from.attributes;
+  for (let i = fromAttrs.length - 1; i >= 0; i--) {
+    const name = (fromAttrs[i] as Attr).name;
+    if (!to.hasAttribute(name)) from.removeAttribute(name);
   }
-  for (const attr of Array.from(to.attributes)) {
+  const toAttrs = to.attributes;
+  for (let i = 0; i < toAttrs.length; i++) {
+    const attr = toAttrs[i] as Attr;
     if (from.getAttribute(attr.name) !== attr.value) {
       from.setAttribute(attr.name, attr.value);
     }
@@ -69,6 +76,10 @@ function syncAttributes(from: Element, to: Element): void {
 // each option is morphed) rather than via `.value`, which cannot express a
 // multi-select and cannot pick options that only exist in the new tree.
 function syncFormState(from: Element, to: Element): void {
+  // Almost every element is none of these — one string compare bails before the
+  // activeElement read and the instanceof chain.
+  const name = from.nodeName;
+  if (name !== "INPUT" && name !== "TEXTAREA" && name !== "OPTION") return;
   if (from.ownerDocument.activeElement === from) return;
   if (from instanceof HTMLInputElement && to instanceof HTMLInputElement) {
     if (from.value !== to.value) from.value = to.value;
@@ -107,24 +118,37 @@ function radioGroupFocused(input: HTMLInputElement): boolean {
 const keyOf = (node: Node, options: MorphOptions): string | null =>
   options.key && node.nodeType === 1 ? options.key(node as Element) : null;
 
-function compatible(old: Node, next: Node, options: MorphOptions): boolean {
-  if (old.nodeType !== next.nodeType) return false;
-  if (old.nodeType === 1) {
-    if ((old as Element).tagName !== (next as Element).tagName) return false;
-    return keyOf(old, options) === keyOf(next, options);
-  }
-  return true;
-}
-
 function morphChildren(
   from: Element,
   to: Element,
   options: MorphOptions,
 ): void {
-  const oldNodes = Array.from(from.childNodes);
-  const newNodes = Array.from(to.childNodes);
+  // Leaf fast paths: most nodes in a real tree have no children or a single
+  // text child — both skip all of the matching scaffold below. (Elements are
+  // excluded from the single-child path: they need key/skip handling.)
+  const fromFirst = from.firstChild;
+  const toFirst = to.firstChild;
+  if (fromFirst === null && toFirst === null) return;
+  if (
+    fromFirst !== null &&
+    toFirst !== null &&
+    fromFirst.nextSibling === null &&
+    toFirst.nextSibling === null &&
+    fromFirst.nodeType !== 1 &&
+    fromFirst.nodeType === toFirst.nodeType
+  ) {
+    if (fromFirst.nodeValue !== toFirst.nodeValue) {
+      fromFirst.nodeValue = toFirst.nodeValue;
+    }
+    return;
+  }
 
+  const oldNodes = Array.from(from.childNodes);
+
+  // Every old element's key is computed exactly once here; `keyedNodes` marks
+  // them so the positional cursor can skip keyed nodes without re-keying.
   const keyed = new Map<string, Element>();
+  const keyedNodes = new Set<Node>();
   if (options.key) {
     for (const node of oldNodes) {
       const key = keyOf(node, options);
@@ -133,6 +157,7 @@ function morphChildren(
         // throws instead of silently reassigning identity.
         if (keyed.has(key)) throw new Error(`Duplicate morph key "${key}".`);
         keyed.set(key, node as Element);
+        keyedNodes.add(node);
       }
     }
   }
@@ -142,33 +167,39 @@ function morphChildren(
   const result: Node[] = [];
   let cursor = 0;
 
-  for (const next of newNodes) {
+  for (let next = toFirst; next !== null; next = next.nextSibling) {
     let match: Node | undefined;
 
+    // Each new node's key is computed exactly once per pass.
     const key = keyOf(next, options);
-    if (key !== null && seenNewKeys !== null) {
-      if (seenNewKeys.has(key))
-        throw new Error(`Duplicate morph key "${key}".`);
-      seenNewKeys.add(key);
-    }
     if (key !== null) {
+      if (seenNewKeys !== null) {
+        if (seenNewKeys.has(key))
+          throw new Error(`Duplicate morph key "${key}".`);
+        seenNewKeys.add(key);
+      }
       const hit = keyed.get(key);
       // A key match still requires the same tag: morphing across tags would hit the recursive
       // replaceWith path whose replacement can't be threaded back into this walk — adopt instead.
       if (hit && !used.has(hit) && hit.tagName === (next as Element).tagName) {
         match = hit;
       }
-    }
-    if (!match) {
+      // A keyed new node never matches positionally, so no cursor work here.
+    } else {
       // Skip used nodes AND keyed old nodes: a keyed node never matches positionally, and one
       // absent from the new tree would otherwise block every unkeyed sibling behind it.
       while (cursor < oldNodes.length) {
         const blocked = oldNodes[cursor] as Node;
-        if (!used.has(blocked) && keyOf(blocked, options) === null) break;
+        if (!used.has(blocked) && !keyedNodes.has(blocked)) break;
         cursor++;
       }
       const candidate = oldNodes[cursor];
-      if (candidate && compatible(candidate, next, options)) {
+      if (
+        candidate &&
+        candidate.nodeType === next.nodeType &&
+        (candidate.nodeType !== 1 ||
+          (candidate as Element).tagName === (next as Element).tagName)
+      ) {
         match = candidate;
         cursor++;
       }
@@ -193,14 +224,6 @@ function morphChildren(
     from.removeChild(old);
   }
 
-  // Place right-to-left so each node's successor is already in position;
-  // in-parent moves take the state-preserving path.
-  let ref: Node | null = null;
-  for (let index = result.length - 1; index >= 0; index--) {
-    const node = result[index] as Node;
-    if (node.parentNode !== from || node.nextSibling !== ref) {
-      placeBefore(from, node, ref);
-    }
-    ref = node;
-  }
+  // Shared LIS positioner: minimal state-preserving moves, adopted nodes inserted in place.
+  positionOrdered(from, result, null);
 }

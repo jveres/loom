@@ -598,8 +598,8 @@ morph(document.querySelector("main")!, next, {
 
 Matching is positional by node type and tag; the optional `key` hook matches
 elements by a stable key across positions first (a keyed match still requires
-the same tag), and moves matched nodes with the same state-preserving
-`moveBefore` path as `list()`/`each()`. Duplicate keys throw, like the keyed
+the same tag), and moves matched nodes with the same LIS-minimal,
+state-preserving move path as `list()`/`each()`. Duplicate keys throw, like the keyed
 list reconcilers. Attributes, text, and form state are synced — the focused
 element is never overwritten (including a focused radio's group siblings), and
 selects sync per-option so multi-selects survive. `options.skip` marks
