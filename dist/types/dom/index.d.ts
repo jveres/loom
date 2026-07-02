@@ -81,3 +81,4 @@ export declare function tap(node: Element, handler: (event: PointerEvent) => voi
  */
 export declare function bindAttr(node: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
 export { type MorphOptions, morph } from "./morph.js";
+export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";

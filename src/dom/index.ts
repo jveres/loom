@@ -753,3 +753,4 @@ function isBinding<TKind extends "attr" | "class" | "style">(
 }
 
 export { type MorphOptions, morph } from "./morph.js";
+export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";
