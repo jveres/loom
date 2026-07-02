@@ -1,0 +1,8 @@
+packages:
+  - "."
+
+# esbuild (vite transitive) ships its platform binary as @esbuild/* optional deps; its install
+# script is a redundant binary check. Denying the build (written by `pnpm approve-builds
+# '!esbuild'`) keeps fresh installs (CI) from hard-erroring with ERR_PNPM_IGNORED_BUILDS.
+allowBuilds:
+  esbuild: false
