@@ -1,4 +1,4 @@
-import { a as e, v as t } from "./loom-hgSnAhZU.js";
+import { a as e, v as t } from "./loom-v9Dpu4UJ.js";
 import { t as n } from "./jsx-props-sAPN8GVq.js";
 //#region src/dom/index.ts
 var r = (e) => e, i = /* @__PURE__ */ new WeakMap(), a = "http://www.w3.org/2000/svg", o = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));

@@ -1,3 +1,4 @@
+import { type Link, type ReactiveNode } from "./core/graph.js";
 export interface State<T> {
     (): T;
     (next: T): void;
@@ -44,26 +45,48 @@ export interface NodeInfo {
     readonly kind: NodeKind;
     readonly label: string;
 }
-export interface InspectNode extends NodeInfo {
-    readonly internal: boolean;
-    readonly deps: readonly number[];
-    readonly subs: readonly number[];
-    readonly runs: number;
-    readonly disposed: boolean;
-    readonly target?: object;
-    readonly value?: unknown;
-    readonly source?: State<unknown>;
-    readonly group?: number;
-    readonly key?: string;
-}
-export interface InspectSnapshot {
-    readonly nodes: readonly InspectNode[];
-}
 export type CleanupEffectFn = () => Stop;
 type FieldKey<T extends object> = Extract<keyof T, string>;
 export type Fields<T extends object> = {
     readonly [K in FieldKey<T>]: State<T[K]>;
 };
+export type NodeBase = ReactiveNode & {
+    deps?: Link | undefined;
+    depsTail?: Link | undefined;
+    meta?: InspectMeta | undefined;
+    subs?: Link | undefined;
+    subsTail?: Link | undefined;
+};
+export interface StateNode<T> extends NodeBase {
+    currentValue: T;
+    pendingValue: T;
+    source?: State<unknown> | undefined;
+}
+interface ScopeResource {
+    pause(): void;
+    resume(): void;
+    stop(): void;
+}
+export interface InspectMeta {
+    readonly id: number;
+    readonly internal: boolean;
+    readonly kind: NodeKind;
+    readonly label: string;
+    readonly target: WeakRef<object> | undefined;
+    disposed: boolean;
+    runs: number;
+    group?: number;
+    key?: string;
+}
+export interface InspectHooks {
+    register(node: NodeBase, kind: NodeKind, options: NodeOptions | EffectOptions | undefined): InspectMeta | undefined;
+    unregister(id: number): void;
+    setEnabled(on: boolean): void;
+    nextGroup(): number;
+}
+export declare function installInspectHooks(hooks: InspectHooks): void;
+export declare function ambientOptions(): NodeOptions | undefined;
+export declare function liveScopeCount(): number;
 export declare function state<T>(initial: T, options?: NodeOptions): State<T>;
 /**
  * A lazy reactive source backed by an external producer. `connect(set)` is invoked the first
@@ -86,6 +109,7 @@ export declare function batch<T>(fn: () => T): T;
  * child suspended.
  */
 export declare function scope(fn: () => void, options?: NodeOptions): Scope;
+export declare function registerScopeResource(resource: ScopeResource): void;
 export type Polled<T> = Read<T> & {
     readonly stop: Stop;
 };
@@ -102,72 +126,6 @@ export declare function untrack<T>(fn: () => T): T;
 export declare function update<T>(source: State<T>, fn: (value: T) => T): void;
 export declare function mutate<T extends object>(source: State<T>, fn: (value: T) => void): void;
 export declare function fields<T extends object>(initial: T, options?: NodeOptions): Fields<T>;
-export interface ChannelOptions {
-    /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */
-    readonly capacity?: number;
-    /** Field names recorded per event on a detail channel (up to 5); emit() takes one value each. */
-    readonly fields?: readonly string[];
-}
-export interface Channel {
-    readonly name: string;
-    /** True while ≥1 meter is attached — gate expensive argument prep behind it. */
-    readonly active: boolean;
-    /** Record one event. No-op and zero-allocation when inactive. One value per declared field. */
-    emit(a?: unknown, b?: unknown, c?: unknown, d?: unknown, e?: unknown): void;
-}
-export interface Frame {
-    /** Exact events on this channel since the last read(). */
-    readonly count: number;
-    /** Events lost to ring overwrite since the last read() (detail channels only). */
-    readonly dropped: number;
-    /** Most-recent records, oldest→newest, at most `capacity`; keyed by the channel's fields. */
-    readonly samples: ReadonlyArray<Readonly<Record<string, unknown>>>;
-}
-/**
- * How a meter reads its channels — borrowed from OpenTelemetry's instrument↔view split: the channel
- * is the instrument (what's measured), the meter is the reader/view (how it's read), and different
- * meters can read the same channel differently.
- * - `"count"` (default) — the Sum/Counter view: `read()` returns counts only and builds no per-event
- *   objects (zero allocation). For rates.
- * - `"samples"` — the records view (OTel exemplars/logs): `read()` also materialises the channel's
- *   retained ring records. For event streams and histograms.
- */
-export type MeterAggregation = "count" | "samples";
-export interface Meter {
-    /** Pull one Frame per metered channel, keyed by channel name. Call on your own clock. */
-    read(): Readonly<Record<string, Frame>>;
-    /** Detach from every channel (drops their gate). */
-    stop(): void;
-}
-export declare function channel(name: string, options?: ChannelOptions): Channel;
-export declare function meter(channels: ReadonlyArray<Channel>, aggregation?: MeterAggregation): Meter;
-export declare const events: {
-    readonly read: Channel;
-    readonly write: Channel;
-    readonly compute: Channel;
-    readonly effect: Channel;
-    readonly flush: Channel;
-    readonly create: Channel;
-    readonly dispose: Channel;
-};
-export interface ReadSample {
-    readonly id: number;
-    readonly by: number | undefined;
-    readonly t: number;
-}
-export interface WriteSample {
-    readonly id: number;
-    readonly prev: unknown;
-    readonly next: unknown;
-    readonly by: number | undefined;
-    readonly t: number;
-}
-export interface FlushSample {
-    readonly batchSize: number;
-    readonly durationMs: number;
-}
-export declare function sampleOf<T>(sample: Readonly<Record<string, unknown>>): T;
-export declare function sampleOf<T>(sample: Readonly<Record<string, unknown>> | undefined): T | undefined;
 /**
  * Configure the runtime.
  *
@@ -188,25 +146,7 @@ export interface ConfigureOptions {
     readonly deferScheduler?: DeferScheduler;
 }
 export declare function configure(options: ConfigureOptions): void;
-/**
- * Snapshot the reactive graph. With `{ active: true }`, skip state/computed cells that have no
- * subscribers — these are either idle (nothing reads them) or "ghosts": cells of a removed object
- * that are unreachable from the app but still alive until GC clears their WeakRef. Effects are
- * always kept. There is no way to detect a not-yet-collected ghost directly (reachability is the
- * GC's business), so the subscriber count is the proxy: a live cell is one something still reads.
- */
-export declare function inspect(options?: {
-    readonly active?: boolean;
-}): InspectSnapshot;
-export interface ResourceCounts {
-    readonly states: number;
-    readonly computeds: number;
-    readonly effects: number;
-    readonly targetedEffects: number;
-    readonly sources: number;
-    readonly scopes: number;
-    readonly channels: number;
-    readonly unread: number;
-}
-export declare function inspectResources(): ResourceCounts;
+export declare function mergeOptions(defaults: NodeOptions | undefined, own: NodeOptions | EffectOptions | undefined): NodeOptions | EffectOptions | undefined;
+export declare function kindOf(node: ReactiveNode): NodeKind | "watcher";
+export declare function nodeValue(node: NodeBase): unknown;
 export {};

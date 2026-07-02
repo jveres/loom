@@ -7,15 +7,18 @@
 export type {
   Channel,
   ChannelOptions,
+  Frame,
+  Meter,
+  MeterAggregation,
+} from "./core/meter.js";
+export { channel, meter } from "./core/meter.js";
+export type {
   CleanupEffectFn,
   DeferScheduler,
   EffectFn,
   EffectOptions,
   ErrorHandler,
   Fields,
-  Frame,
-  Meter,
-  MeterAggregation,
   NodeInfo,
   NodeKind,
   NodeOptions,
@@ -28,12 +31,10 @@ export type {
 } from "./loom.js";
 export {
   batch,
-  channel,
   computed,
   configure,
   effect,
   fields,
-  meter,
   mutate,
   polled,
   scope,

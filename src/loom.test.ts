@@ -1,17 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { inspect, inspectResources } from "./core/inspect.js";
+import { channel, events, type Meter, meter } from "./core/meter.js";
 import {
   batch,
-  channel,
   computed,
   configure,
   type EffectFn,
   effect,
-  events,
   fields,
-  inspect,
-  inspectResources,
-  type Meter,
-  meter,
   mutate,
   type Polled,
   polled,
@@ -1264,7 +1260,8 @@ describe("loom coverage", () => {
     vi.resetModules();
     try {
       const loom = await import("./loom.js");
-      const m = loom.meter([loom.events.flush]); // a flush meter makes now() run for the timing
+      const meterMod = await import("./core/meter.js");
+      const m = meterMod.meter([meterMod.events.flush]); // a flush meter makes now() run for the timing
       const a = loom.state(0);
       const e = loom.effect(() => {
         a();

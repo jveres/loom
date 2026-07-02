@@ -1,8 +1,17 @@
+import * as channels from "./core/channels.js";
 import {
   createReactiveSystem,
   type Link,
   type ReactiveNode,
 } from "./core/graph.js";
+
+// Snapshot the channel nodes + the sampler holder into module-local consts. Under transforms
+// that implement ESM live bindings as per-access getters (vitest/vite SSR, some interop shims), a
+// direct imported-binding read on the write path costs a getter call per write — measured 10x on
+// write throughput. One read at init, plain locals forever after.
+const { readCh, writeCh, computeCh, effectCh, flushCh, createCh, disposeCh } =
+  channels;
+const sampler = channels.sampler;
 
 const Mutable = 1;
 const Watching = 2;
@@ -75,28 +84,6 @@ export interface NodeInfo {
   readonly label: string;
 }
 
-// The full graph-node record produced by inspect() / inspectResources() (the loom/observe surface).
-export interface InspectNode extends NodeInfo {
-  readonly internal: boolean;
-  readonly deps: readonly number[];
-  readonly subs: readonly number[];
-  readonly runs: number;
-  readonly disposed: boolean;
-  readonly target?: object;
-  readonly value?: unknown;
-  // The live setter for a state cell, for tooling that writes back (the inspector). Deliberately
-  // erased to State<unknown>: the concrete T is unrecoverable at snapshot time, so a write here is
-  // unchecked by construction — callers own that unsoundness.
-  readonly source?: State<unknown>;
-  // Cells from one fields() call share a `group` id; `key` is the property name within it.
-  readonly group?: number;
-  readonly key?: string;
-}
-
-export interface InspectSnapshot {
-  readonly nodes: readonly InspectNode[];
-}
-
 // An effect body that returns a cleanup run before each re-run and on dispose (the shape the first
 // effect() overload documents). Exported so callers can name the contract, not just satisfy it.
 export type CleanupEffectFn = () => Stop;
@@ -108,9 +95,7 @@ export type Fields<T extends object> = {
   readonly [K in FieldKey<T>]: State<T[K]>;
 };
 
-type Writable<T> = { -readonly [K in keyof T]: T[K] };
-
-type NodeBase = ReactiveNode & {
+export type NodeBase = ReactiveNode & {
   deps?: Link | undefined;
   depsTail?: Link | undefined;
   meta?: InspectMeta | undefined;
@@ -118,7 +103,7 @@ type NodeBase = ReactiveNode & {
   subsTail?: Link | undefined;
 };
 
-interface StateNode<T> extends NodeBase {
+export interface StateNode<T> extends NodeBase {
   currentValue: T;
   pendingValue: T;
   source?: State<unknown> | undefined;
@@ -182,7 +167,7 @@ interface ScopeNode {
   stopped: boolean;
 }
 
-interface InspectMeta {
+export interface InspectMeta {
   readonly id: number;
   readonly internal: boolean;
   readonly kind: NodeKind;
@@ -213,24 +198,36 @@ let drainCancel: (() => void) | undefined;
 const deferTimeout = 200; // default maxStale (ms) for a deferred effect that doesn't set its own
 let deferScheduler: DeferScheduler = defaultDeferScheduler;
 const DEFER_BUDGET_MS = 5; // a forced (no-idle) drain runs at most ~this long, then yields
-let inspectId = 0;
-let fieldsGroup = 0; // shared id stamped on the cells of each fields() call (for inspector grouping)
 let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off the reactive path)
-// Inspection is opt-in: off by default so node creation allocates no metadata (zero cost). Turn it
-// on with configure({ inspect: true }) BEFORE creating the nodes you want visible to inspect()/the
-// inspector — nodes created while it's off carry no metadata and never appear.
-let inspectEnabled = false;
 let onError: ErrorHandler | undefined;
-const inspectRefs = new Map<number, WeakRef<NodeBase>>();
-// Reclaims a churned node's registry entry as soon as GC collects it — inspect()'s lazy pruning
-// only runs on pulls, so inspection left on without an inspector polling would otherwise
-// accumulate dead WeakRefs indefinitely. Inspection-mode only (registered in registerNode).
-const inspectReaper: FinalizationRegistry<number> | undefined =
-  typeof FinalizationRegistry === "undefined"
-    ? undefined
-    : new FinalizationRegistry((id) => {
-        inspectRefs.delete(id);
-      });
+// The inspection subsystem's seam. core/inspect.ts installs these when it is loaded (any import
+// of loom/observe); until then every hook site is an undefined-check no-op and none of the
+// registry/metadata machinery is even bundled. `inspectRequested` buffers a configure({ inspect })
+// made before the module loaded (e.g. dynamic import ordering).
+export interface InspectHooks {
+  register(
+    node: NodeBase,
+    kind: NodeKind,
+    options: NodeOptions | EffectOptions | undefined,
+  ): InspectMeta | undefined;
+  unregister(id: number): void;
+  setEnabled(on: boolean): void;
+  nextGroup(): number;
+}
+let inspectHooks: InspectHooks | undefined;
+let inspectRequested = false;
+export function installInspectHooks(hooks: InspectHooks): void {
+  inspectHooks = hooks;
+  if (inspectRequested) hooks.setEnabled(true);
+}
+// Read-only seams for core/inspect.ts (not part of the public barrel).
+export function ambientOptions(): NodeOptions | undefined {
+  return activeScope?.options;
+}
+export function liveScopeCount(): number {
+  return liveScopes;
+}
+
 // Each public accessor (a state source, computed read, or effect stop) carries a hidden handle to
 // its node via this private symbol — so trigger() resolves a node in O(1) without the
 // per-create WeakMap registration create-heavy workloads would otherwise pay even with inspection off.
@@ -289,7 +286,7 @@ export function state<T>(initial: T, options?: NodeOptions): State<T> {
   const node = createStateNode(initial);
   const source = stateOper.bind(node) as State<T>;
   node.source = source as State<unknown>;
-  const meta = registerNode(node, "state", options);
+  const meta = inspectHooks?.register(node, "state", options);
   tagNode(source, node);
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return source;
@@ -309,7 +306,7 @@ export function source<T>(
 ): Read<T> {
   const node = createSourceNode(connect, initial);
   const read = sourceOper.bind(node) as Read<T>;
-  const meta = registerNode(node, "state", options);
+  const meta = inspectHooks?.register(node, "state", options);
   tagNode(read, node);
   // When created inside a scope, pausing the scope disconnects the producer even though paused
   // subscribers stay linked; resuming reconnects it if anything is still observing.
@@ -355,7 +352,7 @@ export function computed<T>(
 ): Read<T> {
   const node = createComputedNode(getter);
   const read = computedOper.bind(node) as Read<T>;
-  const meta = registerNode(node, "computed", options);
+  const meta = inspectHooks?.register(node, "computed", options);
   tagNode(read, node);
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return read;
@@ -374,7 +371,7 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     node.deferred = true;
     node.maxStale = options.maxStale ?? deferTimeout;
   }
-  const meta = registerNode(node, "effect", options);
+  const meta = inspectHooks?.register(node, "effect", options);
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   const previous = setActiveSub(node);
   if (previous !== undefined) {
@@ -458,6 +455,12 @@ export function scope(fn: () => void, options?: NodeOptions): Scope {
     pause: () => pauseScope(node),
     resume: () => resumeScope(node),
   };
+}
+
+// Register a resource with the ambient scope (pause/resume/stop ride the scope's lifecycle).
+// Exported for the sibling core modules (meter) — not part of the public barrel.
+export function registerScopeResource(resource: ScopeResource): void {
+  activeScope?.resources.push(resource);
 }
 
 function scopePaused(node: ScopeNode): boolean {
@@ -668,7 +671,7 @@ export function fields<T extends object>(
   const out = {} as { [K in FieldKey<T>]: State<T[K]> };
   const keys = Object.keys(initial) as Array<FieldKey<T>>;
   // One group id per call so the inspector can re-nest the cells under a single parent.
-  const group = inspectEnabled ? ++fieldsGroup : 0;
+  const group = inspectHooks !== undefined ? inspectHooks.nextGroup() : 0;
   for (let index = 0; index < keys.length; index++) {
     const key = keys[index] as FieldKey<T>;
     const cell = state(initial[key], fieldOptions(options, key));
@@ -684,156 +687,13 @@ export function fields<T extends object>(
   return out;
 }
 
-/* ===== Channels & meters: generic, gated, overwriting ring buffers drained by a pull-based meter.
-   A channel is a process-global, name-addressed singleton (the producer/consumer rendezvous). It
-   stays a no-op — and allocation-free — until a meter attaches. Counts are exact; detail is a
-   bounded, most-recent sample that drops oldest under overflow, so no event rate and no consumer
-   can stall the producer. (loom's own self-instrumentation built on these is the `events` registry
-   below, surfaced via loom/observe — but the primitives themselves are generic.) ===== */
-
-export interface ChannelOptions {
-  /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */
-  readonly capacity?: number;
-  /** Field names recorded per event on a detail channel (up to 5); emit() takes one value each. */
-  readonly fields?: readonly string[];
-}
-
-export interface Channel {
-  readonly name: string;
-  /** True while ≥1 meter is attached — gate expensive argument prep behind it. */
-  readonly active: boolean;
-  /** Record one event. No-op and zero-allocation when inactive. One value per declared field. */
-  emit(a?: unknown, b?: unknown, c?: unknown, d?: unknown, e?: unknown): void;
-}
-
-export interface Frame {
-  /** Exact events on this channel since the last read(). */
-  readonly count: number;
-  /** Events lost to ring overwrite since the last read() (detail channels only). */
-  readonly dropped: number;
-  /** Most-recent records, oldest→newest, at most `capacity`; keyed by the channel's fields. */
-  readonly samples: ReadonlyArray<Readonly<Record<string, unknown>>>;
-}
-
-/**
- * How a meter reads its channels — borrowed from OpenTelemetry's instrument↔view split: the channel
- * is the instrument (what's measured), the meter is the reader/view (how it's read), and different
- * meters can read the same channel differently.
- * - `"count"` (default) — the Sum/Counter view: `read()` returns counts only and builds no per-event
- *   objects (zero allocation). For rates.
- * - `"samples"` — the records view (OTel exemplars/logs): `read()` also materialises the channel's
- *   retained ring records. For event streams and histograms.
- */
-export type MeterAggregation = "count" | "samples";
-
-export interface Meter {
-  /** Pull one Frame per metered channel, keyed by channel name. Call on your own clock. */
-  read(): Readonly<Record<string, Frame>>;
-  /** Detach from every channel (drops their gate). */
-  stop(): void;
-}
-
-interface ChannelNode {
-  readonly name: string;
-  readonly cap: number;
-  readonly mask: number;
-  readonly fields: readonly string[];
-  readonly cols: unknown[][];
-  meters: number; // attached meters of any kind (gates counting at the emit sites)
-  samples: number; // of those, the "samples" meters — detail recording is gated on this, so a
-  // count-only consumer (e.g. the stats rates) doesn't pay for the ring write + timestamp
-  seq: number; // monotonic count (double; exact to 2^53)
-  head: number; // ring write index (0..cap-1)
-}
-
-const channelRegistry = new Map<string, ChannelNode>();
-// Shared by every count-only channel's Frame (and any channel with no new samples) so meter.read()
-// allocates nothing on the common path.
-const EMPTY_SAMPLES: ReadonlyArray<Readonly<Record<string, unknown>>> = [];
-
-// A detail ring is small (a recent-samples buffer); bound capacity well under 2^31 so the pow2 loop
-// can't overflow into an infinite loop, and reject clearly-invalid input on this public path.
-const MAX_CHANNEL_CAPACITY = 1 << 20; // 1,048,576
-const MAX_CHANNEL_FIELDS = 5; // emit()/recordChannel record up to 5 positional values
-
-function toPow2(capacity: number): number {
-  if (capacity === 0) return 0;
-  if (
-    !Number.isInteger(capacity) ||
-    capacity < 0 ||
-    capacity > MAX_CHANNEL_CAPACITY
-  ) {
-    throw new RangeError(
-      `Channel capacity must be an integer in [0, ${MAX_CHANNEL_CAPACITY}]; got ${capacity}.`,
-    );
-  }
-  let p = 1;
-  while (p < capacity) p <<= 1;
-  return p;
-}
-
-function createChannelNode(
-  name: string,
-  options?: ChannelOptions,
-): ChannelNode {
-  const cap = toPow2(options?.capacity ?? 0);
-  const fields = options?.fields ?? [];
-  if (fields.length > MAX_CHANNEL_FIELDS) {
-    throw new RangeError(
-      `A channel records up to ${MAX_CHANNEL_FIELDS} fields; "${name}" declares ${fields.length}.`,
-    );
-  }
-  const cols: unknown[][] = [];
-  if (cap > 0)
-    for (let i = 0; i < fields.length; i++) cols.push(new Array(cap));
-  return {
-    name,
-    cap,
-    mask: cap > 0 ? cap - 1 : 0,
-    fields,
-    cols,
-    meters: 0,
-    samples: 0,
-    seq: 0,
-    head: 0,
-  };
-}
-
-// Record one event (caller has checked node.meters !== 0). Zero-allocation: columnar ring write,
-// one fixed positional value per field (up to 5) so nothing is allocated on the producer path.
-function recordChannel(
-  node: ChannelNode,
-  a: unknown,
-  b: unknown,
-  c: unknown,
-  d: unknown,
-  e: unknown,
-): void {
-  if (node.cap !== 0) {
-    const h = node.head;
-    const { cols } = node;
-    const c0 = cols[0];
-    if (c0 !== undefined) c0[h] = a;
-    const c1 = cols[1];
-    if (c1 !== undefined) c1[h] = b;
-    const c2 = cols[2];
-    if (c2 !== undefined) c2[h] = c;
-    const c3 = cols[3];
-    if (c3 !== undefined) c3[h] = d;
-    const c4 = cols[4];
-    if (c4 !== undefined) c4[h] = e;
-    node.head = (h + 1) & node.mask;
-  }
-  node.seq++;
-}
-
 // Record a read on the read channel — the cell, the reader (the running effect/computed) that
 // consumed it, and when. Callers gate on `readCh.samples !== 0`; `meta === undefined`
 // (inspection off for this cell) just counts.
 function recordRead(node: NodeBase, sub: NodeBase): void {
   const meta = node.meta;
   if (meta !== undefined)
-    recordChannel(
+    sampler.record(
       readCh,
       meta.id,
       sub.meta?.id,
@@ -850,211 +710,6 @@ function trackRead(node: NodeBase, sub: NodeBase): void {
     if (readCh.samples !== 0) recordRead(node, sub);
     else readCh.seq++;
   }
-}
-
-function channelOf(node: ChannelNode): Channel {
-  return {
-    name: node.name,
-    get active() {
-      return node.meters !== 0;
-    },
-    emit(a, b, c, d, e) {
-      if (node.meters !== 0) recordChannel(node, a, b, c, d, e);
-    },
-  };
-}
-
-export function channel(name: string, options?: ChannelOptions): Channel {
-  // `loom:` is reserved for the runtime's own built-in event channels (the `events` registry behind
-  // loom/observe), which share this registry. Reject it so app channels can't collide with internals.
-  if (name.startsWith("loom:")) {
-    throw new Error(
-      `Channel name "${name}" uses the reserved "loom:" prefix (built-in runtime channels).`,
-    );
-  }
-  let node = channelRegistry.get(name);
-  if (node === undefined) {
-    node = createChannelNode(name, options);
-    channelRegistry.set(name, node);
-  } else if (options !== undefined) {
-    const cap = toPow2(options.capacity ?? 0);
-    if (cap !== node.cap || !sameFields(options.fields ?? [], node.fields)) {
-      throw new Error(
-        `Channel "${name}" already declared with different options.`,
-      );
-    }
-  }
-  return channelOf(node);
-}
-
-// Element-wise field comparison: a `.join()` compare would treat ["a,b"] and ["a","b"] as equal.
-function sameFields(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
-
-export function meter(
-  channels: ReadonlyArray<Channel>,
-  aggregation: MeterAggregation = "count",
-): Meter {
-  const withSamples = aggregation === "samples";
-  const members: Array<{ readonly node: ChannelNode; cursor: number }> = [];
-  for (const ch of channels) {
-    const node = channelRegistry.get(ch.name);
-    // Unregistered name (a hand-rolled/stale Channel object) is tolerated by design — it simply
-    // never appears in read() rather than throwing. See the "ignores channels it doesn't know" test.
-    if (node !== undefined) members.push({ node, cursor: node.seq });
-  }
-  let attached = false;
-  const attach = (): void => {
-    if (attached) return;
-    attached = true;
-    for (const m of members) {
-      m.node.meters++;
-      if (withSamples) m.node.samples++;
-      m.cursor = m.node.seq;
-    }
-  };
-  const detach = (): void => {
-    if (!attached) return;
-    attached = false;
-    for (const m of members) {
-      m.node.meters--;
-      if (withSamples) m.node.samples--;
-    }
-  };
-  attach();
-  // A meter is a scope resource: pause() detaches (the channels can go inactive → the core's emit
-  // sites become no-ops again), resume() re-attaches fresh, stop()/scope teardown detaches.
-  activeScope?.resources.push({ pause: detach, resume: attach, stop: detach });
-  return {
-    read() {
-      const frame: Record<string, Frame> = {};
-      for (const m of members) {
-        const node = m.node;
-        const seq = node.seq;
-        const count = seq - m.cursor;
-        let dropped = 0;
-        // The `count` view (and any channel with nothing new) shares one frozen empty array, so a
-        // count read allocates nothing per channel; only a `samples` view materialises records.
-        let samples: ReadonlyArray<Readonly<Record<string, unknown>>> =
-          EMPTY_SAMPLES;
-        if (withSamples && node.cap !== 0 && count > 0) {
-          const avail = count < node.cap ? count : node.cap;
-          dropped = count - avail;
-          const { cols, fields, mask, head, cap } = node;
-          const out: Array<Record<string, unknown>> = [];
-          for (let k = 0; k < avail; k++) {
-            const idx = (head + cap - avail + k) & mask;
-            const rec: Record<string, unknown> = {};
-            for (let f = 0; f < fields.length; f++) {
-              rec[fields[f] as string] = cols[f]?.[idx];
-            }
-            out.push(rec);
-          }
-          samples = out;
-        }
-        m.cursor = seq;
-        frame[node.name] = { count, dropped, samples };
-      }
-      return frame;
-    },
-    stop: detach,
-  };
-}
-
-// The runtime's built-in channels, exposed publicly as `events` (via loom/observe). The core
-// records to these inline at the hot-path sites; they stay no-ops until a meter attaches. Records
-// non-internal nodes only *when inspection is on* — the `internal` flag lives in a node's inspect
-// meta, which isn't allocated while inspection is off (registerNode returns early). So with
-// inspection off, the gate can't see the flag and internal nodes are counted too. Loom creates no
-// internal nodes at rest, so the idle baseline is still zero; but a meter attached alongside an
-// app's own `{ internal: true }` nodes while inspection is off will include them. Turn inspection on
-// (configure({ inspect: true })) for the internal-exclusion contract to hold.
-// read carries detail (which cell, the reader that read it, when) so a "samples" meter can stream
-// reads (the Trace tab); a "count" meter (the read rate) ignores the ring. Reads are the
-// highest-frequency event, so the per-read recording is paid only while metered and stays zero-alloc.
-// `by` is the running effect/computed that performed the read — i.e. who consumed the cell.
-const readCh = createChannelNode("loom:read", {
-  capacity: 1024,
-  fields: ["id", "by", "t"],
-});
-// write carries detail so a "samples" meter can stream individual mutations (id + prev→next + the
-// node that wrote it + a wall-clock timestamp), e.g. the inspector's Trace tab; a "count" meter
-// (the rates) ignores the ring and allocates nothing. `by` is the effect/computed that wrote during
-// a reactive cascade, or undefined for a top-level (event-handler) write.
-const writeCh = createChannelNode("loom:write", {
-  capacity: 1024,
-  fields: ["id", "prev", "next", "by", "t"],
-});
-const computeCh = createChannelNode("loom:compute");
-const effectCh = createChannelNode("loom:effect");
-const flushCh = createChannelNode("loom:flush", {
-  capacity: 8,
-  fields: ["batchSize", "durationMs"],
-});
-const createCh = createChannelNode("loom:create");
-const disposeCh = createChannelNode("loom:dispose");
-for (const node of [
-  readCh,
-  writeCh,
-  computeCh,
-  effectCh,
-  flushCh,
-  createCh,
-  disposeCh,
-]) {
-  channelRegistry.set(node.name, node);
-}
-
-// Each /* @__PURE__ */ marks its channelOf() wrapper side-effect-free, so a bundler drops the
-// public `events` accessors when an app never meters. The built-in channel *nodes* above stay (the
-// core's emit gates reference them); only these wrappers tree-shake away.
-export const events = {
-  read: /* @__PURE__ */ channelOf(readCh),
-  write: /* @__PURE__ */ channelOf(writeCh),
-  compute: /* @__PURE__ */ channelOf(computeCh),
-  effect: /* @__PURE__ */ channelOf(effectCh),
-  flush: /* @__PURE__ */ channelOf(flushCh),
-  create: /* @__PURE__ */ channelOf(createCh),
-  dispose: /* @__PURE__ */ channelOf(disposeCh),
-} as const;
-
-// The record shape each built-in detail channel writes into a Frame's `samples`, keyed by the
-// channel's declared `fields`. The Meter API is generic, so `Frame.samples` is typed
-// `Record<string, unknown>`; a consumer (the inspector) narrows a known channel's samples to one of
-// these with `sampleOf`. Keep these in lockstep with the `fields` arrays passed to
-// createChannelNode above — they are the single named contract the devtools reads against.
-export interface ReadSample {
-  readonly id: number;
-  readonly by: number | undefined;
-  readonly t: number;
-}
-export interface WriteSample {
-  readonly id: number;
-  readonly prev: unknown;
-  readonly next: unknown;
-  readonly by: number | undefined;
-  readonly t: number;
-}
-export interface FlushSample {
-  readonly batchSize: number;
-  readonly durationMs: number;
-}
-
-// Narrow a metered channel's untyped sample records to their known payload shape. The generic Meter
-// can't do this at the type level (channels are dynamic), so this is the one sanctioned, centralized
-// reinterpret — consumers name the shape here instead of re-asserting a literal at each read site.
-// A present record narrows to T; a possibly-missing one (e.g. samples.at(-1)) carries the undefined.
-export function sampleOf<T>(sample: Readonly<Record<string, unknown>>): T;
-export function sampleOf<T>(
-  sample: Readonly<Record<string, unknown>> | undefined,
-): T | undefined;
-export function sampleOf<T>(
-  sample: Readonly<Record<string, unknown>> | undefined,
-): T | undefined {
-  return sample as T | undefined;
 }
 
 /**
@@ -1078,139 +733,25 @@ export interface ConfigureOptions {
 }
 
 export function configure(options: ConfigureOptions): void {
-  if (options.inspect !== undefined) inspectEnabled = options.inspect;
+  if (options.inspect !== undefined) {
+    inspectRequested = options.inspect;
+    inspectHooks?.setEnabled(options.inspect);
+  }
   if ("onError" in options) onError = options.onError;
   if (options.deferScheduler !== undefined)
     deferScheduler = options.deferScheduler;
 }
 
-/**
- * Snapshot the reactive graph. With `{ active: true }`, skip state/computed cells that have no
- * subscribers — these are either idle (nothing reads them) or "ghosts": cells of a removed object
- * that are unreachable from the app but still alive until GC clears their WeakRef. Effects are
- * always kept. There is no way to detect a not-yet-collected ghost directly (reachability is the
- * GC's business), so the subscriber count is the proxy: a live cell is one something still reads.
- */
-export function inspect(options?: {
-  readonly active?: boolean;
-}): InspectSnapshot {
-  const activeOnly = options?.active === true;
-  const nodes: InspectNode[] = [];
-  for (const [id, ref] of inspectRefs) {
-    const node = ref.deref();
-    if (!node) {
-      inspectRefs.delete(id);
-      continue;
-    }
-    const meta = node.meta;
-    if (!meta) continue;
-    if (activeOnly && meta.kind !== "effect" && node.subs === undefined) {
-      continue;
-    }
-    nodes.push(inspectNode(node, meta));
-  }
-  return { nodes };
-}
-
-// A live census of the reactive resources, for tooling. Computed by one pull-time walk of the
-// node registry (no per-node allocation, unlike inspect()), plus O(1) reads of the scope counter
-// and channel registry — nothing here runs on the reactive hot path.
-export interface ResourceCounts {
-  readonly states: number;
-  readonly computeds: number;
-  // All live effects; `targetedEffects` is the subset that declared an EffectOptions.target —
-  // attribution to an external object. Surfaces tag their rendering bindings with it (loom/dom
-  // sets the bound DOM node), so tooling can read targeted effects as "views"; core doesn't
-  // assume that meaning.
-  readonly effects: number;
-  readonly targetedEffects: number;
-  readonly sources: number;
-  readonly scopes: number;
-  readonly channels: number;
-  // states/computeds nothing currently reads (no subscribers): idle, or leaked/ghost cells of a
-  // removed object not yet GC'd. A rising count under steady state hints at a leak.
-  readonly unread: number;
-}
-
-export function inspectResources(): ResourceCounts {
-  let states = 0;
-  let computeds = 0;
-  let effects = 0;
-  let targetedEffects = 0;
-  let sources = 0;
-  let unread = 0;
-  for (const [id, ref] of inspectRefs) {
-    const node = ref.deref();
-    if (node === undefined) {
-      inspectRefs.delete(id);
-      continue;
-    }
-    const meta = node.meta;
-    if (!meta || meta.internal) continue;
-    if (meta.kind === "computed") {
-      computeds++;
-      if (node.subs === undefined) unread++;
-    } else if (meta.kind === "effect") {
-      effects++;
-      if (meta.target !== undefined) targetedEffects++;
-    } else if ("connect" in node) {
-      sources++; // a state-kind node backed by an external producer
-    } else {
-      states++;
-      if (node.subs === undefined) unread++;
-    }
-  }
-  return {
-    states,
-    computeds,
-    effects,
-    targetedEffects,
-    sources,
-    scopes: liveScopes,
-    channels: channelRegistry.size,
-    unread,
-  };
-}
-
 // Merge two option sets, letting the second (more specific) win; either may be undefined. The union
-// return (not a generic) preserves EffectOptions' `target` through the merge, which registerNode
+// return (not a generic) preserves EffectOptions' `target` through the merge, which the inspect registrar
 // narrows with an `in` guard — the old `<T> => T | NodeOptions` signature widened that away.
-function mergeOptions(
+export function mergeOptions(
   defaults: NodeOptions | undefined,
   own: NodeOptions | EffectOptions | undefined,
 ): NodeOptions | EffectOptions | undefined {
   if (defaults === undefined) return own;
   if (own === undefined) return defaults;
   return { ...defaults, ...own };
-}
-
-function registerNode(
-  node: NodeBase,
-  kind: NodeKind,
-  options: NodeOptions | EffectOptions | undefined,
-): InspectMeta | undefined {
-  // Opt-in: when inspection is off, skip all metadata work — this is the per-node allocation
-  // (InspectMeta + WeakRef + Map insert) that dominates create-heavy workloads.
-  if (!inspectEnabled) return undefined;
-  // Apply the active scope's ambient defaults (internal/label) under any explicit ones.
-  const opts = mergeOptions(activeScope?.options, options);
-  const id = ++inspectId;
-  const meta: InspectMeta = {
-    id,
-    disposed: false,
-    internal: opts?.internal === true,
-    kind,
-    label: opts?.label ?? `${kind} #${id}`,
-    runs: 0,
-    target:
-      opts && "target" in opts && opts.target
-        ? new WeakRef(opts.target)
-        : undefined,
-  };
-  node.meta = meta;
-  inspectRefs.set(id, new WeakRef(node));
-  inspectReaper?.register(node, id);
-  return meta;
 }
 
 function fieldOptions(
@@ -1226,52 +767,14 @@ function fieldOptions(
     : out;
 }
 
-function inspectNode(node: NodeBase, meta: InspectMeta): InspectNode {
-  const out: Writable<InspectNode> = {
-    id: meta.id,
-    deps: linkedIds(node.deps, "nextDep", "dep"),
-    disposed: meta.disposed,
-    internal: meta.internal,
-    kind: meta.kind,
-    label: meta.label,
-    runs: meta.runs,
-    subs: linkedIds(node.subs, "nextSub", "sub"),
-  };
-  const source =
-    meta.kind === "state" ? (node as StateNode<unknown>).source : undefined;
-  if (source !== undefined) out.source = source;
-  const target = meta.target?.deref();
-  if (target !== undefined) out.target = target;
-  const value = nodeValue(node);
-  if (value !== undefined) out.value = value;
-  if (meta.group !== undefined) out.group = meta.group;
-  if (meta.key !== undefined) out.key = meta.key;
-  return out;
-}
-
-// Walk one side of a node's link list (deps via nextDep/dep, subs via nextSub/sub) collecting the
-// neighbors' inspect ids. Tooling-only path — never on the reactive hot path.
-function linkedIds(
-  head: Link | undefined,
-  next: "nextDep" | "nextSub",
-  peer: "dep" | "sub",
-): number[] {
-  const ids: number[] = [];
-  for (let item = head; item !== undefined; item = item[next]) {
-    const meta = (item[peer] as NodeBase).meta;
-    if (meta) ids.push(meta.id);
-  }
-  return ids;
-}
-
-function kindOf(node: ReactiveNode): NodeKind | "watcher" {
+export function kindOf(node: ReactiveNode): NodeKind | "watcher" {
   if ("getter" in node) return "computed";
   if ("currentValue" in node) return "state";
   if ("fn" in node) return "effect";
   return "watcher";
 }
 
-function nodeValue(node: NodeBase): unknown {
+export function nodeValue(node: NodeBase): unknown {
   switch (kindOf(node)) {
     case "state":
       return (node as StateNode<unknown>).pendingValue;
@@ -1386,7 +889,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
       if (writeCh.meters !== 0 && this.meta?.internal !== true) {
         const meta = this.meta;
         if (meta !== undefined && writeCh.samples !== 0)
-          recordChannel(
+          sampler.record(
             writeCh,
             meta.id,
             previous,
@@ -1583,7 +1086,7 @@ function flush(): void {
     notifyIndex = 0;
     queuedLength = 0;
     if (appBatchSize > 0 && flushCh.meters !== 0) {
-      recordChannel(
+      sampler.record(
         flushCh,
         appBatchSize,
         start ? now() - start : 0,
@@ -1709,7 +1212,7 @@ function stopEffect(this: EffectNode): void {
   if (this.cleanup) runCleanup(this);
   if (!meta || meta.disposed) return;
   meta.disposed = true;
-  inspectRefs.delete(meta.id);
+  inspectHooks?.unregister(meta.id);
   if (disposeCh.meters !== 0 && meta.internal !== true) disposeCh.seq++;
 }
 
@@ -1723,7 +1226,12 @@ function asCleanup(result: unknown): Stop | undefined {
 // other effects); without one, rethrow so it surfaces at whatever triggered the run.
 function reportEffectError(error: unknown, node: EffectNode): void {
   if (onError === undefined) throw error;
-  onError(error, node.meta ? inspectNode(node, node.meta) : undefined);
+  const meta = node.meta;
+  // The boundary gets the lean NodeInfo (id/kind/label); the full InspectNode lives in loom/observe.
+  onError(
+    error,
+    meta ? { id: meta.id, kind: meta.kind, label: meta.label } : undefined,
+  );
 }
 
 function runCleanup(node: EffectNode): void {

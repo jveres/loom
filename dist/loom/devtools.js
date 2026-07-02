@@ -1,4 +1,6 @@
-import { a as e, c as t, f as n, g as r, h as i, i as a, l as o, m as s, o as c, p as l, u, v as ee } from "./loom-hgSnAhZU.js";
+import { a as e, f as t, g as n, h as r, i, m as a, v as o } from "./loom-v9Dpu4UJ.js";
+import { i as s, n as c, r as l } from "./meter-BIAFrHel.js";
+import { n as ee, t as u } from "./observe-4cSITidV.js";
 import { bindAttr as te, tap as d, text as f, when as ne } from "./dom.js";
 import { virtualList as p } from "./dom/virtual-list.js";
 import { jsx as m, jsxs as h } from "./jsx-runtime.js";
@@ -132,8 +134,8 @@ function T(e, t) {
 	}
 }
 function Ke(e) {
-	let n = performance.now();
-	n - De >= we && (S = new Map(t({ active: !0 }).nodes.map((e) => [e.id, e])), De = n), T(w(e), !0);
+	let t = performance.now();
+	t - De >= we && (S = new Map(u({ active: !0 }).nodes.map((e) => [e.id, e])), De = t), T(w(e), !0);
 }
 function qe(e) {
 	e.classList.remove("li-flash"), e.offsetWidth, e.classList.add("li-flash");
@@ -256,20 +258,20 @@ function rt() {
 }
 function it() {
 	if (!x) return;
-	let e = t({ active: !0 }).nodes;
+	let e = u({ active: !0 }).nodes;
 	S = new Map(e.map((e) => [e.id, e])), De = performance.now();
-	let n = /* @__PURE__ */ new Map(), r = [];
-	for (let t of e) if (!(t.internal || t.kind === "effect")) if (t.group !== void 0) {
-		let e = n.get(t.group);
-		e ? e.push(t) : n.set(t.group, [t]);
-	} else r.push(t);
+	let t = /* @__PURE__ */ new Map(), n = [];
+	for (let r of e) if (!(r.internal || r.kind === "effect")) if (r.group !== void 0) {
+		let e = t.get(r.group);
+		e ? e.push(r) : t.set(r.group, [r]);
+	} else n.push(r);
 	Oe = [];
-	for (let [e, t] of n) t.sort((e, t) => (e.key ?? e.label).localeCompare(t.key ?? t.label)), Oe.push({
+	for (let [e, n] of t) n.sort((e, t) => (e.key ?? e.label).localeCompare(t.key ?? t.label)), Oe.push({
 		gid: e,
-		label: Ye(e, t),
-		cells: t
+		label: Ye(e, n),
+		cells: n
 	});
-	ke = r, Pe = Fe, x.setItems(rt()), Pe = !1, Fe = !1;
+	ke = n, Pe = Fe, x.setItems(rt()), Pe = !1, Fe = !1;
 }
 function at() {
 	T([], !1);
@@ -403,7 +405,7 @@ function Ot() {
 	}), yt;
 }
 function kt() {
-	D !== "reads" && !_t && (_t = u([c.write], "samples")), D !== "writes" && !vt && (vt = u([c.read], "samples"));
+	D !== "reads" && !_t && (_t = l([c.write], "samples")), D !== "writes" && !vt && (vt = l([c.read], "samples"));
 }
 function At() {
 	_t?.stop(), _t = null, vt?.stop(), vt = null;
@@ -430,7 +432,7 @@ function Pt() {
 		kind: "read"
 	});
 	if (e.length === 0) return;
-	D === "all" && e.sort((e, t) => l(e.s).t - l(t.s).t), Bt = !1;
+	D === "all" && e.sort((e, t) => s(e.s).t - s(t.s).t), Bt = !1;
 	let r = (F ? M : j)[0]?.seq ?? -1, i = [];
 	for (let { s: t, kind: n } of e) i.push(Rt(t, n));
 	if (i.reverse(), j = i.concat(j), F) {
@@ -453,7 +455,7 @@ function L() {
 	E?.setItems(D === "all" ? e : e.filter((e) => e.kind === (D === "writes" ? "write" : "read"))), bt?.refresh();
 }
 function Rt(e, t) {
-	let n = l(e), r = n.id, i = Vt(r), a = Wt(n.t), o = n.by, s = o === void 0 ? "" : `by ${Vt(o)}`;
+	let n = s(e), r = n.id, i = Vt(r), a = Wt(n.t), o = n.by, c = o === void 0 ? "" : `by ${Vt(o)}`;
 	if (t === "read") return {
 		seq: xt++,
 		id: r,
@@ -464,33 +466,33 @@ function Rt(e, t) {
 		prevCls: "",
 		nextText: "",
 		nextCls: "",
-		srcText: s,
-		full: `${i} — read ${s || "(external)"}`
+		srcText: c,
+		full: `${i} — read ${c || "(external)"}`
 	};
-	let c = l(e), u = y(c.prev, pt), ee = y(c.next, pt);
+	let l = s(e), ee = y(l.prev, pt), u = y(l.next, pt);
 	return {
 		seq: xt++,
 		id: r,
 		kind: t,
 		timeText: a,
 		name: i,
-		prevText: u,
-		prevCls: oe(c.prev),
-		nextText: ee,
-		nextCls: oe(c.next),
-		srcText: s,
-		full: `${i}: ${u} → ${ee} ${s || "(external)"}`
+		prevText: ee,
+		prevCls: oe(l.prev),
+		nextText: u,
+		nextCls: oe(l.next),
+		srcText: c,
+		full: `${i}: ${ee} → ${u} ${c || "(external)"}`
 	};
 }
 var zt = /* @__PURE__ */ new Map(), Bt = !1;
 function Vt(e) {
-	let n = zt.get(e);
-	if (n !== void 0) return n;
+	let t = zt.get(e);
+	if (t !== void 0) return t;
 	if (!Bt) {
 		Bt = !0;
-		for (let e of t().nodes) zt.set(e.id, e.label);
-		let n = zt.get(e);
-		if (n !== void 0) return n;
+		for (let e of u().nodes) zt.set(e.id, e.label);
+		let t = zt.get(e);
+		if (t !== void 0) return t;
 	}
 	return `#${e}`;
 }
@@ -840,10 +842,10 @@ function ir() {
 	}, "lo", J.heap);
 }
 function ar() {
-	let e = an?.read(), t = e?.["loom:read"]?.count ?? 0, n = e?.["loom:write"]?.count ?? 0, r = e?.["loom:effect"]?.count ?? 0, i = e?.["loom:compute"]?.count ?? 0, a = e?.["loom:create"]?.count ?? 0, o = e?.["loom:dispose"]?.count ?? 0, s = on?.read()?.["loom:flush"];
-	sn = G(sn, t), cn = G(cn, n), un = G(un, r), ln = G(ln, i), fn = G(fn, a), pn = G(pn, o), dn = G(dn, s?.count ?? 0);
-	let c = l(s?.samples.at(-1));
-	if (c !== void 0 && (mn = c.batchSize, hn = c.durationMs), !B) Mn = !1, Nn = "";
+	let e = an?.read(), t = e?.["loom:read"]?.count ?? 0, n = e?.["loom:write"]?.count ?? 0, r = e?.["loom:effect"]?.count ?? 0, i = e?.["loom:compute"]?.count ?? 0, a = e?.["loom:create"]?.count ?? 0, o = e?.["loom:dispose"]?.count ?? 0, c = on?.read()?.["loom:flush"];
+	sn = G(sn, t), cn = G(cn, n), un = G(un, r), ln = G(ln, i), fn = G(fn, a), pn = G(pn, o), dn = G(dn, c?.count ?? 0);
+	let l = s(c?.samples.at(-1));
+	if (l !== void 0 && (mn = l.batchSize, hn = l.durationMs), !B) Mn = !1, Nn = "";
 	else {
 		let e = Hn(z);
 		kn = e.score, An = e.key, jn = e.label, Mn = !0, Nn = z >= 55 ? "h-ok" : z >= 30 ? "h-warn" : "h-bad";
@@ -853,7 +855,7 @@ function ar() {
 function or() {
 	let e = !$t();
 	if (Qt() === "stats" && e) {
-		let e = o();
+		let e = ee();
 		Pn = e.states, Fn = e.computeds, In = e.effects - e.targetedEffects, Ln = e.targetedEffects, Rn = e.sources, zn = e.scopes, Bn = e.channels, Vn = e.unread;
 	} else Qt() === "graph" && e ? ot() : Qt() === "trace" && e && Pt();
 }
@@ -886,23 +888,23 @@ function cr() {
 	tn = requestAnimationFrame(e);
 }
 function lr(e) {
-	Qt = e.activeTab, $t = e.isMinimized, an = u([
+	Qt = e.activeTab, $t = e.isMinimized, an = l([
 		c.read,
 		c.write,
 		c.compute,
 		c.effect,
 		c.create,
 		c.dispose
-	]), on = u([c.flush], "samples"), R = n(ar, Yt, g), re(() => {
-		R?.(), ee(or);
+	]), on = l([c.flush], "samples"), R = t(ar, Yt, g), re(() => {
+		R?.(), o(or);
 	}, {
 		defer: !0,
 		maxStale: Yt
 	});
-	let t;
-	return nn = s(() => {
-		wn = i(Kn, 0, g), Tn = i(qn, 0, g), En = i(Jn, 0, g), Dn = i(Xn, 0, g), rr() && (On = n(() => rr()?.usedJSHeapSize ?? 0, 5e3, g)), t = tr();
-	}, g), cr(), t;
+	let n;
+	return nn = a(() => {
+		wn = r(Kn, 0, g), Tn = r(qn, 0, g), En = r(Jn, 0, g), Dn = r(Xn, 0, g), rr() && (On = t(() => rr()?.usedJSHeapSize ?? 0, 5e3, g)), n = tr();
+	}, g), cr(), n;
 }
 function ur() {
 	nn?.pause();
@@ -1041,43 +1043,43 @@ function zr(e) {
 }
 function Br(e = document.body) {
 	if (Y || typeof document > "u") return;
-	if (a({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
+	if (i({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
 		let e = document.createElement("style");
 		e.id = `${v}-css`, e.textContent = ae, document.head.append(e);
 	}
-	Q = r("stats", g);
-	let t = Or(), n = /* @__PURE__ */ m("span", { class: "li-menu-val" }), i = () => {
-		Y?.setAttribute("data-theme", t), hr?.setAttribute("data-theme", t), n.innerHTML = se(pr[t], 13), o.title = `Theme: ${t} (click to cycle)`;
-	}, o = /* @__PURE__ */ h("button", {
+	Q = n("stats", g);
+	let t = Or(), r = /* @__PURE__ */ m("span", { class: "li-menu-val" }), o = () => {
+		Y?.setAttribute("data-theme", t), hr?.setAttribute("data-theme", t), r.innerHTML = se(pr[t], 13), s.title = `Theme: ${t} (click to cycle)`;
+	}, s = /* @__PURE__ */ h("button", {
 		type: "button",
 		class: "li-menu-item",
 		title: "Click to change theme",
-		children: [/* @__PURE__ */ m("span", { children: "Theme" }), n]
+		children: [/* @__PURE__ */ m("span", { children: "Theme" }), r]
 	});
-	d(o, () => {
+	d(s, () => {
 		let e = [
 			"system",
 			"light",
 			"dark"
 		];
-		t = e[(e.indexOf(t) + 1) % e.length] ?? "system", xr(Sr, t), i();
+		t = e[(e.indexOf(t) + 1) % e.length] ?? "system", xr(Sr, t), o();
 	});
 	let c = /* @__PURE__ */ m("div", {
 		class: "li-menu",
 		hidden: !0
 	});
-	c.id = `${v}-menu`, c.append(o), hr = c;
-	let l = kr(), u = /* @__PURE__ */ m("span", { class: "li-menu-val" }), ee = () => {
-		u.textContent = `${l / 1e3}k`, Nt(l);
+	c.id = `${v}-menu`, c.append(s), hr = c;
+	let l = kr(), ee = /* @__PURE__ */ m("span", { class: "li-menu-val" }), u = () => {
+		ee.textContent = `${l / 1e3}k`, Nt(l);
 	}, te = /* @__PURE__ */ h("button", {
 		type: "button",
 		class: "li-menu-item",
 		title: "Trace log size (click to cycle)",
-		children: [/* @__PURE__ */ m("span", { children: "Log size" }), u]
+		children: [/* @__PURE__ */ m("span", { children: "Log size" }), ee]
 	});
 	d(te, () => {
-		l = Dr[(Dr.indexOf(l) + 1) % Dr.length] ?? 1e3, xr(Er, String(l)), ee();
-	}), c.append(te), ee();
+		l = Dr[(Dr.indexOf(l) + 1) % Dr.length] ?? 1e3, xr(Er, String(l)), u();
+	}), c.append(te), u();
 	let f = () => {
 		c.hidden = !0;
 	}, ne = /* @__PURE__ */ h("button", {
@@ -1126,7 +1128,7 @@ function Br(e = document.body) {
 			_
 		]
 	}), ue;
-	Z = s(() => {
+	Z = a(() => {
 		ue = lr({
 			activeTab: () => Q?.(),
 			isMinimized: () => Y?.classList.contains("li-min") ?? !1
@@ -1174,7 +1176,7 @@ function Br(e = document.body) {
 		he,
 		X,
 		ge
-	] }), Y.id = v, y && Y.classList.add("li-min"), i(), Lr(oe, Y), Rr(ge, Y), gr = (e) => {
+	] }), Y.id = v, y && Y.classList.add("li-min"), o(), Lr(oe, Y), Rr(ge, Y), gr = (e) => {
 		let t = e.target instanceof Node ? e.target : null;
 		!c.hidden && (t === null || !c.contains(t)) && e.target !== p && f();
 	}, document.addEventListener("pointerdown", gr), e.append(Y), document.body.append(c), Mr && (Y.style.width = `${Math.max(240, Math.min(Mr.width, window.innerWidth - 16))}px`, Y.style.height = `${Math.max(160, Math.min(Mr.height, window.innerHeight - 16))}px`), jr) {
