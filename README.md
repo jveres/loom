@@ -25,18 +25,23 @@
 
 - **Runtime, not compiled.** Plain functions and live DOM nodes — no build-step
   transform and no virtual-DOM diff. JSX returns real elements.
-- **Near-native speed.** Built on [`alien-signals`](https://github.com/stackblitz/alien-signals);
-  the per-operation read/write/effect path stays within `~1.03x`–`~1.05x` of the
-  raw primitives on the chaos benchmark. That thin margin is the always-on channel
-  instrumentation; inspection (the heavier per-node metadata) is off by default.
+- **Native speed, zero dependencies.** The reactive engine is a vendored copy of
+  [`alien-signals`](https://github.com/stackblitz/alien-signals)' 224-line
+  propagation core (`src/core/graph.ts`, MIT) — no runtime dependencies, and the
+  full pipeline measures statistically at parity with the raw primitives on the
+  chaos benchmark. The always-on channel instrumentation costs ~3% in a controlled
+  experiment; inspection (the heavier per-node metadata) is off by default.
+- **Small and tree-shakable.** A minimal `state`/`computed`/`effect` app bundles
+  to ~3.5 kB gzip; the meter/inspect machinery loads only with `loom/observe`,
+  and per-entry budgets are enforced in CI (`pnpm size`).
 - **Callable cells.** `count()` reads, `count(1)` writes — the whole state model
   in one shape, no setters or hooks.
 - **Generic channel/meter primitives.** A gated ring-buffer `channel` and a pull-based
   `meter` for any event or sample stream — zero allocation until metered. Loom uses them
   to instrument itself; that self-watching surface is the opt-in `loom/observe`.
 - **Lean core, opt-in surfaces.** `loom` (reactivity, lifecycle, channel/meter) ·
-  `loom/observe` (watch loom's internals) · `loom/dom` · `loom/html`
-  (SSR/SSG) · `loom/devtools` (dev panel).
+  `loom/observe` (watch loom's internals) · `loom/async` (async resources) ·
+  `loom/dom` · `loom/html` (SSR/SSG) · `loom/devtools` (dev panel).
 
 ## At a glance
 
@@ -152,7 +157,9 @@ The core exports these functions:
 - `configure({ inspect, onError, deferScheduler })` sets runtime options. `inspect` toggles the
   inspection layer — **off by default**, so node creation allocates no metadata
   (zero cost); turn it on once at startup, before creating the nodes you want
-  visible, when you need tooling. `onError` installs a global effect error
+  visible, when you need tooling. Enabling it also requires the `loom/observe`
+  module to be loaded (importing `inspect`/`events` — or mounting the inspector —
+  does that); the flag alone can't reach machinery that was never bundled. `onError` installs a global effect error
   boundary (see [Error handling](#error-handling)); `deferScheduler` overrides the
   deferred-effect lane's scheduler (see [Deferred effects](#deferred-effects)).
 
@@ -266,6 +273,38 @@ The dev inspector uses both: a `polled()` heartbeat drives its per-tick metric
 math, and the CLS/LCP/INP web vitals are `source()`s whose `PerformanceObserver`s
 connect and disconnect with the panel — no manual teardown.
 
+### Async resources
+
+`loom/async` is a small opt-in entrypoint (~0.3 kB gzip; costs nothing unless
+imported) for async data with fine-grained loading and error state:
+
+- `resource(fetcher, options?)` is an async computed: it runs `fetcher`
+  immediately and again whenever the fetcher's **synchronously tracked** reads
+  change (reads after the first `await` are outside the tracked run). The
+  previous value is passed to `fetcher` untracked. `r()` reads the latest value
+  (`undefined` until the first settle), `r.loading()` and `r.error()` are
+  fine-grained reads, `r.refresh()` forces a refetch, and `r.stop()` disposes
+  (a resource created inside a scope stops with the scope). While a fetch is in
+  flight the previous value stays readable (stale-while-revalidate), and a
+  response that lands after a newer fetch started is dropped.
+
+```ts
+import { effect, state } from "loom";
+import { resource } from "loom/async";
+
+const page = state(1);
+const users = resource(() =>
+  fetch(`/api/users?page=${page()}`).then((response) => response.json()),
+);
+
+effect(() => {
+  if (users.loading()) return renderSpinner();
+  renderList(users() ?? []);
+});
+
+page(2); // tracked read changed -> automatic refetch, stale list stays visible
+```
+
 ### Scopes
 
 `scope(fn)` groups the effects created in `fn` so a whole subtree can be torn
@@ -360,8 +399,8 @@ import { configure, effect, state } from "loom";
 
 configure({
   onError: (error, node) => {
-    // `node` is the offending effect's inspect record (when inspection is on),
-    // otherwise undefined.
+    // `node` is the offending effect's lean NodeInfo — id/kind/label — when
+    // inspection is on, otherwise undefined.
     console.error(`effect ${node?.label ?? "?"} failed:`, error);
   },
 });
@@ -418,6 +457,9 @@ The DOM entrypoint exports these functions:
   relabels the binding or marks it `internal` (tooling built on loom binds
   without observing itself).
 - `list(container, read, options)` reconciles a keyed list into a container.
+  Reorders move as few nodes as possible (longest-increasing-subsequence) and
+  use the state-preserving `Element.moveBefore` where the platform has it, so
+  iframes, focus, and CSS animations survive keyed moves.
 - `each(items, render, key)` is the inline keyed list — the same reconciliation
   as `list()` but returned as a child expression (see
   [Conditional rendering](#conditional-rendering)).
@@ -905,27 +947,34 @@ full-chaos workload (`vitest bench`). It runs three variants on the same machine
 pnpm run bench
 ```
 
-With inspection off (the default), Loom runs within `~1.03x` (manual cells) to
-`~1.05x` (`fields()`) of native `alien-signals`. The per-operation
-read/write/effect hot paths carry only branch-predicted channel guards and
-otherwise match the native primitives — see [Design notes](#design-notes) for the
-attribution. Enabling inspection (`configure({ inspect: true })`) adds one
-metadata object plus a `WeakRef` per node created, which widens the gap to
-~`1.2x` on create-heavy work.
+With inspection off (the default), Loom measures statistically at parity with
+native `alien-signals` — the three variants land within each other's error
+margins run to run. The per-operation read/write/effect hot paths carry only
+branch-predicted channel guards and otherwise match the native primitives — see
+[Design notes](#design-notes) for the attribution. Enabling inspection
+(`configure({ inspect: true })`) adds one metadata object plus a `WeakRef` per
+node created, which widens the gap to ~`1.2x` on create-heavy work.
 
-A browser benchmark is also available from the dev server at `/bench/`. It uses a
-js-framework-benchmark style table workload and compares Loom DOM bindings
-against a hand-written vanilla DOM baseline.
+Two browser benchmarks run from the dev server. `/bench/` compares Loom DOM
+bindings against a hand-written vanilla baseline on a js-framework-benchmark
+style table workload. `/bench/compare/` drives Loom, ArrowJS, Shablon, and the
+vanilla baseline through one shared command surface (create/update/swap/clear
+1k rows, create 10k); as of July 2026 Loom leads or ties every op among the
+frameworks and stays within ~3–8% of the vanilla floor — the full table and
+methodology live in [docs/architecture-v2.md](docs/architecture-v2.md).
 
 ## Design notes
 
-Loom uses `alien-signals` as the reactive graph implementation detail. The
-public API stays small: callable state cells, computed reads, effects, batching,
-manual triggers, object field cells, and an observability surface.
+Loom's reactive graph is a vendored copy of `alien-signals`' propagation core
+(`src/core/graph.ts`, 224 lines, MIT notice retained) — the library has zero
+runtime dependencies. The public API stays small: callable state cells,
+computed reads, effects, batching, manual triggers, object field cells, and an
+observability surface.
 
-The v2 direction — zero dependencies, per-entry tree-shaking, and a
-bench-gated experiment roadmap, grounded in research on ArrowJS, Shablon, and
-SolidJS 2.0 — is recorded in [docs/architecture-v2.md](docs/architecture-v2.md).
+The v2 architecture — the vendoring, the tree-shakable core split, the
+comparative benchmark harness, and the bench-gated experiments (including the
+ones the gates rejected) — is documented with its measurements in
+[docs/architecture-v2.md](docs/architecture-v2.md).
 
 The built-in event channels are gated by a per-channel meter count, so
 reads, writes, computed updates, and effect runs stay allocation-free and pay
@@ -961,14 +1010,15 @@ instrumentation — the `someCh.meters !== 0 && …` guard inlined at each
 read/write/compute/effect/create/dispose site. A controlled experiment (stripping
 just the state-path guards and re-running the chaos bench) attributes ~3% to it on
 the manual-cells path: the cost of keeping observability always available with
-zero allocation when idle. With the guards in place Loom lands within `~1.03x`
-–`~1.05x` of native, and that margin *is* the channel layer, not overhead to
-optimize away.
+zero allocation when idle. With the guards in place Loom lands at parity with
+native (within run-to-run noise), and what margin remains *is* the channel
+layer, not overhead to optimize away.
 
 Two things are intentionally left as-is: the read/write rest parameter (shared
 with `alien-signals`, so removing it would diverge from the reference for no real
 win) and `kindOf`'s `in`-operator dispatch (off the measured hot path — it runs in
-the dirty-check callbacks, which a state→effect graph barely exercises). Inspection
+the dirty-check callbacks, which a state→effect graph barely exercises; a v2
+experiment replacing it with a numeric field measured no win). Inspection
 metadata is the one cost that *was* per-node allocation, which is why it is opt-in
 and off by default.
 
@@ -982,6 +1032,7 @@ pnpm run check   # tsc --noEmit
 pnpm run lint    # biome
 pnpm test        # vitest
 pnpm run bench   # CLI benchmarks (chaos, micro, hot-path)
+pnpm size        # per-entry bundle budgets (gzip)
 pnpm run dev     # dev server
 pnpm run build   # dist/loom (ES bundles) + dist/types (.d.ts)
 ```
