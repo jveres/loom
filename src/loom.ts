@@ -1163,7 +1163,20 @@ function drainDeferred(hasBudget: () => boolean): void {
     deferHead++;
     if (node !== undefined) {
       node.deferredQueued = false;
-      if (node.flags !== 0) runEffect(node); // flags 0 = stopped while queued
+      if (node.flags !== 0) {
+        // flags 0 = stopped while queued
+        try {
+          runEffect(node);
+        } catch (error) {
+          // Only reachable with no onError boundary (reportEffectError rethrows). Aborting the
+          // drain here would wedge every effect queued behind this one — the tail reschedule
+          // never runs and their deferredQueued flags block re-enqueueing forever. Re-throw on a
+          // fresh task instead: window.onerror still fires, the drain keeps going.
+          setTimeout(() => {
+            throw error;
+          }, 0);
+        }
+      }
     }
   }
   if (deferHead >= deferredQueue.length) {

@@ -394,6 +394,9 @@ path — idle-first and coalesced — instead of in the synchronous flush. The
 first run stays synchronous (deps are tracked, the initial output is
 immediate); only re-runs defer. Use it for non-frame-critical reactive work:
 telemetry, debounced persistence, secondary UI, or a tool's own rendering.
+A deferred effect that throws (with no `onError` boundary) is re-thrown on a
+fresh task — it reaches `window.onerror` like any uncaught error — and never
+stalls the lane: the remaining queued effects still run.
 
 ```ts
 effect(() => save(doc()), { defer: true, maxStale: 2000 });

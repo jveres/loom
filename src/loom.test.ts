@@ -1439,6 +1439,44 @@ describe("loom deferred effects", () => {
     }
   });
 
+  it("a throwing deferred effect neither wedges the lane nor goes quiet", () => {
+    vi.useFakeTimers();
+    const a = state(0);
+    const ran: string[] = [];
+    let boom = true;
+    const stopA = effect(
+      () => {
+        if (a() > 0 && boom) throw new Error("deferred boom");
+        ran.push("A");
+      },
+      { defer: true },
+    );
+    const stopB = effect(
+      () => {
+        a();
+        ran.push("B");
+      },
+      { defer: true },
+    );
+    ran.length = 0;
+
+    a(1); // both queue; A throws during the drain
+    fire?.(() => true);
+    // B still ran — the drain survived A's throw...
+    expect(ran).toEqual(["B"]);
+    // ...and the error stays loud: rethrown on a fresh task (window.onerror territory).
+    expect(() => vi.runAllTimers()).toThrow("deferred boom");
+
+    // The lane is not wedged: A re-arms and runs on the next change.
+    boom = false;
+    a(2);
+    fire?.(() => true);
+    expect(ran).toEqual(["B", "A", "B"]);
+    vi.useRealTimers();
+    stopA();
+    stopB();
+  });
+
   it("runs the first pass synchronously but defers re-runs, coalesced to the latest value", () => {
     const a = state(0);
     const seen: number[] = [];

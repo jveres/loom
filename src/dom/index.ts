@@ -93,7 +93,9 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // SVG-only tag names — elements that must be created in the SVG namespace. Tags shared with
 // HTML (a, title, script, style) are intentionally omitted so they keep rendering as HTML;
 // the descendants of an <svg> are created namespaced because each SVG tag is listed here.
-const SVG_TAGS = new Set<string>([
+// Single source of truth: the JSX IntrinsicElements SVG keys derive from this list (SvgTagName),
+// so the types can never offer an SVG tag the runtime would create in the wrong namespace.
+const SVG_TAG_LIST = [
   "svg",
   "g",
   "defs",
@@ -134,7 +136,9 @@ const SVG_TAGS = new Set<string>([
   "feTile",
   "feTurbulence",
   "feDisplacementMap",
-]);
+] as const;
+const SVG_TAGS = new Set<string>(SVG_TAG_LIST);
+export type SvgTagName = (typeof SVG_TAG_LIST)[number];
 
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -500,9 +504,22 @@ function appendChild(parent: Node, child: Child): void {
     parent.appendChild(text(child as Read<unknown>));
     return;
   }
-  parent.appendChild(
-    child instanceof Node ? child : document.createTextNode(String(child)),
-  );
+  if (child instanceof Node) {
+    parent.appendChild(child);
+    return;
+  }
+  // Wrong-runtime guard: a loom/html Html value stringifies to its raw markup, so the silent
+  // fallback below would render escaped HTML as visible text — the most confusing possible
+  // symptom of a mixed-up jsxImportSource. The brand is a registered symbol, so this costs no
+  // import from loom/html.
+  if (typeof child === "object" && Symbol.for("loom.html") in child) {
+    throw new Error(
+      "A loom/html Html value was passed to loom/dom as a child. The SSR runtime's output is an " +
+        "HTML string, not a DOM node — check your jsxImportSource (loom vs loom/html) or render " +
+        "it via morph()/innerHTML instead.",
+    );
+  }
+  parent.appendChild(document.createTextNode(String(child)));
 }
 
 function isDynamic(child: Child): child is DynamicChild {

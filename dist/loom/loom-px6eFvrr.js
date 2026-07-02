@@ -663,7 +663,13 @@ function nt(e, t) {
 function rt(e) {
 	for (A = !1, j = Infinity, se = void 0; k < O.length && e();) {
 		let e = O[k];
-		O[k] = void 0, k++, e !== void 0 && (e.deferredQueued = !1, e.flags !== 0 && $e(e));
+		if (O[k] = void 0, k++, e !== void 0 && (e.deferredQueued = !1, e.flags !== 0)) try {
+			$e(e);
+		} catch (e) {
+			setTimeout(() => {
+				throw e;
+			}, 0);
+		}
 	}
 	if (k >= O.length) O.length = 0, k = 0;
 	else {

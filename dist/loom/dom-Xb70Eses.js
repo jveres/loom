@@ -1,4 +1,4 @@
-import { _ as e, a as t } from "./loom-IKcvaxMB.js";
+import { _ as e, a as t } from "./loom-px6eFvrr.js";
 import { t as n } from "./jsx-props-sAPN8GVq.js";
 //#region src/dom/place.ts
 function r(e, t, n) {
@@ -301,7 +301,12 @@ function j(e, t) {
 			e.appendChild(h(t));
 			return;
 		}
-		e.appendChild(t instanceof Node ? t : document.createTextNode(String(t)));
+		if (t instanceof Node) {
+			e.appendChild(t);
+			return;
+		}
+		if (typeof t == "object" && Symbol.for("loom.html") in t) throw Error("A loom/html Html value was passed to loom/dom as a child. The SSR runtime's output is an HTML string, not a DOM node — check your jsxImportSource (loom vs loom/html) or render it via morph()/innerHTML instead.");
+		e.appendChild(document.createTextNode(String(t)));
 	}
 }
 function M(e) {

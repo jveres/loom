@@ -45,4 +45,24 @@ describe("JSX SVG", () => {
     dash("50 100");
     expect(circle?.getAttribute("stroke-dasharray")).toBe("50 100");
   });
+
+  it("types every HTMLElementTagNameMap tag and only runtime-supported SVG tags", () => {
+    // Derived IntrinsicElements: tags never hand-listed before now compile with
+    // precise element types (this test's value is the typecheck itself).
+    const dialog = <dialog open />;
+    const canvas = <canvas width={8} height={8} />;
+    const details = (
+      <details>
+        <summary>more</summary>
+      </details>
+    );
+    expect(dialog.tagName).toBe("DIALOG");
+    expect(canvas.tagName).toBe("CANVAS");
+    expect(details.tagName).toBe("DETAILS");
+    // An SVG tag absent from the runtime's SVG_TAG_LIST must NOT typecheck —
+    // the runtime would create it in the wrong namespace.
+    // @ts-expect-error `animate` is not a runtime-supported SVG tag
+    const bad = <animate />;
+    expect(bad).toBeDefined();
+  });
 });

@@ -35,6 +35,20 @@ function renderRow(row: Row): Element {
   return node;
 }
 
+describe("loom DOM wrong-runtime guard", () => {
+  it("throws a clear error when a loom/html Html value is used as a child", () => {
+    // the loom/html brand, constructed without importing the SSR surface
+    const htmlValue = {
+      [Symbol.for("loom.html")]: true,
+      value: "<p>ssr</p>",
+      toString: () => "<p>ssr</p>",
+    };
+    expect(() => h("div", null, htmlValue as never)).toThrow(
+      /loom\/html Html value/,
+    );
+  });
+});
+
 describe("loom DOM list", () => {
   it("reorders keyed nodes by default", () => {
     const root = document.createElement("section");

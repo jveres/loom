@@ -28,6 +28,8 @@ export interface ListOptions<T> {
     readonly render: (item: T, key: string) => Element;
     readonly reorder?: Read<boolean>;
 }
+declare const SVG_TAG_LIST: readonly ["svg", "g", "defs", "symbol", "use", "switch", "foreignObject", "image", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "textPath", "linearGradient", "radialGradient", "stop", "clipPath", "mask", "pattern", "marker", "filter", "feGaussianBlur", "feOffset", "feBlend", "feColorMatrix", "feComposite", "feFlood", "feMerge", "feMergeNode", "feMorphology", "feDropShadow", "feImage", "feTile", "feTurbulence", "feDisplacementMap"];
+export type SvgTagName = (typeof SVG_TAG_LIST)[number];
 export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: Props | null, children?: Child): HTMLElementTagNameMap[K];
 export declare function h<K extends keyof SVGElementTagNameMap>(tag: K, props?: Props | null, children?: Child): SVGElementTagNameMap[K];
 export declare function h(tag: string, props?: Props | null, children?: Child): Element;
