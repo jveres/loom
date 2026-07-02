@@ -155,30 +155,6 @@
     scrollbar-width: thin;
     scrollbar-color: var(--li-scroll) transparent;
   }
-  /* Reusable vertical scroll-edge fade (driven by wireScrollFade): used by the panel body and the
-     Trace list. The --li-fade-a/b lengths are set per-scroller in JS. */
-  .li-fade-y {
-    --li-fade-a: 0px;
-    --li-fade-b: 0px;
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 0,
-      #000 var(--li-fade-a),
-      #000 calc(100% - var(--li-fade-b)),
-      transparent 100%
-    );
-    -webkit-mask-repeat: no-repeat;
-    -webkit-mask-size: 100% 100%;
-    mask-image: linear-gradient(
-      to bottom,
-      transparent 0,
-      #000 var(--li-fade-a),
-      #000 calc(100% - var(--li-fade-b)),
-      transparent 100%
-    );
-    mask-repeat: no-repeat;
-    mask-size: 100% 100%;
-  }
   .li-body::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -741,26 +717,6 @@
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
-    --li-fade-a: 0px;
-    --li-fade-b: 0px;
-    -webkit-mask-image: linear-gradient(
-      to right,
-      transparent 0,
-      #000 var(--li-fade-a),
-      #000 calc(100% - var(--li-fade-b)),
-      transparent 100%
-    );
-    -webkit-mask-repeat: no-repeat;
-    -webkit-mask-size: 100% 100%;
-    mask-image: linear-gradient(
-      to right,
-      transparent 0,
-      #000 var(--li-fade-a),
-      #000 calc(100% - var(--li-fade-b)),
-      transparent 100%
-    );
-    mask-repeat: no-repeat;
-    mask-size: 100% 100%;
   }
   .li-tabscroll::-webkit-scrollbar {
     display: none;

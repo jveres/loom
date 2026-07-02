@@ -116,24 +116,24 @@ function u(e, t, n) {
 //#region src/dom/scroll-fade.ts
 var d = 4;
 function f(e, t = {}) {
-	let n = t.size ?? 14, r = -1, i = -1, a = () => {
-		let t = e.scrollTop > d ? n : 0, a = e.scrollHeight - e.clientHeight - e.scrollTop > d ? n : 0;
-		if (t === r && a === i) return;
-		r = t, i = a;
-		let o = r === 0 && i === 0 ? "" : `linear-gradient(to bottom, transparent 0, #000 ${r}px, #000 calc(100% - ${i}px), transparent 100%)`;
-		e.style.maskImage = o, e.style.webkitMaskImage = o;
+	let n = t.size ?? 14, r = t.axis === "x", i = r ? "to right" : "to bottom", a = -1, o = -1, s = () => {
+		let t = r ? e.scrollLeft : e.scrollTop, s = r ? e.scrollWidth - e.clientWidth : e.scrollHeight - e.clientHeight, c = t > d ? n : 0, l = s - t > d ? n : 0;
+		if (c === a && l === o) return;
+		a = c, o = l;
+		let u = a === 0 && o === 0 ? "" : `linear-gradient(${i}, transparent 0, #000 ${a}px, #000 calc(100% - ${o}px), transparent 100%)`;
+		e.style.maskImage = u, e.style.webkitMaskImage = u;
 	};
-	e.addEventListener("scroll", a, { passive: !0 });
-	let o = new ResizeObserver(a);
-	o.observe(e);
-	for (let t of e.children) o.observe(t);
-	let s = new MutationObserver(() => {
-		o.disconnect(), o.observe(e);
-		for (let t of e.children) o.observe(t);
-		a();
+	e.addEventListener("scroll", s, { passive: !0 });
+	let c = new ResizeObserver(s);
+	c.observe(e);
+	for (let t of e.children) c.observe(t);
+	let l = new MutationObserver(() => {
+		c.disconnect(), c.observe(e);
+		for (let t of e.children) c.observe(t);
+		s();
 	});
-	return s.observe(e, { childList: !0 }), a(), () => {
-		e.removeEventListener("scroll", a), o.disconnect(), s.disconnect(), e.style.maskImage = "", e.style.webkitMaskImage = "";
+	return l.observe(e, { childList: !0 }), s(), () => {
+		e.removeEventListener("scroll", s), c.disconnect(), l.disconnect(), e.style.maskImage = "", e.style.webkitMaskImage = "";
 	};
 }
 //#endregion

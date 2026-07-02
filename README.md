@@ -500,12 +500,13 @@ The DOM entrypoint exports these functions:
 - `remove(node)` disposes a node subtree and removes it from the DOM.
 - `morph(from, to, options?)` patches a live subtree to match a freshly built
   one, preserving node identity where shapes align (see below).
-- `scrollFade(el, options?)` masks a vertical scroller's edges so content
-  fades out exactly while more lies beyond — driven by scroll position and
-  kept current across resizes and content changes (no styling opinions; the
-  effect is a `mask-image` on the element). `options.size` sets the fade
-  length in px (default 14). Returns a disposer that removes the listeners
-  and clears the mask.
+- `scrollFade(el, options?)` masks a scroller's edges so content fades out
+  exactly while more lies beyond — driven by scroll position and kept current
+  across resizes and content changes (no styling opinions; the effect is a
+  `mask-image` on the element). `options.size` sets the fade length in px
+  (default 14); `options.axis` picks the scroll axis (`"y"` default, `"x"`
+  for horizontal strips). Returns a disposer that removes the listeners and
+  clears the mask. The dev inspector's own scrollers use it.
 - `tap(node, handler)` binds a robust tap (see below).
 
 These split by where they go. **Child bindings** produce nodes or slot

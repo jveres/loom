@@ -91,4 +91,27 @@ describe("scrollFade", () => {
     expect(el.style.maskImage).toContain("#000 24px");
     dispose();
   });
+
+  it('fades horizontally with axis: "x"', () => {
+    const el = document.createElement("div");
+    let left = 30;
+    Object.defineProperties(el, {
+      scrollWidth: { get: () => 300 },
+      clientWidth: { get: () => 100 },
+      scrollLeft: {
+        get: () => left,
+        set: (value: number) => {
+          left = value;
+        },
+      },
+    });
+    document.body.append(el);
+    const dispose = scrollFade(el, { axis: "x" });
+    expect(el.style.maskImage).toContain("to right");
+    expect(el.style.maskImage).toContain("#000 14px");
+    el.scrollLeft = 200; // at the end
+    el.dispatchEvent(new Event("scroll"));
+    expect(el.style.maskImage).toContain("calc(100% - 0px)");
+    dispose();
+  });
 });

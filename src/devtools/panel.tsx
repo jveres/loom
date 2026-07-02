@@ -5,7 +5,7 @@
 // All of the inspector's own reactive bindings and UI state are created `internal`, so Loom's
 // observability filters them out: the inspector measures the app, never itself.
 import { configure, type Scope, type State, scope, state } from "loom";
-import { tap } from "loom/dom";
+import { scrollFade, tap } from "loom/dom";
 import { bind, disposeBindings, PANEL_OPTS } from "./bindings.js";
 import { CSS, PANEL_ID } from "./css.js";
 import {
@@ -26,7 +26,6 @@ import {
   loomLogo,
   svgMarkup,
 } from "./icons.js";
-import { type ScrollFade, wireScrollFade } from "./scroll-fade.js";
 import { pauseStats, resumeStats, stopStats, wireStats } from "./stats.js";
 import {
   buildTracePane,
@@ -58,7 +57,7 @@ let panel: HTMLElement | null = null;
 let menuEl: HTMLElement | null = null;
 let bodyEl: HTMLElement | null = null;
 let closeMenuOnOutside: ((e: Event) => void) | null = null;
-const scrollFades: ScrollFade[] = [];
+const scrollFades: Array<() => void> = [];
 // Scopes for collective pause: the whole panel (paused when minimized) and, nested inside it, the
 // stats tab (paused when it isn't the active tab) — so a hidden subtree does no reactive work.
 let inspectorScope: Scope | null = null;
@@ -455,7 +454,7 @@ export function mountInspector(target: Element = document.body): void {
   // Panes: Info (stats), Graph, and Trace are each their own module.
   const panes = new Map<TabId, HTMLElement>();
   const tabBtns = new Map<TabId, HTMLElement>();
-  bodyEl = <div class="li-body li-fade-y" />;
+  bodyEl = <div class="li-body" />;
   for (const t of TABS) {
     const pane =
       t.id === "stats"
@@ -582,16 +581,15 @@ export function mountInspector(target: Element = document.body): void {
       tab === "trace" && panel?.classList.contains("li-min") !== true,
     );
     prevTab = tab ?? null;
-    for (const f of scrollFades) f.refresh();
   });
 
-  scrollFades.push(wireScrollFade(bodyEl, "y"), wireScrollFade(tabscroll, "x"));
+  scrollFades.push(scrollFade(bodyEl), scrollFade(tabscroll, { axis: "x" }));
 }
 
 /** Remove the panel and stop all observation/timers. Safe to call when not mounted. */
 export function unmountInspector(): void {
   stopStats();
-  for (const f of scrollFades) f.dispose();
+  for (const dispose of scrollFades) dispose();
   scrollFades.length = 0;
   disposeBindings();
   // inspectorScope owns the meters, heartbeat, the deferred render effect and every binding; stopping

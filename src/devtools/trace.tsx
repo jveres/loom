@@ -7,7 +7,7 @@
 // deferred lane), it drains the selected ring(s) into a capped, newest-first log rendered via the vlist.
 // Panel seams: buildTracePane / renderTrace / showTrace / teardownTrace.
 import { type Meter, meter } from "loom";
-import { tap } from "loom/dom";
+import { scrollFade, tap } from "loom/dom";
 import { type VirtualList, virtualList } from "loom/dom/virtual-list";
 import {
   events,
@@ -19,7 +19,6 @@ import {
 import { formatValue, valueClass } from "./format.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
 import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
-import { type ScrollFade, wireScrollFade } from "./scroll-fade.js";
 
 const TRACE_ROW_H = 22; // uniform row height (must match the .li-tr CSS)
 const VALUE_MAX = 200; // cap a recorded value's text so a giant string can't bloat the DOM/tooltip
@@ -53,7 +52,7 @@ let readMeter: Meter | null = null;
 let traceMode: TraceMode = "all";
 let traceRoot: HTMLElement | null = null;
 let traceScroll: HTMLElement | null = null;
-let traceFade: ScrollFade | null = null;
+let traceFade: (() => void) | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
 let liveDot: HTMLElement | null = null;
 let traceLog: TraceRow[] = []; // newest-first, capped at windowSize
@@ -158,9 +157,9 @@ export function buildTracePane(): HTMLElement {
     applyView();
   });
 
-  traceScroll = <div class="li-tr-scroll li-fade-y" />;
+  traceScroll = <div class="li-tr-scroll" />;
   traceScroll.append(traceVList.el);
-  traceFade = wireScrollFade(traceScroll, "y"); // same edge fade as the panel body
+  traceFade = scrollFade(traceScroll); // same edge fade as the panel body
   // Hover a row to outline the DOM node(s) that cell drives — same overlay the Graph uses. Delegated
   // (rows are reused) and guarded so moving within a row doesn't re-snapshot.
   traceScroll.addEventListener("pointerover", (e) => {
@@ -299,7 +298,7 @@ export function teardownTrace(): void {
   traceVList = null;
   traceRoot = null;
   traceScroll = null;
-  traceFade?.dispose();
+  traceFade?.();
   traceFade = null;
   pauseBtn = null;
   liveDot = null;
@@ -334,7 +333,6 @@ function applyView(): void {
           (r) => r.kind === (traceMode === "writes" ? "write" : "read"),
         ),
   );
-  traceFade?.refresh(); // content height changed — the ResizeObserver won't catch that
 }
 
 function makeRow(

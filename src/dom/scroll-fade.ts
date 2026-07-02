@@ -1,4 +1,4 @@
-// scrollFade(el) — soft-edge masks on a scrollable container: content fades
+// scrollFade(el, { size?, axis? }) — soft-edge masks on a scrollable container: content fades
 // out at an edge exactly while more content lies beyond it. Behavior only,
 // no styling opinions: the effect is a mask-image on the element itself,
 // driven by scroll position and kept current across resizes and content
@@ -7,6 +7,8 @@
 export interface ScrollFadeOptions {
   /** Fade length in px (default 14). */
   readonly size?: number;
+  /** Scroll axis to fade (default "y"). */
+  readonly axis?: "x" | "y";
 }
 
 const EPSILON = 4;
@@ -16,20 +18,25 @@ export function scrollFade(
   options: ScrollFadeOptions = {},
 ): () => void {
   const size = options.size ?? 14;
-  let top = -1;
-  let bottom = -1;
+  const horizontal = options.axis === "x";
+  const direction = horizontal ? "to right" : "to bottom";
+  let start = -1;
+  let end = -1;
 
   const sync = (): void => {
-    const nextTop = el.scrollTop > EPSILON ? size : 0;
-    const nextBottom =
-      el.scrollHeight - el.clientHeight - el.scrollTop > EPSILON ? size : 0;
-    if (nextTop === top && nextBottom === bottom) return;
-    top = nextTop;
-    bottom = nextBottom;
+    const scrolled = horizontal ? el.scrollLeft : el.scrollTop;
+    const overflow = horizontal
+      ? el.scrollWidth - el.clientWidth
+      : el.scrollHeight - el.clientHeight;
+    const nextStart = scrolled > EPSILON ? size : 0;
+    const nextEnd = overflow - scrolled > EPSILON ? size : 0;
+    if (nextStart === start && nextEnd === end) return;
+    start = nextStart;
+    end = nextEnd;
     const mask =
-      top === 0 && bottom === 0
+      start === 0 && end === 0
         ? ""
-        : `linear-gradient(to bottom, transparent 0, #000 ${top}px, #000 calc(100% - ${bottom}px), transparent 100%)`;
+        : `linear-gradient(${direction}, transparent 0, #000 ${start}px, #000 calc(100% - ${end}px), transparent 100%)`;
     el.style.maskImage = mask;
     // Safari still needs the prefixed property.
     el.style.webkitMaskImage = mask;
