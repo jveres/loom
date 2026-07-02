@@ -68,13 +68,13 @@ describe("loom DOM list", () => {
 
     rows([{ id: "b" }, { id: "a" }]);
     expect(keys(root)).toEqual(["b", "a"]);
-    // The reorder of an existing child went through the state-preserving move.
-    expect(moved).toEqual(["b"]);
+    // A two-element swap is ONE state-preserving move (the LIS keeps the other in place).
+    expect(moved).toHaveLength(1);
 
-    // A new key still takes insertBefore, existing moves keep using moveBefore.
+    // A new key still takes insertBefore; only one existing key moves.
     rows([{ id: "c" }, { id: "a" }, { id: "b" }]);
     expect(keys(root)).toEqual(["c", "a", "b"]);
-    expect(moved).toEqual(["b", "a"]);
+    expect(moved).toHaveLength(2);
     stop();
   });
 

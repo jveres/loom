@@ -257,13 +257,30 @@ independent, skippable experiments.
 
 | Stage | Hypothesis | Gate |
 | --- | --- | --- |
-| 0 | Baselines are locked: current `pnpm bench` suites plus a krausest-style create/update/swap-rows harness against ArrowJS and Shablon | Partially done — runtime and bundle baselines are recorded above (July 2, 2026); remaining: the in-repo comparative DOM harness that reproduces the external 2x result |
+| 0 | Baselines are locked: current `pnpm bench` suites plus a krausest-style create/update/swap-rows harness against ArrowJS and Shablon | **Done** — `bench/compare/` drives vanilla/loom/ArrowJS/Shablon through one command surface (medians below, Chrome/M2, July 2, 2026). One measurement lesson: waiting for paint floors every sub-frame op at the frame cadence (~33 ms) — the harness measures sync work + microtask flush + forced layout instead |
 | 1 | Vendoring `alien-signals/system` is perf-neutral; direct calls beat the callback indirection | **Done** — vendored as `core/graph.ts`, loom-vs-native chaos ratio preserved (1.01x, two runs). The indirection removal was tested and **rejected**: importing the hooks across the loom↔graph module cycle measured ~2.2x slower on `write->effect x50k` (445 → 207 hz, rme ≤0.35%) — the factory's closure-captured hooks inline better than cross-cycle live bindings |
 | 1a | Vendored-graph optimizations beat upstream (numeric `kind` field replacing the `in`-operator dispatch in the update/unwatched hooks) | **Rejected** — neutral-to-negative on every suite (`write->effect` 404–418 hz vs 420–445 baseline band; chaos unchanged). V8 already optimizes the upstream `in` probes; the extra node slot buys nothing |
 | 2 | The internal module split changes nothing at runtime and shrinks per-entry bundles | **Done** — core split into `core/{graph,channels,meter,inspect}.ts`; meter/ring-writer and the whole inspect subsystem now load only with `loom/observe` (install-on-import hooks). Minimal app 4.00 → 3.29 kB gzip (−18%; 3.47 kB under the in-repo vite-esbuild that `pnpm size` gates on); minimal-dom −13%. The original ≤3.0 kB guess assumed extracting the deferred lane too — it stays by design so `effect({ defer })` works without extra imports. Bench-neutral after one caught regression (below); ring buffers now allocate lazily (runtime-memory win). Budgets enforced by `pnpm size`. Two behavior notes: `configure({ inspect: true })` requires `loom/observe` to be loaded (the devtools load it), and `onError` now receives the lean `NodeInfo` rather than a full `InspectNode`. Lesson recorded: under live-binding transforms (vitest/vite SSR), hot-path reads of imported bindings are per-access getters — the split initially measured **10x slower writes** until the channel nodes were aliased into module-local consts; the same mechanism explains the stage-1 cycle result |
-| 3 | `loom/tmpl` template-clone creation beats `h()` on creation-heavy workloads | ≥20% on create-10k with zero update-path regression, else drop the entrypoint |
-| 4 | `moveBefore` + LIS in `each`/`list` is bench-neutral and preserves node state across moves | **Done (moveBefore half)** — `placeBefore()` prefers the atomic move for existing children in both reconcilers, insertBefore fallback everywhere else; unit-tested and exercised live in Chrome (demo shuffle + core checks pass). LIS deferred: the existing skip-in-place walk already avoids most moves, and no bench shows move-count as a cost — revisit only if the stage-0 harness disagrees |
-| 5 | `loom/async` `resource()` adds zero cost when unused | Fully tree-shaken from apps that don't import it; DX evaluated separately |
+| 3 | `loom/tmpl` template-clone creation beats `h()` on creation-heavy workloads | **Closed without implementation** — the harness shows `h()` create-10k already within 3–7% of hand-written vanilla and 15–20% *faster* than ArrowJS's template-clone engine; the ≥20% win the gate demands is not available as headroom. Cheapest possible negative result |
+| 4 | `moveBefore` + LIS in `each`/`list` is bench-neutral and preserves node state across moves | **Done (moveBefore half)** — `placeBefore()` prefers the atomic move for existing children in both reconcilers, insertBefore fallback everywhere else; unit-tested and exercised live in Chrome (demo shuffle + core checks pass). LIS initially deferred, then the stage-0 harness disagreed exactly as the gate anticipated: a single far swap degenerated the cursor walk to ~N moves (4.6 ms vs competitors' ~1.6-1.9 ms on swap-1k). `positionOrdered()` now computes the longest increasing subsequence and moves only off-LIS nodes — swap-1k 4.6 → 0.8 ms, ahead of both competitors, at the vanilla floor |
+| 5 | `loom/async` `resource()` adds zero cost when unused | **Done** — own entrypoint (0.33 kB gzip), built purely on core primitives: value/loading/error reads, dep-tracked refetch, stale-response dropping, refresh(), scope disposal. `pnpm size` budgets unchanged for non-importing apps (zero-cost proof); 6 tests |
+
+## Comparative results (stage 0 harness)
+
+Medians over 10 runs after 3 warmups per op (`bench/compare/`, Chrome, Apple
+M2, July 2, 2026, after all v2 stages landed):
+
+| op (median ms) | vanilla | loom | arrow 1.0.6 | shablon 0.0.1-rc.21 |
+| --- | --- | --- | --- | --- |
+| create-1k | 8.2 | **7.5** | 7.6 | 8.8 |
+| update-1k (every 10th) | 1.2 | **0.9** | 1.0 | 1.6 |
+| swap-1k | 0.7 | **0.8** | 1.6 | 1.9 |
+| clear-1k | 0.8 | 1.2 | **1.1** | 3.2 |
+| create-10k | 36.8 | **38.0** | 48.4 | 75.4 |
+
+Loom leads or ties every op among the frameworks and sits within ~3-8% of the
+hand-written vanilla floor. Before the LIS fix, swap-1k measured 4.6 ms — the
+harness's first catch.
 
 ## Sources
 

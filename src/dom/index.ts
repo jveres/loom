@@ -245,12 +245,7 @@ export function list<T>(
           options.render,
         );
         if (shouldReorder) {
-          // Reorder existing keys into item order; the identity check skips already-placed nodes.
-          let cursor = container.firstChild;
-          for (const node of ordered) {
-            if (node !== cursor) placeBefore(container, node, cursor ?? null);
-            cursor = node.nextSibling;
-          }
+          positionOrdered(container, ordered, null);
         } else {
           // Externally positioned: only append the newly created keys, leave the rest in place.
           for (const node of ordered) {
@@ -363,23 +358,77 @@ export function each<T>(
         effect(
           () => {
             const ordered = reconcileKeyed(items(), nodes, key, render);
-            // Position in order: walk back-to-front, inserting each before a cursor that ends at the
-            // anchor; the nextSibling guard skips rows already in place, so only moved keys touch the DOM.
-            let next: Node = anchor;
-            for (let i = ordered.length - 1; i >= 0; i--) {
-              const node = ordered[i] as Element;
-              if (node.nextSibling !== next) {
-                const parent = anchor.parentNode;
-                if (parent) placeBefore(parent, node, next);
-              }
-              next = node;
-            }
+            const parent = anchor.parentNode;
+            if (parent) positionOrdered(parent, ordered, anchor);
           },
           slotOpts(anchor, "dom.each"),
         ),
       );
     },
   } satisfies SlotDescriptor);
+}
+
+// Position `ordered` in sequence ending before `end` (null = the end of `parent`), moving as few
+// nodes as possible: members on the longest increasing subsequence of current DOM positions stay
+// put; only the rest move. The naive cursor walk this replaces degenerated on a single far swap —
+// moving ~N nodes where two suffice (measured 4.6 ms vs ~1 ms on the 1k-row swap bench). New nodes
+// (not yet children) are inserted; every move is state-preserving via placeBefore.
+function positionOrdered(
+  parent: Node,
+  ordered: readonly Element[],
+  end: Node | null,
+): void {
+  const n = ordered.length;
+  if (n === 0) return;
+  const desired = new Map<Element, number>();
+  for (let i = 0; i < n; i++) desired.set(ordered[i] as Element, i);
+  // The members' current DOM order, expressed as desired indexes.
+  const seq: number[] = [];
+  const seqNodes: Element[] = [];
+  for (
+    let child = parent.firstChild;
+    child !== null;
+    child = child.nextSibling
+  ) {
+    const want = desired.get(child as Element);
+    if (want !== undefined) {
+      seq.push(want);
+      seqNodes.push(child as Element);
+    }
+  }
+  // Longest increasing subsequence (patience sorting with parent links): these nodes are already
+  // in relative order and never move.
+  const keep = new Set<Element>();
+  const tails: number[] = []; // seq position of the best tail per LIS length
+  const tailValues: number[] = [];
+  const prev: number[] = new Array(seq.length).fill(-1);
+  for (let i = 0; i < seq.length; i++) {
+    const value = seq[i] as number;
+    let lo = 0;
+    let hi = tailValues.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((tailValues[mid] as number) < value) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0) prev[i] = tails[lo - 1] as number;
+    tails[lo] = i;
+    tailValues[lo] = value;
+  }
+  for (
+    let k = tails.length > 0 ? (tails[tails.length - 1] as number) : -1;
+    k >= 0;
+    k = prev[k] as number
+  ) {
+    keep.add(seqNodes[k] as Element);
+  }
+  // Walk back-to-front: kept nodes only advance the reference; everything else moves before it.
+  let next: Node | null = end;
+  for (let i = n - 1; i >= 0; i--) {
+    const node = ordered[i] as Element;
+    if (!keep.has(node)) placeBefore(parent, node, next);
+    next = node;
+  }
 }
 
 // A ParentNode that may support the state-preserving move (Chrome 133+; spec "atomic move").

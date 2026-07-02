@@ -4,11 +4,11 @@ import { t as n } from "./jsx-props-sAPN8GVq.js";
 var r = (e) => e, i = /* @__PURE__ */ new WeakMap(), a = "http://www.w3.org/2000/svg", o = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
 function s(e, t = null, n) {
 	let r = o.has(e) ? document.createElementNS(a, e) : document.createElement(e);
-	return t && T(r, t), E(r, n), r;
+	return t && E(r, t), D(r, n), r;
 }
 function c(e, t) {
 	let n = document.createTextNode("");
-	return R(n, "dom.text", () => U(e()), (e) => {
+	return z(n, "dom.text", () => W(e()), (e) => {
 		n.data = e;
 	}, "", t), n;
 }
@@ -42,25 +42,23 @@ function f(e, t, n, r) {
 		let s = t.get(e);
 		s || (s = r(o, e), s.setAttribute("data-loom-key", e), t.set(e, s)), a.push(s);
 	}
-	for (let [e, n] of t) i.has(e) || (b(n), t.delete(e));
+	for (let [e, n] of t) i.has(e) || (x(n), t.delete(e));
 	return a;
 }
 function p(n, r, i) {
 	let a = /* @__PURE__ */ new Map(), o = t(() => e(() => {
 		let e = i.reorder?.() !== !1, t = f(r(), a, i.key, i.render);
-		if (e) {
-			let e = n.firstChild;
-			for (let r of t) r !== e && v(n, r, e ?? null), e = r.nextSibling;
-		} else for (let e of t) e.parentNode || n.appendChild(e);
+		if (e) v(n, t, null);
+		else for (let e of t) e.parentNode || n.appendChild(e);
 	}, {
 		label: "dom.list",
 		target: n
 	})), s = () => {
 		o();
-		for (let e of a.values()) b(e);
+		for (let e of a.values()) x(e);
 		a.clear();
 	};
-	return C(n, s), s;
+	return w(n, s), s;
 }
 function m(n, i) {
 	return r({
@@ -71,10 +69,10 @@ function m(n, i) {
 				let e = n();
 				if (e === o) return;
 				o = e;
-				for (let e of a) b(e);
+				for (let e of a) x(e);
 				let s = document.createDocumentFragment();
-				t(() => E(s, i(e))), a = [...s.childNodes], r.parentNode?.insertBefore(s, r);
-			}, k(r, "dom.dynamic")));
+				t(() => D(s, i(e))), a = [...s.childNodes], r.parentNode?.insertBefore(s, r);
+			}, A(r, "dom.dynamic")));
 		}
 	});
 }
@@ -93,36 +91,55 @@ function _(n, i, a) {
 		mount(r) {
 			let o = /* @__PURE__ */ new Map();
 			return t(() => e(() => {
-				let e = f(n(), o, a, i), t = r;
-				for (let n = e.length - 1; n >= 0; n--) {
-					let i = e[n];
-					if (i.nextSibling !== t) {
-						let e = r.parentNode;
-						e && v(e, i, t);
-					}
-					t = i;
-				}
-			}, k(r, "dom.each")));
+				let e = f(n(), o, a, i), t = r.parentNode;
+				t && v(t, e, r);
+			}, A(r, "dom.each")));
 		}
 	});
 }
 function v(e, t, n) {
+	let r = t.length;
+	if (r === 0) return;
+	let i = /* @__PURE__ */ new Map();
+	for (let e = 0; e < r; e++) i.set(t[e], e);
+	let a = [], o = [];
+	for (let t = e.firstChild; t !== null; t = t.nextSibling) {
+		let e = i.get(t);
+		e !== void 0 && (a.push(e), o.push(t));
+	}
+	let s = /* @__PURE__ */ new Set(), c = [], l = [], u = Array(a.length).fill(-1);
+	for (let e = 0; e < a.length; e++) {
+		let t = a[e], n = 0, r = l.length;
+		for (; n < r;) {
+			let e = n + r >> 1;
+			l[e] < t ? n = e + 1 : r = e;
+		}
+		n > 0 && (u[e] = c[n - 1]), c[n] = e, l[n] = t;
+	}
+	for (let e = c.length > 0 ? c[c.length - 1] : -1; e >= 0; e = u[e]) s.add(o[e]);
+	let d = n;
+	for (let n = r - 1; n >= 0; n--) {
+		let r = t[n];
+		s.has(r) || y(e, r, d), d = r;
+	}
+}
+function y(e, t, n) {
 	let r = e;
 	r.moveBefore !== void 0 && t.parentNode === e ? r.moveBefore(t, n) : e.insertBefore(t, n);
 }
-function y(e) {
+function b(e) {
 	let t = [e];
 	for (let e = 0; e < t.length; e++) {
 		let n = t[e], r = i.get(n);
-		r && (i.delete(n), w(r));
+		r && (i.delete(n), T(r));
 		for (let e = n.firstChild; e; e = e.nextSibling) t.push(e);
 	}
 }
-function b(e) {
-	y(e), e.parentNode?.removeChild(e);
+function x(e) {
+	b(e), e.parentNode?.removeChild(e);
 }
-var x = 10;
-function S(e, t) {
+var S = 10;
+function C(e, t) {
 	let n = -1, r = 0, i = 0;
 	e.addEventListener("pointerdown", (e) => {
 		let t = e;
@@ -132,68 +149,68 @@ function S(e, t) {
 		if (a.pointerId !== n) return;
 		n = -1;
 		let o = a.clientX - r, s = a.clientY - i;
-		o * o + s * s <= x * x && t(a);
+		o * o + s * s <= S * S && t(a);
 	}), e.addEventListener("pointercancel", () => {
 		n = -1;
 	});
 }
-function C(e, t) {
+function w(e, t) {
 	let n = i.get(e);
 	n ? Array.isArray(n) ? n.push(t) : i.set(e, [n, t]) : i.set(e, t);
 }
-function w(e) {
+function T(e) {
 	if (Array.isArray(e)) for (let t of e) t();
 	else e();
 }
-function T(e, t) {
+function E(e, t) {
 	for (let n in t) {
 		if (!Object.hasOwn(t, n) || n === "children") continue;
 		let i = t[n];
-		if (!(i == null || i === !1 && !H(n))) {
+		if (!(i == null || i === !1 && !U(n))) {
 			if (n === "key") {
 				e.setAttribute("data-loom-key", String(i));
 				continue;
 			}
 			if (n === "class" || n === "className") {
-				A(e, i);
+				j(e, i);
 				continue;
 			}
 			if (n === "style") {
-				N(e, i);
+				P(e, i);
 				continue;
 			}
 			if (n === "onunmount" && typeof i == "function") {
-				C(e, i);
+				w(e, i);
 				continue;
 			}
-			if (G(i)) {
+			if (K(i)) {
 				let t = r(i);
-				I(e, t.name, t.read);
+				L(e, t.name, t.read);
 				continue;
 			}
 			if (n === "ontap" && typeof i == "function") {
-				S(e, i);
+				C(e, i);
 				continue;
 			}
 			if (n.startsWith("on") && typeof i == "function") {
-				e.addEventListener(W(n), i);
+				e.addEventListener(G(n), i);
 				continue;
 			}
 			if (typeof i == "function") {
-				I(e, n, i);
+				L(e, n, i);
 				continue;
 			}
-			z(e, n, i);
+			B(e, n, i);
 		}
 	}
 }
-function E(e, t) {
+function D(e, t) {
 	if (Array.isArray(t)) {
-		for (let n of t) E(e, n);
+		for (let n of t) D(e, n);
 		return;
 	}
-	if (D(t)) {
-		O(e, t);
+	if (O(t)) {
+		k(e, t);
 		return;
 	}
 	if (!(t == null || t === !0 || t === !1)) {
@@ -204,50 +221,50 @@ function E(e, t) {
 		e.appendChild(t instanceof Node ? t : document.createTextNode(String(t)));
 	}
 }
-function D(e) {
+function O(e) {
 	return typeof e == "object" && !!e && e.__loomDynamic === !0;
 }
-function O(e, t) {
-	let n = document.createComment("loom-slot");
-	e.appendChild(n), C(n, r(t).mount(n));
-}
 function k(e, t) {
+	let n = document.createComment("loom-slot");
+	e.appendChild(n), w(n, r(t).mount(n));
+}
+function A(e, t) {
 	let n = e.parentNode;
 	return n instanceof Element ? {
 		label: t,
 		target: n
 	} : { label: t };
 }
-function A(e, t) {
+function j(e, t) {
 	if (Array.isArray(t)) {
-		for (let n of t) A(e, n);
+		for (let n of t) j(e, n);
 		return;
 	}
 	if (t) {
 		if (typeof t == "string") {
-			j(e, t);
+			M(e, t);
 			return;
 		}
-		if (K(t)) {
-			F(e, r(t));
+		if (q(t)) {
+			I(e, r(t));
 			return;
 		}
-		if (J(t)) for (let n in t) Object.hasOwn(t, n) && P(e, n, t[n]);
+		if (Y(t)) for (let n in t) Object.hasOwn(t, n) && F(e, n, t[n]);
 	}
 }
-function j(e, t) {
+function M(e, t) {
 	let n = t.trim();
 	if (!n) return;
 	let r = e.getAttribute("class");
 	e.setAttribute("class", r ? `${r} ${n}` : n);
 }
-function M(e, t) {
+function N(e, t) {
 	let n = e.getAttribute("class");
 	return n ? n.split(/\s+/).includes(t) : !1;
 }
-function N(e, t) {
+function P(e, t) {
 	if (Array.isArray(t)) {
-		for (let n of t) N(e, n);
+		for (let n of t) P(e, n);
 		return;
 	}
 	if (!t) return;
@@ -255,44 +272,44 @@ function N(e, t) {
 		e.setAttribute("style", t);
 		return;
 	}
-	if (q(t)) {
-		L(e, r(t));
+	if (J(t)) {
+		R(e, r(t));
 		return;
 	}
-	if (!J(t)) return;
+	if (!Y(t)) return;
 	let i = e.style;
 	for (let r in t) {
 		if (!Object.hasOwn(t, r)) continue;
 		let a = t[r], o = n(r);
-		typeof a == "function" ? L(e, {
+		typeof a == "function" ? R(e, {
 			kind: "style",
 			name: o,
 			read: a
 		}) : a != null && i.setProperty(o, String(a));
 	}
 }
-function P(e, t, n) {
-	typeof n == "function" ? F(e, {
+function F(e, t, n) {
+	typeof n == "function" ? I(e, {
 		kind: "class",
 		name: t,
 		read: n
 	}) : n && e.classList.add(t);
 }
-function F(e, t) {
-	R(e, `dom.class.${t.name}`, () => !!t.read(), (n) => e.classList.toggle(t.name, n), M(e, t.name));
+function I(e, t) {
+	z(e, `dom.class.${t.name}`, () => !!t.read(), (n) => e.classList.toggle(t.name, n), N(e, t.name));
 }
-function I(e, t, n, r) {
-	R(e, `dom.attr.${t}`, () => V(t, n()), (n) => B(e, t, n), void 0, r);
+function L(e, t, n, r) {
+	z(e, `dom.attr.${t}`, () => H(t, n()), (n) => V(e, t, n), void 0, r);
 }
-function L(e, t) {
+function R(e, t) {
 	let n = e.style;
-	R(e, `dom.style.${t.name}`, () => V(t.name, t.read()), (e) => {
+	z(e, `dom.style.${t.name}`, () => H(t.name, t.read()), (e) => {
 		e === null ? n.removeProperty(t.name) : n.setProperty(t.name, e);
 	});
 }
-function R(n, r, i, a, o, s) {
+function z(n, r, i, a, o, s) {
 	let c = o;
-	C(n, t(() => e(() => {
+	w(n, t(() => e(() => {
 		let e = i();
 		e !== c && (c = e, a(e));
 	}, {
@@ -301,38 +318,38 @@ function R(n, r, i, a, o, s) {
 		...s
 	})));
 }
-function z(e, t, n) {
-	B(e, t, V(t, n));
-}
 function B(e, t, n) {
+	V(e, t, H(t, n));
+}
+function V(e, t, n) {
 	n === null ? e.removeAttribute(t) : e.setAttribute(t, n);
 }
-function V(e, t) {
-	return H(e) && typeof t == "boolean" ? String(t) : t == null || t === !1 ? null : t === !0 ? "" : String(t);
-}
-function H(e) {
-	return e.startsWith("aria-");
+function H(e, t) {
+	return U(e) && typeof t == "boolean" ? String(t) : t == null || t === !1 ? null : t === !0 ? "" : String(t);
 }
 function U(e) {
-	return e == null || e === !1 ? "" : String(e);
+	return e.startsWith("aria-");
 }
 function W(e) {
-	return e.slice(2).toLowerCase();
+	return e == null || e === !1 ? "" : String(e);
 }
 function G(e) {
-	return Y(e, "attr");
+	return e.slice(2).toLowerCase();
 }
 function K(e) {
-	return Y(e, "class");
+	return X(e, "attr");
 }
 function q(e) {
-	return Y(e, "style");
+	return X(e, "class");
 }
 function J(e) {
+	return X(e, "style");
+}
+function Y(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
-function Y(e, t) {
+function X(e, t) {
 	return typeof e == "object" && !!e && e.kind === t && typeof e.name == "string" && typeof e.read == "function";
 }
 //#endregion
-export { l as attr, I as bindAttr, u as classed, y as dispose, _ as each, s as h, p as list, g as match, b as remove, d as style, S as tap, c as text, h as when };
+export { l as attr, L as bindAttr, u as classed, b as dispose, _ as each, s as h, p as list, g as match, x as remove, d as style, C as tap, c as text, h as when };

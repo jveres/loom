@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@arrow-js/core':
+        specifier: ^1.0.6
+        version: 1.0.6
       '@biomejs/biome':
         specifier: 2.5.1
         version: 2.5.1
@@ -17,6 +20,9 @@ importers:
       alien-signals:
         specifier: 3.2.1
         version: 3.2.1
+      shablon:
+        specifier: 0.0.1-rc.21
+        version: 0.0.1-rc.21
       typescript:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
@@ -28,6 +34,10 @@ importers:
         version: 4.1.9(@types/node@26.0.1)(@vitest/coverage-v8@4.1.9)(happy-dom@20.10.5)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1))
 
 packages:
+
+  '@arrow-js/core@1.0.6':
+    resolution: {integrity: sha512-75f4N0iHtHTwgxf9XS8a1vtfGZZmCvqT0Ix+ScDLclNuR9Fqp2yOIK1u8vmN1BPsS4aRfMVTdSFSmgGCqkJSCg==}
+    engines: {node: '>=20.19.0 || >=22.12.0'}
 
   '@babel/helper-string-parser@7.29.7':
     resolution: {integrity: sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==}
@@ -772,6 +782,9 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  shablon@0.0.1-rc.21:
+    resolution: {integrity: sha512-Dr7Nki38XaQcVNL289WzCC/8TY4GnMqfkE0yfhqK7hl+IGTEq3zoAMFRmewR032jdLgY0s7p/Z0YEr/Psb4HNw==}
+
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
 
@@ -921,6 +934,8 @@ packages:
         optional: true
 
 snapshots:
+
+  '@arrow-js/core@1.0.6': {}
 
   '@babel/helper-string-parser@7.29.7':
     optional: true
@@ -1499,6 +1514,8 @@ snapshots:
 
   semver@7.8.4:
     optional: true
+
+  shablon@0.0.1-rc.21: {}
 
   siginfo@2.0.0: {}
 

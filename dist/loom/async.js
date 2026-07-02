@@ -4,7 +4,7 @@ function i(i, a) {
 	let o = t(void 0, a), s = t(!0, a), c = t(void 0, a), l = t(0, a), u = e(() => {
 		l();
 		let e = !0;
-		return s(!0), i(r(o)).then((t) => {
+		return s(!0), i(r(() => o())).then((t) => {
 			e && n(() => {
 				o(t), c(void 0), s(!1);
 			});
