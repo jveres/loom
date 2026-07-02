@@ -20,6 +20,9 @@ importers:
       alien-signals:
         specifier: 3.2.1
         version: 3.2.1
+      idiomorph:
+        specifier: ^0.7.4
+        version: 0.7.4
       shablon:
         specifier: 0.0.1-rc.21
         version: 0.0.1-rc.21
@@ -649,6 +652,9 @@ packages:
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
+
+  idiomorph@0.7.4:
+    resolution: {integrity: sha512-uCdSpLo3uMfqOmrwXTpR1k/sq4sSmKC7l4o/LdJOEU+MMMq+wkevRqOQYn3lP7vfz9Mv+USBEqPvi0XhdL9ENw==}
 
   istanbul-lib-coverage@3.2.2:
     resolution: {integrity: sha512-O8dpsF+r0WV/8MNRKfnmrtCWhuKjxrq2w+jpzBL5UZKTi2LeVWnWOmWRxFlesJONmc+wLAGvKQZEOanko0LFTg==}
@@ -1390,6 +1396,8 @@ snapshots:
 
   html-escaper@2.0.2:
     optional: true
+
+  idiomorph@0.7.4: {}
 
   istanbul-lib-coverage@3.2.2:
     optional: true

@@ -602,7 +602,10 @@ the same tag), and moves matched nodes with the same state-preserving
 `moveBefore` path as `list()`/`each()`. Duplicate keys throw, like the keyed
 list reconcilers. Attributes, text, and form state are synced — the focused
 element is never overwritten (including a focused radio's group siblings), and
-selects sync per-option so multi-selects survive.
+selects sync per-option so multi-selects survive. `options.skip` marks
+elements the morph must never touch — the hook for enhancer-injected nodes
+(streaming cursors, copy buttons, post-render highlighting): a matched
+element is left exactly as-is, an unmatched one is kept instead of removed.
 
 > **Note:** `morph` is for **static** trees only. It removes and adopts nodes
 > with raw DOM operations, so a subtree containing loom bindings (`text`,

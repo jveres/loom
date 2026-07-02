@@ -8,7 +8,7 @@ function r(e, t, n) {
 //#endregion
 //#region src/dom/morph.ts
 function i(e, t, n = {}) {
-	return e.tagName === t.tagName ? (a(e, t), o(e, t), u(e, t, n), e) : (e.replaceWith(t), t);
+	return n.skip?.(e) ? e : e.tagName === t.tagName ? (a(e, t), o(e, t), u(e, t, n), e) : (e.replaceWith(t), t);
 }
 function a(e, t) {
 	for (let n of Array.from(e.attributes)) t.hasAttribute(n.name) || e.removeAttribute(n.name);
@@ -64,7 +64,7 @@ function u(e, t, n) {
 		}
 		t ? (u.add(t), t.nodeType === 1 ? i(t, e, n) : t.nodeValue !== e.nodeValue && (t.nodeValue = e.nodeValue), f.push(t)) : f.push(e);
 	}
-	for (let t of a) !u.has(t) && t.parentNode === e && e.removeChild(t);
+	for (let t of a) u.has(t) || t.parentNode !== e || t.nodeType === 1 && n.skip?.(t) || e.removeChild(t);
 	let m = null;
 	for (let t = f.length - 1; t >= 0; t--) {
 		let n = f[t];

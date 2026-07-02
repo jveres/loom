@@ -24,6 +24,14 @@ export interface MorphOptions {
    * key positionally.
    */
   key?: (el: Element) => string | null;
+  /**
+   * Elements the morph must not touch — the hook for enhancer-injected
+   * nodes (streaming cursors, copy buttons, post-render highlighting). A
+   * matched element returning true is left exactly as-is (no attribute,
+   * text, or children sync); an unmatched one is kept instead of removed,
+   * with managed siblings ordered around it.
+   */
+  skip?: (el: Element) => boolean;
 }
 
 export function morph(
@@ -31,6 +39,7 @@ export function morph(
   to: Element,
   options: MorphOptions = {},
 ): Element {
+  if (options.skip?.(from)) return from;
   if (from.tagName !== to.tagName) {
     from.replaceWith(to);
     return to;
@@ -179,7 +188,9 @@ function morphChildren(
   }
 
   for (const old of oldNodes) {
-    if (!used.has(old) && old.parentNode === from) from.removeChild(old);
+    if (used.has(old) || old.parentNode !== from) continue;
+    if (old.nodeType === 1 && options.skip?.(old as Element)) continue;
+    from.removeChild(old);
   }
 
   // Place right-to-left so each node's successor is already in position;

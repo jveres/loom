@@ -172,4 +172,27 @@ describe("morph", () => {
     const dupNew = el(`<div><i data-key="x"></i><i data-key="x"></i></div>`);
     expect(() => morph(from, dupNew, { key })).toThrow(/Duplicate morph key/);
   });
+
+  it("skip: leaves matched elements untouched and keeps unmatched ones", () => {
+    const skip = (element: Element): boolean =>
+      element.hasAttribute("data-morph-ignore");
+    // matched skipped element: content and attributes stay as-is
+    const from = el(
+      `<div><pre data-morph-ignore class="hl"><span>enhanced</span></pre><p>a</p></div>`,
+    );
+    const pre = from.querySelector("pre");
+    morph(from, el(`<div><pre data-morph-ignore>plain</pre><p>b</p></div>`), {
+      skip,
+    });
+    expect(from.querySelector("pre")).toBe(pre);
+    expect(pre?.className).toBe("hl"); // untouched
+    expect(pre?.innerHTML).toBe("<span>enhanced</span>");
+    expect(from.querySelector("p")?.textContent).toBe("b");
+
+    // unmatched skipped element (an injected streaming cursor): kept, not removed
+    const host = el(`<div><p>text</p><span data-morph-ignore>▍</span></div>`);
+    morph(host, el(`<div><p>text more</p></div>`), { skip });
+    expect(host.querySelector("span")?.textContent).toBe("▍");
+    expect(host.querySelector("p")?.textContent).toBe("text more");
+  });
 });

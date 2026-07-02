@@ -79,6 +79,7 @@
     "@biomejs/biome": "2.5.1",
     "@types/node": "^26.0.1",
     "alien-signals": "3.2.1",
+    "idiomorph": "^0.7.4",
     "shablon": "0.0.1-rc.21",
     "typescript": "7.0.1-rc",
     "vite": "8.1.0",
