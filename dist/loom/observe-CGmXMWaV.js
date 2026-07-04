@@ -1,22 +1,22 @@
-import { c as e, l as t, s as n, t as r, y as i } from "./loom-px6eFvrr.js";
+import { b as e, c as t, l as n, s as r, t as i } from "./loom-2OcbExJD.js";
 //#region src/core/inspect.ts
 var a = 0, o = 0, s = !1, c = /* @__PURE__ */ new Map(), l = typeof FinalizationRegistry > "u" ? void 0 : new FinalizationRegistry((e) => {
 	c.delete(e);
 });
-function u(e, n, i) {
+function u(e, t, r) {
 	if (!s) return;
-	let o = t(r(), i), u = ++a, d = {
+	let o = n(i(), r), u = ++a, d = {
 		id: u,
 		disposed: !1,
 		internal: o?.internal === !0,
-		kind: n,
-		label: o?.label ?? `${n} #${u}`,
+		kind: t,
+		label: o?.label ?? `${t} #${u}`,
 		runs: 0,
 		target: o && "target" in o && o.target ? new WeakRef(o.target) : void 0
 	};
 	return e.meta = d, c.set(u, new WeakRef(e)), l?.register(e, u), d;
 }
-n({
+r({
 	register: u,
 	unregister(e) {
 		c.delete(e);
@@ -26,9 +26,23 @@ n({
 	},
 	nextGroup() {
 		return s ? ++o : 0;
-	}
+	},
+	trackedWrite: f
 });
-function d(e) {
+var d = /* @__PURE__ */ new Set();
+function f(e, t) {
+	if (!s) return;
+	let n = e.meta, r = t.meta;
+	if (!(!n || !r || n.internal || r.internal)) {
+		for (let i = e.subs; i !== void 0; i = i.nextSub) if (i.sub === t) {
+			let e = `${n.id}:${r.id}`;
+			if (d.has(e)) return;
+			d.add(e), console.warn(`[loom] "${r.label}" writes "${n.label}" which it also reads — it will re-trigger itself. If unintended, read it untracked: update(cell, fn) or untrack(() => cell()).`);
+			return;
+		}
+	}
+}
+function p(e) {
 	let t = e?.active === !0, n = [];
 	for (let [e, r] of c) {
 		let i = r.deref();
@@ -37,50 +51,50 @@ function d(e) {
 			continue;
 		}
 		let a = i.meta;
-		a && (t && a.kind !== "effect" && i.subs === void 0 || n.push(p(i, a)));
+		a && (t && a.kind !== "effect" && i.subs === void 0 || n.push(h(i, a)));
 	}
 	return { nodes: n };
 }
-function f() {
-	let t = 0, n = 0, r = 0, a = 0, o = 0, s = 0;
-	for (let [e, i] of c) {
-		let l = i.deref();
+function m() {
+	let n = 0, r = 0, i = 0, a = 0, o = 0, s = 0;
+	for (let [e, t] of c) {
+		let l = t.deref();
 		if (l === void 0) {
 			c.delete(e);
 			continue;
 		}
 		let u = l.meta;
-		!u || u.internal || (u.kind === "computed" ? (n++, l.subs === void 0 && s++) : u.kind === "effect" ? (r++, u.target !== void 0 && a++) : "connect" in l ? o++ : (t++, l.subs === void 0 && s++));
+		!u || u.internal || (u.kind === "computed" ? (r++, l.subs === void 0 && s++) : u.kind === "effect" ? (i++, u.target !== void 0 && a++) : "connect" in l ? o++ : (n++, l.subs === void 0 && s++));
 	}
 	return {
-		states: t,
-		computeds: n,
-		effects: r,
+		states: n,
+		computeds: r,
+		effects: i,
 		targetedEffects: a,
 		sources: o,
-		scopes: e(),
-		channels: i.size,
+		scopes: t(),
+		channels: e.size,
 		unread: s
 	};
 }
-function p(e, t) {
+function h(e, t) {
 	let n = {
 		id: t.id,
-		deps: m(e.deps, "nextDep", "dep"),
+		deps: g(e.deps, "nextDep", "dep"),
 		disposed: t.disposed,
 		internal: t.internal,
 		kind: t.kind,
 		label: t.label,
 		runs: t.runs,
-		subs: m(e.subs, "nextSub", "sub")
+		subs: g(e.subs, "nextSub", "sub")
 	}, r = t.kind === "state" ? e.source : void 0;
 	r !== void 0 && (n.source = r);
 	let i = t.target?.deref();
 	i !== void 0 && (n.target = i);
-	let a = h(e, t);
+	let a = _(e, t);
 	return a !== void 0 && (n.value = a), t.group !== void 0 && (n.group = t.group), t.key !== void 0 && (n.key = t.key), n;
 }
-function m(e, t, n) {
+function g(e, t, n) {
 	let r = [];
 	for (let i = e; i !== void 0; i = i[t]) {
 		let e = i[n].meta;
@@ -88,7 +102,7 @@ function m(e, t, n) {
 	}
 	return r;
 }
-function h(e, t) {
+function _(e, t) {
 	switch (t.kind) {
 		case "state": return e.pendingValue;
 		case "computed": return e.value;
@@ -96,4 +110,4 @@ function h(e, t) {
 	}
 }
 //#endregion
-export { f as n, d as t };
+export { m as n, p as t };

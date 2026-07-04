@@ -87,6 +87,8 @@ export interface InspectHooks {
     unregister(id: number): void;
     setEnabled(on: boolean): void;
     nextGroup(): number;
+    /** Dev diagnostics: a tracked run wrote `node` — warn if the writer also subscribes to it. */
+    trackedWrite?(node: NodeBase, writer: NodeBase): void;
 }
 export declare function installInspectHooks(hooks: InspectHooks): void;
 export declare function ambientOptions(): NodeOptions | undefined;
@@ -128,7 +130,20 @@ export type Polled<T> = Read<T> & {
 export declare function poll<T>(sample: () => T, ms: number, options?: NodeOptions): Polled<T>;
 export declare function trigger(source: Read<unknown>): void;
 export declare function untrack<T>(fn: () => T): T;
+/**
+ * Functional read-modify-write: `update(count, n => n + 1)`. The read is **untracked** — inside an
+ * effect, updating a cell does not subscribe the effect to it, so the classic `v(v() + 1)`
+ * self-dependency foot-gun can't happen through this helper.
+ */
 export declare function update<T>(source: State<T>, fn: (value: T) => T): void;
+/**
+ * Watch an explicit source and react to its **changes**: `read` is tracked (its dependencies drive
+ * re-evaluation), `onChange(value, previous)` runs untracked and is skipped on the initial
+ * evaluation and whenever the derived value is unchanged. The write-back-binding shape without the
+ * `let first = true` boilerplate — and because `onChange` is untracked, writes inside it can't
+ * create accidental self-dependencies.
+ */
+export declare function watch<T>(read: Read<T>, onChange: (value: T, previous: T) => void, options?: EffectOptions): Stop;
 export declare function mutate<T extends object>(source: State<T>, fn: (value: T) => void): void;
 export declare function fields<T extends object>(initial: T, options?: NodeOptions): Fields<T>;
 /**

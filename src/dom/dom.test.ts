@@ -9,6 +9,7 @@ import {
   h,
   list,
   match,
+  own,
   remove,
   style,
   tap,
@@ -34,6 +35,19 @@ function renderRow(row: Row): Element {
   node.textContent = row.id;
   return node;
 }
+
+describe("loom DOM ownership", () => {
+  it("own() disposers run when the node or an ancestor is removed", () => {
+    const parent = h("div");
+    const child = h("span");
+    parent.append(child);
+    const order: string[] = [];
+    own(child, () => order.push("child"));
+    own(parent, () => order.push("parent"));
+    remove(parent); // disposal reaches descendants' owned disposers too
+    expect(order.sort()).toEqual(["child", "parent"]);
+  });
+});
 
 describe("loom DOM wrong-runtime guard", () => {
   it("throws a clear error when a loom/html Html value is used as a child", () => {

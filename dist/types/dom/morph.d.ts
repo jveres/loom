@@ -10,8 +10,9 @@ export interface MorphOptions {
      * nodes (streaming cursors, copy buttons, post-render highlighting). A
      * matched element returning true is left exactly as-is (no attribute,
      * text, or children sync); an unmatched one is kept instead of removed,
-     * with managed siblings ordered around it.
+     * with managed siblings ordered around it. A string is shorthand for a
+     * selector match: `skip: "[data-chrome]"` ≡ `el => el.matches("[data-chrome]")`.
      */
-    skip?: (el: Element) => boolean;
+    skip?: ((el: Element) => boolean) | string;
 }
 export declare function morph(from: Element, to: Element, options?: MorphOptions): Element;

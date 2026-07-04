@@ -213,6 +213,8 @@ export interface InspectHooks {
   unregister(id: number): void;
   setEnabled(on: boolean): void;
   nextGroup(): number;
+  /** Dev diagnostics: a tracked run wrote `node` — warn if the writer also subscribes to it. */
+  trackedWrite?(node: NodeBase, writer: NodeBase): void;
 }
 let inspectHooks: InspectHooks | undefined;
 let inspectRequested = false;
@@ -650,8 +652,41 @@ export function untrack<T>(fn: () => T): T {
   }
 }
 
+/**
+ * Functional read-modify-write: `update(count, n => n + 1)`. The read is **untracked** — inside an
+ * effect, updating a cell does not subscribe the effect to it, so the classic `v(v() + 1)`
+ * self-dependency foot-gun can't happen through this helper.
+ */
 export function update<T>(source: State<T>, fn: (value: T) => T): void {
-  source(fn(source()));
+  source(fn(untrack(() => source())));
+}
+
+/**
+ * Watch an explicit source and react to its **changes**: `read` is tracked (its dependencies drive
+ * re-evaluation), `onChange(value, previous)` runs untracked and is skipped on the initial
+ * evaluation and whenever the derived value is unchanged. The write-back-binding shape without the
+ * `let first = true` boilerplate — and because `onChange` is untracked, writes inside it can't
+ * create accidental self-dependencies.
+ */
+export function watch<T>(
+  read: Read<T>,
+  onChange: (value: T, previous: T) => void,
+  options?: EffectOptions,
+): Stop {
+  let first = true;
+  let previous!: T;
+  return effect(() => {
+    const value = read();
+    if (first) {
+      first = false;
+      previous = value;
+      return;
+    }
+    if (value === previous) return;
+    const prior = previous;
+    previous = value;
+    untrack(() => onChange(value, prior));
+  }, options);
 }
 
 export function mutate<T extends object>(
@@ -874,6 +909,11 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
     if (previous !== next) {
       this.pendingValue = next;
       this.flags = Mutable | Dirty;
+      // Dev self-dependency warning (inspection on — `meta` exists only then, so production
+      // writes pay a single undefined compare): an effect writing a cell it subscribes to
+      // re-triggers itself, the v(v()+1) phantom-write class of bug.
+      if (this.meta !== undefined && activeSub !== undefined)
+        inspectHooks?.trackedWrite?.(this, activeSub);
       // Idle path unchanged (the `meters !== 0` short-circuit gates everything). When metered with
       // inspection on, record id + prev→next for the samples view; otherwise just count.
       if (writeCh.meters !== 0 && this.meta?.internal !== true) {

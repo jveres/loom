@@ -195,4 +195,11 @@ describe("morph", () => {
     expect(host.querySelector("span")?.textContent).toBe("▍");
     expect(host.querySelector("p")?.textContent).toBe("text more");
   });
+
+  it("skip accepts a selector string shorthand", () => {
+    const host = el(`<div><p>text</p><span data-chrome>UI</span></div>`);
+    morph(host, el(`<div><p>text more</p></div>`), { skip: "[data-chrome]" });
+    expect(host.querySelector("span")?.textContent).toBe("UI");
+    expect(host.querySelector("p")?.textContent).toBe("text more");
+  });
 });

@@ -106,7 +106,32 @@ installInspectHooks({
   nextGroup() {
     return inspectEnabled ? ++fieldsGroup : 0;
   },
+  trackedWrite,
 });
+
+// Dev diagnostic: a tracked run wrote a cell — if the writer also SUBSCRIBES to that cell, it
+// re-triggers itself (the `v(v() + 1)` phantom-write). Warn once per writer/cell pair, naming
+// both, with the fix. Internal (inspector-owned) nodes are exempt; intentional self-stabilizing
+// loops exist, hence a warning rather than a throw.
+const warnedSelfDeps = new Set<string>();
+function trackedWrite(node: NodeBase, writer: NodeBase): void {
+  if (!inspectEnabled) return;
+  const cellMeta = node.meta;
+  const writerMeta = writer.meta;
+  if (!cellMeta || !writerMeta || cellMeta.internal || writerMeta.internal)
+    return;
+  for (let link = node.subs; link !== undefined; link = link.nextSub) {
+    if (link.sub === writer) {
+      const key = `${cellMeta.id}:${writerMeta.id}`;
+      if (warnedSelfDeps.has(key)) return;
+      warnedSelfDeps.add(key);
+      console.warn(
+        `[loom] "${writerMeta.label}" writes "${cellMeta.label}" which it also reads — it will re-trigger itself. If unintended, read it untracked: update(cell, fn) or untrack(() => cell()).`,
+      );
+      return;
+    }
+  }
+}
 
 /**
  * Snapshot the reactive graph. With `{ active: true }`, skip state/computed cells that have no

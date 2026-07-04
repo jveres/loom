@@ -18,6 +18,7 @@ import {
   trigger,
   untrack,
   update,
+  watch,
 } from "./loom.js";
 
 // Inspection is opt-in (off by default). Most tests assert on inspect()/channel internal
@@ -178,6 +179,70 @@ describe("loom core", () => {
   it("rejects non-plain field sources", () => {
     expect(() => fields([])).toThrow(TypeError);
     expect(() => fields(new Date())).toThrow(TypeError);
+  });
+
+  it("update() reads untracked — no self-dependency from read-modify-write", () => {
+    const counter = state(0);
+    const trig = state(0);
+    let runs = 0;
+    const stop = effect(() => {
+      trig();
+      runs++;
+      update(counter, (n) => n + 1); // must NOT subscribe this effect to counter
+    });
+    expect(runs).toBe(1);
+    expect(counter()).toBe(1);
+    counter(10); // a write to counter does not re-run the effect
+    expect(runs).toBe(1);
+    trig(1);
+    expect(runs).toBe(2);
+    expect(counter()).toBe(11);
+    stop();
+  });
+
+  it("watch() skips the initial run, dedups, and keeps the callback untracked", () => {
+    const a = state(1);
+    const other = state(0);
+    const seen: Array<[number, number]> = [];
+    const stop = watch(
+      () => Math.abs(a()),
+      (value, previous) => {
+        other(); // read inside the callback must NOT subscribe the watcher
+        seen.push([value, previous]);
+      },
+    );
+    expect(seen).toEqual([]); // initial evaluation is silent
+    a(3);
+    expect(seen).toEqual([[3, 1]]);
+    a(-3); // derived value unchanged -> no callback
+    expect(seen).toEqual([[3, 1]]);
+    other(1); // callback reads are untracked -> no re-run
+    expect(seen).toEqual([[3, 1]]);
+    a(5);
+    expect(seen).toEqual([
+      [3, 1],
+      [5, 3],
+    ]);
+    stop();
+  });
+
+  it("warns once when an effect writes a cell it also reads (inspection on)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const c = state(0, { label: "selfdep.cell" });
+    const stop = effect(
+      () => {
+        const v = c(); // tracked read...
+        if (v < 1) c(v + 1); // ...then a write to the same cell
+      },
+      { label: "selfdep.effect" },
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain("selfdep.effect");
+    expect(warn.mock.calls[0]?.[0]).toContain("selfdep.cell");
+    c(0); // triggers the same write pair again -> warn-once holds
+    expect(warn).toHaveBeenCalledTimes(1);
+    stop();
+    warn.mockRestore();
   });
 
   it("labels inspectable nodes and reports dependencies", () => {

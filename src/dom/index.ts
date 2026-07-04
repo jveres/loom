@@ -429,7 +429,13 @@ export function tap(
   });
 }
 
-function own(node: Node, stop: Stop): void {
+/**
+ * Attach a disposer to a node's Loom lifecycle: it runs when the node is torn down the Loom way —
+ * `remove()`, `dispose()`, or an ancestor slot/list swapping it out. The imperative twin of the
+ * `onunmount` prop, for kit components that create their own effects/listeners for an element
+ * they build. (This is ownership; `effect`'s `target` option is inspector attribution only.)
+ */
+export function own(node: Node, stop: Stop): void {
   const owned = ownedEffects.get(node);
   if (!owned) ownedEffects.set(node, stop);
   else if (Array.isArray(owned)) owned.push(stop);

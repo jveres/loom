@@ -32,7 +32,7 @@ const APPS = [
   },
   {
     name: "full core (export * from loom)",
-    budget: 5650,
+    budget: 5750,
     source: `export * from "loom";`,
   },
   {

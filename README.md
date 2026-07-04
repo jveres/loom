@@ -128,13 +128,28 @@ The core exports these functions:
   `{ stop, pause, resume }`.
 - `untrack(fn)` reads state inside `fn` without subscribing the active effect.
 - `trigger(read)` notifies subscribers after in-place mutation.
-- `update(source, fn)` writes `fn(source())` back to a state cell.
+- `update(source, fn)` writes `fn(source())` back to a state cell. The read is
+  **untracked**: inside an effect, `update(v, n => n + 1)` does not subscribe
+  the effect to `v` — use it instead of `v(v() + 1)`, which does.
 - `mutate(source, fn)` mutates an object value and then triggers subscribers.
+- `watch(read, onChange, options?)` reacts to an explicit source's **changes**:
+  `read` is tracked, `onChange(value, previous)` runs untracked, and it is
+  skipped on the initial evaluation and when the derived value is unchanged.
+  The write-back-binding shape without the `let first = true` boilerplate.
 
 > Writing an immutable value? Call the cell (`count(next)`) or `update` for a
 > functional set. Mutating an object/array in place? `mutate` (mutate + notify in
 > one) — or `trigger` when the mutation already happened elsewhere and you only
 > need to notify.
+>
+> **Self-dependency warning (dev):** with inspection on
+> (`configure({ inspect: true })` + `loom/observe` loaded), loom warns once per
+> pair when an effect writes a cell it also reads — the `v(v() + 1)` pattern
+> that silently re-triggers the effect. `update()`/`untrack()` are the fixes.
+>
+> **Flush timing:** a top-level write flushes effects synchronously before it
+> returns; `batch(fn)` coalesces any number of writes into one flush at the
+> end. Multi-write operations (undo, form resets) belong in `batch`.
 - `poll(sample, ms, options?)` — the **pull** bridge for external data:
   re-samples `sample()` every `ms` ms into a value-deduped read; bindings
   re-run only when the value changed. Returns a callable read with a `stop`:
@@ -507,6 +522,9 @@ The DOM entrypoint exports these functions:
   (default 14); `options.axis` picks the scroll axis (`"y"` default, `"x"`
   for horizontal strips). Returns a disposer that removes the listeners and
   clears the mask. The dev inspector's own scrollers use it.
+- `own(node, stop)` attaches a disposer to a node's Loom lifecycle — the
+  imperative twin of the `onunmount` prop (see
+  [Ownership & disposal](#ownership--disposal)).
 - `tap(node, handler)` binds a robust tap (see below).
 
 These split by where they go. **Child bindings** produce nodes or slot
@@ -589,6 +607,50 @@ absolutely positioned** within `el` (which the module sets to
 `position: relative`); it only sets each row's `transform`, so rows without
 absolute positioning stack in the wrong place.
 
+#### Ownership & disposal
+
+The contract, precisely:
+
+- Effects created by the DOM layer's own bindings — `text`, `attr`/`classed`/
+  `style`, `list`, `each`, `when`, `match`, reactive props — are **owned by
+  their nodes**. `dispose(root)` runs every owned disposer in the **entire
+  subtree** (all descendants, not just `root`), and `remove(root)` disposes
+  then detaches. A keyed row leaving a `list()`/`each()` is removed the same
+  way, so its bindings die with it.
+- A raw `effect()` call inside a component function is **not** node-owned.
+  Tie it to an element with `own(el, stop)` (or the `onunmount` prop), or
+  group it with `scope()` and stop the scope.
+- `effect`'s `{ target }` option is **inspector attribution only** — it names
+  which node an effect renders for the devtools; it does not create ownership.
+
+```ts
+function widget(): HTMLElement {
+  const el = <div class="widget" /> as HTMLElement;
+  const stop = effect(() => syncSomething(el)); // raw effect: not node-owned
+  own(el, stop); // now remove(el) (or removing any ancestor) disposes it
+  return el;
+}
+```
+
+#### Keyed rows with per-row state
+
+Rebuilding a whole list per keystroke is the wholesale-rerender trap. Give
+each row its own cells and key the list — updates then write one cell and
+patch one text node, and reorders move nodes without rebuilding them:
+
+```ts
+interface RowModel { id: number; label: State<string> }
+
+const rows = state<readonly RowModel[]>([]);
+list(tbody, () => rows(), {
+  key: (row) => row.id,
+  render: (row) => h("tr", null, text(() => row.label())),
+});
+
+// update-in-place: one write, one text-node patch — no list churn
+rows()[3]?.label("renamed");
+```
+
 #### Morphing static trees
 
 `morph(from, to, options?)` patches a live DOM subtree to match a freshly
@@ -616,6 +678,7 @@ selects sync per-option so multi-selects survive. `options.skip` marks
 elements the morph must never touch — the hook for enhancer-injected nodes
 (streaming cursors, copy buttons, post-render highlighting): a matched
 element is left exactly as-is, an unmatched one is kept instead of removed.
+A selector string is shorthand: `skip: "[data-chrome]"`.
 
 > **Note:** `morph` is for **static** trees only. It removes and adopts nodes
 > with raw DOM operations, so a subtree containing loom bindings (`text`,

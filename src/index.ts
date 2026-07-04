@@ -43,4 +43,5 @@ export {
   trigger,
   untrack,
   update,
+  watch,
 } from "./loom.js";

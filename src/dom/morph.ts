@@ -30,9 +30,16 @@ export interface MorphOptions {
    * nodes (streaming cursors, copy buttons, post-render highlighting). A
    * matched element returning true is left exactly as-is (no attribute,
    * text, or children sync); an unmatched one is kept instead of removed,
-   * with managed siblings ordered around it.
+   * with managed siblings ordered around it. A string is shorthand for a
+   * selector match: `skip: "[data-chrome]"` ≡ `el => el.matches("[data-chrome]")`.
    */
-  skip?: (el: Element) => boolean;
+  skip?: ((el: Element) => boolean) | string;
+}
+
+function shouldSkip(el: Element, options: MorphOptions): boolean {
+  const skip = options.skip;
+  if (skip === undefined) return false;
+  return typeof skip === "string" ? el.matches(skip) : skip(el);
 }
 
 export function morph(
@@ -40,7 +47,7 @@ export function morph(
   to: Element,
   options: MorphOptions = {},
 ): Element {
-  if (options.skip?.(from)) return from;
+  if (options.skip !== undefined && shouldSkip(from, options)) return from;
   if (from.tagName !== to.tagName) {
     from.replaceWith(to);
     return to;
@@ -220,7 +227,12 @@ function morphChildren(
 
   for (const old of oldNodes) {
     if (used.has(old) || old.parentNode !== from) continue;
-    if (old.nodeType === 1 && options.skip?.(old as Element)) continue;
+    if (
+      old.nodeType === 1 &&
+      options.skip !== undefined &&
+      shouldSkip(old as Element, options)
+    )
+      continue;
     from.removeChild(old);
   }
 
