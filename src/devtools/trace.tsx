@@ -11,6 +11,7 @@ import { scrollFade, tap } from "loom/dom";
 import { type VirtualList, virtualList } from "loom/dom/virtual-list";
 import {
   events,
+  inspect,
   type ReadSample,
   sampleOf,
   type WriteSample,
@@ -18,7 +19,6 @@ import {
 import { formatValue, valueClass } from "./format.js";
 import { clearGraphHighlight, highlightCell } from "./graph.js";
 import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
-import { labelOf } from "./mirror.js";
 
 const TRACE_ROW_H = 22; // uniform row height (must match the .li-tr CSS)
 const VALUE_MAX = 200; // cap a recorded value's text so a giant string can't bloat the DOM/tooltip
@@ -260,6 +260,7 @@ export function renderTrace(): void {
     fresh.sort(
       (a, b) => sampleOf<ReadSample>(a.s).t - sampleOf<ReadSample>(b.s).t,
     );
+  labelsFresh = false; // let this drain re-snapshot the label map once if it meets a new node
   const prevTop = (traceFilter ? filterLog : traceLog)[0]?.seq ?? -1;
   // Build the new rows oldest→newest (seq must rise with recency), then prepend them in one splice —
   // a per-row unshift would re-shift the whole log for every event (O(events × window)).
@@ -303,6 +304,8 @@ export function teardownTrace(): void {
   liveDot = null;
   traceLog = [];
   filterLog = [];
+  labels.clear();
+  labelsFresh = false;
   lastTopSeq = -1;
   tracePaused = false;
   traceActive = false;
@@ -374,6 +377,25 @@ function makeRow(
     srcText,
     full: `${name}: ${prevText} → ${nextText} ${srcText || "(external)"}`,
   };
+}
+
+// id → label, so an event shows its cell/source name. Labels are immutable per node, so the map
+// persists across drains and is re-snapshotted — a full inspect() walk — at most once per drain,
+// and only when an event references an id it hasn't seen (a node created since the last snapshot).
+// A retained entry keeps naming a node after it's disposed; a never-seen id falls back to `#id`.
+const labels = new Map<number, string>();
+let labelsFresh = false; // has the current drain already re-snapshotted?
+
+function labelOf(id: number): string {
+  const hit = labels.get(id);
+  if (hit !== undefined) return hit;
+  if (!labelsFresh) {
+    labelsFresh = true;
+    for (const n of inspect().nodes) labels.set(n.id, n.label);
+    const found = labels.get(id);
+    if (found !== undefined) return found;
+  }
+  return `#${id}`;
 }
 
 function trRender(item: TraceRow, reuse: HTMLElement | null): HTMLElement {

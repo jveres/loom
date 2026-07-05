@@ -26,7 +26,6 @@ import {
   loomLogo,
   svgMarkup,
 } from "./icons.js";
-import { startMirror, stopMirror } from "./mirror.js";
 import { pauseStats, resumeStats, stopStats, wireStats } from "./stats.js";
 import {
   buildTracePane,
@@ -301,7 +300,6 @@ export function mountInspector(target: Element = document.body): void {
   // turn it on. Only nodes created from here on carry metadata — enable earlier (configure({ inspect:
   // true }) at startup) if you want pre-existing nodes in the census too.
   configure({ inspect: true });
-  startMirror(); // the shared node-set mirror behind graph rows, trace labels, hover highlights
 
   if (!document.getElementById(`${PANEL_ID}-css`)) {
     const style = document.createElement("style");
@@ -590,7 +588,6 @@ export function mountInspector(target: Element = document.body): void {
 
 /** Remove the panel and stop all observation/timers. Safe to call when not mounted. */
 export function unmountInspector(): void {
-  stopMirror();
   stopStats();
   for (const dispose of scrollFades) dispose();
   scrollFades.length = 0;
