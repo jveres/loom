@@ -962,7 +962,19 @@ function sourceOper<T>(this: SourceNode<T>): T {
   if (sub !== undefined) {
     const first = this.subs === undefined;
     trackRead(this, sub);
-    if (first && !this.active) connectSource(this);
+    if (first && !this.active) {
+      connectSource(this);
+      // A connect() that set() a value did so in the middle of this very read —
+      // the notification it propagates targets the reader currently running,
+      // which swallows it in its run-end flag reset. Apply the update here so
+      // the connecting reader returns the fresh value (a connect that resyncs
+      // current state on attach would otherwise stay stale until the next
+      // external set()).
+      if (this.flags & Dirty && updateState(this)) {
+        const subs = this.subs;
+        if (subs !== undefined) shallowPropagate(subs);
+      }
+    }
   }
   return this.currentValue;
 }

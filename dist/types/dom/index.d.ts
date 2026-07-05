@@ -87,5 +87,7 @@ export declare function own(node: Node, stop: Stop): void;
  * `internal` (tooling built on loom — e.g. the inspector — binds without self-reporting).
  */
 export declare function bindAttr(node: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
+export { attrOf } from "./attr-of.js";
+export { connected } from "./connected.js";
 export { type MorphOptions, morph } from "./morph.js";
 export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";

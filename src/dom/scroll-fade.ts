@@ -33,9 +33,13 @@ export function scrollFade(
     if (nextStart === start && nextEnd === end) return;
     start = nextStart;
     end = nextEnd;
+    // No-fade state is an OPAQUE mask, not no mask: clearing mask-image moves
+    // the element off the masked raster path, and the compositing flip when a
+    // fade first appears shows up as a one-frame flash (found by seam, which
+    // worked around it with a permanent base mask in CSS).
     const mask =
       start === 0 && end === 0
-        ? ""
+        ? "linear-gradient(#000 0 0)"
         : `linear-gradient(${direction}, transparent 0, #000 ${start}px, #000 calc(100% - ${end}px), transparent 100%)`;
     el.style.maskImage = mask;
     // Safari still needs the prefixed property.

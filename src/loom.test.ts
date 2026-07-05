@@ -112,6 +112,46 @@ describe("loom core", () => {
     stop();
   });
 
+  it("nested effects die on the parent's rerun; untrack() escapes ownership", () => {
+    const trigger = state(0);
+    const cell = state(0);
+    let ownedRuns = 0;
+    let escapedRuns = 0;
+    let built = false;
+    let escapedStop = (): void => {};
+
+    const stop = effect(() => {
+      trigger();
+      if (!built) {
+        built = true;
+        effect(() => {
+          cell();
+          ownedRuns++;
+        });
+        escapedStop = untrack(() =>
+          effect(() => {
+            cell();
+            escapedRuns++;
+          }),
+        );
+      }
+    });
+
+    cell(1); // both children alive
+    expect(ownedRuns).toBe(2);
+    expect(escapedRuns).toBe(2);
+
+    trigger(1); // parent reruns: the owned child is disposed with it
+    cell(2);
+    expect(ownedRuns).toBe(2); // dead — did not see the write
+    expect(escapedRuns).toBe(3); // escaped construction survives reruns
+
+    stop();
+    cell(3);
+    expect(escapedRuns).toBe(4); // not owned by the parent at all
+    escapedStop();
+  });
+
   it("supports manual triggers for in-place mutation", () => {
     const values = state<number[]>([]);
     const length = computed(() => values().length);
@@ -770,6 +810,32 @@ describe("loom source", () => {
     stop();
     expect(disconnects).toBe(1);
     expect(push).toBeUndefined();
+  });
+
+  it("a connect() that set()s current state resyncs the connecting reader", () => {
+    // The bridge idiom: external state changes while nothing observes; connect
+    // pushes the current value on attach. The set() lands mid-read of the
+    // subscribing effect, whose own-run notification is swallowed — the read
+    // must still return the fresh value (regression: it stayed stale forever).
+    let real = 0;
+    const reading = source<number>((set) => {
+      set(real);
+      return () => {};
+    }, real);
+
+    let seen = -1;
+    const stop1 = effect(() => {
+      seen = reading();
+    });
+    expect(seen).toBe(0);
+    stop1();
+
+    real = 7; // moves while unobserved
+    const stop2 = effect(() => {
+      seen = reading();
+    });
+    expect(seen).toBe(7); // resynced within the connecting read
+    stop2();
   });
 
   it("does not wedge a source whose connect() throws; retries on the next observe", () => {

@@ -521,10 +521,33 @@ The DOM entrypoint exports these functions:
   `mask-image` on the element). `options.size` sets the fade length in px
   (default 14); `options.axis` picks the scroll axis (`"y"` default, `"x"`
   for horizontal strips). Returns a disposer that removes the listeners and
-  clears the mask. The dev inspector's own scrollers use it.
+  clears the mask. While no edge fades, the mask is an opaque gradient rather
+  than none — clearing it would flip the element off the masked raster path
+  and the next fade-in flashes for a frame. The dev inspector's own scrollers
+  use it.
 - `own(node, stop)` attaches a disposer to a node's Loom lifecycle — the
   imperative twin of the `onunmount` prop (see
   [Ownership & disposal](#ownership--disposal)).
+- `connected(node)` returns a `Read<boolean>` that is true while the node is
+  in the document — "on mount" as a signal, not a callback vocabulary:
+  `own(el, watch(connected(el), (on) => on && measure()))`, and it composes
+  with any other cell in one effect. Backed by one shared document-level
+  `MutationObserver` that exists only while at least one connection signal is
+  observed. **Cost while live:** the observer records every childList
+  mutation in the document — measured on the comparative bench: ~3.5% on
+  `create-10k` (bulk inserts), ~0.3 ms per 1k-node `clear`, nothing on
+  update/swap ops; unused, it costs zero. (A zero-cost custom-element
+  sentinel variant was measured and rejected: it plants a hidden child in
+  the watched element, breaking `:empty`, serialization, and `morph()`.)
+  Moves confined to shadow roots are invisible to it.
+- `attrOf(el, name)` returns a `Read<string | null>` of an attribute's current
+  value — the read-side complement of the `attr()` binding, for reacting to
+  `hidden`/`aria-*`/`data-*` state you don't own:
+  `watch(() => connected(el)() && attrOf(el, "hidden")() === null, (visible) => …)`.
+  One shared observer serves the whole app — each watched element carries an
+  `attributeFilter` of exactly its subscribed names, and the observation set
+  is rebuilt only when a subscription changes, never per mutation.
+  Subscriber-counted like every source: nothing observed, nothing exists.
 - `tap(node, handler)` binds a robust tap (see below).
 
 These split by where they go. **Child bindings** produce nodes or slot
@@ -630,6 +653,23 @@ function widget(): HTMLElement {
   own(el, stop); // now remove(el) (or removing any ancestor) disposes it
   return el;
 }
+```
+
+One more ownership rule, easy to hit without noticing: an effect created
+**while another effect is running** links to it as a child and is disposed on
+the parent's next rerun. That's usually right — a rerendering region cleans
+up its own bindings. But when a host effect *builds* UI that should outlive
+its reruns, wrap the construction in `untrack()`: clearing the active
+subscriber is also the **ownership escape**, not just a read guard:
+
+```ts
+effect(() => {
+  frame(current()); // tracked: this effect reruns per navigation
+  // The toolbar is panel-owned, not frame-owned — built tracked, its internal
+  // effects would be disposed on this effect's next rerun (its selected mark
+  // silently stops updating). untrack() detaches the construction.
+  toolbar ??= untrack(() => buildToolbar());
+});
 ```
 
 #### Keyed rows with per-row state

@@ -60,14 +60,16 @@ describe("scrollFade", () => {
     dispose();
   });
 
-  it("clears the mask when nothing scrolls and on dispose", () => {
+  it("keeps an opaque base mask when nothing scrolls, clears on dispose", () => {
     const el = scrollable({
       scrollHeight: 90,
       clientHeight: 100,
       scrollTop: 0,
     });
     const dispose = scrollFade(el);
-    expect(el.style.maskImage).toBe("");
+    // Opaque, not "": clearing would flip the element off the masked raster
+    // path and the next fade-in flashes for a frame.
+    expect(el.style.maskImage).toBe("linear-gradient(#000 0 0)");
 
     const tall = scrollable({
       scrollHeight: 300,
