@@ -36,6 +36,17 @@ const APPS = [
     source: `export * from "loom";`,
   },
   {
+    // Gates the README claim that loom/async adds ~0.3 kB gzip over the minimal core.
+    name: "minimal + async (resource)",
+    budget: 3750,
+    source: `
+      import { effect } from "loom";
+      import { resource } from "loom/async";
+      const r = resource(async (_prev, signal) => (await fetch("/x", { signal })).json());
+      effect(() => console.log(r(), r.loading(), r.error()));
+    `,
+  },
+  {
     name: "minimal dom (h+text)",
     budget: 5100,
     source: `
@@ -62,8 +73,9 @@ try {
       // Mirrors loom.aliases.ts (TypeScript — not importable from this Node script without a
       // loader); keep in sync when an entrypoint file moves.
       alias: {
-        loom: join(root, "src/index.ts"),
+        "loom/async": join(root, "src/async/index.ts"),
         "loom/dom": join(root, "src/dom/index.ts"),
+        loom: join(root, "src/index.ts"),
       },
     });
     const gz = gzipSync(out.outputFiles[0].contents, { level: 9 }).length;

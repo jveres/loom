@@ -15,7 +15,7 @@
 // survivors) — an O(watched elements) walk paid only when a subscription changes, never per
 // mutation. Everything is subscriber-counted through source(): with nothing observed the
 // observer is disconnected and this module costs zero.
-import { type Read, source } from "loom";
+import { type Read, source } from "../loom.js";
 
 // Pooled signals: one per (element, attribute). WeakMap — forgotten elements drop their signals.
 const signals = new WeakMap<Element, Map<string, Read<string | null>>>();

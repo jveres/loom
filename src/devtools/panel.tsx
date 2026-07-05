@@ -592,8 +592,10 @@ export function unmountInspector(): void {
   for (const dispose of scrollFades) dispose();
   scrollFades.length = 0;
   disposeBindings();
-  // inspectorScope owns the meters, heartbeat, the deferred render effect and every binding; stopping
-  // it is the authoritative teardown, so a resource added to the scope but not tracked above can't leak.
+  // inspectorScope owns the meters, heartbeat, the deferred render effect and every binding created
+  // inside wireStats; stopping it is the authoritative teardown for those, so a resource added to
+  // the scope but not tracked above can't leak. (Bindings made after the scope returned — e.g. the
+  // tab switcher — are covered by disposeBindings() above.)
   inspectorScope?.stop();
   inspectorScope = null;
   if (closeMenuOnOutside)

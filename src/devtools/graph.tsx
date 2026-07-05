@@ -2,8 +2,9 @@
 // only the on-screen rows are in the DOM, built lazily for the visible window (see gListSource).
 // renderGraph() rebuilds the group structure on the heartbeat; rows update value + flash on change
 // and outline their DOM node(s) on hover. fields() cells fold under a collapsible header; standalone
-// cells at the root. Owns its module state; the panel drives it through five seams (buildGraphPane /
-// renderGraphThrottled / showGraph / clearGraphHighlight / teardownGraph).
+// cells at the root. Owns its module state; driven from outside through seams: the panel calls
+// buildGraphPane / showGraph / revealCell / clearGraphHighlight / teardownGraph, the stats
+// heartbeat calls renderGraphThrottled, and the Trace tab's row hover calls highlightCell.
 import type { State } from "loom";
 import {
   type ListSource,

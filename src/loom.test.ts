@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { inspect, inspectResources } from "./core/inspect.js";
-import { channel, events, type Meter, meter } from "./core/meter.js";
+import {
+  channel,
+  events,
+  type FlushSample,
+  type Meter,
+  meter,
+  sampleOf,
+} from "./core/meter.js";
 import {
   batch,
   computed,
@@ -407,9 +414,9 @@ describe("loom core", () => {
     expect(m.read()["loom:flush"]?.count).toBe(0);
 
     app(1); // app flush -> batchSize 1
-    const last = m.read()["loom:flush"]?.samples.at(-1) as
-      | { batchSize: number; durationMs: number }
-      | undefined;
+    // sampleOf is the sanctioned narrowing for ring records (the undefined of
+    // a possibly-empty ring carries through).
+    const last = sampleOf<FlushSample>(m.read()["loom:flush"]?.samples.at(-1));
     expect(last?.batchSize).toBe(1);
     expect(typeof last?.durationMs).toBe("number");
 

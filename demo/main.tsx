@@ -225,7 +225,11 @@ effect(() => {
   const items = cards();
   const id = selectedId();
   if (!items.some((card) => card.id === id)) {
-    selectedId(items[0]?.id ?? 0);
+    // Intentional clamp: the tracked selectedId() read above re-arms the guard
+    // (inspector edits can set any id), so this write is self-retriggering by
+    // design and settles in one round. Untracked, so the dev self-dependency
+    // warning knows it's deliberate.
+    untrack(() => selectedId(items[0]?.id ?? 0));
   }
 });
 
@@ -537,7 +541,7 @@ function editRandom(): void {
   const model = card.model;
   const title = titles[Math.floor(random() * titles.length)] as string;
   model.title(title);
-  model.tone(((model.tone() + 1) % 5) as Tone);
+  update(model.tone, (tone) => ((tone + 1) % 5) as Tone);
 }
 
 function insertCard(): void {

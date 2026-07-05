@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { state } from "../loom.js";
 import {
   attr,
+  bindAttr,
   classed,
   dispose,
   each,
@@ -703,6 +704,28 @@ describe("loom DOM onunmount", () => {
     open(false); // when removes the branch subtree
     expect(cleanup).toHaveBeenCalledTimes(1);
     void root;
+  });
+
+  it("bindAttr binds an attribute imperatively with attr() semantics", () => {
+    const mode = state<string | boolean | null>("compact");
+    const el = h("div");
+    bindAttr(el, "data-mode", () => mode());
+    expect(el.getAttribute("data-mode")).toBe("compact");
+
+    mode("full");
+    expect(el.getAttribute("data-mode")).toBe("full");
+
+    mode(true); // boolean true -> presence attribute
+    expect(el.getAttribute("data-mode")).toBe("");
+    mode(null); // null/false -> removed
+    expect(el.hasAttribute("data-mode")).toBe(false);
+
+    // Node-owned like every DOM binding: remove() stops it.
+    mode("back");
+    expect(el.getAttribute("data-mode")).toBe("back");
+    remove(el);
+    mode("after");
+    expect(el.getAttribute("data-mode")).toBe("back");
   });
 
   it("is a lifecycle hook, not a DOM event (no listener added)", () => {

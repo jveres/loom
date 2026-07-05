@@ -115,7 +115,8 @@ The core exports these functions:
 - `state(initial, options?)` creates a callable state cell.
 - `computed(getter, options?)` creates a cached derived read.
 - `effect(fn, options?)` runs `fn` immediately and again when its dependencies
-  change. Pass `{ target }` to associate the effect with the DOM node it writes
+  change. `fn` may return a cleanup that runs before each re-run and on stop
+  (that overload's function type is exported as `CleanupEffectFn`). Pass `{ target }` to associate the effect with the DOM node it writes
   (the DOM layer does this for its bindings so the inspector can highlight what a
   cell drives), or `{ defer: true, maxStale? }` to run re-runs off the critical
   path (see [Deferred effects](#deferred-effects)).
@@ -198,9 +199,10 @@ The core exports these types:
 - `NodeInfo` is the lean node shape (`id` / `kind` / `label`) the
   `configure({ onError })` boundary receives to name the offending node. The full
   `InspectNode`, `InspectSnapshot`, `ResourceCounts` (the `inspect()` /
-  `inspectResources()` result shapes), and `NodeKind` (the
-  `"state" | "computed" | "effect"` union) come with `loom/observe` — where
-  `InspectNode extends NodeInfo`.
+  `inspectResources()` result shapes) come with `loom/observe` — where
+  `InspectNode extends NodeInfo`. `NodeKind` (the
+  `"state" | "computed" | "effect"` union) is exported from both `loom` and
+  `loom/observe`.
 - `Channel` is a named channel; `Meter` drains channels;
   `Frame` is a per-channel `{ count, dropped, samples }`; `MeterAggregation` is a
   meter's view (`"count" | "samples"`); `ChannelOptions` configures
@@ -1004,7 +1006,16 @@ setInterval(() => {
 // Your own channel — count-only, or a bounded detail ring read via the "samples" view:
 const paint = channel("app:paint", { capacity: 256, fields: ["ms"] });
 paint.emit(16.7); // no-op and zero-alloc unless someone is metering it
+// paint.active is true only while a meter is attached — gate expensive
+// argument prep behind it when the values themselves are costly to build.
 ```
+
+A `"samples"` view yields each channel's ring as untyped records;
+`sampleOf<T>(record)` is the one sanctioned narrowing to a known payload shape
+— `ReadSample` / `WriteSample` / `FlushSample` for the built-ins (above:
+`sampleOf<FlushSample>(flushes.read()["loom:flush"].samples.at(-1))` types the
+record as `{ batchSize, durationMs }`, carrying the `undefined` through). The
+inspector's Trace tab is built on exactly this.
 
 The built-in `events` record **non-internal** nodes only, so the idle baseline is
 zero. The rest of `loom/observe` snapshots the reactive graph:
@@ -1027,8 +1038,6 @@ surface (`inspect`, `inspectResources`, `meter`/`events`, `scope`,
 `poll`, `source`). Mount it to get a live, draggable, resizable overlay; it is
 purely a consumer of the runtime, so the same data is available to any tooling
 you write yourself.
-
-The panel has three tabs:
 
 <p align="center">
   <picture>
@@ -1084,8 +1093,9 @@ mountInspector(); // or wire it to a hotkey via toggleInspector()
 The panel has three tabs:
 
 - **Info** — the `inspectResources()` census (states, computeds, effects, views,
-  sources, scopes, channels, `unread`) plus a live rendering-pipeline sparkline
-  (writes in vs DOM updates out) driven by a `meter` over the built-in `events`.
+  sources, scopes, channels, `unread`) plus live pipeline rates and page health
+  (FPS, frame-time histogram, write/effect/create/dispose rates) driven by a
+  `meter` over the built-in `events`.
 - **Graph** — the reactive graph as a virtualized tree of state/computed cells,
   grouped by `fields()` group. A filled dot means the cell drives a
   DOM node downstream; a hollow dot means it doesn't. Hovering a cell (or a group
@@ -1134,8 +1144,9 @@ bindings against a hand-written vanilla baseline on a js-framework-benchmark
 style table workload. `/bench/compare/` drives Loom, ArrowJS, Shablon, and the
 vanilla baseline through one shared command surface (create/update/swap/clear
 1k rows, create 10k); as of July 2026 Loom leads or ties every op among the
-frameworks and stays within ~3–8% of the vanilla floor — the full table and
-methodology live in [docs/architecture-v2.md](docs/architecture-v2.md).
+frameworks and stays within ~3–8% of the vanilla floor — the table above is
+generated from it. `/bench/morph/` benches `morph()` against Idiomorph on a
+streaming-markdown workload (full-document and per-block-skip modes).
 
 ## Design notes
 
@@ -1147,8 +1158,9 @@ observability surface.
 
 The v2 architecture — the vendoring, the tree-shakable core split, the
 comparative benchmark harness, and the bench-gated experiments (including the
-ones the gates rejected) — is documented with its measurements in
-[docs/architecture-v2.md](docs/architecture-v2.md).
+ones the gates rejected) — is recorded in the commit history; every
+performance-relevant decision carries its measurements in the commit that
+made it.
 
 The built-in event channels are gated by a per-channel meter count, so
 reads, writes, computed updates, and effect runs stay allocation-free and pay

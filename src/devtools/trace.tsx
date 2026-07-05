@@ -5,7 +5,8 @@
 // it, clear empties it, the filter narrows by cell name, hovering a row outlines the DOM node(s) the
 // cell drives, and tapping a name jumps to it in the Graph. Driven off the panel heartbeat (in the
 // deferred lane), it drains the selected ring(s) into a capped, newest-first log rendered via the vlist.
-// Panel seams: buildTracePane / renderTrace / showTrace / teardownTrace.
+// Seams: the panel calls buildTracePane / showTrace / setTraceActive / setTraceLiveDot /
+// setTraceLocate / setTraceWindow / teardownTrace; the stats heartbeat calls renderTrace.
 import { type Meter, meter } from "loom";
 import { scrollFade, tap } from "loom/dom";
 import { type VirtualList, virtualList } from "loom/dom/virtual-list";

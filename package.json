@@ -24,7 +24,7 @@
     "format": "biome format --write .",
     "bench": "vitest bench --run",
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build --config vite.loom.config.ts && tsc -p tsconfig.build.json",
+    "build": "vite build --config vite.loom.config.ts && rm -rf dist/types && tsc -p tsconfig.build.json",
     "build:demo": "vite build",
     "size": "node scripts/size.mjs"
   },

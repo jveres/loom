@@ -1,7 +1,7 @@
 // The always-present half of the channel layer: the node shape, the registry, and the built-in
 // runtime channels the core's hot-path gates reference. Everything else — channel()/meter()/events,
-// capacity validation, the ring writer — lives in ./meter.ts and is wired in through `recordSample`
-// below, so apps that never observe anything bundle none of it.
+// capacity validation, the ring writer — lives in ./meter.ts and is wired in through the
+// `sampler` holder below, so apps that never observe anything bundle none of it.
 /* ===== Channels & meters: generic, gated, overwriting ring buffers drained by a pull-based meter.
    A channel is a process-global, name-addressed singleton (the producer/consumer rendezvous). It
    stays a no-op — and allocation-free — until a meter attaches. Counts are exact; detail is a

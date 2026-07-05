@@ -7,7 +7,7 @@ type MovableParent = Node & {
 // the platform has `moveBefore`, the move preserves state that a remove+insert resets — iframe
 // documents, focus, selection, playing media, running CSS animations. New or reparented nodes (and
 // older engines) take the classic insertBefore path.
-export function placeBefore(parent: Node, node: Node, ref: Node | null): void {
+function placeBefore(parent: Node, node: Node, ref: Node | null): void {
   const movable = parent as MovableParent;
   if (movable.moveBefore !== undefined && node.parentNode === parent) {
     movable.moveBefore(node, ref);
@@ -16,12 +16,12 @@ export function placeBefore(parent: Node, node: Node, ref: Node | null): void {
   }
 }
 
-export // Position `ordered` in sequence ending before `end` (null = the end of `parent`), moving as few
+// Position `ordered` in sequence ending before `end` (null = the end of `parent`), moving as few
 // nodes as possible: members on the longest increasing subsequence of current DOM positions stay
 // put; only the rest move. The naive cursor walk this replaces degenerated on a single far swap —
 // moving ~N nodes where two suffice (measured 4.6 ms vs ~1 ms on the 1k-row swap bench). New nodes
 // (not yet children) are inserted; every move is state-preserving via placeBefore.
-function positionOrdered(
+export function positionOrdered(
   parent: Node,
   ordered: readonly Node[],
   end: Node | null,
