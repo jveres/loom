@@ -10,7 +10,7 @@ import {
   type VirtualList,
   virtualList,
 } from "loom/dom/virtual-list";
-import { type InspectNode, inspect } from "loom/observe";
+import type { InspectNode } from "loom/observe";
 import { formatValue, valueClass } from "./format.js";
 import {
   ICON_BOUND,
@@ -20,6 +20,7 @@ import {
   ICON_UNBOUND,
   icon,
 } from "./icons.js";
+import { mirrorSync } from "./mirror.js";
 
 const GRAPH_RENDER_MS = 300; // throttle the (heavy) graph reconcile below the 120ms heartbeat
 const GRAPH_ROW_H = 22; // uniform graph row/header height (must match the .li-grow/.li-gns-h CSS)
@@ -38,8 +39,10 @@ type GraphItem =
       readonly child: boolean;
     };
 let graphVList: VirtualList<GraphItem> | null = null;
-let graphById = new Map<number, InspectNode>();
-let graphByIdAt = 0; // performance.now() of the snapshot behind graphById (see highlightCell)
+// Which mirror revisions this tab has rendered: skip everything when the world hasn't moved
+// (gLastRevision) and skip the partition+sort when only values moved (gLastSetRevision).
+let gLastRevision = -1;
+let gLastSetRevision = -1;
 let graphGroupsData: Array<{
   gid: number;
   label: string;
@@ -176,15 +179,16 @@ function gReframe(id: number, row: HTMLElement): void {
 // (attr/class/style/list) or a Text node (text binding); both count, so a cell that only feeds a
 // text readout is still "bound" (editing it visibly changes the UI).
 function gTargetsFor(id: number): Node[] {
+  const nodes = mirrorSync().nodes;
   const out: Node[] = [];
   const seen = new Set<number>([id]);
-  const start = graphById.get(id);
+  const start = nodes.get(id);
   const queue = start ? [...start.subs] : [];
   while (queue.length > 0) {
     const sid = queue.shift();
     if (sid === undefined || seen.has(sid)) continue;
     seen.add(sid);
-    const node = graphById.get(sid);
+    const node = nodes.get(sid);
     if (!node) continue;
     if (node.kind === "effect") {
       const t = node.target;
@@ -197,7 +201,7 @@ function gTargetsFor(id: number): Node[] {
 function gGroupTargets(gid: number): Node[] {
   const out: Node[] = [];
   const seen = new Set<Node>();
-  for (const n of graphById.values()) {
+  for (const n of mirrorSync().nodes.values()) {
     if (n.group !== gid) continue;
     for (const t of gTargetsFor(n.id))
       if (!seen.has(t)) {
@@ -232,15 +236,9 @@ function gPaint(targets: Node[], on: boolean): void {
   }
 }
 // Outline the DOM node(s) a given cell drives — for callers outside the graph (the Trace tab).
-// The id→node map may be stale (the graph tab may not have rendered), so re-snapshot it — but at
-// most at the graph's own refresh cadence: sweeping the pointer down the trace list would otherwise
-// rebuild the whole graph snapshot once per row crossed. clearGraphHighlight() removes the overlay.
+// Freshness comes from the shared mirror (gTargetsFor pulls it): sweeping the pointer down the
+// trace list costs a meter read per row, not a snapshot. clearGraphHighlight() removes the overlay.
 export function highlightCell(id: number): void {
-  const t = performance.now();
-  if (t - graphByIdAt >= GRAPH_RENDER_MS) {
-    graphById = new Map(inspect({ active: true }).nodes.map((n) => [n.id, n]));
-    graphByIdAt = t;
-  }
   gPaint(gTargetsFor(id), true);
 }
 function gFlash(row: HTMLElement): void {
@@ -418,29 +416,40 @@ function gListSource(): ListSource<GraphItem> {
 
 function renderGraph(): void {
   if (!graphVList) return;
-  // active:true drops subscriber-less cells before they're even built — excluding the ghost cells
-  // of removed objects (alive until GC) that would otherwise balloon the tree under churn.
-  const all = inspect({ active: true }).nodes;
-  graphById = new Map(all.map((n) => [n.id, n]));
-  graphByIdAt = performance.now();
+  const sync = mirrorSync();
+  // The world hasn't moved since the last render: two meter counts are the whole cost.
+  if (!gGraphJustShown && sync.revision === gLastRevision) return;
+  const setChanged = sync.setRevision !== gLastSetRevision;
+  gLastRevision = sync.revision;
+  gLastSetRevision = sync.setRevision;
 
-  // The tree holds state + computed cells only; views (effects) are reached by hover, not listed.
-  const groups = new Map<number, InspectNode[]>();
-  const singles: InspectNode[] = [];
-  for (const n of all) {
-    if (n.internal || n.kind === "effect") continue;
-    if (n.group !== undefined) {
-      const arr = groups.get(n.group);
-      if (arr) arr.push(n);
-      else groups.set(n.group, [n]);
-    } else singles.push(n);
+  if (setChanged) {
+    // Nodes were created/disposed: rebuild the group structure. The tree holds active state +
+    // computed cells only (subscriber-less cells and ghosts are dropped, matching the old
+    // inspect({ active: true }) filter); views (effects) are reached by hover, not listed.
+    const groups = new Map<number, InspectNode[]>();
+    const singles: InspectNode[] = [];
+    for (const n of sync.nodes.values()) {
+      if (n.internal || n.kind === "effect" || n.subs.length === 0) continue;
+      if (n.group !== undefined) {
+        const arr = groups.get(n.group);
+        if (arr) arr.push(n);
+        else groups.set(n.group, [n]);
+      } else singles.push(n);
+    }
+    graphGroupsData = [];
+    for (const [gid, cells] of groups) {
+      cells.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
+      graphGroupsData.push({ gid, label: gGroupLabel(gid, cells), cells });
+    }
+    graphSingles = singles;
+  } else {
+    // Same node set, fresh values: swap in the new snapshot objects, keeping structure and order.
+    for (const g of graphGroupsData) {
+      g.cells = g.cells.map((n) => sync.nodes.get(n.id) ?? n);
+    }
+    graphSingles = graphSingles.map((n) => sync.nodes.get(n.id) ?? n);
   }
-  graphGroupsData = [];
-  for (const [gid, cells] of groups) {
-    cells.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
-    graphGroupsData.push({ gid, label: gGroupLabel(gid, cells), cells });
-  }
-  graphSingles = singles;
   // First render after the tab was re-shown: resync values without flashing (they changed unseen).
   gSuppressFlash = gGraphJustShown;
   graphVList.setItems(gListSource());
@@ -515,6 +524,6 @@ export function teardownGraph(): void {
   graphGroupsData = [];
   graphSingles = [];
   graphCollapsed.clear();
-  graphById = new Map();
-  graphByIdAt = 0;
+  gLastRevision = -1;
+  gLastSetRevision = -1;
 }
