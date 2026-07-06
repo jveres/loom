@@ -530,6 +530,30 @@ The DOM entrypoint exports these functions:
 - `onunmount(node, stop)` attaches a disposer to a node's Loom lifecycle —
   the same thing as the `onunmount` JSX prop, callable (see
   [Ownership & disposal](#ownership--disposal)).
+- `bind(el, fn, options?)` — reactive DOM state that dies with this node:
+  `effect(fn)` target-attributed to `el` and disposed with it. The one-call
+  form of `onunmount(el, effect(fn, { target: el }))`, which is the dominant
+  idiom of kit code. Returns the stop for early manual disposal.
+- `onmount(el, fn)` runs `fn(el)` **once**, on a microtask after the task
+  that inserted the element — inserted and measurable, not yet painted, so
+  measure-then-classify work causes no flash. Insert in the same synchronous
+  task and no observer is ever created; a late insertion is caught by a
+  transient shared observer that lives only until the element connects.
+  Import-only, deliberately not a JSX prop — prop wiring would put its
+  machinery in every `h()` bundle. Returns a cancel. Need ongoing
+  connectivity instead of a one-shot? That's `connected()`.
+- `observeSize(el, cb)` — sized observation with the lifetime treatment
+  events get: `cb(entry)` runs on ResizeObserver's clock (including the
+  initial delivery on attach) and detaches automatically when the node is
+  torn down — the forgotten `ro.disconnect()` leak is gone by construction.
+  One shared observer serves the whole app. Returns a stop for early detach.
+- `persisted(key, initial, options?)` — a `State<T>` backed by
+  `localStorage`: read-validate once at creation, write-through on set. It is
+  a plain state cell (`update`/`watch`/bindings all compose); `options` add
+  `serialize`/`parse` (default JSON) and `validate` — the choke point that
+  drops a corrupt or out-of-range stored value instead of leaking it into
+  the app. Absent or throwing storage degrades to an unpersisted cell. The
+  inspector's own panel chrome (theme, position, size) sits on it.
 - `connected(node)` returns a `Read<boolean>` that is true while the node is
   in the document — "on mount" as a signal, not a callback vocabulary:
   `onunmount(el, watch(connected(el), (on) => on && measure()))`, and it
@@ -675,6 +699,26 @@ effect(() => {
   toolbar ??= untrack(() => buildToolbar());
 });
 ```
+
+#### Derived writable (recipe)
+
+UI vocabulary often maps onto a domain cell — a picker shows `"All cards"`
+while the domain stores `type: null`. Loom's callable-cell convention makes
+the two-way link a three-line function, so there is no `link()` API:
+
+```ts
+// Reads map domain -> label; writes map label -> domain.
+const typeLabel = (next?: string): string =>
+  next === undefined
+    ? labelFor(type()) // tracked read: re-runs bindings when type changes
+    : (type(domainFor(next)), next);
+
+// It now behaves like a cell wherever a Read/State is expected:
+h("select", { value: typeLabel, onchange: (e) => typeLabel(e.target.value) });
+```
+
+The wrapper is just a function — it subscribes through the cells it reads, so
+bindings, `computed`, and `watch` all compose with it unchanged.
 
 #### Keyed rows with per-row state
 

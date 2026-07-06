@@ -1,4 +1,4 @@
-import { type EffectOptions, type Read, type State, type Stop } from "../loom.js";
+import { type CleanupEffectFn, type EffectFn, type EffectOptions, type Read, type State, type Stop } from "../loom.js";
 export type Child = Node | Read<unknown> | DynamicChild | string | number | boolean | null | undefined | readonly Child[];
 declare const BINDING: unique symbol;
 export type AttrBinding = {
@@ -81,6 +81,15 @@ export declare function tap(node: Element, handler: (event: PointerEvent) => voi
  */
 export declare function onunmount(node: Node, stop: Stop): void;
 /**
+ * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
+ * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
+ * leaving). The one-call form of `onunmount(el, effect(fn, { target: el }))` — the dominant idiom
+ * of kit code. Returns the stop for rare early manual disposal; options merge over the target
+ * default, so `{ target: other }` can re-attribute.
+ */
+export declare function bind(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
+export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
+/**
  * Bind a reactive attribute on an existing element: `read()` re-runs as its dependencies change,
  * and the attribute updates only when the resulting value actually differs (nullish/false removes
  * it, true sets it empty — same coercion as a JSX attribute). The imperative sibling of `attr()`
@@ -91,4 +100,7 @@ export declare function bindAttr(node: Element, name: string, read: Read<unknown
 export { attrOf } from "./attr-of.js";
 export { connected } from "./connected.js";
 export { type MorphOptions, morph } from "./morph.js";
+export { observeSize, type SizeCallback } from "./observe-size.js";
+export { onmount } from "./onmount.js";
+export { type PersistedOptions, persisted } from "./persisted.js";
 export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";

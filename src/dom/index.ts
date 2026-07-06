@@ -1,5 +1,7 @@
 import { cssPropName } from "../jsx-props.js";
 import {
+  type CleanupEffectFn,
+  type EffectFn,
   type EffectOptions,
   effect,
   type Read,
@@ -443,6 +445,25 @@ export function onunmount(node: Node, stop: Stop): void {
   else ownedEffects.set(node, [owned, stop]);
 }
 
+/**
+ * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
+ * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
+ * leaving). The one-call form of `onunmount(el, effect(fn, { target: el }))` — the dominant idiom
+ * of kit code. Returns the stop for rare early manual disposal; options merge over the target
+ * default, so `{ target: other }` can re-attribute.
+ */
+export function bind(
+  node: Node,
+  fn: CleanupEffectFn,
+  options?: EffectOptions,
+): Stop;
+export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
+export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop {
+  const stop = effect(fn, { target: node, ...options });
+  onunmount(node, stop);
+  return stop;
+}
+
 function stopOwned(owned: OwnedEffect): void {
   if (Array.isArray(owned)) {
     for (const stop of owned) stop();
@@ -762,4 +783,7 @@ function isBinding<TKind extends "attr" | "class" | "style">(
 export { attrOf } from "./attr-of.js";
 export { connected } from "./connected.js";
 export { type MorphOptions, morph } from "./morph.js";
+export { observeSize, type SizeCallback } from "./observe-size.js";
+export { onmount } from "./onmount.js";
+export { type PersistedOptions, persisted } from "./persisted.js";
 export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";

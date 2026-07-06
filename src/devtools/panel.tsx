@@ -5,7 +5,7 @@
 // All of the inspector's own reactive bindings and UI state are created `internal`, so Loom's
 // observability filters them out: the inspector measures the app, never itself.
 import { configure, type Scope, type State, scope, state } from "loom";
-import { scrollFade, tap } from "loom/dom";
+import { persisted, scrollFade, tap } from "loom/dom";
 import { bind, disposeBindings, PANEL_OPTS } from "./bindings.js";
 import { CSS, PANEL_ID } from "./css.js";
 import {
@@ -71,59 +71,58 @@ let prevTab: TabId | null = null;
 
 /* ============================================================ persistence ========== */
 
-function lsGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function lsSet(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* localStorage unavailable */
-  }
-}
-
-const THEME_KEY = `${PANEL_ID}-theme`;
-const MIN_KEY = `${PANEL_ID}-min`;
-const POS_KEY = `${PANEL_ID}-pos`;
-const SIZE_KEY = `${PANEL_ID}-size`;
-const LOGSIZE_KEY = `${PANEL_ID}-logsize`;
 const LOG_SIZES = [1000, 5000, 25000];
 
-function loadTheme(): Theme {
-  const t = lsGet(THEME_KEY);
-  return t === "light" || t === "dark" || t === "system" ? t : "system";
+type PanelPos = { left: number; top: number } | null;
+type PanelSize = { width: number; height: number } | null;
+interface PanelCells {
+  readonly theme: State<Theme>;
+  readonly min: State<boolean>;
+  readonly logSize: State<number>;
+  readonly pos: State<PanelPos>;
+  readonly size: State<PanelSize>;
 }
-function loadLogSize(): number {
-  const n = Number(lsGet(LOGSIZE_KEY));
-  return LOG_SIZES.includes(n) ? n : 1000;
+
+// Persisted panel chrome, on loom's own persisted() cells (all `internal`, so the inspector never
+// observes itself). Created lazily on first mount — the module stays a strict no-op until then —
+// and memoized across mount/unmount cycles. Theme/min/logSize keep their historical raw-string
+// storage formats via parse/serialize, so values persisted before this migration still load;
+// validate is the choke point that drops a clobbered or out-of-range stored value.
+let cells: PanelCells | null = null;
+function panelCells(): PanelCells {
+  cells ??= {
+    theme: persisted<Theme>(`${PANEL_ID}-theme`, "system", {
+      internal: true,
+      serialize: (t) => t,
+      parse: (raw) => raw as Theme,
+      validate: (t) => t === "light" || t === "dark" || t === "system",
+    }),
+    min: persisted<boolean>(`${PANEL_ID}-min`, false, {
+      internal: true,
+      serialize: (v) => (v ? "1" : "0"),
+      parse: (raw) => raw === "1",
+    }),
+    logSize: persisted<number>(`${PANEL_ID}-logsize`, 1000, {
+      internal: true,
+      serialize: String,
+      parse: Number,
+      validate: (n) => LOG_SIZES.includes(n),
+    }),
+    pos: persisted<PanelPos>(`${PANEL_ID}-pos`, null, {
+      internal: true,
+      validate: (v) =>
+        v !== null && typeof v.left === "number" && typeof v.top === "number",
+    }),
+    size: persisted<PanelSize>(`${PANEL_ID}-size`, null, {
+      internal: true,
+      validate: (v) =>
+        v !== null &&
+        typeof v.width === "number" &&
+        typeof v.height === "number",
+    }),
+  };
+  return cells;
 }
-// A persisted numeric record (panel position/size): every named field must parse as a number, else
-// null (missing, malformed JSON, or a clobbered value all fall back to the defaults).
-function loadNumbers<K extends string>(
-  storageKey: string,
-  keys: readonly K[],
-): Record<K, number> | null {
-  const raw = lsGet(storageKey);
-  if (!raw) return null;
-  try {
-    const v = JSON.parse(raw);
-    const out = {} as Record<K, number>;
-    for (const key of keys) {
-      if (typeof v?.[key] !== "number") return null;
-      out[key] = v[key];
-    }
-    return out;
-  } catch {
-    /* malformed */
-  }
-  return null;
-}
-let panelPos = loadNumbers(POS_KEY, ["left", "top"]);
-let panelSize = loadNumbers(SIZE_KEY, ["width", "height"]);
 
 /* ============================================================ chrome helpers ======= */
 
@@ -213,6 +212,7 @@ function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
     e.preventDefault();
     const startX = e.clientX;
     const startY = e.clientY;
+    let moved: PanelPos = null;
     handle.style.cursor = "grabbing";
     startDragSession(
       handle,
@@ -227,11 +227,11 @@ function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
         );
         target.style.left = `${left}px`;
         target.style.top = `${top}px`;
-        panelPos = { left, top };
+        moved = { left, top };
       },
       () => {
         handle.style.cursor = "";
-        if (panelPos) lsSet(POS_KEY, JSON.stringify(panelPos));
+        if (moved) panelCells().pos(moved); // write-through persists it
       },
     );
   });
@@ -243,6 +243,7 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
     e.stopPropagation();
     const startX = e.clientX;
     const startY = e.clientY;
+    let resized: PanelSize = null;
     startDragSession(
       handle,
       target,
@@ -268,10 +269,10 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
         );
         target.style.width = `${w}px`;
         target.style.height = `${h}px`;
-        panelSize = { width: w, height: h };
+        resized = { width: w, height: h };
       },
       () => {
-        if (panelSize) lsSet(SIZE_KEY, JSON.stringify(panelSize));
+        if (resized) panelCells().size(resized); // write-through persists it
       },
     );
   });
@@ -310,7 +311,7 @@ export function mountInspector(target: Element = document.body): void {
 
   ui = state<TabId>("stats", PANEL_OPTS);
 
-  let theme = loadTheme();
+  let theme = panelCells().theme();
   const themeVal = <span class="li-menu-val" />;
   const applyTheme = (): void => {
     panel?.setAttribute("data-theme", theme);
@@ -327,7 +328,7 @@ export function mountInspector(target: Element = document.body): void {
   tap(themeItem, (): void => {
     const order: Theme[] = ["system", "light", "dark"];
     theme = order[(order.indexOf(theme) + 1) % order.length] ?? "system";
-    lsSet(THEME_KEY, theme);
+    panelCells().theme(theme);
     applyTheme();
   });
   const menu = <div class="li-menu" hidden />;
@@ -336,7 +337,7 @@ export function mountInspector(target: Element = document.body): void {
   menuEl = menu;
 
   // Trace-log window size — cycle 1k / 5k / 25k (how many events the Trace tab keeps).
-  let logSize = loadLogSize();
+  let logSize = panelCells().logSize();
   const sizeVal = <span class="li-menu-val" />;
   const applyLogSize = (): void => {
     sizeVal.textContent = `${logSize / 1000}k`;
@@ -355,7 +356,7 @@ export function mountInspector(target: Element = document.body): void {
   tap(sizeItem, (): void => {
     logSize =
       LOG_SIZES[(LOG_SIZES.indexOf(logSize) + 1) % LOG_SIZES.length] ?? 1000;
-    lsSet(LOGSIZE_KEY, String(logSize));
+    panelCells().logSize(logSize);
     applyLogSize();
   });
   menu.append(sizeItem);
@@ -406,12 +407,12 @@ export function mountInspector(target: Element = document.body): void {
     min.title = isMin ? "Expand" : "Collapse";
     min.replaceChildren(barIcon(isMin ? ICON_MAXIMIZE : ICON_MINIMIZE));
   };
-  const startMin = lsGet(MIN_KEY) === "1";
+  const startMin = panelCells().min();
   paintMin(startMin);
   tap(min, (): void => {
     const isMin = !!panel?.classList.toggle("li-min");
     paintMin(isMin);
-    lsSet(MIN_KEY, isMin ? "1" : "0");
+    panelCells().min(isMin);
     // Freeze (or thaw) the panel's reactivity while collapsed.
     if (isMin) inspectorScope?.pause();
     else inspectorScope?.resume();
@@ -527,12 +528,14 @@ export function mountInspector(target: Element = document.body): void {
   target.append(panel);
   document.body.append(menu);
 
-  if (panelSize) {
-    panel.style.width = `${Math.max(240, Math.min(panelSize.width, window.innerWidth - 16))}px`;
-    panel.style.height = `${Math.max(160, Math.min(panelSize.height, window.innerHeight - 16))}px`;
+  const savedSize = panelCells().size();
+  const savedPos = panelCells().pos();
+  if (savedSize) {
+    panel.style.width = `${Math.max(240, Math.min(savedSize.width, window.innerWidth - 16))}px`;
+    panel.style.height = `${Math.max(160, Math.min(savedSize.height, window.innerHeight - 16))}px`;
   }
-  if (panelPos) {
-    const { left, top } = clampOnScreen(panel, panelPos.left, panelPos.top);
+  if (savedPos) {
+    const { left, top } = clampOnScreen(panel, savedPos.left, savedPos.top);
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;
     panel.style.right = "auto";
