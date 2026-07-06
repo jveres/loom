@@ -615,19 +615,29 @@ It fires on release when the pointer hasn't moved more than ~10px from the press
 reach for `ontap` only in the rare continuous-mutation case. `tap(node, handler)`
 is the same logic for imperative (non-JSX) call sites.
 
-**`onunmount` — a lifecycle hook, not a DOM event.** It runs a cleanup when the
-node is torn down the Loom way — `remove()` / `dispose()`, or an ancestor
-`when` / `match` / `each` slot swapping it out — riding the same node-owned
-disposer channel as the reactive bindings, so it fires exactly when they do
-(no `MutationObserver`). Use it to tie an external resource to a node's lifetime:
+**`onmount` / `onunmount` — lifecycle hooks, not DOM events.** `onmount` runs
+once, on a microtask after the task that inserted the node — connected and
+measurable, not yet painted, so measure-then-classify work causes no flash.
+`onunmount` runs a cleanup when the node is torn down the Loom way —
+`remove()` / `dispose()`, or an ancestor `when` / `match` / `each` slot
+swapping it out — riding the same node-owned disposer channel as the reactive
+bindings, so it fires exactly when they do. Both are also importable
+functions (`onmount(el, fn)` / `onunmount(el, stop)`) for imperative call
+sites:
 
 ```tsx
-<div onunmount={() => socket.close()}>{() => status()}</div>
+<div
+  onmount={(el) => measureAndClassify(el)}
+  onunmount={() => socket.close()}
+>
+  {() => status()}
+</div>
 ```
 
-It does **not** fire on a raw `node.remove()` / `replaceChildren()` that bypasses
-Loom's teardown — same caveat as every Loom binding. For grouping many effects,
-prefer a `scope()`; `onunmount` is the per-node escape hatch.
+`onunmount` does **not** fire on a raw `node.remove()` / `replaceChildren()`
+that bypasses Loom's teardown — same caveat as every Loom binding. For
+grouping many effects, prefer a `scope()`; `onunmount` is the per-node escape
+hatch, and `bind(el, fn)` is the effect-shaped shorthand for the common case.
 
 `list()` reorders keyed nodes by default. Pass `reorder: () => false` when an
 external layout system positions existing keyed nodes and only needs Loom to
@@ -668,17 +678,17 @@ The contract, precisely:
   then detaches. A keyed row leaving a `list()`/`each()` is removed the same
   way, so its bindings die with it.
 - A raw `effect()` call inside a component function is **not** node-owned.
-  Tie it to an element with `onunmount(el, stop)` (the JSX prop of the same
-  name is this function as a prop), or group it with `scope()` and stop the
-  scope.
+  Tie it to an element with `bind(el, fn)` (effect + attribution + lifetime
+  in one), with `onunmount(el, stop)` for a disposer you already hold, or
+  group it with `scope()` and stop the scope.
 - `effect`'s `{ target }` option is **inspector attribution only** — it names
   which node an effect renders for the devtools; it does not create ownership.
 
 ```ts
 function widget(): HTMLElement {
   const el = <div class="widget" /> as HTMLElement;
-  const stop = effect(() => syncSomething(el)); // raw effect: not node-owned
-  onunmount(el, stop); // now remove(el) (or removing any ancestor) disposes it
+  bind(el, () => syncSomething(el)); // effect, dies with el, shows on hover
+  // — the one-call form of: onunmount(el, effect(() => …, { target: el }))
   return el;
 }
 ```
