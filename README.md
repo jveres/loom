@@ -527,12 +527,13 @@ The DOM entrypoint exports these functions:
   than none — clearing it would flip the element off the masked raster path
   and the next fade-in flashes for a frame. The dev inspector's own scrollers
   use it.
-- `own(node, stop)` attaches a disposer to a node's Loom lifecycle — the
-  imperative twin of the `onunmount` prop (see
+- `onunmount(node, stop)` attaches a disposer to a node's Loom lifecycle —
+  the same thing as the `onunmount` JSX prop, callable (see
   [Ownership & disposal](#ownership--disposal)).
 - `connected(node)` returns a `Read<boolean>` that is true while the node is
   in the document — "on mount" as a signal, not a callback vocabulary:
-  `own(el, watch(connected(el), (on) => on && measure()))`, and it composes
+  `onunmount(el, watch(connected(el), (on) => on && measure()))`, and it
+  composes
   with any other cell in one effect. Backed by one shared document-level
   `MutationObserver` that exists only while at least one connection signal is
   observed. **Cost while live:** the observer records every childList
@@ -643,8 +644,9 @@ The contract, precisely:
   then detaches. A keyed row leaving a `list()`/`each()` is removed the same
   way, so its bindings die with it.
 - A raw `effect()` call inside a component function is **not** node-owned.
-  Tie it to an element with `own(el, stop)` (or the `onunmount` prop), or
-  group it with `scope()` and stop the scope.
+  Tie it to an element with `onunmount(el, stop)` (the JSX prop of the same
+  name is this function as a prop), or group it with `scope()` and stop the
+  scope.
 - `effect`'s `{ target }` option is **inspector attribution only** — it names
   which node an effect renders for the devtools; it does not create ownership.
 
@@ -652,7 +654,7 @@ The contract, precisely:
 function widget(): HTMLElement {
   const el = <div class="widget" /> as HTMLElement;
   const stop = effect(() => syncSomething(el)); // raw effect: not node-owned
-  own(el, stop); // now remove(el) (or removing any ancestor) disposes it
+  onunmount(el, stop); // now remove(el) (or removing any ancestor) disposes it
   return el;
 }
 ```

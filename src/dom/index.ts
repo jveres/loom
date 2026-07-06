@@ -267,7 +267,7 @@ export function list<T>(
     for (const node of nodes.values()) remove(node);
     nodes.clear();
   };
-  own(container, stopList);
+  onunmount(container, stopList);
   return stopList;
 }
 
@@ -431,11 +431,12 @@ export function tap(
 
 /**
  * Attach a disposer to a node's Loom lifecycle: it runs when the node is torn down the Loom way —
- * `remove()`, `dispose()`, or an ancestor slot/list swapping it out. The imperative twin of the
- * `onunmount` prop, for kit components that create their own effects/listeners for an element
- * they build. (This is ownership; `effect`'s `target` option is inspector attribution only.)
+ * `remove()`, `dispose()`, or an ancestor slot/list swapping it out. The `onunmount` JSX prop is
+ * this function as a prop — one concept, two syntaxes — for kit components that create their own
+ * effects/listeners for an element they build. (This is ownership; `effect`'s `target` option is
+ * inspector attribution only.)
  */
-export function own(node: Node, stop: Stop): void {
+export function onunmount(node: Node, stop: Stop): void {
   const owned = ownedEffects.get(node);
   if (!owned) ownedEffects.set(node, stop);
   else if (Array.isArray(owned)) owned.push(stop);
@@ -472,7 +473,7 @@ function applyProps(node: Element, props: Props): void {
     // Loom-owned props above, not the DOM `on*` listeners below — it rides the node-owned disposer
     // channel (same as the reactive bindings), so it fires exactly when they do.
     if (name === "onunmount" && typeof value === "function") {
-      own(node, value as Stop);
+      onunmount(node, value as Stop);
       continue;
     }
     if (isAttrBinding(value)) {
@@ -540,7 +541,7 @@ function isDynamic(child: Child): child is DynamicChild {
 function mountSlot(parent: Node, desc: DynamicChild): void {
   const anchor = document.createComment("loom-slot");
   parent.appendChild(anchor);
-  own(anchor, brand<SlotDescriptor>(desc).mount(anchor));
+  onunmount(anchor, brand<SlotDescriptor>(desc).mount(anchor));
 }
 
 // Effect options for a slot: label it, and target its parent element (when there is one) so the
@@ -693,7 +694,7 @@ function bindReactiveValue<T>(
       { label, target: node, ...options },
     ),
   );
-  own(node, stop);
+  onunmount(node, stop);
 }
 
 function setAttr(node: Element, name: string, value: unknown): void {

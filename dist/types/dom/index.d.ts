@@ -74,11 +74,12 @@ export declare function remove(node: Node): void;
 export declare function tap(node: Element, handler: (event: PointerEvent) => void): void;
 /**
  * Attach a disposer to a node's Loom lifecycle: it runs when the node is torn down the Loom way —
- * `remove()`, `dispose()`, or an ancestor slot/list swapping it out. The imperative twin of the
- * `onunmount` prop, for kit components that create their own effects/listeners for an element
- * they build. (This is ownership; `effect`'s `target` option is inspector attribution only.)
+ * `remove()`, `dispose()`, or an ancestor slot/list swapping it out. The `onunmount` JSX prop is
+ * this function as a prop — one concept, two syntaxes — for kit components that create their own
+ * effects/listeners for an element they build. (This is ownership; `effect`'s `target` option is
+ * inspector attribution only.)
  */
-export declare function own(node: Node, stop: Stop): void;
+export declare function onunmount(node: Node, stop: Stop): void;
 /**
  * Bind a reactive attribute on an existing element: `read()` re-runs as its dependencies change,
  * and the attribute updates only when the resulting value actually differs (nullish/false removes
