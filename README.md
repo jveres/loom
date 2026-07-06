@@ -1216,7 +1216,9 @@ The v2 architecture — the vendoring, the tree-shakable core split, the
 comparative benchmark harness, and the bench-gated experiments (including the
 ones the gates rejected) — is recorded in the commit history; every
 performance-relevant decision carries its measurements in the commit that
-made it.
+made it. The proposed next consolidation (node-lifetime as the unifying
+ownership concept, surface pruning driven by real import data) is drafted in
+[docs/api-consolidation.md](docs/api-consolidation.md).
 
 The built-in event channels are gated by a per-channel meter count, so
 reads, writes, computed updates, and effect runs stay allocation-free and pay
