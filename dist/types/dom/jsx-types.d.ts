@@ -50,6 +50,7 @@ type EventProps<TElement extends Element> = {
 };
 type SharedProps<TElement extends Element> = Props & EventProps<TElement> & {
     children?: Child;
+    onmount?: (node: Node) => void;
     onunmount?: () => void;
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;

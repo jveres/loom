@@ -180,14 +180,12 @@ describe("onmount", () => {
     b.remove();
   });
 
-  it("is not a JSX prop (kept out of the h() baseline by design)", async () => {
+  it("works as the JSX prop, the symmetric twin of onunmount", async () => {
     const calls: string[] = [];
-    // A function prop named onmount is wired as a plain event listener like any
-    // other on<name> prop — the mount hook is import-only.
     const el = h("div", { onmount: () => calls.push("mount") });
     document.body.append(el);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(calls).toEqual([]);
+    await Promise.resolve();
+    expect(calls).toEqual(["mount"]);
     el.remove();
   });
 });

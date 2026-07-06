@@ -48,7 +48,7 @@ const APPS = [
   },
   {
     name: "minimal dom (h+text)",
-    budget: 5100,
+    budget: 5500,
     source: `
       import { state } from "loom";
       import { h, text } from "loom/dom";

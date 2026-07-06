@@ -538,10 +538,10 @@ The DOM entrypoint exports these functions:
   that inserted the element — inserted and measurable, not yet painted, so
   measure-then-classify work causes no flash. Insert in the same synchronous
   task and no observer is ever created; a late insertion is caught by a
-  transient shared observer that lives only until the element connects.
-  Import-only, deliberately not a JSX prop — prop wiring would put its
-  machinery in every `h()` bundle. Returns a cancel. Need ongoing
-  connectivity instead of a one-shot? That's `connected()`.
+  transient shared observer that lives only until the element connects. Also
+  the `onmount` JSX prop — the symmetric twin of `onunmount`. Returns a
+  cancel. Need ongoing connectivity instead of a one-shot? That's
+  `connected()`.
 - `observeSize(el, cb)` — sized observation with the lifetime treatment
   events get: `cb(entry)` runs on ResizeObserver's clock (including the
   initial delivery on attach) and detaches automatically when the node is

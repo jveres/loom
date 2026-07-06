@@ -1,8 +1,9 @@
 // onmount(el, fn) — the mount hook, with an explicit timing contract: `fn` runs once, on a
 // microtask after the task that inserted the element — inserted and measurable (layout on
-// demand), **not yet painted** — so measure-then-classify work causes no flash. Function-only,
-// deliberately NOT a JSX prop: wiring it into applyProps would bundle this module into every
-// h() user (+231 B gzip measured on the minimal-dom budget); as an import it's free until used.
+// demand), **not yet painted** — so measure-then-classify work causes no flash. The `onmount`
+// JSX prop is this function as a prop, the symmetric twin of `onunmount`. (The prop wiring pulls
+// this module into every h() bundle — +231 B gzip, accepted deliberately with the 5500 B
+// minimal-dom budget: the lifecycle pair belongs in the baseline prop vocabulary.)
 //
 // Cost model: the common case — caller inserts the element in the same synchronous task, or it is
 // already connected — resolves entirely on the microtask, no observers anywhere. Only an element

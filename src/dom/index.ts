@@ -9,6 +9,7 @@ import {
   type Stop,
   untrack,
 } from "../loom.js";
+import { onmount } from "./onmount.js";
 import { positionOrdered } from "./place.js";
 
 export type Child =
@@ -493,6 +494,10 @@ function applyProps(node: Element, props: Props): void {
     // (`remove()` / `dispose()`, or an ancestor slot swapping it out). Grouped with the other
     // Loom-owned props above, not the DOM `on*` listeners below — it rides the node-owned disposer
     // channel (same as the reactive bindings), so it fires exactly when they do.
+    if (name === "onmount" && typeof value === "function") {
+      onmount(node, value as (node: Node) => void);
+      continue;
+    }
     if (name === "onunmount" && typeof value === "function") {
       onunmount(node, value as Stop);
       continue;

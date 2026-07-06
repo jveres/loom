@@ -60,7 +60,10 @@ type EventProps<TElement extends Element> = {
 type SharedProps<TElement extends Element> = Props &
   EventProps<TElement> & {
     children?: Child;
-    // Cleanup run when the node is torn down the Loom way (remove()/dispose()); not a DOM event.
+    // The Loom lifecycle pair; neither is a DOM event. onmount runs once on a microtask after
+    // insertion (measurable, not yet painted); onunmount is the cleanup run when the node is torn
+    // down the Loom way (remove()/dispose()).
+    onmount?: (node: Node) => void;
     onunmount?: () => void;
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;

@@ -1,7 +1,7 @@
 import { _ as e, a as t, d as n, h as r, i, m as a, p as o } from "./loom-B3Wy1Jmk.js";
 import { i as s, n as c, r as l } from "./meter-BP1riSQj.js";
 import { n as ee, t as u } from "./observe-B5KfbviS.js";
-import { _ as d, g as te, h as ne, m as re, p as f, r as p } from "./dom-CUhC3JWe.js";
+import { _ as d, g as te, h as ne, m as re, p as f, r as p } from "./dom-BN_BI_CK.js";
 import { virtualList as m } from "./dom/virtual-list.js";
 import { jsx as h, jsxs as g } from "./jsx-runtime.js";
 //#region src/devtools/bindings.ts
