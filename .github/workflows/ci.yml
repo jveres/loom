@@ -33,6 +33,8 @@ jobs:
 
       - name: Bundle-size budgets
         run: pnpm size
+      - name: README samples typecheck
+        run: pnpm samples
 
       # The compiled dist is committed (so a GitHub install needs no build step).
       # Rebuild it and fail if it drifts from what's checked in — i.e. src changed

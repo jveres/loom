@@ -1327,6 +1327,7 @@ pnpm run lint    # biome
 pnpm test        # vitest
 pnpm run bench   # CLI benchmarks (chaos, micro, hot-path)
 pnpm size        # per-entry bundle budgets (gzip)
+pnpm samples     # every README code sample typechecks against src
 pnpm run dev     # dev server
 pnpm run build   # dist/loom (ES bundles) + dist/types (.d.ts)
 ```
