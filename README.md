@@ -1044,6 +1044,11 @@ function Page(props: { title: string }) {
 const html = renderToString(<Page title="Docs" />);
 ```
 
+The pragma selects the JSX runtime per file — it is needed only in projects
+that mix browser JSX and static JSX. A project whose JSX is entirely static
+sets `jsxImportSource: "loom/html"` once in `tsconfig.json` (and the
+bundler's equivalent, e.g. Vite's JSX `importSource`) and omits the pragma.
+
 The `loom/html` entrypoint exports:
 
 - `renderToString(child)` serializes a node tree to an HTML string.
