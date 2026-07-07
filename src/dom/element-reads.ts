@@ -48,14 +48,11 @@ function reobserve(): void {
 }
 
 export function attrRead(el: Element, name: string): Read<string | null> {
-  let byName = signals.get(el);
-  if (!byName) {
-    byName = new Map();
-    signals.set(el, byName);
-  }
-  const cached = byName.get(name);
-  if (cached) return cached;
-  const read = source<string | null>((set) => {
+  return memo(signals, el, name, () => attrSource(el, name));
+}
+
+function attrSource(el: Element, name: string): Read<string | null> {
+  return source<string | null>((set) => {
     set(el.getAttribute(name)); // resync: it may have changed while unobserved
     let setters = watched.get(el);
     if (!setters) {
@@ -72,45 +69,50 @@ export function attrRead(el: Element, name: string): Read<string | null> {
       reobserve();
     };
   }, el.getAttribute(name));
-  byName.set(name, read);
-  return read;
 }
 
-// Class/style reads: keyed caches so N readers share one derived computed (and through it, one
-// attribute subscription).
+// Keyed caches so N readers share one derived computed (and through it, one attribute
+// subscription). One get-or-create for all three read kinds.
+function memo<V>(
+  cache: WeakMap<Element, Map<string, V>>,
+  el: Element,
+  key: string,
+  make: () => V,
+): V {
+  let byKey = cache.get(el);
+  if (!byKey) {
+    byKey = new Map();
+    cache.set(el, byKey);
+  }
+  let value = byKey.get(key);
+  if (value === undefined) {
+    value = make();
+    byKey.set(key, value);
+  }
+  return value;
+}
+
 const classSignals = new WeakMap<Element, Map<string, Read<boolean>>>();
 const styleSignals = new WeakMap<Element, Map<string, Read<string>>>();
 
 export function classRead(el: Element, name: string): Read<boolean> {
-  let byName = classSignals.get(el);
-  if (!byName) {
-    byName = new Map();
-    classSignals.set(el, byName);
-  }
-  const cached = byName.get(name);
-  if (cached) return cached;
-  const classAttr = attrRead(el, "class");
-  const read = computed(() => {
-    classAttr(); // subscription; the value itself comes from the live classList
-    return el.classList.contains(name);
+  return memo(classSignals, el, name, () => {
+    const classAttr = attrRead(el, "class");
+    return computed(() => {
+      classAttr(); // subscription; the value itself comes from the live classList
+      return el.classList.contains(name);
+    });
   });
-  byName.set(name, read);
-  return read;
 }
 
 export function styleRead(el: Element, prop: string): Read<string> {
-  let byProp = styleSignals.get(el);
-  if (!byProp) {
-    byProp = new Map();
-    styleSignals.set(el, byProp);
-  }
-  const cached = byProp.get(prop);
-  if (cached) return cached;
-  const styleAttr = attrRead(el, "style");
-  const read = computed(() => {
-    styleAttr(); // subscription; the value itself comes from the live inline style
-    return (el as ElementCSSInlineStyle & Element).style.getPropertyValue(prop);
+  return memo(styleSignals, el, prop, () => {
+    const styleAttr = attrRead(el, "style");
+    return computed(() => {
+      styleAttr(); // subscription; the value itself comes from the live inline style
+      return (el as ElementCSSInlineStyle & Element).style.getPropertyValue(
+        prop,
+      );
+    });
   });
-  byProp.set(prop, read);
-  return read;
 }

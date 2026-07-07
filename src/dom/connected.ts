@@ -1,8 +1,8 @@
 // connected(node) — a reactive DOM-connection signal: true while the node is in the document.
-// "On mount" then needs no vocabulary of its own — it's a watch() on a Read<boolean>, and it
-// composes with any other signal in one effect ("connected AND visible AND selected").
+// Mount state as a signal: it composes with any other signal in one effect ("connected AND
+// visible AND selected"), and watch() turns it into connect/disconnect callbacks:
 //
-//   own(el, watch(connected(el), (on) => on && measure()));
+//   onUnmount(el, watch(connected(el), (on) => on && measure()));
 //
 // One shared document-level observer backs every signal, attached only while at least one signal
 // is observed (source() connects on first subscriber, disconnects on last) — unused, this module

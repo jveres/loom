@@ -6,6 +6,7 @@
 // records on a shared observer cannot be routed to the right subscriber.
 import type { Stop } from "../loom.js";
 import { onUnmount } from "./index.js";
+import { once } from "./once.js";
 
 export type MutationsCallback = (records: MutationRecord[]) => void;
 
@@ -16,12 +17,7 @@ export function observeMutation(
 ): Stop {
   const observer = new MutationObserver(cb);
   observer.observe(el, options);
-  let detached = false;
-  const stop = (): void => {
-    if (detached) return;
-    detached = true;
-    observer.disconnect();
-  };
+  const stop = once(() => observer.disconnect());
   onUnmount(el, stop);
   return stop;
 }

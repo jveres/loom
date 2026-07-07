@@ -38,7 +38,6 @@ interface DomEventMap {
     pointerup: PointerEvent;
     scroll: Event;
     submit: SubmitEvent;
-    tap: PointerEvent;
     touchcancel: TouchEvent;
     touchend: TouchEvent;
     touchmove: TouchEvent;

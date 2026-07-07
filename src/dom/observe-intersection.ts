@@ -7,6 +7,7 @@
 // objects and rare enough that keying pools on them buys nothing.
 import type { Stop } from "../loom.js";
 import { onUnmount } from "./index.js";
+import { once } from "./once.js";
 
 export type IntersectionCallback = (entry: IntersectionObserverEntry) => void;
 
@@ -60,10 +61,7 @@ function pooled(
     pool.observer.observe(el);
   }
   callbacks.add(cb);
-  let detached = false;
-  return () => {
-    if (detached) return;
-    detached = true;
+  return once(() => {
     const current = pools.get(key);
     if (!current) return;
     const set = current.watched.get(el);
@@ -77,7 +75,7 @@ function pooled(
         pools.delete(key);
       }
     }
-  };
+  });
 }
 
 export function observeIntersection(
@@ -98,12 +96,7 @@ export function observeIntersection(
       },
     );
     observer.observe(el);
-    let detached = false;
-    stop = () => {
-      if (detached) return;
-      detached = true;
-      observer.disconnect();
-    };
+    stop = once(() => observer.disconnect());
   } else {
     stop = pooled(el, cb, poolKey(options), options);
   }

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The seam-round-3 kit helpers: bind / observeSize / onmount / persisted.
+// Kit helpers: bind / observeSize / observeIntersection / observeMutation / onMount / persisted.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { state } from "../loom.js";
 import { bind, h, onMount, remove } from "./index.js";

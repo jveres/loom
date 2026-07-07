@@ -119,6 +119,5 @@ export { type MorphOptions, morph } from "./morph.js";
 export { type IntersectionCallback, type IntersectionOptions, observeIntersection, } from "./observe-intersection.js";
 export { type MutationsCallback, observeMutation, } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
-export { onMount } from "./onmount.js";
+export { onMount } from "./on-mount.js";
 export { type PersistedOptions, persisted } from "./persisted.js";
-export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";

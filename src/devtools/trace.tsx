@@ -8,7 +8,8 @@
 // Seams: the panel calls buildTracePane / showTrace / setTraceActive / setTraceLiveDot /
 // setTraceLocate / setTraceWindow / teardownTrace; the stats heartbeat calls renderTrace.
 import { type Meter, meter } from "loom";
-import { onTap, scrollFade } from "loom/dom";
+import { onTap } from "loom/dom";
+import { scrollFade } from "loom/dom/scroll-fade";
 import { type VirtualList, virtualList } from "loom/dom/virtual-list";
 import {
   events,
@@ -18,7 +19,7 @@ import {
   type WriteSample,
 } from "loom/observe";
 import { formatValue, valueClass } from "./format.js";
-import { clearGraphHighlight, highlightCell } from "./graph.js";
+import { clearGraphHighlight, highlightSignal } from "./graph.js";
 import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
 
 const TRACE_ROW_H = 22; // uniform row height (must match the .li-tr CSS)
@@ -169,7 +170,7 @@ export function buildTracePane(): HTMLElement {
     const id = row?.dataset["id"];
     if (id !== undefined && Number(id) !== lastHoverId) {
       lastHoverId = Number(id);
-      highlightCell(lastHoverId);
+      highlightSignal(lastHoverId);
     }
   });
   traceScroll.addEventListener("pointerleave", () => {

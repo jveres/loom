@@ -89,10 +89,10 @@ export interface NodeInfo {
 export type CleanupEffectFn = () => Stop;
 type InternalEffectFn = EffectFn | CleanupEffectFn;
 
-type FieldKey<T extends object> = Extract<keyof T, string>;
+type PropKey<T extends object> = Extract<keyof T, string>;
 
 export type Props<T extends object> = {
-  readonly [K in FieldKey<T>]: State<T[K]>;
+  readonly [K in PropKey<T>]: State<T[K]>;
 };
 
 export type NodeBase = ReactiveNode & {
@@ -704,13 +704,13 @@ export function props<T extends object>(
   if (!isPlainObject(initial)) {
     throw new TypeError("props() expects a plain object.");
   }
-  const out = {} as { [K in FieldKey<T>]: State<T[K]> };
-  const keys = Object.keys(initial) as Array<FieldKey<T>>;
+  const out = {} as { [K in PropKey<T>]: State<T[K]> };
+  const keys = Object.keys(initial) as Array<PropKey<T>>;
   // One group id per call so the inspector can re-nest the signals under a single parent.
   const group = inspectHooks !== undefined ? inspectHooks.nextGroup() : 0;
   for (let index = 0; index < keys.length; index++) {
-    const key = keys[index] as FieldKey<T>;
-    const signal = state(initial[key], fieldOptions(options, key));
+    const key = keys[index] as PropKey<T>;
+    const signal = state(initial[key], propOptions(options, key));
     if (group !== 0) {
       const meta = nodeOf(signal as object)?.meta;
       if (meta) {
@@ -790,7 +790,7 @@ export function mergeOptions(
   return { ...defaults, ...own };
 }
 
-function fieldOptions(
+function propOptions(
   options: NodeOptions | undefined,
   key: string,
 ): NodeOptions | undefined {

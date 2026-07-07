@@ -46,9 +46,9 @@ export interface NodeInfo {
     readonly label: string;
 }
 export type CleanupEffectFn = () => Stop;
-type FieldKey<T extends object> = Extract<keyof T, string>;
+type PropKey<T extends object> = Extract<keyof T, string>;
 export type Props<T extends object> = {
-    readonly [K in FieldKey<T>]: State<T[K]>;
+    readonly [K in PropKey<T>]: State<T[K]>;
 };
 export type NodeBase = ReactiveNode & {
     deps?: Link | undefined;

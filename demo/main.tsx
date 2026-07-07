@@ -130,9 +130,9 @@ app.replaceChildren(
         type="button"
         class={["primary", { on: settings.running }]}
         aria-pressed={settings.running}
-        // onTap, not onclick: iOS Safari drops the synthesized click when the DOM mutates mid-tap
-        // (which the chaos does every frame); onTap is built from raw pointer events, so it survives.
-        onTap={() => {
+        // ontap, not onclick: iOS Safari drops the synthesized click when the DOM mutates mid-tap
+        // (which the chaos does every frame); the tap synth uses raw pointer events, so it survives.
+        ontap={() => {
           const next = !settings.running();
           settings.running(next);
           if (next) {
@@ -623,7 +623,7 @@ function runChecks(): void {
 
     const model = props({ value: 0 });
     model.value(7);
-    assertEqual(model.value(), 7, "fields failed");
+    assertEqual(model.value(), 7, "props failed");
 
     const objectState = state({ count: 0 });
     let objectSeen = 0;
@@ -685,7 +685,7 @@ function runChecks(): void {
     dispose(node);
 
     showChecksFeedback(
-      "pass · state, computed, batch, cleanup, fields, trigger, mutate, untrack, list, jsx",
+      "pass · state, computed, batch, cleanup, props, trigger, mutate, untrack, list, jsx",
     );
   } catch (error) {
     showChecksFeedback(

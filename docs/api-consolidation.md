@@ -1,8 +1,8 @@
 # API consolidation — the shape seam's feedback is pointing at
 
-*Status: proposal / working note, 2026-07-06. Nothing here is decided; this
-records the analysis so the v0.5 discussion starts from evidence instead of
-taste.*
+*Working note. The import census and thesis are from 2026-07-06; the naming
+convention is implemented (2026-07-07). Remaining proposals are marked in the
+Sequencing section.*
 
 ## Thesis
 
@@ -39,6 +39,10 @@ Import-site counts across every real consumer (seam `src/`, branching-tree
                  2 renderToString 1 inspect         0 match/trigger/mutate
                                                     0 poll/source/channel*
 ```
+
+*(Census names are as of 2026-07-06; since renamed: `fields` → `props`,
+`onunmount` → `onUnmount`, `tap` → `onTap`; `attrOf`/`bindAttr` were absorbed
+into `attr`'s element forms.)*
 
 *\* `poll`/`source`/`channel` are used by devtools internals via `loom`'s own
 modules, but have no app-level importer.*
@@ -88,9 +92,10 @@ the 1k-row clear/swap ops and the chaos bench must hold their bands.
 
 Candidates (all breaking → batched for v0.5, informed by the table above):
 
-- `attr`/`classed`/`style`/`bindAttr` → internal JSX plumbing; out of the
-  headline docs (kept exported for the imperative escape hatch, or dropped —
-  decide on a consumer census at the time).
+- ~~`attr`/`classed`/`style` → internal plumbing~~ — superseded: the naming
+  round promoted all three to documented three-form signal accessors
+  (descriptor / element read / element write binding) and absorbed the
+  imperative binder into them.
 - `when` folds into `match` (boolean selector is the degenerate case).
 - `trigger` folds under `mutate` (trigger is its notify half).
 - `poll` and `resource` positioned explicitly as sugar over `source` — they
@@ -99,8 +104,9 @@ Candidates (all breaking → batched for v0.5, informed by the table above):
 
 ### 3. Present families, not items
 
-The browser bridges — `connected`, `attrOf`, `observeSize`, `persisted`,
-`scrollFade` — are one idea: *external browser state with loom lifetime*.
+The browser bridges — `connected`, the element reads of
+`attr`/`classed`/`style`, `observeSize`, `persisted`, `scrollFade` — are one
+idea: *external browser state with loom lifetime*.
 One docs section, one shared internal pattern (subscriber-counted shared
 observers), five entries that read as variations.
 
@@ -118,14 +124,17 @@ set also lives in the README.
   lifetime: `observeSize`, `observeIntersection`, `observeMutation`.
   Function-only: options exceed what a prop value can carry, and each wired
   prop adds its module to every `h()` bundle.
-- **Unprefixed** — signals and signals: `connected`, `persisted`, and the signal
+- **Unprefixed** — signals: `connected`, `persisted`, and the signal
   forms of `attr`/`classed`/`style`. Signal direction follows the state-signal
   convention — read without a value argument, write/bind with one; the JSX
   descriptor form is selected by a string first argument.
 - **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,
   `morph`, `virtualList`. Verb- or noun-accurate names; camelCase when
   multiword. Names that read as actions on the element (`resize(el)`) or
-  collide with core exports are invalid.
+  collide with core exports are invalid. Widgets and standalone behaviors are
+  subpath entrypoints (`loom/dom/virtual-list`, `loom/dom/scroll-fade`); the
+  `loom/dom` barrel holds rendering, binding, lifecycle, and browser state.
+  An umbrella entrypoint for behaviors requires three members.
 - **Grain markers**: core reactivity is `watch` (tracked read, untracked
   callback, no DOM); DOM observation with node lifetime is `observe…`.
 - Callback sugar over an existing signal is not added when the composition
@@ -133,18 +142,19 @@ set also lives in the README.
 
 ## Sequencing
 
-1. **v0.4.0 now** — everything since v0.3.0 is additive
-   (`connected`/`attrOf`/kit/`onunmount` rename); consumers get a stable pin.
+1. **Next tag** — main carries the naming round (a breaking hard cut:
+   `attrOf`/`bindAttr`/`tap`/`fields`/`own` removed) plus the kit and the
+   browser bridges; consumers get a stable pin.
 2. **v0.5 theme: node-as-scope + pruning** — ownership unification first
-   (internal, bench-gated, non-breaking), docs taxonomy second, deletions
-   last (breaking, batched, justified by a fresh import census).
+   (internal, bench-gated, non-breaking), docs taxonomy second, remaining
+   deletions last (`when`/`match`, `trigger`/`mutate` folds — breaking,
+   batched, justified by a fresh import census).
 
 ## Open questions
 
 - Does node-scope nest into `scope()` (a row's scope inside the app scope),
   and what does `pause` of an ancestor mean for DOM bindings mid-frame?
-- Do `attr`/`classed`/`style` stay exported-but-undocumented, or go? (Check
-  imports again when v0.5 starts; seam's `bindAttr as bindDomAttr` alias is
-  the one live consumer today.)
+- Does the `when`/`match` fold happen in v0.5, and does anything adopt
+  `match` beyond the docs by then?
 - Is `computed`'s low pull real or an artifact of small apps? (Cheap to keep
   either way — it's core to the engine; this only affects docs emphasis.)

@@ -8,6 +8,7 @@
 // entry. With nothing observed the observer is disconnected and this module costs zero.
 import type { Stop } from "../loom.js";
 import { onUnmount } from "./index.js";
+import { once } from "./once.js";
 
 export type SizeCallback = (entry: ResizeObserverEntry) => void;
 
@@ -31,10 +32,7 @@ export function observeSize(el: Element, cb: SizeCallback): Stop {
     observer.observe(el);
   }
   callbacks.add(cb);
-  let detached = false;
-  const stop = (): void => {
-    if (detached) return; // idempotent: manual stop + the node teardown both call it
-    detached = true;
+  const stop = once(() => {
     const current = watched.get(el);
     if (!current) return;
     current.delete(cb);
@@ -46,7 +44,7 @@ export function observeSize(el: Element, cb: SizeCallback): Stop {
         observer = null;
       }
     }
-  };
+  });
   onUnmount(el, stop);
   return stop;
 }

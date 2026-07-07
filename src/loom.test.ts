@@ -192,7 +192,7 @@ describe("loom core", () => {
     stop();
   });
 
-  it("creates fine-grained object fields", () => {
+  it("creates fine-grained property signals", () => {
     const model = props({ left: 0, right: 0 });
     let leftRuns = 0;
     let rightRuns = 0;
@@ -215,7 +215,7 @@ describe("loom core", () => {
     stopRight();
   });
 
-  it("creates fields from string keys only", () => {
+  it("creates signals from string keys only", () => {
     const hidden = Symbol("hidden");
     const model = props({ visible: 1, [hidden]: 2 });
 

@@ -278,7 +278,7 @@ bridge (async fetches with loading/error state) see
 `loom/async` is a small opt-in entrypoint (~0.3 kB gzip; costs nothing unless
 imported) for async data with fine-grained loading and error state:
 
-- `resource(fetcher, options?)` is an async computed: it runs
+- `resource(fetcher, options?)` (returns a `Resource<T>` handle) is an async computed: it runs
   `fetcher(previous, signal)` immediately and again whenever the fetcher's
   **synchronously tracked** reads change (reads after the first `await` are
   outside the tracked run). The previous value is passed untracked; `signal` is
@@ -556,7 +556,8 @@ observers where a callback reacts:
 
 #### Scroll fade
 
-`scrollFade(el, options?)` masks a scroller's edges so content fades out
+`scrollFade(el, options?)` (entrypoint `loom/dom/scroll-fade`) masks a
+scroller's edges so content fades out
 exactly while more lies beyond — driven by scroll position and kept current
 across resizes and content changes (no styling opinions; the effect is a
 `mask-image` on the element). `options.size` sets the fade length in px
@@ -578,32 +579,36 @@ inspector's own scrollers use it.
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `connected`, `persisted`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
-| `scrollFade` | [Scroll fade](#scroll-fade) |
+| `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
 
 Types: `Child`, `ElementProps` (the props bag `h()` and JSX accept),
+`PersistedOptions` (adds `storage` to override the backing `Storage`),
 `ListOptions`, `SvgTagName`, the binding handles
 `AttrBinding`/`ClassBinding`/`StyleBinding`/`DynamicChild`, `MorphOptions`,
-`ScrollFadeOptions`, `PersistedOptions`, `SizeCallback`,
+`ScrollFadeOptions`, `SizeCallback`,
 `IntersectionCallback`/`IntersectionOptions`, `MutationsCallback`,
 `ListSource`/`VirtualList`/`VirtualListOptions` (virtual list).
 
 #### Naming convention
 
-- **`on…(el, …)`** — imperative twin of a JSX prop of the same name and
-  spelling: `onMount`, `onUnmount`, `onTap`. Props also accept the
-  all-lowercase spelling.
+- **`on…(el, …)`** — imperative twin of a JSX prop of the same concept:
+  `onMount`, `onUnmount`, `onTap`. Imperative functions are camelCase; JSX
+  uses the platform's lowercase prop spelling (`onmount`, `ontap`, `onclick`)
+  in samples and house code. Props accept camelCase as well.
 - **`observe…(el, cb, options?)`** — parameterized observation with node
   lifetime: `observeSize`, `observeIntersection`, `observeMutation`.
   Function-only; the callback detaches on node teardown.
-- **Unprefixed** — signals and signals, the reactive grain: `connected`,
+- **Unprefixed** — signals, the reactive grain: `connected`,
   `persisted`, and the signal forms of `attr`/`classed`/`style` (direction by
   first argument and arity, as with a signal: read without a value,
   write with one).
 - **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,
   `morph`, `virtualList`. Verb- or noun-accurate names, camelCase when
-  multiword.
+  multiword. Widgets and standalone behaviors are subpath entrypoints
+  (`loom/dom/virtual-list`, `loom/dom/scroll-fade`); the `loom/dom` barrel
+  holds rendering, binding, lifecycle, and browser state.
 - Core reactivity uses `watch` (tracked read, untracked callback, no DOM);
   `observe…` is DOM observation with node lifetime. The prefixes mark the
   grain.
@@ -637,7 +642,7 @@ handler never runs. `onTap` is built from raw `pointerdown`+`pointerup`, which
 are dispatched directly rather than hit-test-synthesized, so it survives:
 
 ```ts
-h("button", { onTap: () => stop() }); // fires reliably even under DOM churn
+h("button", { ontap: () => stop() }); // fires reliably even under DOM churn
 ```
 
 It fires on release when the pointer hasn't moved more than ~10px from the press
@@ -645,7 +650,7 @@ It fires on release when the pointer hasn't moved more than ~10px from the press
 reach for `onTap` only in the rare continuous-mutation case. `onTap(node, handler)`
 is the same logic for imperative (non-JSX) call sites.
 
-**`onMount` / `onUnmount` — lifecycle hooks, not DOM events.** `onMount` runs
+**`onmount` / `onunmount` — lifecycle hooks, not DOM events.** `onMount` runs
 once, on a microtask after the task that inserted the node — connected and
 measurable, not yet painted, so measure-then-classify work causes no flash.
 `onUnmount` runs a cleanup when the node is torn down the Loom way —
@@ -657,8 +662,8 @@ sites:
 
 ```tsx
 <div
-  onMount={(el) => measureAndClassify(el)}
-  onUnmount={() => socket.close()}
+  onmount={(el) => measureAndClassify(el)}
+  onunmount={() => socket.close()}
 >
   {() => status()}
 </div>
@@ -1113,11 +1118,12 @@ inspector's Trace tab is built on exactly this.
 The built-in `events` record **non-internal** nodes only, so the idle baseline is
 zero. The rest of `loom/observe` snapshots the reactive graph:
 
-- `inspect()` returns a snapshot of the current graph (empty unless inspection is
+- `inspect()` returns an `InspectSnapshot` (`{ nodes: InspectNode[] }`) of
+  the current graph (empty unless inspection is
   enabled via `configure({ inspect: true })`). Pass `{ active: true }` to skip
   state/computed signals with no subscribers — idle signals and "ghosts" (signals of a
   removed object, unreachable but not yet GC'd); effects are always kept.
-- `inspectResources()` returns a live census `{ states, computeds, effects,
+- `inspectResources()` returns a live census (`ResourceCounts`) `{ states, computeds, effects,
   targetedEffects, sources, scopes, channels, unread }` — one cheap walk, no
   per-node allocation. `targetedEffects` is the subset of `effects` that declared
   an `EffectOptions.target` (loom/dom's bindings set it to the bound DOM node, so
@@ -1236,9 +1242,18 @@ Two browser benchmarks run from the dev server. `/bench/` compares Loom DOM
 bindings against a hand-written vanilla baseline on a js-framework-benchmark
 style table workload. `/bench/compare/` drives Loom, ArrowJS, Shablon, and the
 vanilla baseline through one shared command surface (create/update/swap/clear
-1k rows, create 10k); as of July 2026 Loom leads or ties every op among the
-frameworks and stays within ~3–8% of the vanilla floor — the table above is
-generated from it. `/bench/morph/` benches `morph()` against Idiomorph on a
+1k rows, create 10k). Medians (ms, July 2026, Apple M2, Chrome; two runs):
+
+| op | vanilla | loom | arrow | shablon |
+| --- | --- | --- | --- | --- |
+| create-1k | 8.5 | 7.0 | 7.6 | 10.0 |
+| update-1k (10th) | 1.1 | 0.9 | 1.0 | 1.7 |
+| swap-1k | 0.5 | 0.8 | 1.3 | 1.8 |
+| clear-1k | 2.3 | 2.5 | 2.2 | 3.8 |
+| create-10k | 51.9 | 46.4 | 60.6 | 86.5 |
+
+Loom leads or ties every op among the frameworks and stays within ~3–8% of
+the vanilla floor on the create-heavy ones. `/bench/morph/` benches `morph()` against Idiomorph on a
 streaming-markdown workload (full-document and per-block-skip modes).
 
 ## Design notes

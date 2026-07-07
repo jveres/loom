@@ -727,6 +727,21 @@ describe("loom DOM onunmount", () => {
     expect(el.getAttribute("data-mode")).toBe("back");
   });
 
+  it("wires the camelCase prop spellings (onUnmount, onTap)", () => {
+    const cleanup = vi.fn();
+    const tapped = vi.fn();
+    const el = h("button", { onUnmount: cleanup, onTap: tapped });
+    el.dispatchEvent(
+      new PointerEvent("pointerdown", { pointerId: 1, clientX: 0, clientY: 0 }),
+    );
+    el.dispatchEvent(
+      new PointerEvent("pointerup", { pointerId: 1, clientX: 0, clientY: 0 }),
+    );
+    expect(tapped).toHaveBeenCalledTimes(1);
+    remove(el);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
   it("is a lifecycle hook, not a DOM event (no listener added)", () => {
     const cleanup = vi.fn();
     const el = h("button", { onunmount: cleanup });

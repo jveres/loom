@@ -3,8 +3,8 @@
 // renderGraph() rebuilds the group structure on the heartbeat; rows update value + flash on change
 // and outline their DOM node(s) on hover. props() signals fold under a collapsible header; standalone
 // signals at the root. Owns its module state; driven from outside through seams: the panel calls
-// buildGraphPane / showGraph / revealCell / clearGraphHighlight / teardownGraph, the stats
-// heartbeat calls renderGraphThrottled, and the Trace tab's row hover calls highlightCell.
+// buildGraphPane / showGraph / revealSignal / clearGraphHighlight / teardownGraph, the stats
+// heartbeat calls renderGraphThrottled, and the Trace tab's row hover calls highlightSignal.
 import type { State } from "loom";
 import {
   type ListSource,
@@ -40,7 +40,7 @@ type GraphItem =
     };
 let graphVList: VirtualList<GraphItem> | null = null;
 let graphById = new Map<number, InspectNode>();
-let graphByIdAt = 0; // performance.now() of the snapshot behind graphById (see highlightCell)
+let graphByIdAt = 0; // performance.now() of the snapshot behind graphById (see highlightSignal)
 let graphGroupsData: Array<{
   gid: number;
   label: string;
@@ -56,7 +56,7 @@ let lastGraphRender = 0; // performance.now() of the last graph reconcile (see G
 let gSuppressFlash = false;
 let gGraphJustShown = false;
 const graphCollapsed = new Set<number>();
-let gRevealId = -1; // a signal to flash on its next render (set by revealCell, from the Trace tab)
+let gRevealId = -1; // a signal to flash on its next render (set by revealSignal, from the Trace tab)
 
 export function buildGraphPane(): HTMLElement {
   graphVList = virtualList<GraphItem>({
@@ -236,7 +236,7 @@ function gPaint(targets: Node[], on: boolean): void {
 // The id→node map may be stale (the graph tab may not have rendered), so re-snapshot it — but at
 // most at the graph's own refresh cadence: sweeping the pointer down the trace list would otherwise
 // rebuild the whole graph snapshot once per row crossed. clearGraphHighlight() removes the overlay.
-export function highlightCell(id: number): void {
+export function highlightSignal(id: number): void {
   const t = performance.now();
   if (t - graphByIdAt >= GRAPH_RENDER_MS) {
     graphById = new Map(inspect({ active: true }).nodes.map((n) => [n.id, n]));
@@ -274,7 +274,7 @@ function gScrollToTargets(targets: Node[], stillActive: () => boolean): void {
 function gGroupLabel(gid: number, signals: InspectNode[]): string {
   const first = signals[0];
   const dot = first ? first.label.lastIndexOf(".") : -1;
-  return first && dot > 0 ? first.label.slice(0, dot) : `fields #${gid}`;
+  return first && dot > 0 ? first.label.slice(0, dot) : `props #${gid}`;
 }
 
 /* ---- virtual-list row renderers (create when reuse is null, else update in place) ---- */
@@ -500,7 +500,7 @@ function gIndexOf(id: number): number {
 
 // Jump the graph to a signal — used by the Trace tab's clickable name. Rebuilds the tree so the signal
 // is current, expands its group if needed, scrolls it to centre, and flashes it on render.
-export function revealCell(id: number): void {
+export function revealSignal(id: number): void {
   if (graphVList === null) return;
   renderGraph();
   const index = gIndexOf(id);

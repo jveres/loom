@@ -274,7 +274,7 @@ export const events = {
 // The record shape each built-in detail channel writes into a Frame's `samples`, keyed by the
 // channel's declared `fields`. The Meter API is generic, so `Frame.samples` is typed
 // `Record<string, unknown>`; a consumer (the inspector) narrows a known channel's samples to one of
-// these with `sampleOf`. Keep these in lockstep with the `fields` arrays passed to
+// these with `sampleOf`. Keep these in lockstep with the `fields` arrays the built-in channels declare via builtin() in ./channels.ts, fed to
 // createChannelNode above — they are the single named contract the devtools reads against.
 export interface ReadSample {
   readonly id: number;

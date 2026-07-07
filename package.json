@@ -49,6 +49,10 @@
       "types": "./dist/types/dom/virtual-list.d.ts",
       "default": "./dist/loom/dom/virtual-list.js"
     },
+    "./dom/scroll-fade": {
+      "types": "./dist/types/dom/scroll-fade.d.ts",
+      "default": "./dist/loom/dom/scroll-fade.js"
+    },
     "./devtools": {
       "types": "./dist/types/devtools/index.d.ts",
       "default": "./dist/loom/devtools.js"

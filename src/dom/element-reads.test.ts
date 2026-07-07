@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { effect } from "../loom.js";
-import { attr, classed, h, style } from "./index.js";
+import { effect, state } from "../loom.js";
+import { attr, classed, h, remove, style } from "./index.js";
 
 describe("attr(el, name) — reactive reads", () => {
   it("tracks attribute set, change, and removal", async () => {
@@ -120,5 +120,31 @@ describe("attr(el, name) — reactive reads", () => {
     el.style.width = "10px";
     await vi.waitFor(() => expect(seen).toEqual(["", "10px"]));
     stop();
+  });
+
+  it("classed(el, name, read) toggles the class as a node-owned binding", () => {
+    const on = state(false);
+    const el = h("div");
+    classed(el, "active", () => on());
+    expect(el.classList.contains("active")).toBe(false);
+    on(true);
+    expect(el.classList.contains("active")).toBe(true);
+
+    remove(el); // node teardown disposes the binding
+    on(false);
+    expect(el.classList.contains("active")).toBe(true);
+  });
+
+  it("style(el, prop, read) binds inline style, camelCase converted", () => {
+    const width = state("10px");
+    const el = h("div");
+    style(el, "maxWidth", () => width()); // camelCase prop name
+    expect(el.style.getPropertyValue("max-width")).toBe("10px");
+    width("20px");
+    expect(el.style.getPropertyValue("max-width")).toBe("20px");
+
+    remove(el);
+    width("30px");
+    expect(el.style.getPropertyValue("max-width")).toBe("20px");
   });
 });

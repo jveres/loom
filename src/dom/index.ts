@@ -9,8 +9,8 @@ import {
   type Stop,
   untrack,
 } from "../loom.js";
-import { attrRead, classRead, styleRead } from "./attr-of.js";
-import { onMount } from "./onmount.js";
+import { attrRead, classRead, styleRead } from "./element-reads.js";
+import { onMount } from "./on-mount.js";
 import { positionOrdered } from "./place.js";
 
 export type Child =
@@ -219,7 +219,7 @@ export function attr(
   }
   const name = b as string;
   if (read === undefined) return attrRead(a, name);
-  bindAttrValue(a, name, read, options);
+  applyAttrBinding(a, name, read, options);
   return undefined;
 }
 
@@ -595,7 +595,7 @@ function applyProps(node: Element, props: ElementProps): void {
     }
     if (isAttrBinding(value)) {
       const binding = brand<PropBinding>(value);
-      bindAttrValue(node, binding.name, binding.read);
+      applyAttrBinding(node, binding.name, binding.read);
       continue;
     }
     if ((name === "ontap" || name === "onTap") && typeof value === "function") {
@@ -607,7 +607,7 @@ function applyProps(node: Element, props: ElementProps): void {
       continue;
     }
     if (typeof value === "function") {
-      bindAttrValue(node, name, value as Read<unknown>);
+      applyAttrBinding(node, name, value as Read<unknown>);
       continue;
     }
     setAttr(node, name, value);
@@ -757,7 +757,7 @@ function bindClass(
   );
 }
 
-function bindAttrValue(
+function applyAttrBinding(
   node: Element,
   name: string,
   read: Read<unknown>,
@@ -892,6 +892,5 @@ export {
   observeMutation,
 } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
-export { onMount } from "./onmount.js";
+export { onMount } from "./on-mount.js";
 export { type PersistedOptions, persisted } from "./persisted.js";
-export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";

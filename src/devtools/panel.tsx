@@ -5,13 +5,14 @@
 // All of the inspector's own reactive bindings and UI state are created `internal`, so Loom's
 // observability filters them out: the inspector measures the app, never itself.
 import { configure, type Scope, type State, scope, state } from "loom";
-import { onTap, persisted, scrollFade } from "loom/dom";
+import { onTap, persisted } from "loom/dom";
+import { scrollFade } from "loom/dom/scroll-fade";
 import { bind, disposeBindings, PANEL_OPTS } from "./bindings.js";
 import { CSS, PANEL_ID } from "./css.js";
 import {
   buildGraphPane,
   clearGraphHighlight,
-  revealCell,
+  revealSignal,
   showGraph,
   teardownGraph,
 } from "./graph.js";
@@ -75,7 +76,7 @@ const LOG_SIZES = [1000, 5000, 25000];
 
 type PanelPos = { left: number; top: number } | null;
 type PanelSize = { width: number; height: number } | null;
-interface PanelCells {
+interface PanelSignals {
   readonly theme: State<Theme>;
   readonly min: State<boolean>;
   readonly logSize: State<number>;
@@ -88,8 +89,8 @@ interface PanelCells {
 // and memoized across mount/unmount cycles. Theme/min/logSize keep their historical raw-string
 // storage formats via parse/serialize, so values persisted before this migration still load;
 // validate is the choke point that drops a clobbered or out-of-range stored value.
-let signals: PanelCells | null = null;
-function panelCells(): PanelCells {
+let signals: PanelSignals | null = null;
+function panelSignals(): PanelSignals {
   signals ??= {
     theme: persisted<Theme>(`${PANEL_ID}-theme`, "system", {
       internal: true,
@@ -231,7 +232,7 @@ function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
       },
       () => {
         handle.style.cursor = "";
-        if (moved) panelCells().pos(moved); // write-through persists it
+        if (moved) panelSignals().pos(moved); // write-through persists it
       },
     );
   });
@@ -272,7 +273,7 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
         resized = { width: w, height: h };
       },
       () => {
-        if (resized) panelCells().size(resized); // write-through persists it
+        if (resized) panelSignals().size(resized); // write-through persists it
       },
     );
   });
@@ -311,7 +312,7 @@ export function mountInspector(target: Element = document.body): void {
 
   ui = state<TabId>("stats", PANEL_OPTS);
 
-  let theme = panelCells().theme();
+  let theme = panelSignals().theme();
   const themeVal = <span class="li-menu-val" />;
   const applyTheme = (): void => {
     panel?.setAttribute("data-theme", theme);
@@ -328,7 +329,7 @@ export function mountInspector(target: Element = document.body): void {
   onTap(themeItem, (): void => {
     const order: Theme[] = ["system", "light", "dark"];
     theme = order[(order.indexOf(theme) + 1) % order.length] ?? "system";
-    panelCells().theme(theme);
+    panelSignals().theme(theme);
     applyTheme();
   });
   const menu = <div class="li-menu" hidden />;
@@ -337,7 +338,7 @@ export function mountInspector(target: Element = document.body): void {
   menuEl = menu;
 
   // Trace-log window size — cycle 1k / 5k / 25k (how many events the Trace tab keeps).
-  let logSize = panelCells().logSize();
+  let logSize = panelSignals().logSize();
   const sizeVal = <span class="li-menu-val" />;
   const applyLogSize = (): void => {
     sizeVal.textContent = `${logSize / 1000}k`;
@@ -356,7 +357,7 @@ export function mountInspector(target: Element = document.body): void {
   onTap(sizeItem, (): void => {
     logSize =
       LOG_SIZES[(LOG_SIZES.indexOf(logSize) + 1) % LOG_SIZES.length] ?? 1000;
-    panelCells().logSize(logSize);
+    panelSignals().logSize(logSize);
     applyLogSize();
   });
   menu.append(sizeItem);
@@ -407,12 +408,12 @@ export function mountInspector(target: Element = document.body): void {
     min.title = isMin ? "Expand" : "Collapse";
     min.replaceChildren(barIcon(isMin ? ICON_MAXIMIZE : ICON_MINIMIZE));
   };
-  const startMin = panelCells().min();
+  const startMin = panelSignals().min();
   paintMin(startMin);
   onTap(min, (): void => {
     const isMin = !!panel?.classList.toggle("li-min");
     paintMin(isMin);
-    panelCells().min(isMin);
+    panelSignals().min(isMin);
     // Freeze (or thaw) the panel's reactivity while collapsed.
     if (isMin) inspectorScope?.pause();
     else inspectorScope?.resume();
@@ -469,7 +470,7 @@ export function mountInspector(target: Element = document.body): void {
   // Clicking a trace row's name jumps to that signal in the Graph tab (the panel owns tab state).
   setTraceLocate((id): void => {
     ui?.("graph");
-    revealCell(id);
+    revealSignal(id);
   });
 
   const tabscroll = <div class="li-tabscroll" />;
@@ -528,8 +529,8 @@ export function mountInspector(target: Element = document.body): void {
   target.append(panel);
   document.body.append(menu);
 
-  const savedSize = panelCells().size();
-  const savedPos = panelCells().pos();
+  const savedSize = panelSignals().size();
+  const savedPos = panelSignals().pos();
   if (savedSize) {
     panel.style.width = `${Math.max(240, Math.min(savedSize.width, window.innerWidth - 16))}px`;
     panel.style.height = `${Math.max(160, Math.min(savedSize.height, window.innerHeight - 16))}px`;

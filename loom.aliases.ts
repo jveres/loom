@@ -14,6 +14,10 @@ export const loomAliases = [
     find: /^loom\/dom\/virtual-list$/,
     replacement: r("src/dom/virtual-list.ts"),
   },
+  {
+    find: /^loom\/dom\/scroll-fade$/,
+    replacement: r("src/dom/scroll-fade.ts"),
+  },
   { find: /^loom\/devtools$/, replacement: r("src/devtools/index.ts") },
   { find: /^loom\/html$/, replacement: r("src/html/index.ts") },
   { find: /^loom\/jsx-runtime$/, replacement: r("src/dom/jsx-runtime.ts") },

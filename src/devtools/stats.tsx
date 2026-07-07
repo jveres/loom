@@ -113,6 +113,13 @@ function pulse<T>(read: () => T): () => T {
     return read();
   };
 }
+// The two heartbeat-driven binding shapes, PANEL_OPTS pre-applied.
+function pulsedAttr(el: Element, name: string, read: () => string): void {
+  attr(el, name, pulse(read), PANEL_OPTS);
+}
+function pulsedText(read: () => string): Text {
+  return text(pulse(read), PANEL_OPTS);
+}
 /* ---- formatting + web-vital sources ---- */
 const ema = (prev: number, delta: number): number =>
   prev * 0.6 + (delta / POLL_S) * 0.4;
@@ -276,31 +283,15 @@ function gaugeLive(): Child {
       transform="rotate(135 44 44)"
     />
   );
-  attr(
+  pulsedAttr(
     arc,
     "stroke-dasharray",
-    pulse(() => `${(GAUGE_ARC * score) / 100} ${GAUGE_C}`),
-    PANEL_OPTS,
+    () => `${(GAUGE_ARC * score) / 100} ${GAUGE_C}`,
   );
-  attr(
-    arc,
-    "class",
-    pulse(() => `li-garc h-${healthKey}`),
-    PANEL_OPTS,
-  );
+  pulsedAttr(arc, "class", () => `li-garc h-${healthKey}`);
   const num = <text class="li-gnum" x={44} y={48} text-anchor="middle" />;
-  num.append(
-    text(
-      pulse(() => String(score)),
-      PANEL_OPTS,
-    ),
-  );
-  attr(
-    num,
-    "class",
-    pulse(() => `li-gnum h-${healthKey}`),
-    PANEL_OPTS,
-  );
+  num.append(pulsedText(() => String(score)));
+  pulsedAttr(num, "class", () => `li-gnum h-${healthKey}`);
   return [arc, num];
 }
 function buildGauge(): HTMLElement {
@@ -433,30 +424,16 @@ const TIP = {
 function buildStatsPane(): HTMLElement {
   const fpsValue = <span class="li-perfh-fps" />;
   fpsValue.append(
-    text(
-      pulse(() => (fpsReady ? `${Math.round(fps)} fps` : "— fps")),
-      PANEL_OPTS,
-    ),
+    pulsedText(() => (fpsReady ? `${Math.round(fps)} fps` : "— fps")),
   );
-  attr(
-    fpsValue,
-    "class",
-    pulse(() => `li-perfh-fps ${fpsKey}`),
-    PANEL_OPTS,
-  );
+  pulsedAttr(fpsValue, "class", () => `li-perfh-fps ${fpsKey}`);
 
   const hlabel = <div class="li-hlabel" title={TIP.health} />;
   hlabel.append(
-    text(
-      pulse(() => (fpsReady ? healthLabel.toUpperCase() : "LOADING")),
-      PANEL_OPTS,
-    ),
+    pulsedText(() => (fpsReady ? healthLabel.toUpperCase() : "LOADING")),
   );
-  attr(
-    hlabel,
-    "class",
-    pulse(() => (healthReady ? `li-hlabel h-${healthKey}` : "li-hlabel")),
-    PANEL_OPTS,
+  pulsedAttr(hlabel, "class", () =>
+    healthReady ? `li-hlabel h-${healthKey}` : "li-hlabel",
   );
 
   const side = (
@@ -588,13 +565,7 @@ function vitalStat(
 ): HTMLElement {
   const row = stat(label, get, "", title);
   const val = row.querySelector(".li-stat-v");
-  if (val)
-    attr(
-      val,
-      "class",
-      pulse(() => `li-stat-v ${color()}`),
-      PANEL_OPTS,
-    );
+  if (val) pulsedAttr(val, "class", () => `li-stat-v ${color()}`);
   return row;
 }
 
