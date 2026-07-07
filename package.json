@@ -10,7 +10,10 @@
     "type": "git",
     "url": "git+https://github.com/jveres/loom.git"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/loom/defer.js",
+    "./src/core/defer.ts"
+  ],
   "files": [
     "dist",
     "src",

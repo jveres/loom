@@ -13,7 +13,7 @@
 <p align="center">
   <a href="./LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-green"></a>
   <img alt="status: alpha" src="https://img.shields.io/badge/status-alpha-orange">
-  <img alt="gzip ~6 kB" src="https://img.shields.io/badge/gzip-~6%20kB-blue">
+  <img alt="gzip ~5.5 kB" src="https://img.shields.io/badge/gzip-~5.5%20kB-blue">
   <img alt="TypeScript" src="https://img.shields.io/badge/types-TypeScript-3178c6">
   <img alt="built on alien-signals" src="https://img.shields.io/badge/built%20on-alien--signals-8957e5">
 </p>
@@ -1276,8 +1276,9 @@ vanilla baseline through one shared command surface (create/update/swap/clear
 | clear-1k | 2.3 | 2.5 | 2.2 | 3.8 |
 | create-10k | 51.9 | 46.4 | 60.6 | 86.5 |
 
-Loom leads or ties every op among the frameworks and stays within ~3–8% of
-the vanilla floor on the create-heavy ones. `/bench/morph/` benches `morph()` against Idiomorph on a
+Loom beats the vanilla baseline on the create-heavy ops (keyed reconcile
+amortizes better than rebuild-and-append) and trades single-op wins with
+ArrowJS on swap/clear; Shablon trails throughout. `/bench/morph/` benches `morph()` against Idiomorph on a
 streaming-markdown workload (full-document and per-block-skip modes).
 
 ## Design notes

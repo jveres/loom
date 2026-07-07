@@ -18,6 +18,7 @@ const root = new URL("..", import.meta.url).pathname;
 // App source → gzip budget in bytes. The minimal app is the headline number: the cost of
 // state/computed/effect alone (engine + signals + channel gates + deferred lane; no meter ring
 // writer, no inspect machinery — those load with loom/observe).
+const results = [];
 const APPS = [
   {
     name: "minimal (state+computed+effect)",
@@ -34,6 +35,21 @@ const APPS = [
     name: "full core (export * from loom)",
     budget: 5500,
     source: `export * from "loom";`,
+  },
+  {
+    // Gates the loom/defer lane: its bare import must survive bundling (sideEffects lists it) and
+    // stay small. A result at ~the minimal number means the import was stripped — the lane never
+    // installs and { defer: true } throws in production; minDelta catches that regression.
+    name: "minimal + defer lane",
+    budget: 3650,
+    minDelta: 150,
+    source: `
+      import "loom/defer";
+      import { effect, state } from "loom";
+      const a = state(1);
+      effect(() => console.log(a()), { defer: true });
+      a(2);
+    `,
   },
   {
     // Gates the README claim that loom/async adds ~0.3 kB gzip over the minimal core.
@@ -80,7 +96,9 @@ try {
       },
     });
     const gz = gzipSync(out.outputFiles[0].contents, { level: 9 }).length;
-    const ok = gz <= app.budget;
+    if (results.length === 0) results.push(gz); // minimal is first: the baseline for minDelta
+    const ok =
+      gz <= app.budget && (!app.minDelta || gz - results[0] >= app.minDelta);
     failed ||= !ok;
     console.log(
       `${ok ? "ok  " : "FAIL"} ${app.name}: ${gz} B gzip (budget ${app.budget})`,
