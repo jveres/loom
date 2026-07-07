@@ -463,8 +463,8 @@ export function each<T>(
   } satisfies SlotDescriptor);
 }
 
-// Walk a subtree's node-owned disposers, applying `fn` to each stop. Shared by dispose (teardown)
-// and pause/resume (suspension) — one traversal protocol for every lifetime operation.
+// Walk a subtree's node-owned disposers, applying `fn` to each stop; `clear` drops the entries
+// (teardown). One traversal protocol for every lifetime operation — dispose, pause, resume.
 function walkOwned(root: Node, fn: (stop: Stop) => void, clear: boolean): void {
   const stack: Node[] = [root];
   for (let index = 0; index < stack.length; index++) {
@@ -493,18 +493,7 @@ export function resume(root: Node): void {
 }
 
 export function dispose(root: Node): void {
-  const stack: Node[] = [root];
-  for (let index = 0; index < stack.length; index++) {
-    const node = stack[index] as Node;
-    const stops = ownedEffects.get(node);
-    if (stops) {
-      ownedEffects.delete(node);
-      stopOwned(stops);
-    }
-    for (let child = node.firstChild; child; child = child.nextSibling) {
-      stack.push(child);
-    }
-  }
+  walkOwned(root, (stop) => stop(), true);
 }
 
 export function remove(node: Node): void {
@@ -579,14 +568,6 @@ export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop {
   const stop = effect(fn, { target: node, ...options });
   onUnmount(node, stop);
   return stop;
-}
-
-function stopOwned(owned: OwnedEffect): void {
-  if (Array.isArray(owned)) {
-    for (const stop of owned) stop();
-  } else {
-    owned();
-  }
 }
 
 function applyProps(node: Element, props: ElementProps): void {

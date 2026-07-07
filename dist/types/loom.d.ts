@@ -21,7 +21,8 @@ export interface NodeOptions {
 export interface EffectOptions extends NodeOptions {
     readonly target?: object;
     /**
-     * Run this effect in the deferred lane: re-runs happen off the critical path (idle-first,
+     * Run this effect in the deferred lane (requires `import "loom/defer"` once at startup):
+     * re-runs happen off the critical path (idle-first,
      * coalesced) instead of in the synchronous flush. The initial run is still synchronous (so deps
      * are tracked and the first output is immediate); only re-runs defer. Coalesced means it sees the
      * latest value, NOT every transition — use a channel for every-transition.

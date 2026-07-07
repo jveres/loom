@@ -52,7 +52,8 @@ export interface NodeOptions {
 export interface EffectOptions extends NodeOptions {
   readonly target?: object;
   /**
-   * Run this effect in the deferred lane: re-runs happen off the critical path (idle-first,
+   * Run this effect in the deferred lane (requires `import "loom/defer"` once at startup):
+   * re-runs happen off the critical path (idle-first,
    * coalesced) instead of in the synchronous flush. The initial run is still synchronous (so deps
    * are tracked and the first output is immediate); only re-runs defer. Coalesced means it sees the
    * latest value, NOT every transition — use a channel for every-transition.
@@ -199,9 +200,6 @@ let queuedLength = 0;
 let activeSub: NodeBase | undefined;
 let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
-// Deferred lane: effects whose re-runs run off the critical path (see deferEffect/drainDeferred).
-// A head index makes the drain O(1)-per-item (no shift); drained slots are nulled and the backing
-// array reset once fully consumed.
 const deferTimeout = 200; // default maxStale (ms) for a deferred effect that doesn't set its own
 let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off the reactive path)
 let onError: ErrorHandler | undefined;
@@ -512,7 +510,8 @@ export function resumeEffectStop(stop: Stop): boolean {
     (node.flags & (Dirty | Pending)) !== 0
   ) {
     enqueueEffect(node);
-    if (batchDepth === 0) flush();
+    // Ride an in-progress flush (resume from inside an effect run) instead of re-entering.
+    if (batchDepth === 0 && runDepth === 0) flush();
   }
   return true;
 }
@@ -611,6 +610,7 @@ function walkResources(
 function flushScope(node: ScopeNode): void {
   if (scopePaused(node)) return;
   for (const effectNode of node.effects) {
+    if (effectNode.pausedCount !== 0) continue; // still directly paused (dom subtree pause)
     if (effectNode.flags & (Dirty | Pending)) enqueueEffect(effectNode);
   }
   for (const child of node.children) flushScope(child);
@@ -1129,8 +1129,13 @@ function queueEffect(effect: EffectNode): void {
 }
 
 function runEffect(node: EffectNode): boolean {
-  // A scope paused after this effect was already queued: leave it dirty for resume.
-  if (node.scope !== undefined && scopePaused(node.scope)) return false;
+  // Paused after this effect was already queued (directly, or via its scope chain): leave it
+  // dirty for resume.
+  if (
+    node.pausedCount !== 0 ||
+    (node.scope !== undefined && scopePaused(node.scope))
+  )
+    return false;
   const flags = node.flags;
   if (
     flags & Dirty ||

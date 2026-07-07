@@ -14,14 +14,14 @@ import {
   source,
   untrack,
 } from "loom";
-import { attr, type Child, text, when } from "loom/dom";
+import { attr, bind, type Child, text, when } from "loom/dom";
 import {
   events,
   type FlushSample,
   inspectResources,
   sampleOf,
 } from "loom/observe";
-import { bind, PANEL_OPTS } from "./bindings.js";
+import { PANEL_OPTS } from "./bindings.js";
 import { renderGraphThrottled } from "./graph.js";
 import type { TabId } from "./panel.js";
 import { renderTrace } from "./trace.js";
@@ -334,7 +334,7 @@ function buildHisto(): HTMLElement {
   // Everything a bar shows derives from its ms sample, so one number per bar dedups all three
   // attribute writes — empty/steady bars (idle tails) cost nothing per tick.
   const lastMs: number[] = new Array(FRAME_N).fill(-1);
-  bind(() => {
+  const paint = (): void => {
     heartbeat?.();
     const off = bars.length - frameMs.length;
     for (let i = 0; i < bars.length; i++) {
@@ -348,8 +348,8 @@ function buildHisto(): HTMLElement {
       bar.setAttribute("height", String(hgt));
       bar.setAttribute("class", ms ? frameColor(ms) : "");
     }
-  });
-  return (
+  };
+  const el = (
     <div class="li-histo" title={TIP.frames}>
       <svg
         preserveAspectRatio="none"
@@ -361,6 +361,8 @@ function buildHisto(): HTMLElement {
       </svg>
     </div>
   );
+  bind(el, paint, PANEL_OPTS);
+  return el;
 }
 
 /* ---- stats tab ---- */
@@ -728,17 +730,6 @@ export function wireStats(opts: {
   ]); // default "count" view — rates only, no per-event allocation
   flushMeter = meter([events.flush], "samples"); // the one channel we read records from
   heartbeat = poll(pollTick, POLL_MS, PANEL_OPTS);
-  // The heavy per-tab refresh runs in the deferred lane — ticked by the heartbeat but off the
-  // critical path (idle-first, ~POLL_MS floor), so under app load it yields instead of competing each
-  // frame. untracked so it re-runs only on the tick, not on whatever the render reads. Owned by the
-  // panel scope, so it pauses with minimize like the heartbeat.
-  bind(
-    () => {
-      heartbeat?.();
-      untrack(renderActiveTab);
-    },
-    { defer: true, maxStale: POLL_MS },
-  );
   // Definite-assignment: scope() runs its callback synchronously, so statsPane is set before the
   // scope() call returns and before it's read at the end of wireStats.
   let statsPane!: HTMLElement;
@@ -752,6 +743,18 @@ export function wireStats(opts: {
     }
     statsPane = buildStatsPane();
   }, PANEL_OPTS);
+  // The heavy per-tab refresh runs in the deferred lane — ticked by the heartbeat but off the
+  // critical path (idle-first, ~POLL_MS floor), so under app load it yields instead of competing
+  // each frame. untracked so it re-runs only on the tick, not on whatever the render reads. Owned
+  // by the pane node (dies with the panel) and paused with minimize via the ambient scope.
+  bind(
+    statsPane,
+    () => {
+      heartbeat?.();
+      untrack(renderActiveTab);
+    },
+    { ...PANEL_OPTS, defer: true, maxStale: POLL_MS },
+  );
   startMetrics();
   return statsPane;
 }

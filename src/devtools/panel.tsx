@@ -5,9 +5,9 @@
 // All of the inspector's own reactive bindings and UI state are created `internal`, so Loom's
 // observability filters them out: the inspector measures the app, never itself.
 import { configure, type Scope, type State, scope, state } from "loom";
-import { onTap, persisted } from "loom/dom";
+import { bind, onTap, persisted, remove } from "loom/dom";
 import { scrollFade } from "loom/dom/scroll-fade";
-import { bind, disposeBindings, PANEL_OPTS } from "./bindings.js";
+import { PANEL_OPTS } from "./bindings.js";
 import { CSS, PANEL_ID } from "./css.js";
 import {
   buildGraphPane,
@@ -543,8 +543,9 @@ export function mountInspector(target: Element = document.body): void {
     panel.style.bottom = "auto";
   }
 
-  // Reactive tab switching (dogfood: ui -> pane visibility + active styling).
-  bind(() => {
+  // Reactive tab switching (dogfood: ui -> pane visibility + active styling). Owned by the panel
+  // node — remove(panel) at unmount disposes it with every other binding.
+  bind(panel, () => {
     const tab = ui?.();
     // Save the outgoing tab's scroll before its pane is hidden (heights differ per tab).
     if (prevTab && prevTab !== tab && bodyEl)
@@ -595,19 +596,18 @@ export function unmountInspector(): void {
   stopStats();
   for (const dispose of scrollFades) dispose();
   scrollFades.length = 0;
-  disposeBindings();
   // inspectorScope owns the meters, heartbeat, the deferred render effect and every binding created
   // inside wireStats; stopping it is the authoritative teardown for those, so a resource added to
-  // the scope but not tracked above can't leak. (Bindings made after the scope returned — e.g. the
-  // tab switcher — are covered by disposeBindings() above.)
+  // the scope but not tracked above can't leak. (Bindings made after the scope
+  // returned — e.g. the tab switcher — are node-owned and die with remove(panel) below.)
   inspectorScope?.stop();
   inspectorScope = null;
   if (closeMenuOnOutside)
     document.removeEventListener("pointerdown", closeMenuOnOutside);
   closeMenuOnOutside = null;
-  menuEl?.remove();
+  if (menuEl) remove(menuEl);
   menuEl = null;
-  panel?.remove();
+  if (panel) remove(panel); // loom remove: node-owned bindings (incl. the tab switcher) die here
   panel = null;
   bodyEl = null;
   ui = null;

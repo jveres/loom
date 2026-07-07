@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Kit helpers: bind / observeSize / observeIntersection / observeMutation / onMount / persisted.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { state } from "../loom.js";
+import { batch, scope, state } from "../loom.js";
 import { bind, h, onMount, onUnmount, pause, remove, resume } from "./index.js";
 import { observeIntersection } from "./observe-intersection.js";
 import { observeMutation } from "./observe-mutation.js";
@@ -427,4 +427,96 @@ describe("pause/resume (subtree)", () => {
     remove(outside);
     expect(manual).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("pause edge cases (audit round)", () => {
+  it("an effect queued before pause stays suspended until resume", () => {
+    const value = state(0);
+    const el = h("div");
+    let runs = 0;
+    bind(el, () => {
+      value();
+      runs++;
+    });
+    batch(() => {
+      value(1); // queued...
+      pause(el); // ...then paused before the flush
+    });
+    expect(runs).toBe(1); // did not run at flush
+    resume(el);
+    expect(runs).toBe(2); // catch-up delivers it
+    remove(el);
+  });
+
+  it("scope resume does not wake a subtree-paused effect", () => {
+    const value = state(0);
+    const el = h("div");
+    let runs = 0;
+    const s = scope(() => {
+      bind(el, () => {
+        value();
+        runs++;
+      });
+    });
+    pause(el);
+    s.pause();
+    value(1);
+    s.resume(); // scope side wakes; the direct pause must still hold
+    expect(runs).toBe(1);
+    resume(el);
+    expect(runs).toBe(2);
+    s.stop();
+    remove(el);
+  });
+
+  it("remove() of a paused subtree disposes cleanly; stray resume is a no-op", () => {
+    const value = state(0);
+    const el = h("div");
+    let runs = 0;
+    bind(el, () => {
+      value();
+      runs++;
+    });
+    pause(el);
+    value(1);
+    remove(el); // dispose while paused
+    resume(el); // nothing owned anymore — must not throw or run
+    value(2);
+    expect(runs).toBe(1);
+
+    const fresh = h("div");
+    resume(fresh); // resume without any prior pause: no-op
+  });
+});
+
+it("dom pause suspends a deferred effect already in the lane", async () => {
+  await import("../core/defer.js");
+  const { configure } = await import("../loom.js");
+  // Synchronous scheduler: drain immediately when scheduled.
+  configure({
+    deferScheduler: (drain) => {
+      queueMicrotask(() => drain(() => true));
+      return () => {};
+    },
+  });
+  const value = state(0);
+  const el = h("div");
+  let runs = 0;
+  bind(
+    el,
+    () => {
+      value();
+      runs++;
+    },
+    { defer: true },
+  );
+  value(1); // enqueued in the lane...
+  pause(el); // ...paused before the drain fires
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(runs).toBe(1); // drain skipped it
+  resume(el);
+  // A deferred effect resumes on its own lane, not synchronously.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(runs).toBe(2);
+  remove(el);
 });

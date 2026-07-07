@@ -327,7 +327,7 @@ function Ce(e) {
 }
 function we(e) {
 	let t = N(e);
-	return t === void 0 || t.fn === void 0 || t.flags === 0 ? !1 : (t.pausedCount > 0 && t.pausedCount--, t.pausedCount === 0 && (t.scope === void 0 || !z(t.scope)) && t.flags & 48 && (U(t), C === 0 && Z()), !0);
+	return t === void 0 || t.fn === void 0 || t.flags === 0 ? !1 : (t.pausedCount > 0 && t.pausedCount--, t.pausedCount === 0 && (t.scope === void 0 || !z(t.scope)) && t.flags & 48 && (U(t), C === 0 && S === 0 && Z()), !0);
 }
 function Te(e) {
 	D?.resources.push(e);
@@ -373,7 +373,7 @@ function H(e, t) {
 }
 function ke(e) {
 	if (!z(e)) {
-		for (let t of e.effects) t.flags & 48 && U(t);
+		for (let t of e.effects) t.pausedCount === 0 && t.flags & 48 && U(t);
 		for (let t of e.children) ke(t);
 	}
 }
@@ -642,7 +642,7 @@ function Ze(e) {
 	}
 }
 function X(e) {
-	if (e.scope !== void 0 && z(e.scope)) return !1;
+	if (e.pausedCount !== 0 || e.scope !== void 0 && z(e.scope)) return !1;
 	let t = e.flags;
 	if (t & v || t & oe && me(e.deps, e)) {
 		if (t & y && nt(e), e.cleanup && (et(e), !e.flags)) return !1;
