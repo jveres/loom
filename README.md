@@ -215,7 +215,7 @@ Pass `{ label }` to `state`, `computed`, `effect`, or `props` when
 you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
 tooling state that must not appear in app-level event streams by default.
 
-### Object props
+### Object properties
 
 Use `props()` when you want fine-grained updates for a plain object. Each
 enumerable string key becomes its own signal.

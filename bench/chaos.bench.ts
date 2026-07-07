@@ -15,7 +15,7 @@ import {
 } from "../src/loom.js";
 
 type Tone = 0 | 1 | 2 | 3 | 4;
-type Cell<T> = {
+type Signal<T> = {
   (): T;
   (value: T): void;
 };
@@ -33,9 +33,9 @@ interface CardModel {
   pending: number;
 }
 
-type CardCells = { readonly [K in keyof CardModel]: Cell<CardModel[K]> };
+type CardSignals = { readonly [K in keyof CardModel]: Signal<CardModel[K]> };
 type LoomCard = Props<CardModel>;
-type AlienCard = CardCells;
+type AlienCard = CardSignals;
 
 interface CardRef<T> {
   readonly model: T;
@@ -299,7 +299,7 @@ function bindAlienCardViews(model: AlienCard): Array<() => void> {
   ];
 }
 
-function applyTraffic(card: CardRef<CardCells>, op: TrafficOp): void {
+function applyTraffic(card: CardRef<CardSignals>, op: TrafficOp): void {
   const model = card.model;
   if (op.kind === 0) model.likes(model.likes() + op.amount);
   else if (op.kind === 1) model.views(model.views() + op.amount);

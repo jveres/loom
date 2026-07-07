@@ -1,4 +1,4 @@
-// Loom: keyed list() into a tbody, per-row label state cell bound with text() — updates are
+// Loom: keyed list() into a tbody, per-row label signal bound with text() — updates are
 // fine-grained writes, reorders are keyed moves.
 import { type State, state } from "loom";
 import { h, list, text } from "loom/dom";
