@@ -110,110 +110,74 @@ batch(() => {
 stop();
 ```
 
-The core exports these functions:
-
-- `state(initial, options?)` creates a callable signal.
+- `state(initial, options?)` creates a callable signal: `count()` reads,
+  `count(next)` writes.
 - `computed(getter, options?)` creates a cached derived read.
-- `effect(fn, options?)` runs `fn` immediately and again when its dependencies
-  change. `fn` may return a cleanup that runs before each re-run and on stop
-  (that overload's function type is exported as `CleanupEffectFn`). Pass `{ target }` to associate the effect with the DOM node it writes
-  (the DOM layer does this for its bindings so the inspector can highlight what a
-  signal drives), or `{ defer: true, maxStale? }` to run re-runs off the critical
-  path (see [Deferred effects](#deferred-effects)).
-- `batch(fn)` groups writes and flushes effects once after the batch.
-- `scope(fn, options?)` groups the effects (and `poll`/`source` resources)
-  created inside `fn` so they can be disposed (`stop()`) or suspended (`pause()`
-  / `resume()`) together. Scopes nest, and an effect runs only while no scope in
-  its parent chain is paused. `options` (`internal` / `label`)
-  become defaults for every node created in the scope. Returns
-  `{ stop, pause, resume }`.
-- `untrack(fn)` reads state inside `fn` without subscribing the active effect.
-- `trigger(read)` notifies subscribers after in-place mutation.
+- `effect(fn, options?)` runs `fn` immediately and again when its
+  dependencies change. `fn` may return a cleanup that runs before each re-run
+  and on stop. `{ target }` associates the effect with the DOM node it writes
+  (inspector attribution); `{ defer, maxStale }` moves re-runs off the
+  critical path ([Deferred effects](#deferred-effects)).
+- `batch(fn)` groups writes and flushes effects once after the batch. A
+  top-level write outside `batch` flushes synchronously before it returns.
+- `untrack(fn)` reads state inside `fn` without subscribing the active
+  effect — and, because a nested effect links to the running one, it is also
+  the ownership escape ([Ownership & disposal](#ownership--disposal)).
+
+#### Deriving and reacting
+
 - `update(source, fn)` writes `fn(source())` back to a signal. The read is
   **untracked**: inside an effect, `update(v, n => n + 1)` does not subscribe
-  the effect to `v` — use it instead of `v(v() + 1)`, which does.
-- `mutate(source, fn)` mutates an object value and then triggers subscribers.
-- `watch(read, onChange, options?)` reacts to an explicit source's **changes**:
-  `read` is tracked, `onChange(value, previous)` runs untracked, and it is
-  skipped on the initial evaluation and when the derived value is unchanged.
-  The write-back-binding shape without the `let first = true` boilerplate.
+  the effect to `v` — `v(v() + 1)` does, and re-triggers the effect.
+- `watch(read, onChange, options?)` reacts to a source's **changes**: `read`
+  is tracked, `onChange(value, previous)` runs untracked, and it is skipped
+  on the initial evaluation and when the derived value is unchanged.
 
-> Writing an immutable value? Call the signal (`count(next)`) or `update` for a
-> functional set. Mutating an object/array in place? `mutate` (mutate + notify in
-> one) — or `trigger` when the mutation already happened elsewhere and you only
-> need to notify.
->
 > **Self-dependency warning (dev):** with inspection on
-> (`configure({ inspect: true })` + `loom/observe` loaded), loom warns once per
-> pair when an effect writes a signal it also reads — the `v(v() + 1)` pattern
-> that silently re-triggers the effect. `update()`/`untrack()` are the fixes.
->
-> **Flush timing:** a top-level write flushes effects synchronously before it
-> returns; `batch(fn)` coalesces any number of writes into one flush at the
-> end. Multi-write operations (undo, form resets) belong in `batch`.
-- `poll(sample, ms, options?)` — the **pull** bridge for external data:
-  re-samples `sample()` every `ms` ms into a value-deduped read; bindings
-  re-run only when the value changed. Returns a callable read with a `stop`:
-  `p()` reads, `p.stop()` clears the timer. See
-  [External data](#external-data).
-- `source(connect, initial, options?)` — the **push** bridge: `connect(set)`
-  runs when the source gains its first subscriber and the returned teardown
-  runs when it loses its last, so the producer (event listener,
-  `PerformanceObserver`, socket) is only live while observed. Returns a read
-  function. See [External data](#external-data).
-- `props(object, options?)` creates one signal per enumerable string key.
-- `channel(name, options?)` declares a named channel — a **generic**, gated,
-  overwriting ring buffer that records cheaply (no allocation until metered) and
-  is drained, not pushed. A reusable primitive for any event or sample stream, not
-  just telemetry.
-- `meter(channels, aggregation?)` attaches a pull-based meter (`aggregation` is
-  `"count"`, the default, or `"samples"`); `read()` returns a Frame per channel
-  (`{ count, dropped, samples }`) since the last read. A meter is a scope
-  resource, so it detaches on `scope.pause()`.
-- `configure({ inspect, onError, deferScheduler })` sets runtime options. `inspect` toggles the
-  inspection layer — **off by default**, so node creation allocates no metadata
-  (zero cost); turn it on once at startup, before creating the nodes you want
-  visible, when you need tooling. Enabling it also requires the `loom/observe`
-  module to be loaded (importing `inspect`/`events` — or mounting the inspector —
-  does that); the flag alone can't reach machinery that was never bundled. `onError` installs a global effect error
-  boundary (see [Error handling](#error-handling)); `deferScheduler` overrides the
-  deferred-effect lane's scheduler (see [Deferred effects](#deferred-effects)).
+> (`configure({ inspect: true })` + `loom/observe` loaded), loom warns once
+> per pair when an effect writes a signal it also reads — the `v(v() + 1)`
+> pattern that silently re-triggers the effect. `update()`/`untrack()` are
+> the fixes.
 
-> `channel` and `meter` are generic core primitives. **Watching Loom's *own* internals**
-> — the `events` registry (the runtime's built-in streams) and the graph-snapshot tools
-> `inspect` / `inspectResources` — is a separate opt-in surface,
-> [`loom/observe`](#observability). Keeping it out of the core means the default
-> `loom` import stays lean: reactivity, lifecycle, and `channel`/`meter` only.
+For in-place mutation of objects and arrays, `mutate` and `trigger` —
+[In-place mutation](#in-place-mutation).
 
-The core exports these types:
+#### Runtime configuration
 
-- `State<T>` is a callable read/write signal.
-- `Read<T>` is a read function.
-- `Stop` is a disposer function.
-- `Scope` is a scope handle: `{ stop, pause, resume }`.
-- `Polled<T>` is `poll()`'s handle: `Read<T> & { stop }`.
-- `SourceConnect<T>` is a lazy source's `(set) => teardown` wiring function.
-- `EffectFn` is a reusable effect callback type.
-- `ErrorHandler` is the `configure({ onError })` boundary signature.
-- `Props<T>` maps enumerable string keys to `State<T[K]>`.
-- `NodeInfo` is the lean node shape (`id` / `kind` / `label`) the
-  `configure({ onError })` boundary receives to name the offending node. The full
-  `InspectNode`, `InspectSnapshot`, `ResourceCounts` (the `inspect()` /
-  `inspectResources()` result shapes) come with `loom/observe` — where
-  `InspectNode extends NodeInfo`. `NodeKind` (the
-  `"state" | "computed" | "effect"` union) is exported from both `loom` and
-  `loom/observe`.
-- `Channel` is a named channel; `Meter` drains channels;
-  `Frame` is a per-channel `{ count, dropped, samples }`; `MeterAggregation` is a
-  meter's view (`"count" | "samples"`); `ChannelOptions` configures
-  `{ capacity, fields }`.
-- `NodeOptions` (`{ internal, label }`) and `EffectOptions` (adds `{ target }`
-  and the deferred-lane `{ defer, maxStale }`) are the option bags accepted by the
-  primitives; `DeferScheduler` is the configurable deferred-lane scheduler.
+`configure({ inspect, onError, deferScheduler })` sets runtime options.
+`inspect` toggles the inspection layer — **off by default**, so node creation
+allocates no metadata; turn it on once at startup, before creating the nodes
+you want visible. Enabling it also requires the `loom/observe` module to be
+loaded (importing `inspect`/`events` — or mounting the inspector — does
+that). `onError` installs a global effect error boundary
+([Error handling](#error-handling)); `deferScheduler` overrides the
+deferred-lane scheduler ([Deferred effects](#deferred-effects)).
 
-Pass `{ label }` to `state`, `computed`, `effect`, or `props` when
-you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
-tooling state that must not appear in app-level event streams by default.
+#### API index — `loom`
+
+| Export | Documented in |
+| --- | --- |
+| `state`, `computed`, `effect`, `batch`, `untrack` | [Core primitives](#core-primitives) |
+| `update`, `watch` | [Deriving and reacting](#deriving-and-reacting) |
+| `mutate`, `trigger` | [In-place mutation](#in-place-mutation) |
+| `props` | [Object properties](#object-properties) |
+| `poll`, `source` | [External data](#external-data) |
+| `scope` | [Scopes](#scopes) |
+| `channel`, `meter` | [Observability](#observability) |
+| `configure` | [Runtime configuration](#runtime-configuration) |
+
+Types: `State<T>` (callable read/write signal), `Read<T>`, `Stop`, `Scope`,
+`Polled<T>` (`poll`'s `Read<T> & { stop }`), `SourceConnect<T>`, `EffectFn`,
+`CleanupEffectFn` (effect body returning a cleanup), `ErrorHandler`,
+`Props<T>` (string keys to `State<T[K]>`), `NodeInfo` (`id`/`kind`/`label`,
+what an `onError` boundary receives), `NodeKind`, `Channel`, `Meter`,
+`Frame`, `MeterAggregation`, `ChannelOptions`, `NodeOptions`
+(`{ internal, label }`), `EffectOptions` (adds `{ target, defer, maxStale }`),
+`DeferScheduler`.
+
+Pass `{ label }` to `state`, `computed`, `effect`, or `props` when you want
+meaningful names in tooling. Pass `{ internal: true }` for Loom-owned tooling
+state that must not appear in app-level event streams by default.
 
 ### Object properties
 
@@ -491,103 +455,140 @@ document.body.append(
 );
 ```
 
-The DOM entrypoint exports these functions:
+The construction and binding core:
 
-- `h(tag, props, children)` creates an element.
+- `h(tag, props, children)` creates an element (JSX compiles to it).
 - `text(read)` creates a text node bound to a reactive read.
-- `attr` — the attribute as a signal, direction by first argument and arity:
-  `attr(name, read)` returns a JSX binding descriptor; `attr(el, name)`
-  returns a reactive `Read<string | null>` of the attribute's value;
-  `attr(el, name, read, options?)` binds `read()` to the attribute,
-  node-owned. `options` relabels the binding or marks it `internal`.
-- `classed` — a class as a boolean signal, same three forms:
-  `classed(name, read)` descriptor; `classed(el, name)` → `Read<boolean>` of
-  the class's presence; `classed(el, name, read, options?)` toggles it.
-- `style` — an inline style property as a signal, same three forms:
-  `style(name, read)` descriptor; `style(el, prop)` → `Read<string>` of the
-  inline value (empty when unset); `style(el, prop, read, options?)` binds
-  it. Property names accept camelCase or kebab-case.
+- `attr`, `classed`, `style` treat an attribute, a class, and an inline style
+  property as signals — see
+  [Element state as signals](#element-state-as-signals).
 - `list(container, read, options)` reconciles a keyed list into a container.
   Reorders move as few nodes as possible (longest-increasing-subsequence) and
   use the state-preserving `Element.moveBefore` where the platform has it, so
   iframes, focus, and CSS animations survive keyed moves.
-- `each(items, render, key)` is the inline keyed list — the same reconciliation
-  as `list()` but returned as a child expression (see
-  [Conditional rendering](#conditional-rendering)).
-- `when(cond, render, fallback?)` renders a subtree keyed on the truthiness of
-  `cond` (see [Conditional rendering](#conditional-rendering)).
-- `match(selector, cases, fallback?)` renders a subtree keyed on `selector()` —
-  the switch/case form.
-- `dispose(root)` disposes effects owned by a node subtree.
-- `remove(node)` disposes a node subtree and removes it from the DOM.
-- `morph(from, to, options?)` patches a live subtree to match a freshly built
-  one, preserving node identity where shapes align (see below).
-- `scrollFade(el, options?)` masks a scroller's edges so content fades out
-  exactly while more lies beyond — driven by scroll position and kept current
-  across resizes and content changes (no styling opinions; the effect is a
-  `mask-image` on the element). `options.size` sets the fade length in px
-  (default 14); `options.axis` picks the scroll axis (`"y"` default, `"x"`
-  for horizontal strips). Returns a disposer that removes the listeners and
-  clears the mask. While no edge fades, the mask is an opaque gradient rather
-  than none — clearing it would flip the element off the masked raster path
-  and the next fade-in flashes for a frame. The dev inspector's own scrollers
-  use it.
-- `onUnmount(node, stop)` attaches a disposer to a node's Loom lifecycle —
-  the JSX prop of the same name, callable (see
-  [Ownership & disposal](#ownership--disposal)).
+- `each(items, render, key)`, `when(cond, render, fallback?)`, and
+  `match(selector, cases, fallback?)` are the child-expression forms —
+  [Conditional rendering](#conditional-rendering).
+- `dispose(root)` disposes effects owned by a node subtree; `remove(node)`
+  disposes and detaches — [Ownership & disposal](#ownership--disposal).
+
+#### Element state as signals
+
+`attr`, `classed`, and `style` each carry three forms; the first argument and
+arity select the direction, as with a signal — read without a value, write
+with one:
+
+```ts
+attr("aria-pressed", hot);          // JSX binding descriptor (string first)
+attr(el, "hidden");                 // Read<string | null> — reactive read
+attr(el, "data-mode", () => mode()); // node-owned write binding
+```
+
+- `classed(name, read)` / `classed(el, name)` → `Read<boolean>` of the
+  class's presence / `classed(el, name, read, options?)`.
+- `style(name, read)` / `style(el, prop)` → `Read<string>` of the inline
+  value (empty when unset) / `style(el, prop, read, options?)`. Property
+  names accept camelCase or kebab-case.
+- Write bindings coerce like JSX attributes (nullish/false removes, true sets
+  empty); `options` relabels the binding or marks it `internal`.
+
+The reads share one app-wide `MutationObserver`: each watched element carries
+an `attributeFilter` of exactly its subscribed names, and the observation set
+is rebuilt only when a subscription changes, never per mutation.
+Subscriber-counted like every source — nothing observed, nothing exists.
+Typical guardrail:
+
+```ts
+watch(
+  () => connected(el)() && attr(el, "hidden")() === null,
+  (visible) => visible && clampIntoView(),
+);
+```
+
+#### Lifecycle
+
+- `onMount(el, fn)` runs `fn(el)` **once**, on a microtask after the task
+  that inserted the element — inserted and measurable, not yet painted.
+  Insertion in the same synchronous task creates no observer; a late
+  insertion is caught by a transient shared observer that lives only until
+  the element connects. Returns a cancel.
+- `onUnmount(el, stop)` attaches a disposer to the node's Loom lifecycle —
+  the contract is in [Ownership & disposal](#ownership--disposal).
 - `bind(el, fn, options?)` — reactive DOM state that dies with this node:
   `effect(fn)` target-attributed to `el` and disposed with it. The one-call
-  form of `onUnmount(el, effect(fn, { target: el }))`. Returns the stop for
-  early manual disposal.
-- `onMount(el, fn)` runs `fn(el)` **once**, on a microtask after the task
-  that inserted the element — inserted and measurable, not yet painted, so
-  measure-then-classify work causes no flash. Insertion in the same
-  synchronous task creates no observer; a late insertion is caught by a
-  transient shared observer that lives only until the element connects. Also
-  the `onMount` JSX prop — the symmetric twin of `onUnmount`. Returns a
-  cancel. For ongoing connectivity, use `connected()`.
-- `observeSize(el, cb)` — sized observation with the lifetime treatment
-  events get: `cb(entry)` runs on ResizeObserver's clock (including the
-  initial delivery on attach) and detaches automatically when the node is
-  torn down — the forgotten `ro.disconnect()` leak is gone by construction.
-  One shared observer serves the whole app. Returns a stop for early detach.
+  form of `onUnmount(el, effect(fn, { target: el }))`. Returns the stop.
+- `onTap(node, handler)` binds a robust tap — see
+  [The `onTap` synthetic event](#the-ontap-synthetic-event).
+
+All three lifecycle names are also JSX props — see the prop documentation
+below.
+
+#### Browser state and observers
+
+External browser state with loom lifetime — signals where state is read,
+observers where a callback reacts:
+
+- `connected(node)` returns a `Read<boolean>`, true while the node is in the
+  document: `onUnmount(el, watch(connected(el), (on) => on && measure()))`.
+  Backed by one shared document-level `MutationObserver` that exists only
+  while at least one connection signal is observed. **Cost while live** (the
+  observer records every childList mutation in the document, measured on the
+  comparative bench): ~3.5% on `create-10k`, ~0.3 ms per 1k-node `clear`,
+  nothing on update/swap; unused, zero. Moves confined to shadow roots are
+  invisible to it.
 - `persisted(key, initial, options?)` — a `State<T>` backed by
-  `localStorage`: read-validate once at creation, write-through on set. It is
-  a plain signal (`update`/`watch`/bindings all compose); `options` add
-  `serialize`/`parse` (default JSON) and `validate` — the choke point that
-  drops a corrupt or out-of-range stored value instead of leaking it into
-  the app. Absent or throwing storage degrades to an unpersisted signal. The
-  inspector's own panel chrome (theme, position, size) sits on it.
-- `connected(node)` returns a `Read<boolean>` that is true while the node is
-  in the document — mount state as a signal:
-  `onUnmount(el, watch(connected(el), (on) => on && measure()))`, and it
-  composes with any other signal in one effect. Backed by one shared document-level
-  `MutationObserver` that exists only while at least one connection signal is
-  observed. **Cost while live:** the observer records every childList
-  mutation in the document — measured on the comparative bench: ~3.5% on
-  `create-10k` (bulk inserts), ~0.3 ms per 1k-node `clear`, nothing on
-  update/swap ops; unused, it costs zero. (A zero-cost custom-element
-  sentinel variant was measured and rejected: it plants a hidden child in
-  the watched element, breaking `:empty`, serialization, and `morph()`.)
-  Moves confined to shadow roots are invisible to it.
-- Attribute/class/style **reads** (`attr(el, name)`, `classed(el, name)`,
-  `style(el, prop)`) share one app-wide `MutationObserver` — each watched
-  element carries an `attributeFilter` of exactly its subscribed names, and
-  the observation set is rebuilt only when a subscription changes, never per
-  mutation. Subscriber-counted like every source: nothing observed, nothing
-  exists. Typical guardrail:
-  `watch(() => connected(el)() && attr(el, "hidden")() === null, (visible) => …)`.
-- `observeIntersection(el, cb, options?)` — intersection observation with
-  node lifetime: `cb(entry)` runs on IntersectionObserver's clock and
-  detaches when the node is torn down. Observers with equal
-  `rootMargin`/`threshold` and the default root are shared; a custom `root`
-  gets a dedicated observer. Returns a stop.
-- `observeMutation(el, cb, options)` — DOM mutation observation with node
-  lifetime: the raw `MutationObserver` contract (`cb(records)`, batched per
-  microtask, `MutationObserverInit` options), detached on node teardown. One
-  observer per call: with `subtree` a record's target is the mutated
-  descendant, so shared observers cannot route records. Returns a stop.
-- `onTap(node, handler)` binds a robust tap (see below).
+  `localStorage`: read-validate once at creation, write-through on set. A
+  plain signal (`update`/`watch`/bindings compose); `options` add
+  `serialize`/`parse` (default JSON) and `validate`, which drops a corrupt or
+  out-of-range stored value instead of leaking it into the app. Absent or
+  throwing storage degrades to an unpersisted signal. The inspector's panel
+  chrome sits on it.
+- `observeSize(el, cb)` — `cb(entry)` on ResizeObserver's clock (including
+  the initial delivery on attach), detached on node teardown. One shared
+  observer serves the whole app. Returns a stop.
+- `observeIntersection(el, cb, options?)` — `cb(entry)` on
+  IntersectionObserver's clock, detached on node teardown. Observers with
+  equal `rootMargin`/`threshold` and the default root are shared; a custom
+  `root` gets a dedicated observer. Returns a stop.
+- `observeMutation(el, cb, options)` — the raw `MutationObserver` contract
+  (`cb(records)`, batched per microtask, `MutationObserverInit` options),
+  detached on node teardown. One observer per call: with `subtree` a
+  record's target is the mutated descendant, so shared observers cannot
+  route records. Returns a stop.
+
+#### Scroll fade
+
+`scrollFade(el, options?)` masks a scroller's edges so content fades out
+exactly while more lies beyond — driven by scroll position and kept current
+across resizes and content changes (no styling opinions; the effect is a
+`mask-image` on the element). `options.size` sets the fade length in px
+(default 14); `options.axis` picks the scroll axis (`"y"` default, `"x"` for
+horizontal strips). Returns a disposer. While no edge fades, the mask is an
+opaque gradient rather than none — clearing it would flip the element off the
+masked raster path and the next fade-in flashes for a frame. The dev
+inspector's own scrollers use it.
+
+#### API index — `loom/dom`
+
+| Export | Documented in |
+| --- | --- |
+| `h`, `text` | [DOM and events](#dom-and-events) |
+| `attr`, `classed`, `style` | [Element state as signals](#element-state-as-signals) |
+| `list` | [DOM and events](#dom-and-events) |
+| `each`, `when`, `match` | [Conditional rendering](#conditional-rendering) |
+| `dispose`, `remove`, `onUnmount`, `bind` | [Ownership & disposal](#ownership--disposal) |
+| `onMount`, `onTap` | [Lifecycle](#lifecycle) |
+| `connected`, `persisted`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
+| `scrollFade` | [Scroll fade](#scroll-fade) |
+| `morph` | [Morphing static trees](#morphing-static-trees) |
+| `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
+
+Types: `Child`, `ElementProps` (the props bag `h()` and JSX accept),
+`ListOptions`, `SvgTagName`, the binding handles
+`AttrBinding`/`ClassBinding`/`StyleBinding`/`DynamicChild`, `MorphOptions`,
+`ScrollFadeOptions`, `PersistedOptions`, `SizeCallback`,
+`IntersectionCallback`/`IntersectionOptions`, `MutationsCallback`,
+`ListSource`/`VirtualList`/`VirtualListOptions` (virtual list).
 
 #### Naming convention
 
@@ -627,7 +628,9 @@ with standard bubbling and the precise DOM event type in the handler:
 h("input", { oninput: (event) => value(event.currentTarget.valueAsNumber) });
 ```
 
-**`onTap` — the one synthetic event.** iOS Safari **drops the synthesized
+#### The `onTap` synthetic event
+
+iOS Safari **drops the synthesized
 `click`** when the DOM mutates between `touchstart` and `touchend`. An app that
 rewrites the DOM during interaction (a live dashboard, a game, the demo's chaos
 mode) will see taps silently do nothing — the button shows `:active` but the
@@ -678,6 +681,8 @@ list(container, rows, {
   reorder: () => false,
 });
 ```
+
+#### Virtualized lists
 
 For long lists, `loom/dom/virtual-list` is a standalone fixed-row-height
 virtualizer — only the rows in (and just around) the viewport stay in the DOM.
