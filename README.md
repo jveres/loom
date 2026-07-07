@@ -78,7 +78,7 @@ pnpm add github:jveres/loom
 Pin to a tag or commit for reproducible builds:
 
 ```sh
-pnpm add github:jveres/loom#v0.3.0
+pnpm add github:jveres/loom#v0.4.0
 ```
 
 It then imports as `loom` (and `loom/observe`, `loom/dom`, …).
