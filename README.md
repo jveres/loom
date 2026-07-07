@@ -628,8 +628,8 @@ Event props accept both spellings: the DOM's own lowercase names (`onclick`,
 lowercases `on*` before `addEventListener`, so both wire the same listener
 with standard bubbling and the precise DOM event type in the handler:
 
-```ts
-h("input", { oninput: (event) => value(event.currentTarget.valueAsNumber) });
+```tsx
+<input oninput={(event) => value(event.currentTarget.valueAsNumber)} />;
 ```
 
 #### The `onTap` synthetic event
@@ -665,7 +665,7 @@ sites:
   onmount={(el) => measureAndClassify(el)}
   onunmount={() => socket.close()}
 >
-  {() => status()}
+  {() => statusText()}
 </div>
 ```
 
@@ -679,7 +679,7 @@ external layout system positions existing keyed nodes and only needs Loom to
 append new keys and remove missing keys.
 
 ```ts
-list(container, rows, {
+list(container, () => rows(), {
   key: (row) => row.id,
   render: (row) => h("article", null, row.title),
   reorder: () => false,
@@ -740,10 +740,10 @@ subscriber is also the **ownership escape**, not just a read guard:
 ```ts
 effect(() => {
   frame(current()); // tracked: this effect reruns per navigation
-  // The toolbar is panel-owned, not frame-owned — built tracked, its internal
+  // The strip is panel-owned, not frame-owned — built tracked, its internal
   // effects would be disposed on this effect's next rerun (its selected mark
   // silently stops updating). untrack() detaches the construction.
-  toolbar ??= untrack(() => buildToolbar());
+  strip ??= untrack(() => buildToolbar());
 });
 ```
 
@@ -761,7 +761,7 @@ const typeLabel = (next?: string): string =>
     : (type(domainFor(next)), next);
 
 // It now behaves like a signal wherever a Read/State is expected:
-h("select", { value: typeLabel, onchange: (e) => typeLabel(e.target.value) });
+<select value={typeLabel} onchange={(e) => typeLabel(e.currentTarget.value)} />;
 ```
 
 The wrapper is just a function — it subscribes through the signals it reads, so
