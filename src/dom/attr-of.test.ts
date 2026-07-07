@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { effect } from "../loom.js";
-import { attrOf } from "./attr-of.js";
+import { attr, classed, h, style } from "./index.js";
 
-describe("attrOf", () => {
+describe("attr(el, name) — reactive reads", () => {
   it("tracks attribute set, change, and removal", async () => {
     const el = document.createElement("div");
     const seen: Array<string | null> = [];
     const stop = effect(() => {
-      seen.push(attrOf(el, "data-mode")());
+      seen.push(attr(el, "data-mode")());
     });
     expect(seen).toEqual([null]);
 
@@ -27,16 +27,16 @@ describe("attrOf", () => {
 
   it("pools per (element, attribute) and filters to subscribed names", async () => {
     const el = document.createElement("div");
-    expect(attrOf(el, "hidden")).toBe(attrOf(el, "hidden"));
-    expect(attrOf(el, "hidden")).not.toBe(attrOf(el, "title"));
+    expect(attr(el, "hidden")).toBe(attr(el, "hidden"));
+    expect(attr(el, "hidden")).not.toBe(attr(el, "title"));
 
     const hiddenSeen: Array<string | null> = [];
     const titleSeen: Array<string | null> = [];
     const stopHidden = effect(() => {
-      hiddenSeen.push(attrOf(el, "hidden")());
+      hiddenSeen.push(attr(el, "hidden")());
     });
     const stopTitle = effect(() => {
-      titleSeen.push(attrOf(el, "title")());
+      titleSeen.push(attr(el, "title")());
     });
 
     el.setAttribute("hidden", "");
@@ -58,10 +58,10 @@ describe("attrOf", () => {
     const aSeen: Array<string | null> = [];
     const bSeen: Array<string | null> = [];
     const stopA = effect(() => {
-      aSeen.push(attrOf(a, "data-a")());
+      aSeen.push(attr(a, "data-a")());
     });
     const stopB = effect(() => {
-      bSeen.push(attrOf(b, "data-b")());
+      bSeen.push(attr(b, "data-b")());
     });
 
     a.setAttribute("data-a", "1");
@@ -81,15 +81,44 @@ describe("attrOf", () => {
 
   it("resyncs on re-subscribe after changing while unobserved", () => {
     const el = document.createElement("div");
-    const stop1 = effect(() => attrOf(el, "data-x")());
+    const stop1 = effect(() => attr(el, "data-x")());
     stop1(); // observer disconnected
 
     el.setAttribute("data-x", "late");
     let now: string | null = null;
     const stop2 = effect(() => {
-      now = attrOf(el, "data-x")();
+      now = attr(el, "data-x")();
     });
     expect(now).toBe("late"); // connect() resync, no mutation event needed
     stop2();
+  });
+
+  it("classed(el, name) reads class presence reactively", async () => {
+    const el = h("div");
+    const seen: boolean[] = [];
+    const stop = effect(() => {
+      seen.push(classed(el, "active")());
+    });
+    expect(seen).toEqual([false]);
+    el.classList.add("active");
+    await vi.waitFor(() => expect(seen).toEqual([false, true]));
+    el.classList.remove("active");
+    await vi.waitFor(() => expect(seen).toEqual([false, true, false]));
+    el.classList.add("other"); // class attribute changes, presence does not
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(seen).toEqual([false, true, false]); // deduped by computed()
+    stop();
+  });
+
+  it("style(el, prop) reads the inline value reactively", async () => {
+    const el = h("div");
+    const seen: string[] = [];
+    const stop = effect(() => {
+      seen.push(style(el, "width")());
+    });
+    expect(seen).toEqual([""]);
+    el.style.width = "10px";
+    await vi.waitFor(() => expect(seen).toEqual(["", "10px"]));
+    stop();
   });
 });

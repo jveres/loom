@@ -9,7 +9,8 @@ import {
   type Stop,
   untrack,
 } from "../loom.js";
-import { onmount } from "./onmount.js";
+import { attrRead, classRead, styleRead } from "./attr-of.js";
+import { onMount } from "./onmount.js";
 import { positionOrdered } from "./place.js";
 
 export type Child =
@@ -184,24 +185,104 @@ export function text(read: Read<unknown>, options?: EffectOptions): Text {
   return node;
 }
 
-export function attr(name: string, read: Read<unknown>): AttrBinding {
-  return brand<AttrBinding>({ kind: "attr", name, read } satisfies PropBinding);
+/**
+ * The attribute as a cell — direction by first argument and arity:
+ * `attr(name, read)` returns a JSX descriptor; `attr(el, name)` returns a reactive
+ * `Read<string | null>` of the attribute's current value; `attr(el, name, read, options?)` binds
+ * `read()` to the attribute, node-owned. Writes coerce like JSX attributes (nullish/false removes,
+ * true sets empty). `options` relabels the binding or marks it `internal`.
+ */
+export function attr(name: string, read: Read<unknown>): AttrBinding;
+export function attr(el: Element, name: string): Read<string | null>;
+export function attr(
+  el: Element,
+  name: string,
+  read: Read<unknown>,
+  options?: EffectOptions,
+): void;
+export function attr(
+  a: string | Element,
+  b: Read<unknown> | string,
+  read?: Read<unknown>,
+  options?: EffectOptions,
+): AttrBinding | Read<string | null> | undefined {
+  if (typeof a === "string") {
+    return brand<AttrBinding>({
+      kind: "attr",
+      name: a,
+      read: b as Read<unknown>,
+    } satisfies PropBinding);
+  }
+  const name = b as string;
+  if (read === undefined) return attrRead(a, name);
+  bindAttrValue(a, name, read, options);
+  return undefined;
 }
 
-export function classed(name: string, read: Read<unknown>): ClassBinding {
-  return brand<ClassBinding>({
-    kind: "class",
-    name,
-    read,
-  } satisfies PropBinding);
+/**
+ * A class as a boolean cell — direction by first argument and arity:
+ * `classed(name, read)` returns a JSX descriptor; `classed(el, name)` returns a reactive
+ * `Read<boolean>` of the class's presence; `classed(el, name, read, options?)` toggles the class
+ * from `read()`, node-owned.
+ */
+export function classed(name: string, read: Read<unknown>): ClassBinding;
+export function classed(el: Element, name: string): Read<boolean>;
+export function classed(
+  el: Element,
+  name: string,
+  read: Read<unknown>,
+  options?: EffectOptions,
+): void;
+export function classed(
+  a: string | Element,
+  b: Read<unknown> | string,
+  read?: Read<unknown>,
+  options?: EffectOptions,
+): ClassBinding | Read<boolean> | undefined {
+  if (typeof a === "string") {
+    return brand<ClassBinding>({
+      kind: "class",
+      name: a,
+      read: b as Read<unknown>,
+    } satisfies PropBinding);
+  }
+  const name = b as string;
+  if (read === undefined) return classRead(a, name);
+  bindClass(a, { kind: "class", name, read }, options);
+  return undefined;
 }
 
-export function style(name: string, read: Read<unknown>): StyleBinding {
-  return brand<StyleBinding>({
-    kind: "style",
-    name,
-    read,
-  } satisfies PropBinding);
+/**
+ * An inline style property as a cell — direction by first argument and arity:
+ * `style(name, read)` returns a JSX descriptor; `style(el, prop)` returns a reactive
+ * `Read<string>` of the inline value (empty string when unset); `style(el, prop, read, options?)`
+ * binds `read()` to the property, node-owned. Property names accept camelCase or kebab-case.
+ */
+export function style(name: string, read: Read<unknown>): StyleBinding;
+export function style(el: Element, prop: string): Read<string>;
+export function style(
+  el: Element,
+  prop: string,
+  read: Read<unknown>,
+  options?: EffectOptions,
+): void;
+export function style(
+  a: string | Element,
+  b: Read<unknown> | string,
+  read?: Read<unknown>,
+  options?: EffectOptions,
+): StyleBinding | Read<string> | undefined {
+  if (typeof a === "string") {
+    return brand<StyleBinding>({
+      kind: "style",
+      name: a,
+      read: b as Read<unknown>,
+    } satisfies PropBinding);
+  }
+  const prop = cssPropName(b as string);
+  if (read === undefined) return styleRead(a, prop);
+  bindStyle(a, { kind: "style", name: prop, read }, options);
+  return undefined;
 }
 
 // Shared keyed reconcile for list()/each(): create or reuse each item's element (stamping its
@@ -270,7 +351,7 @@ export function list<T>(
     for (const node of nodes.values()) remove(node);
     nodes.clear();
   };
-  onunmount(container, stopList);
+  onUnmount(container, stopList);
   return stopList;
 }
 
@@ -406,7 +487,7 @@ const TAP_SLOP = 10;
  * {@link TAP_SLOP} px of it (so a drag or scroll does not trigger it). Use the `ontap` JSX prop,
  * which routes here; this export is for imperative call sites (e.g. the inspector).
  */
-export function tap(
+export function onTap(
   node: Element,
   handler: (event: PointerEvent) => void,
 ): void {
@@ -439,7 +520,7 @@ export function tap(
  * effects/listeners for an element they build. (This is ownership; `effect`'s `target` option is
  * inspector attribution only.)
  */
-export function onunmount(node: Node, stop: Stop): void {
+export function onUnmount(node: Node, stop: Stop): void {
   const owned = ownedEffects.get(node);
   if (!owned) ownedEffects.set(node, stop);
   else if (Array.isArray(owned)) owned.push(stop);
@@ -449,7 +530,7 @@ export function onunmount(node: Node, stop: Stop): void {
 /**
  * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
  * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
- * leaving). The one-call form of `onunmount(el, effect(fn, { target: el }))` — the dominant idiom
+ * leaving). The one-call form of `onUnmount(el, effect(fn, { target: el }))` — the dominant idiom
  * of kit code. Returns the stop for rare early manual disposal; options merge over the target
  * default, so `{ target: other }` can re-attribute.
  */
@@ -461,7 +542,7 @@ export function bind(
 export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
 export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop {
   const stop = effect(fn, { target: node, ...options });
-  onunmount(node, stop);
+  onUnmount(node, stop);
   return stop;
 }
 
@@ -494,21 +575,27 @@ function applyProps(node: Element, props: Props): void {
     // (`remove()` / `dispose()`, or an ancestor slot swapping it out). Grouped with the other
     // Loom-owned props above, not the DOM `on*` listeners below — it rides the node-owned disposer
     // channel (same as the reactive bindings), so it fires exactly when they do.
-    if (name === "onmount" && typeof value === "function") {
-      onmount(node, value as (node: Node) => void);
+    if (
+      (name === "onmount" || name === "onMount") &&
+      typeof value === "function"
+    ) {
+      onMount(node, value as (node: Node) => void);
       continue;
     }
-    if (name === "onunmount" && typeof value === "function") {
-      onunmount(node, value as Stop);
+    if (
+      (name === "onunmount" || name === "onUnmount") &&
+      typeof value === "function"
+    ) {
+      onUnmount(node, value as Stop);
       continue;
     }
     if (isAttrBinding(value)) {
       const binding = brand<PropBinding>(value);
-      bindAttr(node, binding.name, binding.read);
+      bindAttrValue(node, binding.name, binding.read);
       continue;
     }
-    if (name === "ontap" && typeof value === "function") {
-      tap(node, value as (event: PointerEvent) => void);
+    if ((name === "ontap" || name === "onTap") && typeof value === "function") {
+      onTap(node, value as (event: PointerEvent) => void);
       continue;
     }
     if (name.startsWith("on") && typeof value === "function") {
@@ -516,7 +603,7 @@ function applyProps(node: Element, props: Props): void {
       continue;
     }
     if (typeof value === "function") {
-      bindAttr(node, name, value as Read<unknown>);
+      bindAttrValue(node, name, value as Read<unknown>);
       continue;
     }
     setAttr(node, name, value);
@@ -567,7 +654,7 @@ function isDynamic(child: Child): child is DynamicChild {
 function mountSlot(parent: Node, desc: DynamicChild): void {
   const anchor = document.createComment("loom-slot");
   parent.appendChild(anchor);
-  onunmount(anchor, brand<SlotDescriptor>(desc).mount(anchor));
+  onUnmount(anchor, brand<SlotDescriptor>(desc).mount(anchor));
 }
 
 // Effect options for a slot: label it, and target its parent element (when there is one) so the
@@ -651,24 +738,22 @@ function applyClassMapValue(node: Element, name: string, value: unknown): void {
   }
 }
 
-function bindClass(node: Element, binding: PropBinding): void {
+function bindClass(
+  node: Element,
+  binding: PropBinding,
+  options?: EffectOptions,
+): void {
   bindReactiveValue(
     node,
     `dom.class.${binding.name}`,
     () => Boolean(binding.read()),
     (next) => node.classList.toggle(binding.name, next),
     hasClassName(node, binding.name),
+    options,
   );
 }
 
-/**
- * Bind a reactive attribute on an existing element: `read()` re-runs as its dependencies change,
- * and the attribute updates only when the resulting value actually differs (nullish/false removes
- * it, true sets it empty — same coercion as a JSX attribute). The imperative sibling of `attr()`
- * for call sites that hold the element directly; `options` relabels the binding or marks it
- * `internal` (tooling built on loom — e.g. the inspector — binds without self-reporting).
- */
-export function bindAttr(
+function bindAttrValue(
   node: Element,
   name: string,
   read: Read<unknown>,
@@ -684,7 +769,11 @@ export function bindAttr(
   );
 }
 
-function bindStyle(node: Element, binding: PropBinding): void {
+function bindStyle(
+  node: Element,
+  binding: PropBinding,
+  options?: EffectOptions,
+): void {
   const styleDecl = (node as StyledElement).style;
   bindReactiveValue(
     node,
@@ -694,6 +783,8 @@ function bindStyle(node: Element, binding: PropBinding): void {
       if (next === null) styleDecl.removeProperty(binding.name);
       else styleDecl.setProperty(binding.name, next);
     },
+    undefined,
+    options,
   );
 }
 
@@ -720,7 +811,7 @@ function bindReactiveValue<T>(
       { label, target: node, ...options },
     ),
   );
-  onunmount(node, stop);
+  onUnmount(node, stop);
 }
 
 function setAttr(node: Element, name: string, value: unknown): void {
@@ -785,10 +876,18 @@ function isBinding<TKind extends "attr" | "class" | "style">(
   );
 }
 
-export { attrOf } from "./attr-of.js";
 export { connected } from "./connected.js";
 export { type MorphOptions, morph } from "./morph.js";
+export {
+  type IntersectionCallback,
+  type IntersectionOptions,
+  observeIntersection,
+} from "./observe-intersection.js";
+export {
+  type MutationsCallback,
+  observeMutation,
+} from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
-export { onmount } from "./onmount.js";
+export { onMount } from "./onmount.js";
 export { type PersistedOptions, persisted } from "./persisted.js";
 export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";

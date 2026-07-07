@@ -1,21 +1,13 @@
-// attrOf(el, name) — a reactive attribute read: the current value of an attribute as a
-// Read<string | null>, updating when the attribute changes. The read-side complement of the
-// attr() write binding, and the general form of "watch this element's hidden/aria-*/data-*
-// state":
+// Reactive attribute/class/style reads, backed by ONE shared MutationObserver — observe() takes
+// per-target options, so each watched element carries an attributeFilter of exactly its
+// subscribed names. Subscribing or unsubscribing rebuilds the observation set (drain pending
+// records, disconnect, re-observe the survivors) — an O(watched elements) walk paid only when a
+// subscription changes, never per mutation. Everything is subscriber-counted through source():
+// with nothing observed the observer is disconnected and this module costs zero.
 //
-//   watch(
-//     () => connected(el)() && attrOf(el, "hidden")() === null,
-//     (visible) => visible && clampIntoView(),
-//   );
-//
-// ONE MutationObserver serves every attrOf signal in the app — observe() takes per-target
-// options, so each watched element carries an attributeFilter of exactly its subscribed names
-// (no records for attributes nobody reads, even on watched elements). Subscribing or
-// unsubscribing rebuilds the observation set (drain pending records, disconnect, re-observe the
-// survivors) — an O(watched elements) walk paid only when a subscription changes, never per
-// mutation. Everything is subscriber-counted through source(): with nothing observed the
-// observer is disconnected and this module costs zero.
-import { type Read, source } from "../loom.js";
+// attrRead/classRead/styleRead are the element forms of attr()/classed()/style() in ./index.ts;
+// class and style reads derive from the class/style attribute signals, deduped by computed().
+import { computed, type Read, source } from "../loom.js";
 
 // Pooled signals: one per (element, attribute). WeakMap — forgotten elements drop their signals.
 const signals = new WeakMap<Element, Map<string, Read<string | null>>>();
@@ -55,7 +47,7 @@ function reobserve(): void {
   }
 }
 
-export function attrOf(el: Element, name: string): Read<string | null> {
+export function attrRead(el: Element, name: string): Read<string | null> {
   let byName = signals.get(el);
   if (!byName) {
     byName = new Map();
@@ -81,5 +73,44 @@ export function attrOf(el: Element, name: string): Read<string | null> {
     };
   }, el.getAttribute(name));
   byName.set(name, read);
+  return read;
+}
+
+// Class/style reads: keyed caches so N readers share one derived computed (and through it, one
+// attribute subscription).
+const classSignals = new WeakMap<Element, Map<string, Read<boolean>>>();
+const styleSignals = new WeakMap<Element, Map<string, Read<string>>>();
+
+export function classRead(el: Element, name: string): Read<boolean> {
+  let byName = classSignals.get(el);
+  if (!byName) {
+    byName = new Map();
+    classSignals.set(el, byName);
+  }
+  const cached = byName.get(name);
+  if (cached) return cached;
+  const classAttr = attrRead(el, "class");
+  const read = computed(() => {
+    classAttr(); // subscription; the value itself comes from the live classList
+    return el.classList.contains(name);
+  });
+  byName.set(name, read);
+  return read;
+}
+
+export function styleRead(el: Element, prop: string): Read<string> {
+  let byProp = styleSignals.get(el);
+  if (!byProp) {
+    byProp = new Map();
+    styleSignals.set(el, byProp);
+  }
+  const cached = byProp.get(prop);
+  if (cached) return cached;
+  const styleAttr = attrRead(el, "style");
+  const read = computed(() => {
+    styleAttr(); // subscription; the value itself comes from the live inline style
+    return (el as ElementCSSInlineStyle & Element).style.getPropertyValue(prop);
+  });
+  byProp.set(prop, read);
   return read;
 }

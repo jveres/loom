@@ -8,7 +8,7 @@
 // Seams: the panel calls buildTracePane / showTrace / setTraceActive / setTraceLiveDot /
 // setTraceLocate / setTraceWindow / teardownTrace; the stats heartbeat calls renderTrace.
 import { type Meter, meter } from "loom";
-import { scrollFade, tap } from "loom/dom";
+import { onTap, scrollFade } from "loom/dom";
 import { type VirtualList, virtualList } from "loom/dom/virtual-list";
 import {
   events,
@@ -118,13 +118,13 @@ export function buildTracePane(): HTMLElement {
     <button type="button" class="li-tr-btn" title="Pause / resume the trace" />
   ) as HTMLButtonElement;
   pauseBtn.append(icon(ICON_PAUSE, 12));
-  tap(pauseBtn, () => setPaused(!tracePaused)); // tap, not click — click is dropped under load on iOS
+  onTap(pauseBtn, () => setPaused(!tracePaused)); // tap, not click — click is dropped under load on iOS
 
   const clearBtn = (
     <button type="button" class="li-tr-btn" title="Clear the trace" />
   ) as HTMLButtonElement;
   clearBtn.append(icon(ICON_CLEAR, 12));
-  tap(clearBtn, () => clearLog());
+  onTap(clearBtn, () => clearLog());
 
   const modeSel = (
     <select class="li-tr-mode" title="Which events to stream">
@@ -178,7 +178,7 @@ export function buildTracePane(): HTMLElement {
   });
   // Tap a cell name to jump to it in the Graph tab (tap, not click — click is dropped under load on
   // iOS; tap's slop also ignores a scroll drag).
-  tap(traceScroll, (e) => {
+  onTap(traceScroll, (e) => {
     const target = e.target instanceof Element ? e.target : null;
     const name = target?.closest(".li-tr-name");
     const row = name?.closest(".li-tr") as HTMLElement | null;

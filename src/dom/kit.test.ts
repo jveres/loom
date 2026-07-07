@@ -2,7 +2,9 @@
 // The seam-round-3 kit helpers: bind / observeSize / onmount / persisted.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { state } from "../loom.js";
-import { bind, h, onmount, remove } from "./index.js";
+import { bind, h, onMount, remove } from "./index.js";
+import { observeIntersection } from "./observe-intersection.js";
+import { observeMutation } from "./observe-mutation.js";
 import { observeSize } from "./observe-size.js";
 import { persisted } from "./persisted.js";
 
@@ -131,11 +133,11 @@ describe("observeSize", () => {
   });
 });
 
-describe("onmount", () => {
+describe("onMount", () => {
   it("fires once on a microtask when inserted in the same task", async () => {
     const el = h("div");
     const calls: Node[] = [];
-    onmount(el, (n) => calls.push(n));
+    onMount(el, (n) => calls.push(n));
     document.body.append(el); // same-task insertion — the documented contract
     expect(calls).toEqual([]); // not synchronous
     await Promise.resolve();
@@ -147,7 +149,7 @@ describe("onmount", () => {
     const el = h("div");
     document.body.append(el);
     let fired = 0;
-    onmount(el, () => fired++);
+    onMount(el, () => fired++);
     await Promise.resolve();
     expect(fired).toBe(1);
     el.remove();
@@ -156,7 +158,7 @@ describe("onmount", () => {
   it("falls back to observation for late insertion, still fires once", async () => {
     const el = h("div");
     let fired = 0;
-    onmount(el, () => fired++);
+    onMount(el, () => fired++);
     await Promise.resolve(); // microtask passes disconnected -> pending
     expect(fired).toBe(0);
     document.body.append(el);
@@ -168,8 +170,8 @@ describe("onmount", () => {
     const a = h("div");
     const b = h("div");
     let fired = 0;
-    const cancel = onmount(a, () => fired++);
-    onmount(b, () => fired++);
+    const cancel = onMount(a, () => fired++);
+    onMount(b, () => fired++);
     cancel();
     remove(b); // never mounted: teardown must clear the pending entry
     await Promise.resolve();
@@ -180,13 +182,15 @@ describe("onmount", () => {
     b.remove();
   });
 
-  it("works as the JSX prop, the symmetric twin of onunmount", async () => {
+  it("works as the JSX prop in both spellings", async () => {
     const calls: string[] = [];
-    const el = h("div", { onmount: () => calls.push("mount") });
-    document.body.append(el);
+    const el = h("div", { onmount: () => calls.push("lower") });
+    const el2 = h("div", { onMount: () => calls.push("camel") });
+    document.body.append(el, el2);
     await Promise.resolve();
-    expect(calls).toEqual(["mount"]);
+    expect(calls).toEqual(["lower", "camel"]);
     el.remove();
+    el2.remove();
   });
 });
 
@@ -258,5 +262,108 @@ describe("persisted", () => {
     const cell = persisted("k6", 1, { storage: broken });
     cell(2);
     expect(cell()).toBe(2);
+  });
+});
+
+describe("observeMutation", () => {
+  it("delivers records and detaches with the node", async () => {
+    const el = h("div");
+    const seen: string[] = [];
+    observeMutation(
+      el,
+      (records) => {
+        for (const r of records) seen.push(r.type);
+      },
+      { attributes: true },
+    );
+    el.setAttribute("data-x", "1");
+    await vi.waitFor(() => expect(seen).toEqual(["attributes"]));
+
+    remove(el); // node teardown disconnects
+    el.setAttribute("data-x", "2");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(seen).toEqual(["attributes"]);
+  });
+
+  it("manual stop is idempotent with teardown", () => {
+    const el = h("div");
+    const stop = observeMutation(el, () => {}, { childList: true });
+    stop();
+    remove(el); // second detach must be harmless
+  });
+});
+
+describe("observeIntersection", () => {
+  let instances: Array<{
+    observed: Element[];
+    cb: IntersectionObserverCallback;
+    disconnected: boolean;
+  }> = [];
+
+  function stubIO(): void {
+    instances = [];
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        record = {
+          observed: [] as Element[],
+          cb: (() => {}) as IntersectionObserverCallback,
+          disconnected: false,
+        };
+        constructor(cb: IntersectionObserverCallback) {
+          this.record.cb = cb;
+          instances.push(this.record);
+        }
+        observe(el: Element): void {
+          this.record.observed.push(el);
+        }
+        unobserve(el: Element): void {
+          this.record.observed = this.record.observed.filter((e) => e !== el);
+        }
+        disconnect(): void {
+          this.record.disconnected = true;
+        }
+      },
+    );
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("pools same-options observers and routes by target", () => {
+    stubIO();
+    const a = h("div");
+    const b = h("div");
+    const seen: string[] = [];
+    observeIntersection(a, () => seen.push("a"));
+    observeIntersection(b, () => seen.push("b"));
+    expect(instances.length).toBe(1); // shared default pool
+
+    observeIntersection(a, () => seen.push("a-margin"), {
+      rootMargin: "10px",
+    });
+    expect(instances.length).toBe(2); // distinct options -> distinct pool
+
+    const inst = instances[0];
+    inst?.cb(
+      [{ target: a } as unknown as IntersectionObserverEntry],
+      inst as unknown as IntersectionObserver,
+    );
+    expect(seen).toEqual(["a"]);
+
+    remove(a);
+    remove(b);
+    expect(instances[0]?.disconnected).toBe(true);
+    expect(instances[1]?.disconnected).toBe(true);
+  });
+
+  it("a custom root gets a dedicated observer", () => {
+    stubIO();
+    const el = h("div");
+    const root = h("div");
+    observeIntersection(el, () => {}, { root });
+    observeIntersection(el, () => {}, { root });
+    expect(instances.length).toBe(2); // no pooling across roots
+    remove(el);
+    expect(instances.every((i) => i.disconnected)).toBe(true);
   });
 });

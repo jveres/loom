@@ -34,9 +34,34 @@ export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?:
 export declare function h<K extends keyof SVGElementTagNameMap>(tag: K, props?: Props | null, children?: Child): SVGElementTagNameMap[K];
 export declare function h(tag: string, props?: Props | null, children?: Child): Element;
 export declare function text(read: Read<unknown>, options?: EffectOptions): Text;
+/**
+ * The attribute as a cell — direction by first argument and arity:
+ * `attr(name, read)` returns a JSX descriptor; `attr(el, name)` returns a reactive
+ * `Read<string | null>` of the attribute's current value; `attr(el, name, read, options?)` binds
+ * `read()` to the attribute, node-owned. Writes coerce like JSX attributes (nullish/false removes,
+ * true sets empty). `options` relabels the binding or marks it `internal`.
+ */
 export declare function attr(name: string, read: Read<unknown>): AttrBinding;
+export declare function attr(el: Element, name: string): Read<string | null>;
+export declare function attr(el: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
+/**
+ * A class as a boolean cell — direction by first argument and arity:
+ * `classed(name, read)` returns a JSX descriptor; `classed(el, name)` returns a reactive
+ * `Read<boolean>` of the class's presence; `classed(el, name, read, options?)` toggles the class
+ * from `read()`, node-owned.
+ */
 export declare function classed(name: string, read: Read<unknown>): ClassBinding;
+export declare function classed(el: Element, name: string): Read<boolean>;
+export declare function classed(el: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
+/**
+ * An inline style property as a cell — direction by first argument and arity:
+ * `style(name, read)` returns a JSX descriptor; `style(el, prop)` returns a reactive
+ * `Read<string>` of the inline value (empty string when unset); `style(el, prop, read, options?)`
+ * binds `read()` to the property, node-owned. Property names accept camelCase or kebab-case.
+ */
 export declare function style(name: string, read: Read<unknown>): StyleBinding;
+export declare function style(el: Element, prop: string): Read<string>;
+export declare function style(el: Element, prop: string, read: Read<unknown>, options?: EffectOptions): void;
 export declare function list<T>(container: Element, read: Read<readonly T[]>, options: ListOptions<T>): Stop;
 /**
  * Conditional subtree, keyed on the truthiness of `cond`. Renders `render()` while truthy and the
@@ -71,7 +96,7 @@ export declare function remove(node: Node): void;
  * {@link TAP_SLOP} px of it (so a drag or scroll does not trigger it). Use the `ontap` JSX prop,
  * which routes here; this export is for imperative call sites (e.g. the inspector).
  */
-export declare function tap(node: Element, handler: (event: PointerEvent) => void): void;
+export declare function onTap(node: Element, handler: (event: PointerEvent) => void): void;
 /**
  * Attach a disposer to a node's Loom lifecycle: it runs when the node is torn down the Loom way —
  * `remove()`, `dispose()`, or an ancestor slot/list swapping it out. The `onunmount` JSX prop is
@@ -79,28 +104,21 @@ export declare function tap(node: Element, handler: (event: PointerEvent) => voi
  * effects/listeners for an element they build. (This is ownership; `effect`'s `target` option is
  * inspector attribution only.)
  */
-export declare function onunmount(node: Node, stop: Stop): void;
+export declare function onUnmount(node: Node, stop: Stop): void;
 /**
  * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
  * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
- * leaving). The one-call form of `onunmount(el, effect(fn, { target: el }))` — the dominant idiom
+ * leaving). The one-call form of `onUnmount(el, effect(fn, { target: el }))` — the dominant idiom
  * of kit code. Returns the stop for rare early manual disposal; options merge over the target
  * default, so `{ target: other }` can re-attribute.
  */
 export declare function bind(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
 export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
-/**
- * Bind a reactive attribute on an existing element: `read()` re-runs as its dependencies change,
- * and the attribute updates only when the resulting value actually differs (nullish/false removes
- * it, true sets it empty — same coercion as a JSX attribute). The imperative sibling of `attr()`
- * for call sites that hold the element directly; `options` relabels the binding or marks it
- * `internal` (tooling built on loom — e.g. the inspector — binds without self-reporting).
- */
-export declare function bindAttr(node: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
-export { attrOf } from "./attr-of.js";
 export { connected } from "./connected.js";
 export { type MorphOptions, morph } from "./morph.js";
+export { type IntersectionCallback, type IntersectionOptions, observeIntersection, } from "./observe-intersection.js";
+export { type MutationsCallback, observeMutation, } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
-export { onmount } from "./onmount.js";
+export { onMount } from "./onmount.js";
 export { type PersistedOptions, persisted } from "./persisted.js";
 export { type ScrollFadeOptions, scrollFade } from "./scroll-fade.js";

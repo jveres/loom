@@ -5,7 +5,7 @@
 // All of the inspector's own reactive bindings and UI state are created `internal`, so Loom's
 // observability filters them out: the inspector measures the app, never itself.
 import { configure, type Scope, type State, scope, state } from "loom";
-import { persisted, scrollFade, tap } from "loom/dom";
+import { onTap, persisted, scrollFade } from "loom/dom";
 import { bind, disposeBindings, PANEL_OPTS } from "./bindings.js";
 import { CSS, PANEL_ID } from "./css.js";
 import {
@@ -325,7 +325,7 @@ export function mountInspector(target: Element = document.body): void {
       {themeVal}
     </button>
   ) as HTMLButtonElement;
-  tap(themeItem, (): void => {
+  onTap(themeItem, (): void => {
     const order: Theme[] = ["system", "light", "dark"];
     theme = order[(order.indexOf(theme) + 1) % order.length] ?? "system";
     panelCells().theme(theme);
@@ -353,7 +353,7 @@ export function mountInspector(target: Element = document.body): void {
       {sizeVal}
     </button>
   ) as HTMLButtonElement;
-  tap(sizeItem, (): void => {
+  onTap(sizeItem, (): void => {
     logSize =
       LOG_SIZES[(LOG_SIZES.indexOf(logSize) + 1) % LOG_SIZES.length] ?? 1000;
     panelCells().logSize(logSize);
@@ -374,7 +374,7 @@ export function mountInspector(target: Element = document.body): void {
       <span class="li-kbd">⌃⌘L</span>
     </button>
   ) as HTMLButtonElement;
-  tap(hideItem, (): void => {
+  onTap(hideItem, (): void => {
     closeMenu();
     unmountInspector();
   });
@@ -382,7 +382,7 @@ export function mountInspector(target: Element = document.body): void {
 
   const gear = (<button type="button" title="Settings" />) as HTMLButtonElement;
   gear.append(barIcon(ICON_SETTINGS));
-  tap(gear, (e): void => {
+  onTap(gear, (e): void => {
     e.stopPropagation();
     if (!menu.hidden) {
       closeMenu();
@@ -409,7 +409,7 @@ export function mountInspector(target: Element = document.body): void {
   };
   const startMin = panelCells().min();
   paintMin(startMin);
-  tap(min, (): void => {
+  onTap(min, (): void => {
     const isMin = !!panel?.classList.toggle("li-min");
     paintMin(isMin);
     panelCells().min(isMin);
@@ -487,7 +487,7 @@ export function mountInspector(target: Element = document.body): void {
       btn.append(dot);
       setTraceLiveDot(dot);
     }
-    tap(btn, (): void => ui?.(t.id));
+    onTap(btn, (): void => ui?.(t.id));
     tabBtns.set(t.id, btn);
     tabscroll.append(btn);
   }

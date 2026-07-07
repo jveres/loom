@@ -1,7 +1,7 @@
-// onmount(el, fn) — the mount hook, with an explicit timing contract: `fn` runs once, on a
+// onMount(el, fn) — the mount hook, with an explicit timing contract: `fn` runs once, on a
 // microtask after the task that inserted the element — inserted and measurable (layout on
-// demand), **not yet painted** — so measure-then-classify work causes no flash. The `onmount`
-// JSX prop is this function as a prop, the symmetric twin of `onunmount`. (The prop wiring pulls
+// demand), **not yet painted** — so measure-then-classify work causes no flash. The `onMount`
+// JSX prop is this function as a prop, the symmetric twin of `onUnmount`. (The prop wiring pulls
 // this module into every h() bundle — +231 B gzip, accepted deliberately with the 5500 B
 // minimal-dom budget: the lifecycle pair belongs in the baseline prop vocabulary.)
 //
@@ -13,7 +13,7 @@
 // entry is dropped by `remove()`/`dispose()` like any node-owned resource, so an element that
 // never mounts doesn't pin the observer).
 import type { Stop } from "../loom.js";
-import { onunmount } from "./index.js";
+import { onUnmount } from "./index.js";
 
 const pending = new Map<Node, Set<(node: Node) => void>>();
 let observer: MutationObserver | null = null;
@@ -44,7 +44,7 @@ function enqueue(node: Node, fn: (node: Node) => void): void {
   })();
 }
 
-export function onmount(node: Node, fn: (node: Node) => void): Stop {
+export function onMount(node: Node, fn: (node: Node) => void): Stop {
   let cancelled = false;
   const run = (n: Node): void => {
     if (!cancelled) {
@@ -72,6 +72,6 @@ export function onmount(node: Node, fn: (node: Node) => void): Stop {
     }
   };
   // A node torn down the Loom way before it ever mounts must not pin the transient observer.
-  onunmount(node, cancel);
+  onUnmount(node, cancel);
   return cancel;
 }

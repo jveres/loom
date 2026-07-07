@@ -60,11 +60,16 @@ type EventProps<TElement extends Element> = {
 type SharedProps<TElement extends Element> = Props &
   EventProps<TElement> & {
     children?: Child;
-    // The Loom lifecycle pair; neither is a DOM event. onmount runs once on a microtask after
-    // insertion (measurable, not yet painted); onunmount is the cleanup run when the node is torn
-    // down the Loom way (remove()/dispose()).
+    // The Loom lifecycle pair; neither is a DOM event. onMount runs once on a microtask after
+    // insertion (measurable, not yet painted); onUnmount is the cleanup run when the node is torn
+    // down the Loom way (remove()/dispose()). Both spellings are wired.
+    onMount?: (node: Node) => void;
     onmount?: (node: Node) => void;
+    onUnmount?: () => void;
     onunmount?: () => void;
+    // Robust tap (press+release within slop; a drag or scroll does not trigger it).
+    onTap?: (event: PointerEvent) => void;
+    ontap?: (event: PointerEvent) => void;
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;
   };

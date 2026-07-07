@@ -3,17 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { state } from "../loom.js";
 import {
   attr,
-  bindAttr,
   classed,
   dispose,
   each,
   h,
   list,
   match,
-  onunmount,
+  onTap,
+  onUnmount,
   remove,
   style,
-  tap,
   text,
   when,
 } from "./index.js";
@@ -38,13 +37,13 @@ function renderRow(row: Row): Element {
 }
 
 describe("loom DOM ownership", () => {
-  it("onunmount() disposers run when the node or an ancestor is removed", () => {
+  it("onUnmount() disposers run when the node or an ancestor is removed", () => {
     const parent = h("div");
     const child = h("span");
     parent.append(child);
     const order: string[] = [];
-    onunmount(child, () => order.push("child"));
-    onunmount(parent, () => order.push("parent"));
+    onUnmount(child, () => order.push("child"));
+    onUnmount(parent, () => order.push("parent"));
     remove(parent); // disposal reaches descendants' owned disposers too
     expect(order.sort()).toEqual(["child", "parent"]);
   });
@@ -246,7 +245,7 @@ describe("loom DOM props and bindings", () => {
   it("binds tap imperatively too", () => {
     let taps = 0;
     const el = h("button", {});
-    tap(el, () => {
+    onTap(el, () => {
       taps++;
     });
     el.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 1 }));
@@ -706,10 +705,10 @@ describe("loom DOM onunmount", () => {
     void root;
   });
 
-  it("bindAttr binds an attribute imperatively with attr() semantics", () => {
+  it("attr(el, name, read) binds an attribute imperatively", () => {
     const mode = state<string | boolean | null>("compact");
     const el = h("div");
-    bindAttr(el, "data-mode", () => mode());
+    attr(el, "data-mode", () => mode());
     expect(el.getAttribute("data-mode")).toBe("compact");
 
     mode("full");

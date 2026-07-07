@@ -14,7 +14,7 @@ import {
   source,
   untrack,
 } from "loom";
-import { bindAttr as bindDomAttr, type Child, text, when } from "loom/dom";
+import { attr, type Child, text, when } from "loom/dom";
 import {
   events,
   type FlushSample,
@@ -100,12 +100,6 @@ let nodeChannels = 0;
 let nodeUnread = 0;
 
 /* ---- binding helpers ---- */
-// The dom surface's dedup attribute binder, pre-branded internal so the inspector never observes
-// itself (same options text() gets at its call sites).
-function bindAttr(node: Element, name: string, read: () => string): void {
-  bindDomAttr(node, name, read, PANEL_OPTS);
-}
-
 // Read a lazy web-vital source's value; reading it inside a binding is what wires its
 // PerformanceObserver on first use. 0 while the source isn't created yet.
 function vital(src: Read<number> | null): number {
@@ -282,15 +276,17 @@ function gaugeLive(): Child {
       transform="rotate(135 44 44)"
     />
   );
-  bindAttr(
+  attr(
     arc,
     "stroke-dasharray",
     pulse(() => `${(GAUGE_ARC * score) / 100} ${GAUGE_C}`),
+    PANEL_OPTS,
   );
-  bindAttr(
+  attr(
     arc,
     "class",
     pulse(() => `li-garc h-${healthKey}`),
+    PANEL_OPTS,
   );
   const num = <text class="li-gnum" x={44} y={48} text-anchor="middle" />;
   num.append(
@@ -299,10 +295,11 @@ function gaugeLive(): Child {
       PANEL_OPTS,
     ),
   );
-  bindAttr(
+  attr(
     num,
     "class",
     pulse(() => `li-gnum h-${healthKey}`),
+    PANEL_OPTS,
   );
   return [arc, num];
 }
@@ -441,10 +438,11 @@ function buildStatsPane(): HTMLElement {
       PANEL_OPTS,
     ),
   );
-  bindAttr(
+  attr(
     fpsValue,
     "class",
     pulse(() => `li-perfh-fps ${fpsKey}`),
+    PANEL_OPTS,
   );
 
   const hlabel = <div class="li-hlabel" title={TIP.health} />;
@@ -454,10 +452,11 @@ function buildStatsPane(): HTMLElement {
       PANEL_OPTS,
     ),
   );
-  bindAttr(
+  attr(
     hlabel,
     "class",
     pulse(() => (healthReady ? `li-hlabel h-${healthKey}` : "li-hlabel")),
+    PANEL_OPTS,
   );
 
   const side = (
@@ -590,10 +589,11 @@ function vitalStat(
   const row = stat(label, get, "", title);
   const val = row.querySelector(".li-stat-v");
   if (val)
-    bindAttr(
+    attr(
       val,
       "class",
       pulse(() => `li-stat-v ${color()}`),
+      PANEL_OPTS,
     );
   return row;
 }

@@ -495,13 +495,18 @@ The DOM entrypoint exports these functions:
 
 - `h(tag, props, children)` creates an element.
 - `text(read)` creates a text node bound to a reactive read.
-- `attr(name, read)` creates an explicit reactive attribute binding.
-- `classed(name, read)` creates an explicit reactive class binding.
-- `style(name, read)` creates an explicit reactive style binding.
-- `bindAttr(node, name, read, options?)` binds a reactive attribute on an
-  element you already hold — the imperative sibling of `attr()`. `options`
-  relabels the binding or marks it `internal` (tooling built on loom binds
-  without observing itself).
+- `attr` — the attribute as a cell, direction by first argument and arity:
+  `attr(name, read)` returns a JSX binding descriptor; `attr(el, name)`
+  returns a reactive `Read<string | null>` of the attribute's value;
+  `attr(el, name, read, options?)` binds `read()` to the attribute,
+  node-owned. `options` relabels the binding or marks it `internal`.
+- `classed` — a class as a boolean cell, same three forms:
+  `classed(name, read)` descriptor; `classed(el, name)` → `Read<boolean>` of
+  the class's presence; `classed(el, name, read, options?)` toggles it.
+- `style` — an inline style property as a cell, same three forms:
+  `style(name, read)` descriptor; `style(el, prop)` → `Read<string>` of the
+  inline value (empty when unset); `style(el, prop, read, options?)` binds
+  it. Property names accept camelCase or kebab-case.
 - `list(container, read, options)` reconciles a keyed list into a container.
   Reorders move as few nodes as possible (longest-increasing-subsequence) and
   use the state-preserving `Element.moveBefore` where the platform has it, so
@@ -527,21 +532,20 @@ The DOM entrypoint exports these functions:
   than none — clearing it would flip the element off the masked raster path
   and the next fade-in flashes for a frame. The dev inspector's own scrollers
   use it.
-- `onunmount(node, stop)` attaches a disposer to a node's Loom lifecycle —
-  the same thing as the `onunmount` JSX prop, callable (see
+- `onUnmount(node, stop)` attaches a disposer to a node's Loom lifecycle —
+  the JSX prop of the same name, callable (see
   [Ownership & disposal](#ownership--disposal)).
 - `bind(el, fn, options?)` — reactive DOM state that dies with this node:
   `effect(fn)` target-attributed to `el` and disposed with it. The one-call
-  form of `onunmount(el, effect(fn, { target: el }))`, which is the dominant
-  idiom of kit code. Returns the stop for early manual disposal.
-- `onmount(el, fn)` runs `fn(el)` **once**, on a microtask after the task
+  form of `onUnmount(el, effect(fn, { target: el }))`. Returns the stop for
+  early manual disposal.
+- `onMount(el, fn)` runs `fn(el)` **once**, on a microtask after the task
   that inserted the element — inserted and measurable, not yet painted, so
-  measure-then-classify work causes no flash. Insert in the same synchronous
-  task and no observer is ever created; a late insertion is caught by a
+  measure-then-classify work causes no flash. Insertion in the same
+  synchronous task creates no observer; a late insertion is caught by a
   transient shared observer that lives only until the element connects. Also
-  the `onmount` JSX prop — the symmetric twin of `onunmount`. Returns a
-  cancel. Need ongoing connectivity instead of a one-shot? That's
-  `connected()`.
+  the `onMount` JSX prop — the symmetric twin of `onUnmount`. Returns a
+  cancel. For ongoing connectivity, use `connected()`.
 - `observeSize(el, cb)` — sized observation with the lifetime treatment
   events get: `cb(entry)` runs on ResizeObserver's clock (including the
   initial delivery on attach) and detaches automatically when the node is
@@ -555,10 +559,9 @@ The DOM entrypoint exports these functions:
   the app. Absent or throwing storage degrades to an unpersisted cell. The
   inspector's own panel chrome (theme, position, size) sits on it.
 - `connected(node)` returns a `Read<boolean>` that is true while the node is
-  in the document — "on mount" as a signal, not a callback vocabulary:
-  `onunmount(el, watch(connected(el), (on) => on && measure()))`, and it
-  composes
-  with any other cell in one effect. Backed by one shared document-level
+  in the document — mount state as a signal:
+  `onUnmount(el, watch(connected(el), (on) => on && measure()))`, and it
+  composes with any other cell in one effect. Backed by one shared document-level
   `MutationObserver` that exists only while at least one connection signal is
   observed. **Cost while live:** the observer records every childList
   mutation in the document — measured on the comparative bench: ~3.5% on
@@ -567,76 +570,101 @@ The DOM entrypoint exports these functions:
   sentinel variant was measured and rejected: it plants a hidden child in
   the watched element, breaking `:empty`, serialization, and `morph()`.)
   Moves confined to shadow roots are invisible to it.
-- `attrOf(el, name)` returns a `Read<string | null>` of an attribute's current
-  value — the read-side complement of the `attr()` binding, for reacting to
-  `hidden`/`aria-*`/`data-*` state you don't own:
-  `watch(() => connected(el)() && attrOf(el, "hidden")() === null, (visible) => …)`.
-  One shared observer serves the whole app — each watched element carries an
-  `attributeFilter` of exactly its subscribed names, and the observation set
-  is rebuilt only when a subscription changes, never per mutation.
-  Subscriber-counted like every source: nothing observed, nothing exists.
-- `tap(node, handler)` binds a robust tap (see below).
+- Attribute/class/style **reads** (`attr(el, name)`, `classed(el, name)`,
+  `style(el, prop)`) share one app-wide `MutationObserver` — each watched
+  element carries an `attributeFilter` of exactly its subscribed names, and
+  the observation set is rebuilt only when a subscription changes, never per
+  mutation. Subscriber-counted like every source: nothing observed, nothing
+  exists. Typical guardrail:
+  `watch(() => connected(el)() && attr(el, "hidden")() === null, (visible) => …)`.
+- `observeIntersection(el, cb, options?)` — intersection observation with
+  node lifetime: `cb(entry)` runs on IntersectionObserver's clock and
+  detaches when the node is torn down. Observers with equal
+  `rootMargin`/`threshold` and the default root are shared; a custom `root`
+  gets a dedicated observer. Returns a stop.
+- `observeMutation(el, cb, options)` — DOM mutation observation with node
+  lifetime: the raw `MutationObserver` contract (`cb(records)`, batched per
+  microtask, `MutationObserverInit` options), detached on node teardown. One
+  observer per call: with `subtree` a record's target is the mutated
+  descendant, so shared observers cannot route records. Returns a stop.
+- `onTap(node, handler)` binds a robust tap (see below).
+
+#### Naming convention
+
+- **`on…(el, …)`** — imperative twin of a JSX prop of the same name and
+  spelling: `onMount`, `onUnmount`, `onTap`. Props also accept the
+  all-lowercase spelling.
+- **`observe…(el, cb, options?)`** — parameterized observation with node
+  lifetime: `observeSize`, `observeIntersection`, `observeMutation`.
+  Function-only; the callback detaches on node teardown.
+- **Unprefixed** — signals and cells, the reactive grain: `connected`,
+  `persisted`, and the cell forms of `attr`/`classed`/`style` (direction by
+  first argument and arity, as with a state cell: read without a value,
+  write with one).
+- **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,
+  `morph`, `virtualList`. Verb- or noun-accurate names, camelCase when
+  multiword.
+- Core reactivity uses `watch` (tracked read, untracked callback, no DOM);
+  `observe…` is DOM observation with node lifetime. The prefixes mark the
+  grain.
 
 These split by where they go. **Child bindings** produce nodes or slot
 descriptors to place among children — `text`, `each`, `when`, and `match`.
 `list()` is the imperative container reconciler when you already have a host
-element. **Prop bindings** — `attr` / `classed` / `style` — return opaque
-descriptors you pass as a prop *value*
-(`h("a", { class: classed("on", isOn) })`); the handles are opaque, built only
-by these factories; `bindAttr()` is their imperative form when you already
-hold the element. (In JSX you rarely need them: a reactive read as a child,
-class-map value, or attribute is enough.)
+element. **Prop bindings** — the descriptor forms of `attr` / `classed` /
+`style` — return opaque handles you pass as a prop *value*
+(`h("a", { class: classed("on", isOn) })`); the element forms of the same
+functions bind or read directly when you hold the element. (In JSX you rarely
+need descriptors: a reactive read as a child, class-map value, or attribute
+is enough.)
 
-Loom is a thin layer over the DOM, so event props use **the DOM's own lowercase
-names** — `onclick`, `oninput`, `onpointerup`, `onkeydown` — not React's
-camelCase. Any `on<event>` function prop is wired with `addEventListener`, so you
-get standard bubbling and the precise DOM event type in the handler:
+Event props accept both spellings: the DOM's own lowercase names (`onclick`,
+`oninput`, `onpointerup`) and camelCase (`onClick`, `onInput`) — the runtime
+lowercases `on*` before `addEventListener`, so both wire the same listener
+with standard bubbling and the precise DOM event type in the handler:
 
 ```ts
 h("input", { oninput: (event) => value(event.currentTarget.valueAsNumber) });
 ```
 
-(A camelCase `onClick` still works — the runtime lowercases `on*` — but lowercase
-is the typed, documented form.)
-
-**`ontap` — the one synthetic event.** iOS Safari **drops the synthesized
+**`onTap` — the one synthetic event.** iOS Safari **drops the synthesized
 `click`** when the DOM mutates between `touchstart` and `touchend`. An app that
 rewrites the DOM during interaction (a live dashboard, a game, the demo's chaos
 mode) will see taps silently do nothing — the button shows `:active` but the
-handler never runs. `ontap` is built from raw `pointerdown`+`pointerup`, which
+handler never runs. `onTap` is built from raw `pointerdown`+`pointerup`, which
 are dispatched directly rather than hit-test-synthesized, so it survives:
 
 ```ts
-h("button", { ontap: () => stop() }); // fires reliably even under DOM churn
+h("button", { onTap: () => stop() }); // fires reliably even under DOM churn
 ```
 
 It fires on release when the pointer hasn't moved more than ~10px from the press
 (so a drag or scroll doesn't trigger it). Use plain `onclick` everywhere else;
-reach for `ontap` only in the rare continuous-mutation case. `tap(node, handler)`
+reach for `onTap` only in the rare continuous-mutation case. `onTap(node, handler)`
 is the same logic for imperative (non-JSX) call sites.
 
-**`onmount` / `onunmount` — lifecycle hooks, not DOM events.** `onmount` runs
+**`onMount` / `onUnmount` — lifecycle hooks, not DOM events.** `onMount` runs
 once, on a microtask after the task that inserted the node — connected and
 measurable, not yet painted, so measure-then-classify work causes no flash.
-`onunmount` runs a cleanup when the node is torn down the Loom way —
+`onUnmount` runs a cleanup when the node is torn down the Loom way —
 `remove()` / `dispose()`, or an ancestor `when` / `match` / `each` slot
 swapping it out — riding the same node-owned disposer channel as the reactive
 bindings, so it fires exactly when they do. Both are also importable
-functions (`onmount(el, fn)` / `onunmount(el, stop)`) for imperative call
+functions (`onMount(el, fn)` / `onUnmount(el, stop)`) for imperative call
 sites:
 
 ```tsx
 <div
-  onmount={(el) => measureAndClassify(el)}
-  onunmount={() => socket.close()}
+  onMount={(el) => measureAndClassify(el)}
+  onUnmount={() => socket.close()}
 >
   {() => status()}
 </div>
 ```
 
-`onunmount` does **not** fire on a raw `node.remove()` / `replaceChildren()`
+`onUnmount` does **not** fire on a raw `node.remove()` / `replaceChildren()`
 that bypasses Loom's teardown — same caveat as every Loom binding. For
-grouping many effects, prefer a `scope()`; `onunmount` is the per-node escape
+grouping many effects, prefer a `scope()`; `onUnmount` is the per-node escape
 hatch, and `bind(el, fn)` is the effect-shaped shorthand for the common case.
 
 `list()` reorders keyed nodes by default. Pass `reorder: () => false` when an
@@ -679,7 +707,7 @@ The contract, precisely:
   way, so its bindings die with it.
 - A raw `effect()` call inside a component function is **not** node-owned.
   Tie it to an element with `bind(el, fn)` (effect + attribution + lifetime
-  in one), with `onunmount(el, stop)` for a disposer you already hold, or
+  in one), with `onUnmount(el, stop)` for a disposer you already hold, or
   group it with `scope()` and stop the scope.
 - `effect`'s `{ target }` option is **inspector attribution only** — it names
   which node an effect renders for the devtools; it does not create ownership.
@@ -688,7 +716,7 @@ The contract, precisely:
 function widget(): HTMLElement {
   const el = <div class="widget" /> as HTMLElement;
   bind(el, () => syncSomething(el)); // effect, dies with el, shows on hover
-  // — the one-call form of: onunmount(el, effect(() => …, { target: el }))
+  // — the one-call form of: onUnmount(el, effect(() => …, { target: el }))
   return el;
 }
 ```
@@ -780,7 +808,7 @@ A selector string is shorthand: `skip: "[data-chrome]"`.
 
 > **Note:** `morph` is for **static** trees only. It removes and adopts nodes
 > with raw DOM operations, so a subtree containing loom bindings (`text`,
-> `list`, `onunmount`, …) must be updated reactively or torn down with
+> `list`, `onUnmount`, …) must be updated reactively or torn down with
 > `remove()` — morphing it would strand the bindings' effects.
 
 ### JSX
