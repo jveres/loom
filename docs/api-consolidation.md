@@ -104,6 +104,39 @@ The browser bridges — `connected`, `attrOf`, `observeSize`, `persisted`,
 One docs section, one shared internal pattern (subscriber-counted shared
 observers), five entries that read as variations.
 
+## Naming convention (agreed 2026-07-07)
+
+The rule set that keeps the surface predictable as it consolidates:
+
+- **`on…(el, …)` — imperative twin of a JSX prop of the same name.** The
+  prefix is *earned by the prop*: `onmount`/`onunmount` (and `ontap`, pending
+  the rename from `tap`) exist in both syntaxes, spelled identically, so prop
+  and function are visibly one concept. No prop → no `on` prefix.
+- **`observe…(el, cb, options?)` — parameterized observation with node
+  lifetime.** `observeSize`, plus the proposed `observeIntersection` /
+  `observeMutation`. These stay function-only (no JSX prop): they take
+  options a prop value can't carry, and every wired prop costs baseline
+  bytes for all `h()` users (measured: +231 B for `onmount`). Bare
+  event-style names were rejected here because they read as actions —
+  `resize(el)` looks like it resizes the element — and `mutate` collides
+  with core's `mutate(source, fn)`.
+- **Unprefixed names — signals and cells, the reactive grain.**
+  `connected(el)` returns a `Read`; `attr` follows the callable-cell
+  convention, direction by arity/first-arg:
+  `attr(name, read)` = JSX descriptor, `attr(el, name)` = reactive read,
+  `attr(el, name, read)` = node-owned write binding (absorbing `attrOf` and
+  `bindAttr` — one name, three sides of "the attribute as a cell").
+- **Callback sugar over signals is not added when it's a one-liner.**
+  `onconnected` was deliberately rejected:
+  `onunmount(el, watch(connected(el), cb))` composes from existing grain, and
+  the name would fight both the rule (no prop) and the `connected()` signal.
+- **Lowercase throughout** — the props ride the platform's own event-prop
+  grammar (`onclick`, not `onClick`), and the functions match their props.
+
+Status: rule agreed; the renames it implies (`tap` → `ontap`, `attrOf` +
+`bindAttr` → `attr` overloads) and the two new observers are **proposed,
+awaiting approval** — nothing implemented yet.
+
 ## Sequencing
 
 1. **v0.4.0 now** — everything since v0.3.0 is additive
