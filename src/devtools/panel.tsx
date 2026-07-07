@@ -83,14 +83,14 @@ interface PanelCells {
   readonly size: State<PanelSize>;
 }
 
-// Persisted panel chrome, on loom's own persisted() cells (all `internal`, so the inspector never
+// Persisted panel chrome, on loom's own persisted() signals (all `internal`, so the inspector never
 // observes itself). Created lazily on first mount — the module stays a strict no-op until then —
 // and memoized across mount/unmount cycles. Theme/min/logSize keep their historical raw-string
 // storage formats via parse/serialize, so values persisted before this migration still load;
 // validate is the choke point that drops a clobbered or out-of-range stored value.
-let cells: PanelCells | null = null;
+let signals: PanelCells | null = null;
 function panelCells(): PanelCells {
-  cells ??= {
+  signals ??= {
     theme: persisted<Theme>(`${PANEL_ID}-theme`, "system", {
       internal: true,
       serialize: (t) => t,
@@ -121,7 +121,7 @@ function panelCells(): PanelCells {
         typeof v.height === "number",
     }),
   };
-  return cells;
+  return signals;
 }
 
 /* ============================================================ chrome helpers ======= */
@@ -466,7 +466,7 @@ export function mountInspector(target: Element = document.body): void {
     panes.set(t.id, pane);
     bodyEl.append(pane);
   }
-  // Clicking a trace row's name jumps to that cell in the Graph tab (the panel owns tab state).
+  // Clicking a trace row's name jumps to that signal in the Graph tab (the panel owns tab state).
   setTraceLocate((id): void => {
     ui?.("graph");
     revealCell(id);

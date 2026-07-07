@@ -415,7 +415,7 @@ const TIP = {
   creates:
     "Reactive nodes (state/computed/effect) created per second — graph allocation rate.",
   disposes: "Reactive nodes disposed per second — graph teardown rate.",
-  states: "Live state cells in the reactive graph.",
+  states: "Live state signals in the reactive graph.",
   computeds: "Live computed values.",
   effects:
     "Live app effects (your effect() calls), excluding DOM-binding views.",
@@ -427,7 +427,7 @@ const TIP = {
   channels:
     "Registered channels — gated ring-buffer event streams for any use (7 built-in reactive ones + any the app declares).",
   unread:
-    "States/computeds nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked cells.",
+    "States/computeds nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked signals.",
 } as const;
 
 function buildStatsPane(): HTMLElement {

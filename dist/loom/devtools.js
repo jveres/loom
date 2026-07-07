@@ -1,6 +1,6 @@
 import { _ as e, a as t, h as n, i as r, m as i, p as a, u as o } from "./loom-BE6Qi7th.js";
 import { i as s, n as c, r as l } from "./meter-DFb_yOza.js";
-import { n as ee, t as u } from "./observe-DHhsUoCi.js";
+import { n as ee, t as u } from "./observe-DAHMNNFv.js";
 import { g as d, h as te, l as f, m as ne, p, t as m } from "./dom-D4_Tlbqb.js";
 import { virtualList as h } from "./dom/virtual-list.js";
 import { jsx as g, jsxs as _ } from "./jsx-runtime.js";
@@ -223,7 +223,7 @@ function et(e, t) {
 }
 function tt() {
 	let e = w.length;
-	for (let t of C) e += 1 + (T.has(t.gid) ? 0 : t.cells.length);
+	for (let t of C) e += 1 + (T.has(t.gid) ? 0 : t.signals.length);
 	return e;
 }
 function nt(e) {
@@ -233,19 +233,19 @@ function nt(e) {
 			kind: "header",
 			gid: e.gid,
 			label: e.label,
-			count: e.cells.length
+			count: e.signals.length
 		};
 		if (--t, !T.has(e.gid)) {
-			if (t < e.cells.length) return {
-				kind: "cell",
-				node: e.cells[t],
+			if (t < e.signals.length) return {
+				kind: "signal",
+				node: e.signals[t],
 				child: !0
 			};
-			t -= e.cells.length;
+			t -= e.signals.length;
 		}
 	}
 	return t < w.length ? {
-		kind: "cell",
+		kind: "signal",
 		node: w[t],
 		child: !1
 	} : void 0;
@@ -269,7 +269,7 @@ function it() {
 	for (let [e, n] of t) n.sort((e, t) => (e.key ?? e.label).localeCompare(t.key ?? t.label)), C.push({
 		gid: e,
 		label: Ye(e, n),
-		cells: n
+		signals: n
 	});
 	w = n, Pe = Fe, x.setItems(rt()), Pe = !1, Fe = !1;
 }
@@ -289,9 +289,9 @@ function st() {
 function ct(e) {
 	let t = 0;
 	for (let n of C) {
-		let r = n.cells.findIndex((t) => t.id === e);
+		let r = n.signals.findIndex((t) => t.id === e);
 		if (r >= 0) return T.has(n.gid) && (T.delete(n.gid), x?.setItems(rt())), t + 1 + r;
-		t += 1 + (T.has(n.gid) ? 0 : n.cells.length);
+		t += 1 + (T.has(n.gid) ? 0 : n.signals.length);
 	}
 	let n = w.findIndex((t) => t.id === e);
 	return n >= 0 ? t + n : -1;
@@ -731,14 +731,14 @@ var J = {
 	flushTime: "Wall-clock duration of the most recent flush.",
 	creates: "Reactive nodes (state/computed/effect) created per second — graph allocation rate.",
 	disposes: "Reactive nodes disposed per second — graph teardown rate.",
-	states: "Live state cells in the reactive graph.",
+	states: "Live state signals in the reactive graph.",
 	computeds: "Live computed values.",
 	effects: "Live app effects (your effect() calls), excluding DOM-binding views.",
 	views: "Live DOM bindings (text/attr/class/style/list) — the rendering output.",
 	sources: "Live lazy sources (source/poll) — external producers wired into the graph.",
 	scopes: "Live scopes grouping effects and resources.",
 	channels: "Registered channels — gated ring-buffer event streams for any use (7 built-in reactive ones + any the app declares).",
-	unread: "States/computeds nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked cells."
+	unread: "States/computeds nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked signals."
 };
 function tr() {
 	let e = /* @__PURE__ */ g("span", { class: "li-perfh-fps" });

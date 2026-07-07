@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>A tiny runtime reactive UI core.</strong><br>
-  Callable state cells, computed reads, effects, and a small DOM layer —
+  Callable signals, computed reads, effects, and a small DOM layer —
   no compiler, no virtual DOM.
 </p>
 
@@ -34,7 +34,7 @@
 - **Small and tree-shakable.** A minimal `state`/`computed`/`effect` app bundles
   to ~3.5 kB gzip; the meter/inspect machinery loads only with `loom/observe`,
   and per-entry budgets are enforced in CI (`pnpm size`).
-- **Callable cells.** `count()` reads, `count(1)` writes — the whole state model
+- **Callable signals.** `count()` reads, `count(1)` writes — the whole state model
   in one shape, no setters or hooks.
 - **Generic channel/meter primitives.** A gated ring-buffer `channel` and a pull-based
   `meter` for any event or sample stream — zero allocation until metered. Loom uses them
@@ -58,7 +58,7 @@ function Counter() {
 document.body.append(<Counter />);
 ```
 
-State cells are callable: calling without an argument reads the value, calling
+State signals are callable: calling without an argument reads the value, calling
 with an argument writes the next one. A `computed` caches a derived read; an
 `effect` re-runs when its dependencies change. JSX evaluates once and returns a
 real DOM node, with reactive reads wired in place.
@@ -112,13 +112,13 @@ stop();
 
 The core exports these functions:
 
-- `state(initial, options?)` creates a callable state cell.
+- `state(initial, options?)` creates a callable signal.
 - `computed(getter, options?)` creates a cached derived read.
 - `effect(fn, options?)` runs `fn` immediately and again when its dependencies
   change. `fn` may return a cleanup that runs before each re-run and on stop
   (that overload's function type is exported as `CleanupEffectFn`). Pass `{ target }` to associate the effect with the DOM node it writes
   (the DOM layer does this for its bindings so the inspector can highlight what a
-  cell drives), or `{ defer: true, maxStale? }` to run re-runs off the critical
+  signal drives), or `{ defer: true, maxStale? }` to run re-runs off the critical
   path (see [Deferred effects](#deferred-effects)).
 - `batch(fn)` groups writes and flushes effects once after the batch.
 - `scope(fn, options?)` groups the effects (and `poll`/`source` resources)
@@ -129,7 +129,7 @@ The core exports these functions:
   `{ stop, pause, resume }`.
 - `untrack(fn)` reads state inside `fn` without subscribing the active effect.
 - `trigger(read)` notifies subscribers after in-place mutation.
-- `update(source, fn)` writes `fn(source())` back to a state cell. The read is
+- `update(source, fn)` writes `fn(source())` back to a signal. The read is
   **untracked**: inside an effect, `update(v, n => n + 1)` does not subscribe
   the effect to `v` — use it instead of `v(v() + 1)`, which does.
 - `mutate(source, fn)` mutates an object value and then triggers subscribers.
@@ -138,14 +138,14 @@ The core exports these functions:
   skipped on the initial evaluation and when the derived value is unchanged.
   The write-back-binding shape without the `let first = true` boilerplate.
 
-> Writing an immutable value? Call the cell (`count(next)`) or `update` for a
+> Writing an immutable value? Call the signal (`count(next)`) or `update` for a
 > functional set. Mutating an object/array in place? `mutate` (mutate + notify in
 > one) — or `trigger` when the mutation already happened elsewhere and you only
 > need to notify.
 >
 > **Self-dependency warning (dev):** with inspection on
 > (`configure({ inspect: true })` + `loom/observe` loaded), loom warns once per
-> pair when an effect writes a cell it also reads — the `v(v() + 1)` pattern
+> pair when an effect writes a signal it also reads — the `v(v() + 1)` pattern
 > that silently re-triggers the effect. `update()`/`untrack()` are the fixes.
 >
 > **Flush timing:** a top-level write flushes effects synchronously before it
@@ -161,7 +161,7 @@ The core exports these functions:
   runs when it loses its last, so the producer (event listener,
   `PerformanceObserver`, socket) is only live while observed. Returns a read
   function. See [External data](#external-data).
-- `props(object, options?)` creates one state cell per enumerable string key.
+- `props(object, options?)` creates one signal per enumerable string key.
 - `channel(name, options?)` declares a named channel — a **generic**, gated,
   overwriting ring buffer that records cheaply (no allocation until metered) and
   is drained, not pushed. A reusable primitive for any event or sample stream, not
@@ -187,7 +187,7 @@ The core exports these functions:
 
 The core exports these types:
 
-- `State<T>` is a callable read/write cell.
+- `State<T>` is a callable read/write signal.
 - `Read<T>` is a read function.
 - `Stop` is a disposer function.
 - `Scope` is a scope handle: `{ stop, pause, resume }`.
@@ -218,7 +218,7 @@ tooling state that must not appear in app-level event streams by default.
 ### Object props
 
 Use `props()` when you want fine-grained updates for a plain object. Each
-enumerable string key becomes its own state cell.
+enumerable string key becomes its own signal.
 
 ```ts
 const model = props(
@@ -392,7 +392,7 @@ import { effect, props, scope } from "loom";
 
 scope(
   () => {
-    const settings = props({ theme: "dark", zoom: 1 }); // cells inherit the defaults
+    const settings = props({ theme: "dark", zoom: 1 }); // signals inherit the defaults
     effect(() => apply(settings.theme())); // so does this effect
   },
   { internal: true },
@@ -495,15 +495,15 @@ The DOM entrypoint exports these functions:
 
 - `h(tag, props, children)` creates an element.
 - `text(read)` creates a text node bound to a reactive read.
-- `attr` — the attribute as a cell, direction by first argument and arity:
+- `attr` — the attribute as a signal, direction by first argument and arity:
   `attr(name, read)` returns a JSX binding descriptor; `attr(el, name)`
   returns a reactive `Read<string | null>` of the attribute's value;
   `attr(el, name, read, options?)` binds `read()` to the attribute,
   node-owned. `options` relabels the binding or marks it `internal`.
-- `classed` — a class as a boolean cell, same three forms:
+- `classed` — a class as a boolean signal, same three forms:
   `classed(name, read)` descriptor; `classed(el, name)` → `Read<boolean>` of
   the class's presence; `classed(el, name, read, options?)` toggles it.
-- `style` — an inline style property as a cell, same three forms:
+- `style` — an inline style property as a signal, same three forms:
   `style(name, read)` descriptor; `style(el, prop)` → `Read<string>` of the
   inline value (empty when unset); `style(el, prop, read, options?)` binds
   it. Property names accept camelCase or kebab-case.
@@ -553,15 +553,15 @@ The DOM entrypoint exports these functions:
   One shared observer serves the whole app. Returns a stop for early detach.
 - `persisted(key, initial, options?)` — a `State<T>` backed by
   `localStorage`: read-validate once at creation, write-through on set. It is
-  a plain state cell (`update`/`watch`/bindings all compose); `options` add
+  a plain signal (`update`/`watch`/bindings all compose); `options` add
   `serialize`/`parse` (default JSON) and `validate` — the choke point that
   drops a corrupt or out-of-range stored value instead of leaking it into
-  the app. Absent or throwing storage degrades to an unpersisted cell. The
+  the app. Absent or throwing storage degrades to an unpersisted signal. The
   inspector's own panel chrome (theme, position, size) sits on it.
 - `connected(node)` returns a `Read<boolean>` that is true while the node is
   in the document — mount state as a signal:
   `onUnmount(el, watch(connected(el), (on) => on && measure()))`, and it
-  composes with any other cell in one effect. Backed by one shared document-level
+  composes with any other signal in one effect. Backed by one shared document-level
   `MutationObserver` that exists only while at least one connection signal is
   observed. **Cost while live:** the observer records every childList
   mutation in the document — measured on the comparative bench: ~3.5% on
@@ -597,9 +597,9 @@ The DOM entrypoint exports these functions:
 - **`observe…(el, cb, options?)`** — parameterized observation with node
   lifetime: `observeSize`, `observeIntersection`, `observeMutation`.
   Function-only; the callback detaches on node teardown.
-- **Unprefixed** — signals and cells, the reactive grain: `connected`,
-  `persisted`, and the cell forms of `attr`/`classed`/`style` (direction by
-  first argument and arity, as with a state cell: read without a value,
+- **Unprefixed** — signals and signals, the reactive grain: `connected`,
+  `persisted`, and the signal forms of `attr`/`classed`/`style` (direction by
+  first argument and arity, as with a signal: read without a value,
   write with one).
 - **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,
   `morph`, `virtualList`. Verb- or noun-accurate names, camelCase when
@@ -740,8 +740,8 @@ effect(() => {
 
 #### Derived writable (recipe)
 
-UI vocabulary often maps onto a domain cell — a picker shows `"All cards"`
-while the domain stores `type: null`. Loom's callable-cell convention makes
+UI vocabulary often maps onto a domain signal — a picker shows `"All cards"`
+while the domain stores `type: null`. Loom's callable-signal convention makes
 the two-way link a three-line function, so there is no `link()` API:
 
 ```ts
@@ -751,17 +751,17 @@ const typeLabel = (next?: string): string =>
     ? labelFor(type()) // tracked read: re-runs bindings when type changes
     : (type(domainFor(next)), next);
 
-// It now behaves like a cell wherever a Read/State is expected:
+// It now behaves like a signal wherever a Read/State is expected:
 h("select", { value: typeLabel, onchange: (e) => typeLabel(e.target.value) });
 ```
 
-The wrapper is just a function — it subscribes through the cells it reads, so
+The wrapper is just a function — it subscribes through the signals it reads, so
 bindings, `computed`, and `watch` all compose with it unchanged.
 
 #### Keyed rows with per-row state
 
 Rebuilding a whole list per keystroke is the wholesale-rerender trap. Give
-each row its own cells and key the list — updates then write one cell and
+each row its own signals and key the list — updates then write one signal and
 patch one text node, and reorders move nodes without rebuilding them:
 
 ```ts
@@ -1009,7 +1009,7 @@ container element (or need the `reorder` option).
 Both `each` and `list` render a row **once per key** — like the conditional
 helpers, they reconcile structure, not row contents. A row whose key is unchanged
 is reused as-is; its `render` does not re-run when the item behind that key is
-replaced. So make the row model expose Loom reads/cells and pass those reads into
+replaced. So make the row model expose Loom reads/signals and pass those reads into
 bindings (`{row.title}`, `class={{ done: row.done }}`), or, if a row is a
 static snapshot, fold the fields it shows into the `key` so a changed field
 produces a new key and rebuilds the row.
@@ -1106,7 +1106,7 @@ zero. The rest of `loom/observe` snapshots the reactive graph:
 
 - `inspect()` returns a snapshot of the current graph (empty unless inspection is
   enabled via `configure({ inspect: true })`). Pass `{ active: true }` to skip
-  state/computed cells with no subscribers — idle cells and "ghosts" (cells of a
+  state/computed signals with no subscribers — idle signals and "ghosts" (signals of a
   removed object, unreachable but not yet GC'd); effects are always kept.
 - `inspectResources()` returns a live census `{ states, computeds, effects,
   targetedEffects, sources, scopes, channels, unread }` — one cheap walk, no
@@ -1140,7 +1140,7 @@ you write yourself.
 
 <p align="center">
   <em><strong>Info</strong> — FPS, web-vitals and live pipeline rates ·
-  <strong>Graph</strong> — state cells grouped by source with current values ·
+  <strong>Graph</strong> — signals grouped by source with current values ·
   <strong>Trace</strong> — the live event stream, pausable and filterable.</em>
 </p>
 
@@ -1180,19 +1180,19 @@ The panel has three tabs:
   sources, scopes, channels, `unread`) plus live pipeline rates and page health
   (FPS, frame-time histogram, write/effect/create/dispose rates) driven by a
   `meter` over the built-in `events`.
-- **Graph** — the reactive graph as a virtualized tree of state/computed cells,
-  grouped by `props()` group. A filled dot means the cell drives a
-  DOM node downstream; a hollow dot means it doesn't. Hovering a cell (or a group
+- **Graph** — the reactive graph as a virtualized tree of state/computed signals,
+  grouped by `props()` group. A filled dot means the signal drives a
+  DOM node downstream; a hollow dot means it doesn't. Hovering a signal (or a group
   header) highlights every DOM target it feeds; the locate button scrolls the
-  first target into view. Primitive state cells are editable in place, and values
+  first target into view. Primitive signals are editable in place, and values
   flash on change.
 - **Trace** — a live, newest-on-top causal trace of reactive events, read from the
-  `loom:read` and `loom:write` channels' `samples` views. Each row shows the cell, the
+  `loom:read` and `loom:write` channels' `samples` views. Each row shows the signal, the
   change (`prev → next` for writes), and the **source** — the effect/computed that read
   or wrote it (`by dom.class.chaos`), so the stream reads as "who did what". A header
   selector picks reads / writes / all; pause, clear, and a name filter narrow it; the
   last window (1k–25k, set from the menu) is kept, with filtered matches accumulating
-  their own window. Hover a row to highlight the DOM node(s) the cell drives; click a
+  their own window. Hover a row to highlight the DOM node(s) the signal drives; click a
   name to jump to it in the Graph.
 
 The panel is styled by a single `inspector.css` — ordinary formatted CSS, authored
@@ -1208,8 +1208,8 @@ by a `data-theme` attribute (`light` / `dark` / `system`).
 
 The CLI benchmark compares Loom against native `alien-signals` primitives under a
 full-chaos workload (`vitest bench`). It runs three variants on the same machine:
-`loom` (using `props()`), `loom manual` (manually declared state cells), and
-`alien native` (native `alien-signals` cells).
+`loom` (using `props()`), `loom manual` (manually declared signals), and
+`alien native` (native `alien-signals` signals).
 
 ```sh
 pnpm run bench
@@ -1236,8 +1236,8 @@ streaming-markdown workload (full-document and per-block-skip modes).
 
 Loom's reactive graph is a vendored copy of `alien-signals`' propagation core
 (`src/core/graph.ts`, 224 lines, MIT notice retained) — the library has zero
-runtime dependencies. The public API stays small: callable state cells,
-computed reads, effects, batching, manual triggers, object field cells, and an
+runtime dependencies. The public API stays small: callable signals,
+computed reads, effects, batching, manual triggers, object field signals, and an
 observability surface.
 
 The v2 architecture — the vendoring, the tree-shakable core split, the
@@ -1273,7 +1273,7 @@ APIs should pick the shape their layer already uses.
 ### Hot path
 
 The per-operation read/write/effect path is deliberately kept at parity with the
-underlying `alien-signals` primitives. The callable cell shape (`signal(...value)`
+underlying `alien-signals` primitives. The callable signal shape (`signal(...value)`
 read/write dispatch) is the same one `alien-signals` uses, so Loom adds no
 allocation of its own there.
 
@@ -1281,7 +1281,7 @@ The whole measured gap over native `alien-signals` is the channel
 instrumentation — the `someCh.meters !== 0 && …` guard inlined at each
 read/write/compute/effect/create/dispose site. A controlled experiment (stripping
 just the state-path guards and re-running the chaos bench) attributes ~3% to it on
-the manual-cells path: the cost of keeping observability always available with
+the manual-signals path: the cost of keeping observability always available with
 zero allocation when idle. With the guards in place Loom lands at parity with
 native (within run-to-run noise), and what margin remains *is* the channel
 layer, not overhead to optimize away.
@@ -1317,7 +1317,7 @@ plus `tsconfig` `paths`), so `check` / `test` / `dev` never need a build.
 
 With the dev server running, open `/demo/` for the realtime UI demo or `/bench/`
 for the browser benchmark. The demo is a realtime stress UI written in Loom JSX:
-it exercises state cells, object props, computed values, effects, keyed list
+it exercises signals, object props, computed values, effects, keyed list
 reconciliation, direct JSX text/attribute/class bindings, cleanup through DOM
 disposal, and the browser JSX runtime.
 

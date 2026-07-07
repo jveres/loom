@@ -1,4 +1,4 @@
-// Shared value rendering for the inspector's cell/trace rows.
+// Shared value rendering for the inspector's signal/trace rows.
 
 // Compact display of a value. Strings are quoted and truncated past `cap` chars (the caller sets the
 // budget — wide in the trace log, tight in the graph tree); other types get a short summary.

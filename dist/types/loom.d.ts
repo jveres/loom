@@ -132,7 +132,7 @@ export declare function trigger(source: Read<unknown>): void;
 export declare function untrack<T>(fn: () => T): T;
 /**
  * Functional read-modify-write: `update(count, n => n + 1)`. The read is **untracked** — inside an
- * effect, updating a cell does not subscribe the effect to it, so the classic `v(v() + 1)`
+ * effect, updating a signal does not subscribe the effect to it, so the classic `v(v() + 1)`
  * self-dependency foot-gun can't happen through this helper.
  */
 export declare function update<T>(source: State<T>, fn: (value: T) => T): void;

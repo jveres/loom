@@ -118,8 +118,8 @@ set also lives in the README.
   lifetime: `observeSize`, `observeIntersection`, `observeMutation`.
   Function-only: options exceed what a prop value can carry, and each wired
   prop adds its module to every `h()` bundle.
-- **Unprefixed** — signals and cells: `connected`, `persisted`, and the cell
-  forms of `attr`/`classed`/`style`. Cell direction follows the state-cell
+- **Unprefixed** — signals and signals: `connected`, `persisted`, and the signal
+  forms of `attr`/`classed`/`style`. Signal direction follows the state-signal
   convention — read without a value argument, write/bind with one; the JSX
   descriptor form is selected by a string first argument.
 - **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,

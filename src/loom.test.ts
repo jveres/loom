@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("loom core", () => {
-  it("creates callable state cells", () => {
+  it("creates callable state signals", () => {
     const count = state(0);
 
     expect(count()).toBe(0);
@@ -121,7 +121,7 @@ describe("loom core", () => {
 
   it("nested effects die on the parent's rerun; untrack() escapes ownership", () => {
     const trigger = state(0);
-    const cell = state(0);
+    const signal = state(0);
     let ownedRuns = 0;
     let escapedRuns = 0;
     let built = false;
@@ -132,29 +132,29 @@ describe("loom core", () => {
       if (!built) {
         built = true;
         effect(() => {
-          cell();
+          signal();
           ownedRuns++;
         });
         escapedStop = untrack(() =>
           effect(() => {
-            cell();
+            signal();
             escapedRuns++;
           }),
         );
       }
     });
 
-    cell(1); // both children alive
+    signal(1); // both children alive
     expect(ownedRuns).toBe(2);
     expect(escapedRuns).toBe(2);
 
     trigger(1); // parent reruns: the owned child is disposed with it
-    cell(2);
+    signal(2);
     expect(ownedRuns).toBe(2); // dead — did not see the write
     expect(escapedRuns).toBe(3); // escaped construction survives reruns
 
     stop();
-    cell(3);
+    signal(3);
     expect(escapedRuns).toBe(4); // not owned by the parent at all
     escapedStop();
   });
@@ -273,19 +273,19 @@ describe("loom core", () => {
     stop();
   });
 
-  it("warns once when an effect writes a cell it also reads (inspection on)", () => {
+  it("warns once when an effect writes a signal it also reads (inspection on)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const c = state(0, { label: "selfdep.cell" });
+    const c = state(0, { label: "selfdep.signal" });
     const stop = effect(
       () => {
         const v = c(); // tracked read...
-        if (v < 1) c(v + 1); // ...then a write to the same cell
+        if (v < 1) c(v + 1); // ...then a write to the same signal
       },
       { label: "selfdep.effect" },
     );
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toContain("selfdep.effect");
-    expect(warn.mock.calls[0]?.[0]).toContain("selfdep.cell");
+    expect(warn.mock.calls[0]?.[0]).toContain("selfdep.signal");
     c(0); // triggers the same write pair again -> warn-once holds
     expect(warn).toHaveBeenCalledTimes(1);
     stop();
@@ -362,16 +362,16 @@ describe("loom core", () => {
     const f = m.read()["loom:write"];
     expect(f?.count).toBe(2); // the two writes (creation isn't a write)
     const rows = f?.samples ?? [];
-    // every write captured, in order, with the cell id + the exact prev→next transition
+    // every write captured, in order, with the signal id + the exact prev→next transition
     expect(rows.map((r) => [r["prev"], r["next"]])).toEqual([
       [5, 6],
       [6, 7],
     ]);
-    expect(new Set(rows.map((r) => r["id"])).size).toBe(1); // same cell
+    expect(new Set(rows.map((r) => r["id"])).size).toBe(1); // same signal
     m.stop();
   });
 
-  it("records the source — the effect that read or wrote a cell", () => {
+  it("records the source — the effect that read or wrote a signal", () => {
     const rm = meter([events.read], "samples");
     const wm = meter([events.write], "samples");
     const a = state(0);
@@ -616,7 +616,7 @@ describe("loom channels", () => {
     expect(keep).toHaveLength(5);
   });
 
-  it("inspect({ active }) skips subscriber-less cells but keeps effects", () => {
+  it("inspect({ active }) skips subscriber-less signals but keeps effects", () => {
     const watched = state(0, { label: "act-watched" });
     const idle = state(0, { label: "act-idle" }); // nothing ever reads it
     const stop = effect(
@@ -632,7 +632,7 @@ describe("loom channels", () => {
     expect(has("act-effect")).toBe(true); // effects are always kept
     expect(has("act-idle")).toBe(false); // no subscribers -> skipped
 
-    // the full snapshot still includes the idle cell
+    // the full snapshot still includes the idle signal
     expect(inspect().nodes.some((n) => n.label === "act-idle")).toBe(true);
 
     stop();
@@ -1175,7 +1175,7 @@ describe("loom scope options", () => {
     expect(keep).toHaveLength(1);
   });
 
-  it("applies scope options to props() cells", () => {
+  it("applies scope options to props() signals", () => {
     const keep: unknown[] = [];
     scope(
       () => {
@@ -1183,11 +1183,11 @@ describe("loom scope options", () => {
       },
       { internal: true },
     );
-    const cells = inspect().nodes.filter(
+    const signals = inspect().nodes.filter(
       (n) => n.label === "form.a" || n.label === "form.b",
     );
-    expect(cells).toHaveLength(2);
-    expect(cells.every((n) => n.internal)).toBe(true);
+    expect(signals).toHaveLength(2);
+    expect(signals.every((n) => n.internal)).toBe(true);
   });
 });
 
@@ -1694,9 +1694,9 @@ describe("loom deferred effects", () => {
   });
 
   it("processes only what fits the budget and reschedules the rest", () => {
-    const cells = [state(0), state(0), state(0)];
+    const signals = [state(0), state(0), state(0)];
     const ran: number[] = [];
-    const stops = cells.map((c, i) =>
+    const stops = signals.map((c, i) =>
       effect(
         () => {
           c();
@@ -1706,7 +1706,7 @@ describe("loom deferred effects", () => {
       ),
     );
     ran.length = 0;
-    for (const c of cells) c(1); // all three queued
+    for (const c of signals) c(1); // all three queued
     let budget = 2;
     fire?.(() => budget-- > 0); // budget for 2
     expect(ran).toEqual([0, 1]); // only two ran; the third was rescheduled

@@ -109,7 +109,7 @@ export interface StateNode<T> extends NodeBase {
   source?: State<unknown> | undefined;
 }
 
-// A lazy external source: a state-shaped value cell that runs `connect` when it gains its first
+// A lazy external source: a state-shaped value signal that runs `connect` when it gains its first
 // subscriber and the returned `disconnect` when it loses its last (see sourceOper / unwatched).
 interface SourceNode<T> extends StateNode<T> {
   connect: SourceConnect<T>;
@@ -582,10 +582,10 @@ export function poll<T>(
   ms: number,
   options?: NodeOptions,
 ): Polled<T> {
-  const cell = state(sample(), options);
+  const signal = state(sample(), options);
   let timer: ReturnType<typeof setInterval> | undefined;
   const start = (): void => {
-    timer = setInterval(() => cell(sample()), ms);
+    timer = setInterval(() => signal(sample()), ms);
   };
   const clear = (): void => {
     if (timer !== undefined) {
@@ -600,13 +600,13 @@ export function poll<T>(
     pause: clear,
     resume: () => {
       if (timer === undefined) {
-        cell(sample());
+        signal(sample());
         start();
       }
     },
     stop: clear,
   });
-  return Object.assign((): T => cell(), { stop: clear });
+  return Object.assign((): T => signal(), { stop: clear });
 }
 
 export function trigger(source: Read<unknown>): void {
@@ -654,7 +654,7 @@ export function untrack<T>(fn: () => T): T {
 
 /**
  * Functional read-modify-write: `update(count, n => n + 1)`. The read is **untracked** — inside an
- * effect, updating a cell does not subscribe the effect to it, so the classic `v(v() + 1)`
+ * effect, updating a signal does not subscribe the effect to it, so the classic `v(v() + 1)`
  * self-dependency foot-gun can't happen through this helper.
  */
 export function update<T>(source: State<T>, fn: (value: T) => T): void {
@@ -706,26 +706,26 @@ export function props<T extends object>(
   }
   const out = {} as { [K in FieldKey<T>]: State<T[K]> };
   const keys = Object.keys(initial) as Array<FieldKey<T>>;
-  // One group id per call so the inspector can re-nest the cells under a single parent.
+  // One group id per call so the inspector can re-nest the signals under a single parent.
   const group = inspectHooks !== undefined ? inspectHooks.nextGroup() : 0;
   for (let index = 0; index < keys.length; index++) {
     const key = keys[index] as FieldKey<T>;
-    const cell = state(initial[key], fieldOptions(options, key));
+    const signal = state(initial[key], fieldOptions(options, key));
     if (group !== 0) {
-      const meta = nodeOf(cell as object)?.meta;
+      const meta = nodeOf(signal as object)?.meta;
       if (meta) {
         meta.group = group;
         meta.key = key;
       }
     }
-    out[key] = cell;
+    out[key] = signal;
   }
   return out;
 }
 
-// Record a read on the read channel — the cell, the reader (the running effect/computed) that
+// Record a read on the read channel — the signal, the reader (the running effect/computed) that
 // consumed it, and when. Callers gate on `readCh.samples !== 0`; `meta === undefined`
-// (inspection off for this cell) just counts.
+// (inspection off for this signal) just counts.
 function recordRead(node: NodeBase, sub: NodeBase): void {
   const meta = node.meta;
   if (meta !== undefined)
@@ -910,7 +910,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
       this.pendingValue = next;
       this.flags = Mutable | Dirty;
       // Dev self-dependency warning (inspection on — `meta` exists only then, so production
-      // writes pay a single undefined compare): an effect writing a cell it subscribes to
+      // writes pay a single undefined compare): an effect writing a signal it subscribes to
       // re-triggers itself, the v(v()+1) phantom-write class of bug.
       if (this.meta !== undefined && activeSub !== undefined)
         inspectHooks?.trackedWrite?.(this, activeSub);

@@ -15,11 +15,11 @@ export interface InspectSnapshot {
     readonly nodes: readonly InspectNode[];
 }
 /**
- * Snapshot the reactive graph. With `{ active: true }`, skip state/computed cells that have no
- * subscribers — these are either idle (nothing reads them) or "ghosts": cells of a removed object
+ * Snapshot the reactive graph. With `{ active: true }`, skip state/computed signals that have no
+ * subscribers — these are either idle (nothing reads them) or "ghosts": signals of a removed object
  * that are unreachable from the app but still alive until GC clears their WeakRef. Effects are
  * always kept. There is no way to detect a not-yet-collected ghost directly (reachability is the
- * GC's business), so the subscriber count is the proxy: a live cell is one something still reads.
+ * GC's business), so the subscriber count is the proxy: a live signal is one something still reads.
  */
 export declare function inspect(options?: {
     readonly active?: boolean;

@@ -32,11 +32,11 @@ export interface InspectNode extends NodeInfo {
   readonly disposed: boolean;
   readonly target?: object;
   readonly value?: unknown;
-  // The live setter for a state cell, for tooling that writes back (the inspector). Deliberately
+  // The live setter for a state signal, for tooling that writes back (the inspector). Deliberately
   // erased to State<unknown>: the concrete T is unrecoverable at snapshot time, so a write here is
   // unchecked by construction — callers own that unsoundness.
   readonly source?: State<unknown>;
-  // Cells from one props() call share a `group` id; `key` is the property name within it.
+  // Signals from one props() call share a `group` id; `key` is the property name within it.
   readonly group?: number;
   readonly key?: string;
 }
@@ -46,7 +46,7 @@ export interface InspectSnapshot {
 }
 
 let inspectId = 0;
-let propsGroup = 0; // shared id stamped on the cells of each props() call (for inspector grouping)
+let propsGroup = 0; // shared id stamped on the signals of each props() call (for inspector grouping)
 // Inspection is opt-in: off by default so node creation allocates no metadata (zero cost). Turn it
 // on with configure({ inspect: true }) BEFORE creating the nodes you want visible to inspect()/the
 // inspector — nodes created while it's off carry no metadata and never appear. NOTE: enabling also
@@ -109,24 +109,24 @@ installInspectHooks({
   trackedWrite,
 });
 
-// Dev diagnostic: a tracked run wrote a cell — if the writer also SUBSCRIBES to that cell, it
-// re-triggers itself (the `v(v() + 1)` phantom-write). Warn once per writer/cell pair, naming
+// Dev diagnostic: a tracked run wrote a signal — if the writer also SUBSCRIBES to that signal, it
+// re-triggers itself (the `v(v() + 1)` phantom-write). Warn once per writer/signal pair, naming
 // both, with the fix. Internal (inspector-owned) nodes are exempt; intentional self-stabilizing
 // loops exist, hence a warning rather than a throw.
 const warnedSelfDeps = new Set<string>();
 function trackedWrite(node: NodeBase, writer: NodeBase): void {
   if (!inspectEnabled) return;
-  const cellMeta = node.meta;
+  const signalMeta = node.meta;
   const writerMeta = writer.meta;
-  if (!cellMeta || !writerMeta || cellMeta.internal || writerMeta.internal)
+  if (!signalMeta || !writerMeta || signalMeta.internal || writerMeta.internal)
     return;
   for (let link = node.subs; link !== undefined; link = link.nextSub) {
     if (link.sub === writer) {
-      const key = `${cellMeta.id}:${writerMeta.id}`;
+      const key = `${signalMeta.id}:${writerMeta.id}`;
       if (warnedSelfDeps.has(key)) return;
       warnedSelfDeps.add(key);
       console.warn(
-        `[loom] "${writerMeta.label}" writes "${cellMeta.label}" which it also reads — it will re-trigger itself. If unintended, read it untracked: update(cell, fn) or untrack(() => cell()).`,
+        `[loom] "${writerMeta.label}" writes "${signalMeta.label}" which it also reads — it will re-trigger itself. If unintended, read it untracked: update(signal, fn) or untrack(() => signal()).`,
       );
       return;
     }
@@ -134,11 +134,11 @@ function trackedWrite(node: NodeBase, writer: NodeBase): void {
 }
 
 /**
- * Snapshot the reactive graph. With `{ active: true }`, skip state/computed cells that have no
- * subscribers — these are either idle (nothing reads them) or "ghosts": cells of a removed object
+ * Snapshot the reactive graph. With `{ active: true }`, skip state/computed signals that have no
+ * subscribers — these are either idle (nothing reads them) or "ghosts": signals of a removed object
  * that are unreachable from the app but still alive until GC clears their WeakRef. Effects are
  * always kept. There is no way to detect a not-yet-collected ghost directly (reachability is the
- * GC's business), so the subscriber count is the proxy: a live cell is one something still reads.
+ * GC's business), so the subscriber count is the proxy: a live signal is one something still reads.
  */
 export function inspect(options?: {
   readonly active?: boolean;
@@ -176,7 +176,7 @@ export interface ResourceCounts {
   readonly sources: number;
   readonly scopes: number;
   readonly channels: number;
-  // states/computeds nothing currently reads (no subscribers): idle, or leaked/ghost cells of a
+  // states/computeds nothing currently reads (no subscribers): idle, or leaked/ghost signals of a
   // removed object not yet GC'd. A rising count under steady state hints at a leak.
   readonly unread: number;
 }

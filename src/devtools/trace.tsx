@@ -1,9 +1,9 @@
 // Trace tab: a live, newest-on-top causal trace of reactive events, read from the loom:write and/or
 // loom:read channels' *samples* views (each channel ring holds the last 1024). Each event carries
-// its source — the effect/computed that read or wrote the cell — so a row reads "X — by Y". A header
+// its source — the effect/computed that read or wrote the signal — so a row reads "X — by Y". A header
 // selector picks which types stream (writes, reads, or all interleaved by timestamp); pause freezes
-// it, clear empties it, the filter narrows by cell name, hovering a row outlines the DOM node(s) the
-// cell drives, and tapping a name jumps to it in the Graph. Driven off the panel heartbeat (in the
+// it, clear empties it, the filter narrows by signal name, hovering a row outlines the DOM node(s) the
+// signal drives, and tapping a name jumps to it in the Graph. Driven off the panel heartbeat (in the
 // deferred lane), it drains the selected ring(s) into a capped, newest-first log rendered via the vlist.
 // Seams: the panel calls buildTracePane / showTrace / setTraceActive / setTraceLiveDot /
 // setTraceLocate / setTraceWindow / teardownTrace; the stats heartbeat calls renderTrace.
@@ -35,7 +35,7 @@ function isTraceMode(value: string): value is TraceMode {
 
 type TraceRow = {
   readonly seq: number; // unique, monotonic — the vlist key (the log shifts as it prepends)
-  readonly id: number; // the cell id — for hover-highlighting the DOM nodes it drives
+  readonly id: number; // the signal id — for hover-highlighting the DOM nodes it drives
   readonly kind: "read" | "write";
   readonly timeText: string;
   readonly name: string;
@@ -63,7 +63,7 @@ let traceActive = false; // is the Trace tab the visible one? (the live view onl
 let traceFilter = ""; // lowercased name substring; "" = no filter
 let rowSeq = 0; // monotonic key source
 let lastTopSeq = -1; // seq of the row that was the top before the last update (new-arrivals boundary)
-let lastHoverId = -1; // cell id currently hover-highlighted (avoids re-snapshotting within a row)
+let lastHoverId = -1; // signal id currently hover-highlighted (avoids re-snapshotting within a row)
 let onLocate: ((id: number) => void) | null = null; // jump-to-graph, wired by the panel
 
 // Wire the "click a name to jump to it in the Graph" action (set by the panel, which owns tab state).
@@ -161,7 +161,7 @@ export function buildTracePane(): HTMLElement {
   traceScroll = <div class="li-tr-scroll" />;
   traceScroll.append(traceVList.el);
   traceFade = scrollFade(traceScroll); // same edge fade as the panel body
-  // Hover a row to outline the DOM node(s) that cell drives — same overlay the Graph uses. Delegated
+  // Hover a row to outline the DOM node(s) that signal drives — same overlay the Graph uses. Delegated
   // (rows are reused) and guarded so moving within a row doesn't re-snapshot.
   traceScroll.addEventListener("pointerover", (e) => {
     const target = e.target instanceof Element ? e.target : null;
@@ -176,7 +176,7 @@ export function buildTracePane(): HTMLElement {
     lastHoverId = -1;
     clearGraphHighlight();
   });
-  // Tap a cell name to jump to it in the Graph tab (tap, not click — click is dropped under load on
+  // Tap a signal name to jump to it in the Graph tab (tap, not click — click is dropped under load on
   // iOS; tap's slop also ignores a scroll drag).
   onTap(traceScroll, (e) => {
     const target = e.target instanceof Element ? e.target : null;
@@ -380,7 +380,7 @@ function makeRow(
   };
 }
 
-// id → label, so an event shows its cell/source name. Labels are immutable per node, so the map
+// id → label, so an event shows its signal/source name. Labels are immutable per node, so the map
 // persists across drains and is re-snapshotted — a full inspect() walk — at most once per drain,
 // and only when an event references an id it hasn't seen (a node created since the last snapshot).
 // A retained entry keeps naming a node after it's disposed; a never-seen id falls back to `#id`.

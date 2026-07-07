@@ -1,8 +1,8 @@
 // Graph tab: a grouped tree of states/computeds (by props() group) rendered through a windowing —
 // only the on-screen rows are in the DOM, built lazily for the visible window (see gListSource).
 // renderGraph() rebuilds the group structure on the heartbeat; rows update value + flash on change
-// and outline their DOM node(s) on hover. props() cells fold under a collapsible header; standalone
-// cells at the root. Owns its module state; driven from outside through seams: the panel calls
+// and outline their DOM node(s) on hover. props() signals fold under a collapsible header; standalone
+// signals at the root. Owns its module state; driven from outside through seams: the panel calls
 // buildGraphPane / showGraph / revealCell / clearGraphHighlight / teardownGraph, the stats
 // heartbeat calls renderGraphThrottled, and the Trace tab's row hover calls highlightCell.
 import type { State } from "loom";
@@ -34,7 +34,7 @@ type GraphItem =
       readonly count: number;
     }
   | {
-      readonly kind: "cell";
+      readonly kind: "signal";
       readonly node: InspectNode;
       readonly child: boolean;
     };
@@ -44,7 +44,7 @@ let graphByIdAt = 0; // performance.now() of the snapshot behind graphById (see 
 let graphGroupsData: Array<{
   gid: number;
   label: string;
-  cells: InspectNode[];
+  signals: InspectNode[];
 }> = [];
 let graphSingles: InspectNode[] = [];
 let gOverlays: HTMLElement[] = []; // active hover-highlight overlay boxes
@@ -56,7 +56,7 @@ let lastGraphRender = 0; // performance.now() of the last graph reconcile (see G
 let gSuppressFlash = false;
 let gGraphJustShown = false;
 const graphCollapsed = new Set<number>();
-let gRevealId = -1; // a cell to flash on its next render (set by revealCell, from the Trace tab)
+let gRevealId = -1; // a signal to flash on its next render (set by revealCell, from the Trace tab)
 
 export function buildGraphPane(): HTMLElement {
   graphVList = virtualList<GraphItem>({
@@ -68,7 +68,7 @@ export function buildGraphPane(): HTMLElement {
   return graphVList.el;
 }
 
-// A cell is "bound" (filled dot) when editing it would visibly change the UI — i.e. it drives at
+// A signal is "bound" (filled dot) when editing it would visibly change the UI — i.e. it drives at
 // least one DOM node (element or text) downstream. Hollow means nothing in the DOM reflects it
 // (read only by non-rendering computeds, or read by nothing).
 function gBound(n: InspectNode): boolean {
@@ -82,7 +82,7 @@ function gCoerce(input: string, prev: unknown): unknown {
   }
   return input;
 }
-// Editable = a state cell (has a writable source) holding a primitive.
+// Editable = a state signal (has a writable source) holding a primitive.
 function gEditable(n: InspectNode): boolean {
   if (n.kind !== "state" || !n.source) return false;
   const v = n.value;
@@ -93,7 +93,7 @@ function gEditable(n: InspectNode): boolean {
     typeof v === "boolean"
   );
 }
-// Paint a row's value cell (text + type colour), flashing on change. Skipped while the row's value
+// Paint a row's value signal (text + type colour), flashing on change. Skipped while the row's value
 // is being edited (its <span> is detached into an <input>). prevVal lives on the element's dataset
 // so flash fires only on a genuine change of an on-screen row, not on scroll-in.
 // `silent` suppresses the change flash for self-initiated edits (the user just typed the value, so
@@ -121,18 +121,18 @@ function gPaintVal(
   val.className = `li-gval${edit} ${valueClass(value)}`;
   row.dataset["prev"] = text;
 }
-// Open the in-place editor for a state cell: booleans toggle, others get an <input> that commits on
-// Enter/blur (Escape cancels) and writes straight back to the live cell.
+// Open the in-place editor for a state signal: booleans toggle, others get an <input> that commits on
+// Enter/blur (Escape cancels) and writes straight back to the live signal.
 function gBeginEdit(
   id: number,
-  cell: State<unknown>,
+  signal: State<unknown>,
   val: HTMLElement,
   row: HTMLElement,
 ): void {
-  const prev = cell();
+  const prev = signal();
   if (typeof prev === "boolean") {
-    cell(!prev);
-    gPaintVal(row, cell(), id, true);
+    signal(!prev);
+    gPaintVal(row, signal(), id, true);
     gReframe(id, row);
     return;
   }
@@ -154,9 +154,9 @@ function gBeginEdit(
   };
   const commit = (): void => {
     if (gEditing !== input) return;
-    cell(gCoerce(input.value, prev));
+    signal(gCoerce(input.value, prev));
     restore();
-    gPaintVal(row, cell(), id, true);
+    gPaintVal(row, signal(), id, true);
     gReframe(id, row);
   };
   input.onblur = commit; // also fires when the row is scrolled out of the window
@@ -166,7 +166,7 @@ function gBeginEdit(
   };
 }
 
-// After a self-edit the cell may drive DOM whose size just changed; if the row is still hovered, its
+// After a self-edit the signal may drive DOM whose size just changed; if the row is still hovered, its
 // highlight overlay now frames the old bounds, so re-measure it (a no-op when the row isn't hovered).
 function gReframe(id: number, row: HTMLElement): void {
   if (row.matches(":hover")) gPaint(gTargetsFor(id), true);
@@ -174,7 +174,7 @@ function gReframe(id: number, row: HTMLElement): void {
 
 // Views aren't listed; instead, hovering a state/computed outlines every DOM node it drives — walk
 // subscribers through computeds to the effects that write the DOM. A binding's target is an Element
-// (attr/class/style/list) or a Text node (text binding); both count, so a cell that only feeds a
+// (attr/class/style/list) or a Text node (text binding); both count, so a signal that only feeds a
 // text readout is still "bound" (editing it visibly changes the UI).
 function gTargetsFor(id: number): Node[] {
   const out: Node[] = [];
@@ -194,7 +194,7 @@ function gTargetsFor(id: number): Node[] {
   }
   return out;
 }
-// Union of the downstream targets of every cell in a props() group (hover the group header).
+// Union of the downstream targets of every signal in a props() group (hover the group header).
 function gGroupTargets(gid: number): Node[] {
   const out: Node[] = [];
   const seen = new Set<Node>();
@@ -232,7 +232,7 @@ function gPaint(targets: Node[], on: boolean): void {
     gOverlays.push(o);
   }
 }
-// Outline the DOM node(s) a given cell drives — for callers outside the graph (the Trace tab).
+// Outline the DOM node(s) a given signal drives — for callers outside the graph (the Trace tab).
 // The id→node map may be stale (the graph tab may not have rendered), so re-snapshot it — but at
 // most at the graph's own refresh cadence: sweeping the pointer down the trace list would otherwise
 // rebuild the whole graph snapshot once per row crossed. clearGraphHighlight() removes the overlay.
@@ -271,8 +271,8 @@ function gScrollToTargets(targets: Node[], stillActive: () => boolean): void {
 }
 
 // A group's display name: the props() label prefix ("card 3" from "card 3.title"), else anonymous.
-function gGroupLabel(gid: number, cells: InspectNode[]): string {
-  const first = cells[0];
+function gGroupLabel(gid: number, signals: InspectNode[]): string {
+  const first = signals[0];
   const dot = first ? first.label.lastIndexOf(".") : -1;
   return first && dot > 0 ? first.label.slice(0, dot) : `fields #${gid}`;
 }
@@ -284,7 +284,7 @@ function gRender(item: GraphItem, reuse: HTMLElement | null): HTMLElement {
     return reuse ? gUpdateHeader(reuse, item) : gCreateHeader(item);
   const row = reuse ? gUpdateCell(reuse, item) : gCreateCell(item);
   if (item.node.id === gRevealId) {
-    gFlash(row); // a jump from the Trace tab — flash the revealed cell
+    gFlash(row); // a jump from the Trace tab — flash the revealed signal
     gRevealId = -1;
   }
   return row;
@@ -338,7 +338,7 @@ function gUpdateHeader(
   return header;
 }
 
-function gCreateCell(item: GraphItem & { kind: "cell" }): HTMLElement {
+function gCreateCell(item: GraphItem & { kind: "signal" }): HTMLElement {
   const n = item.node;
   const val = <span class="li-gval" />;
   const bound = gBound(n);
@@ -367,15 +367,15 @@ function gCreateCell(item: GraphItem & { kind: "cell" }): HTMLElement {
   row.onmouseleave = () => gPaint(gTargetsFor(n.id), false);
   if (gEditable(n) && n.source) {
     val.classList.add("li-edit");
-    const cell = n.source;
-    val.onclick = () => gBeginEdit(n.id, cell, val, row);
+    const signal = n.source;
+    val.onclick = () => gBeginEdit(n.id, signal, val, row);
   }
   gPaintVal(row, n.value, n.id);
   return row;
 }
 function gUpdateCell(
   row: HTMLElement,
-  item: GraphItem & { kind: "cell" },
+  item: GraphItem & { kind: "signal" },
 ): HTMLElement {
   gPaintVal(row, item.node.value, item.node.id);
   return row;
@@ -387,7 +387,7 @@ function gUpdateCell(
 function gListLength(): number {
   let n = graphSingles.length;
   for (const g of graphGroupsData)
-    n += 1 + (graphCollapsed.has(g.gid) ? 0 : g.cells.length);
+    n += 1 + (graphCollapsed.has(g.gid) ? 0 : g.signals.length);
   return n;
 }
 
@@ -399,17 +399,21 @@ function gItemAt(index: number): GraphItem | undefined {
         kind: "header",
         gid: g.gid,
         label: g.label,
-        count: g.cells.length,
+        count: g.signals.length,
       };
     i -= 1; // the header
     if (!graphCollapsed.has(g.gid)) {
-      if (i < g.cells.length)
-        return { kind: "cell", node: g.cells[i] as InspectNode, child: true };
-      i -= g.cells.length;
+      if (i < g.signals.length)
+        return {
+          kind: "signal",
+          node: g.signals[i] as InspectNode,
+          child: true,
+        };
+      i -= g.signals.length;
     }
   }
   return i < graphSingles.length
-    ? { kind: "cell", node: graphSingles[i] as InspectNode, child: false }
+    ? { kind: "signal", node: graphSingles[i] as InspectNode, child: false }
     : undefined;
 }
 
@@ -419,13 +423,13 @@ function gListSource(): ListSource<GraphItem> {
 
 function renderGraph(): void {
   if (!graphVList) return;
-  // active:true drops subscriber-less cells before they're even built — excluding the ghost cells
+  // active:true drops subscriber-less signals before they're even built — excluding the ghost signals
   // of removed objects (alive until GC) that would otherwise balloon the tree under churn.
   const all = inspect({ active: true }).nodes;
   graphById = new Map(all.map((n) => [n.id, n]));
   graphByIdAt = performance.now();
 
-  // The tree holds state + computed cells only; views (effects) are reached by hover, not listed.
+  // The tree holds state + computed signals only; views (effects) are reached by hover, not listed.
   const groups = new Map<number, InspectNode[]>();
   const singles: InspectNode[] = [];
   for (const n of all) {
@@ -437,9 +441,9 @@ function renderGraph(): void {
     } else singles.push(n);
   }
   graphGroupsData = [];
-  for (const [gid, cells] of groups) {
-    cells.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
-    graphGroupsData.push({ gid, label: gGroupLabel(gid, cells), cells });
+  for (const [gid, signals] of groups) {
+    signals.sort((a, b) => (a.key ?? a.label).localeCompare(b.key ?? b.label));
+    graphGroupsData.push({ gid, label: gGroupLabel(gid, signals), signals });
   }
   graphSingles = singles;
   // First render after the tab was re-shown: resync values without flashing (they changed unseen).
@@ -476,11 +480,11 @@ export function showGraph(): void {
   graphVList.refresh();
 }
 
-// The flat index of a cell in the rendered tree, expanding its group if it's collapsed.
+// The flat index of a signal in the rendered tree, expanding its group if it's collapsed.
 function gIndexOf(id: number): number {
   let i = 0;
   for (const g of graphGroupsData) {
-    const ci = g.cells.findIndex((c) => c.id === id);
+    const ci = g.signals.findIndex((c) => c.id === id);
     if (ci >= 0) {
       if (graphCollapsed.has(g.gid)) {
         graphCollapsed.delete(g.gid);
@@ -488,13 +492,13 @@ function gIndexOf(id: number): number {
       }
       return i + 1 + ci; // +1 for the group header
     }
-    i += 1 + (graphCollapsed.has(g.gid) ? 0 : g.cells.length);
+    i += 1 + (graphCollapsed.has(g.gid) ? 0 : g.signals.length);
   }
   const si = graphSingles.findIndex((c) => c.id === id);
   return si >= 0 ? i + si : -1;
 }
 
-// Jump the graph to a cell — used by the Trace tab's clickable name. Rebuilds the tree so the cell
+// Jump the graph to a signal — used by the Trace tab's clickable name. Rebuilds the tree so the signal
 // is current, expands its group if needed, scrolls it to centre, and flashes it on render.
 export function revealCell(id: number): void {
   if (graphVList === null) return;

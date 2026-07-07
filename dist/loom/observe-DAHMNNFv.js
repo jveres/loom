@@ -37,7 +37,7 @@ function f(e, t) {
 		for (let i = e.subs; i !== void 0; i = i.nextSub) if (i.sub === t) {
 			let e = `${n.id}:${r.id}`;
 			if (d.has(e)) return;
-			d.add(e), console.warn(`[loom] "${r.label}" writes "${n.label}" which it also reads — it will re-trigger itself. If unintended, read it untracked: update(cell, fn) or untrack(() => cell()).`);
+			d.add(e), console.warn(`[loom] "${r.label}" writes "${n.label}" which it also reads — it will re-trigger itself. If unintended, read it untracked: update(signal, fn) or untrack(() => signal()).`);
 			return;
 		}
 	}

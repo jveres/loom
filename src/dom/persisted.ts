@@ -1,12 +1,12 @@
-// persisted(key, initial, options?) — a state cell backed by Storage: read-validate once at
-// creation, write-through on every set. The cell IS a plain loom State (update()/watch()/bindings
+// persisted(key, initial, options?) — a state signal backed by Storage: read-validate once at
+// creation, write-through on every set. The signal IS a plain loom State (update()/watch()/bindings
 // all compose); persistence is a watch() subscriber, so the initial load never writes back and
 // unchanged sets don't touch storage. `validate` is the choke point a hand-rolled read/write pair
 // never has — a corrupt, stale, or out-of-range stored value falls back to `initial` instead of
 // leaking into the app (the class of bug where a persisted fractional position broke layout).
 //
 // Storage access is fully guarded: no localStorage (SSR, sandboxed frames, disabled cookies) or a
-// throwing quota simply degrades to an unpersisted cell.
+// throwing quota simply degrades to an unpersisted signal.
 import { type NodeOptions, type State, state, watch } from "../loom.js";
 
 export interface PersistedOptions<T> extends NodeOptions {
@@ -51,20 +51,20 @@ export function persisted<T>(
   }
 
   const label = options.label ?? `persisted:${key}`;
-  const cell = state(
+  const signal = state(
     value,
     options.internal === undefined
       ? { label }
       : { label, internal: options.internal },
   );
   if (storage) {
-    watch(cell, (next) => {
+    watch(signal, (next) => {
       try {
         storage.setItem(key, serialize(next));
       } catch {
-        /* quota/permission: the cell still works, it just stops persisting */
+        /* quota/permission: the signal still works, it just stops persisting */
       }
     });
   }
-  return cell;
+  return signal;
 }

@@ -190,7 +190,7 @@ export function text(read: Read<unknown>, options?: EffectOptions): Text {
 }
 
 /**
- * The attribute as a cell — direction by first argument and arity:
+ * The attribute as a signal — direction by first argument and arity:
  * `attr(name, read)` returns a JSX descriptor; `attr(el, name)` returns a reactive
  * `Read<string | null>` of the attribute's current value; `attr(el, name, read, options?)` binds
  * `read()` to the attribute, node-owned. Writes coerce like JSX attributes (nullish/false removes,
@@ -224,7 +224,7 @@ export function attr(
 }
 
 /**
- * A class as a boolean cell — direction by first argument and arity:
+ * A class as a boolean signal — direction by first argument and arity:
  * `classed(name, read)` returns a JSX descriptor; `classed(el, name)` returns a reactive
  * `Read<boolean>` of the class's presence; `classed(el, name, read, options?)` toggles the class
  * from `read()`, node-owned.
@@ -257,7 +257,7 @@ export function classed(
 }
 
 /**
- * An inline style property as a cell — direction by first argument and arity:
+ * An inline style property as a signal — direction by first argument and arity:
  * `style(name, read)` returns a JSX descriptor; `style(el, prop)` returns a reactive
  * `Read<string>` of the inline value (empty string when unset); `style(el, prop, read, options?)`
  * binds `read()` to the property, node-owned. Property names accept camelCase or kebab-case.
@@ -438,7 +438,7 @@ export function match(
  */
 export function each<T>(
   // State is spelled out alongside Read because its dual call signature otherwise blocks T inference
-  // (a plain Read/computed infers fine; a state/fields cell would fall back to unknown).
+  // (a plain Read/computed infers fine; a state/fields signal would fall back to unknown).
   items: State<readonly T[]> | Read<readonly T[]>,
   render: (item: NoInfer<T>, key: string) => Element,
   key: (item: NoInfer<T>) => string | number,

@@ -255,7 +255,7 @@ function frame(now: number): void {
   lastFrame = now;
   if (settings.running()) {
     tick(dt);
-    // Deduped by the state cell — only propagates (re-renders the button) when the second changes.
+    // Deduped by the state signal — only propagates (re-renders the button) when the second changes.
     chaosSeconds(Math.floor((now - chaosStart) / 1000));
   }
   requestAnimationFrame(frame);
@@ -466,7 +466,7 @@ function rangeControl(
     </label>
   ) as HTMLElement;
   // Two-way: reflect the state onto the thumb. We set the .value *property* (not the attribute, which
-  // a range input ignores once dragged), so external writes — e.g. editing the cell in the inspector —
+  // a range input ignores once dragged), so external writes — e.g. editing the signal in the inspector —
   // move the slider. target:input ties the binding to the element so the inspector marks the state
   // bound and highlights the slider on hover.
   const input = ctl.querySelector("input") as HTMLInputElement;

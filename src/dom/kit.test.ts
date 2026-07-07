@@ -197,35 +197,35 @@ describe("onMount", () => {
 describe("persisted", () => {
   it("loads, validates, and writes through", () => {
     localStorage.setItem("k1", JSON.stringify(41));
-    const cell = persisted("k1", 0);
-    expect(cell()).toBe(41);
+    const signal = persisted("k1", 0);
+    expect(signal()).toBe(41);
 
-    cell(42);
+    signal(42);
     expect(localStorage.getItem("k1")).toBe("42");
   });
 
   it("validate is the load choke point: rejected values fall back to initial", () => {
     localStorage.setItem("k2", JSON.stringify(3.7)); // the fractional-position bug
-    const cell = persisted("k2", 0, {
+    const signal = persisted("k2", 0, {
       validate: (v) => Number.isInteger(v),
     });
-    expect(cell()).toBe(0);
+    expect(signal()).toBe(0);
     localStorage.removeItem("k2");
   });
 
   it("unparsable storage falls back to initial and does not write back", () => {
     localStorage.setItem("k3", "{not json");
-    const cell = persisted("k3", "fallback");
-    expect(cell()).toBe("fallback");
+    const signal = persisted("k3", "fallback");
+    expect(signal()).toBe("fallback");
     expect(localStorage.getItem("k3")).toBe("{not json"); // load never writes
   });
 
   it("honors serialize/parse hooks", () => {
-    const cell = persisted<Set<string>>("k4", new Set(), {
+    const signal = persisted<Set<string>>("k4", new Set(), {
       serialize: (s) => JSON.stringify([...s]),
       parse: (raw) => new Set(JSON.parse(raw)),
     });
-    cell(new Set(["a", "b"]));
+    signal(new Set(["a", "b"]));
     expect(localStorage.getItem("k4")).toBe('["a","b"]');
 
     const again = persisted<Set<string>>("k4-copy", new Set(), {
@@ -240,28 +240,28 @@ describe("persisted", () => {
     localStorage.removeItem("k4");
   });
 
-  it("degrades to a plain cell when storage is absent", () => {
+  it("degrades to a plain signal when storage is absent", () => {
     vi.stubGlobal("localStorage", undefined);
     try {
-      const cell = persisted("k5", 7);
-      cell(8);
-      expect(cell()).toBe(8); // still a working state cell, just unpersisted
+      const signal = persisted("k5", 7);
+      signal(8);
+      expect(signal()).toBe(8); // still a working state signal, just unpersisted
     } finally {
       vi.unstubAllGlobals();
     }
     expect(localStorage.getItem("k5")).toBeNull(); // nothing was written
   });
 
-  it("a throwing setItem degrades writes, not the cell", () => {
+  it("a throwing setItem degrades writes, not the signal", () => {
     const broken = {
       getItem: () => null,
       setItem: () => {
         throw new Error("quota");
       },
     } as unknown as Storage;
-    const cell = persisted("k6", 1, { storage: broken });
-    cell(2);
-    expect(cell()).toBe(2);
+    const signal = persisted("k6", 1, { storage: broken });
+    signal(2);
+    expect(signal()).toBe(2);
   });
 });
 

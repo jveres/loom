@@ -1,6 +1,6 @@
 // connected(node) — a reactive DOM-connection signal: true while the node is in the document.
 // "On mount" then needs no vocabulary of its own — it's a watch() on a Read<boolean>, and it
-// composes with any other cell in one effect ("connected AND visible AND selected").
+// composes with any other signal in one effect ("connected AND visible AND selected").
 //
 //   own(el, watch(connected(el), (on) => on && measure()));
 //

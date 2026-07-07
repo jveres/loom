@@ -82,10 +82,10 @@ function builtin(
 // no internal nodes at rest, so the idle baseline is still zero; but a meter attached alongside an
 // app's own `{ internal: true }` nodes while inspection is off will include them. Turn inspection
 // on (configure({ inspect: true })) for the internal-exclusion contract to hold.
-// read carries detail (which cell, the reader that read it, when) so a "samples" meter can stream
+// read carries detail (which signal, the reader that read it, when) so a "samples" meter can stream
 // reads (the Trace tab); a "count" meter (the read rate) ignores the ring. Reads are the
 // highest-frequency event, so the per-read recording is paid only while metered and stays zero-alloc.
-// `by` is the running effect/computed that performed the read — i.e. who consumed the cell.
+// `by` is the running effect/computed that performed the read — i.e. who consumed the signal.
 export const readCh = builtin("loom:read", 1024, ["id", "by", "t"]);
 // write carries detail so a "samples" meter can stream individual mutations (id + prev→next + the
 // node that wrote it + a wall-clock timestamp), e.g. the inspector's Trace tab; a "count" meter
