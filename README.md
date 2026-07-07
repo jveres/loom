@@ -517,10 +517,8 @@ watch(
 - `bind(el, fn, options?)` — reactive DOM state that dies with this node:
   `effect(fn)` target-attributed to `el` and disposed with it. The one-call
   form of `onUnmount(el, effect(fn, { target: el }))`. Returns the stop.
-- `onTap(node, handler)` binds a robust tap — see
-  [The `onTap` synthetic event](#the-ontap-synthetic-event).
 
-All three lifecycle names are also JSX props — see the prop documentation
+`onMount` and `onUnmount` are also JSX props — see the prop documentation
 below.
 
 #### Browser state and observers
@@ -577,7 +575,8 @@ inspector's own scrollers use it.
 | `list` | [DOM and events](#dom-and-events) |
 | `each`, `when`, `match` | [Conditional rendering](#conditional-rendering) |
 | `dispose`, `remove`, `onUnmount`, `bind` | [Ownership & disposal](#ownership--disposal) |
-| `onMount`, `onTap` | [Lifecycle](#lifecycle) |
+| `onMount` | [Lifecycle](#lifecycle) |
+| `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `connected`, `persisted`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` | [Scroll fade](#scroll-fade) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
