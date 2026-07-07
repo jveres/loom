@@ -161,7 +161,7 @@ The core exports these functions:
   runs when it loses its last, so the producer (event listener,
   `PerformanceObserver`, socket) is only live while observed. Returns a read
   function. See [External data](#external-data).
-- `fields(object, options?)` creates one state cell per enumerable string key.
+- `props(object, options?)` creates one state cell per enumerable string key.
 - `channel(name, options?)` declares a named channel — a **generic**, gated,
   overwriting ring buffer that records cheaply (no allocation until metered) and
   is drained, not pushed. A reusable primitive for any event or sample stream, not
@@ -195,7 +195,7 @@ The core exports these types:
 - `SourceConnect<T>` is a lazy source's `(set) => teardown` wiring function.
 - `EffectFn` is a reusable effect callback type.
 - `ErrorHandler` is the `configure({ onError })` boundary signature.
-- `Fields<T>` maps enumerable string keys to `State<T[K]>`.
+- `Props<T>` maps enumerable string keys to `State<T[K]>`.
 - `NodeInfo` is the lean node shape (`id` / `kind` / `label`) the
   `configure({ onError })` boundary receives to name the offending node. The full
   `InspectNode`, `InspectSnapshot`, `ResourceCounts` (the `inspect()` /
@@ -211,17 +211,17 @@ The core exports these types:
   and the deferred-lane `{ defer, maxStale }`) are the option bags accepted by the
   primitives; `DeferScheduler` is the configurable deferred-lane scheduler.
 
-Pass `{ label }` to `state`, `computed`, `effect`, or `fields` when
+Pass `{ label }` to `state`, `computed`, `effect`, or `props` when
 you want meaningful names in tooling. Pass `{ internal: true }` for Loom-owned
 tooling state that must not appear in app-level event streams by default.
 
-### Object fields
+### Object props
 
-Use `fields()` when you want fine-grained updates for a plain object. Each
+Use `props()` when you want fine-grained updates for a plain object. Each
 enumerable string key becomes its own state cell.
 
 ```ts
-const model = fields(
+const model = props(
   {
     title: "Hello",
     likes: 0,
@@ -236,7 +236,7 @@ effect(() => {
 model.likes(1);
 ```
 
-`fields()` rejects non-plain objects such as arrays and dates. Symbol keys are
+`props()` rejects non-plain objects such as arrays and dates. Symbol keys are
 not exposed because the runtime uses enumerable string keys. When you pass a
 `label`, each field is labeled as `label.key`, for example `post.likes`.
 
@@ -388,11 +388,11 @@ without repeating the options on every primitive. A node's own options win, and
 nested scopes inherit and can override:
 
 ```ts
-import { effect, fields, scope } from "loom";
+import { effect, props, scope } from "loom";
 
 scope(
   () => {
-    const settings = fields({ theme: "dark", zoom: 1 }); // cells inherit the defaults
+    const settings = props({ theme: "dark", zoom: 1 }); // cells inherit the defaults
     effect(() => apply(settings.theme())); // so does this effect
   },
   { internal: true },
@@ -1181,7 +1181,7 @@ The panel has three tabs:
   (FPS, frame-time histogram, write/effect/create/dispose rates) driven by a
   `meter` over the built-in `events`.
 - **Graph** — the reactive graph as a virtualized tree of state/computed cells,
-  grouped by `fields()` group. A filled dot means the cell drives a
+  grouped by `props()` group. A filled dot means the cell drives a
   DOM node downstream; a hollow dot means it doesn't. Hovering a cell (or a group
   header) highlights every DOM target it feeds; the locate button scrolls the
   first target into view. Primitive state cells are editable in place, and values
@@ -1208,7 +1208,7 @@ by a `data-theme` attribute (`light` / `dark` / `system`).
 
 The CLI benchmark compares Loom against native `alien-signals` primitives under a
 full-chaos workload (`vitest bench`). It runs three variants on the same machine:
-`loom` (using `fields()`), `loom manual` (manually declared state cells), and
+`loom` (using `props()`), `loom manual` (manually declared state cells), and
 `alien native` (native `alien-signals` cells).
 
 ```sh
@@ -1317,7 +1317,7 @@ plus `tsconfig` `paths`), so `check` / `test` / `dev` never need a build.
 
 With the dev server running, open `/demo/` for the realtime UI demo or `/bench/`
 for the browser benchmark. The demo is a realtime stress UI written in Loom JSX:
-it exercises state cells, object fields, computed values, effects, keyed list
+it exercises state cells, object props, computed values, effects, keyed list
 reconciliation, direct JSX text/attribute/class bindings, cleanup through DOM
 disposal, and the browser JSX runtime.
 

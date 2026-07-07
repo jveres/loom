@@ -1,4 +1,4 @@
-import type { Child, Props, SvgTagName } from "./index.js";
+import type { Child, ElementProps, SvgTagName } from "./index.js";
 type Component = (props: never) => Child;
 type EventHandler<TElement extends Element, TEvent extends Event> = (event: TEvent & {
     readonly currentTarget: TElement;
@@ -48,7 +48,7 @@ interface DomEventMap {
 type EventProps<TElement extends Element> = {
     [K in keyof DomEventMap as `on${K & string}`]?: EventHandler<TElement, DomEventMap[K]>;
 };
-type SharedProps<TElement extends Element> = Props & EventProps<TElement> & {
+type SharedProps<TElement extends Element> = ElementProps & EventProps<TElement> & {
     children?: Child;
     onMount?: (node: Node) => void;
     onmount?: (node: Node) => void;
@@ -59,12 +59,12 @@ type SharedProps<TElement extends Element> = Props & EventProps<TElement> & {
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;
 };
-type ElementProps<TElement extends HTMLElement> = SharedProps<TElement> & {
+type HtmlProps<TElement extends HTMLElement> = SharedProps<TElement> & {
     htmlFor?: string;
 };
 type SvgProps<TElement extends SVGElement> = SharedProps<TElement>;
 type HtmlIntrinsics = {
-    [K in keyof HTMLElementTagNameMap]: ElementProps<HTMLElementTagNameMap[K]>;
+    [K in keyof HTMLElementTagNameMap]: HtmlProps<HTMLElementTagNameMap[K]>;
 };
 type SvgIntrinsics = {
     [K in SvgTagName]: SvgProps<SVGElementTagNameMap[K]>;

@@ -76,7 +76,7 @@ type StyledElement = Element & ElementCSSInlineStyle;
 // handling, but the `Record<string, unknown>` index accepts any attribute name/value. Loom is a thin
 // layer over setAttribute, so applyProps validates and applies at runtime rather than the type
 // enforcing an exhaustive per-element attribute model; a typo'd attribute is set as-is, not rejected.
-export type Props = Record<string, unknown> & {
+export type ElementProps = Record<string, unknown> & {
   class?: ClassProp;
   className?: ClassProp;
   key?: string | number;
@@ -146,18 +146,22 @@ export type SvgTagName = (typeof SVG_TAG_LIST)[number];
 
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
-  props?: Props | null,
+  props?: ElementProps | null,
   children?: Child,
 ): HTMLElementTagNameMap[K];
 export function h<K extends keyof SVGElementTagNameMap>(
   tag: K,
-  props?: Props | null,
+  props?: ElementProps | null,
   children?: Child,
 ): SVGElementTagNameMap[K];
-export function h(tag: string, props?: Props | null, children?: Child): Element;
 export function h(
   tag: string,
-  props: Props | null = null,
+  props?: ElementProps | null,
+  children?: Child,
+): Element;
+export function h(
+  tag: string,
+  props: ElementProps | null = null,
   children?: Child,
 ): Element {
   const node = SVG_TAGS.has(tag)
@@ -554,7 +558,7 @@ function stopOwned(owned: OwnedEffect): void {
   }
 }
 
-function applyProps(node: Element, props: Props): void {
+function applyProps(node: Element, props: ElementProps): void {
   for (const name in props) {
     if (!Object.hasOwn(props, name) || name === "children") continue;
     const value = props[name];

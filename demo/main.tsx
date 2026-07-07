@@ -3,9 +3,9 @@ import {
   computed,
   configure,
   effect,
-  type Fields,
-  fields,
   mutate,
+  type Props,
+  props,
   type State,
   state,
   trigger,
@@ -39,7 +39,7 @@ interface CardModel {
 
 interface Card {
   readonly id: number;
-  readonly model: Fields<CardModel>;
+  readonly model: Props<CardModel>;
 }
 
 const titles = [
@@ -83,7 +83,7 @@ const sources = [
   "Iris Sloan",
 ] as const;
 
-const settings = fields(
+const settings = props(
   {
     running: false,
     viewers: 250,
@@ -94,7 +94,7 @@ const settings = fields(
   },
   { label: "settings" },
 );
-const metrics = fields({ checks: "idle" }, { label: "metrics" });
+const metrics = props({ checks: "idle" }, { label: "metrics" });
 
 let nextCardId = 0;
 const initialCards = Array.from({ length: 12 }, () => makeCard());
@@ -130,9 +130,9 @@ app.replaceChildren(
         type="button"
         class={["primary", { on: settings.running }]}
         aria-pressed={settings.running}
-        // ontap, not onclick: iOS Safari drops the synthesized click when the DOM mutates mid-tap
-        // (which the chaos does every frame); ontap is built from raw pointer events, so it survives.
-        ontap={() => {
+        // onTap, not onclick: iOS Safari drops the synthesized click when the DOM mutates mid-tap
+        // (which the chaos does every frame); onTap is built from raw pointer events, so it survives.
+        onTap={() => {
           const next = !settings.running();
           settings.running(next);
           if (next) {
@@ -511,7 +511,7 @@ function makeCard(): Card {
   };
   return {
     id,
-    model: fields(model, { label: `card ${id}` }),
+    model: props(model, { label: `card ${id}` }),
   };
 }
 
@@ -621,7 +621,7 @@ function runChecks(): void {
     cleanupStop();
     assertEqual(cleanups, 1, "cleanup failed");
 
-    const model = fields({ value: 0 });
+    const model = props({ value: 0 });
     model.value(7);
     assertEqual(model.value(), 7, "fields failed");
 

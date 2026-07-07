@@ -1,7 +1,7 @@
-// Graph tab: a grouped tree of states/computeds (by fields() group) rendered through a windowing —
+// Graph tab: a grouped tree of states/computeds (by props() group) rendered through a windowing —
 // only the on-screen rows are in the DOM, built lazily for the visible window (see gListSource).
 // renderGraph() rebuilds the group structure on the heartbeat; rows update value + flash on change
-// and outline their DOM node(s) on hover. fields() cells fold under a collapsible header; standalone
+// and outline their DOM node(s) on hover. props() cells fold under a collapsible header; standalone
 // cells at the root. Owns its module state; driven from outside through seams: the panel calls
 // buildGraphPane / showGraph / revealCell / clearGraphHighlight / teardownGraph, the stats
 // heartbeat calls renderGraphThrottled, and the Trace tab's row hover calls highlightCell.
@@ -194,7 +194,7 @@ function gTargetsFor(id: number): Node[] {
   }
   return out;
 }
-// Union of the downstream targets of every cell in a fields() group (hover the group header).
+// Union of the downstream targets of every cell in a props() group (hover the group header).
 function gGroupTargets(gid: number): Node[] {
   const out: Node[] = [];
   const seen = new Set<Node>();
@@ -270,7 +270,7 @@ function gScrollToTargets(targets: Node[], stillActive: () => boolean): void {
   window.setTimeout(settle, 600); // fallback: scrollend may not fire (already in view / unsupported)
 }
 
-// A group's display name: the fields() label prefix ("card 3" from "card 3.title"), else anonymous.
+// A group's display name: the props() label prefix ("card 3" from "card 3.title"), else anonymous.
 function gGroupLabel(gid: number, cells: InspectNode[]): string {
   const first = cells[0];
   const dot = first ? first.label.lastIndexOf(".") : -1;

@@ -1,4 +1,4 @@
-import type { Child, Props, SvgTagName } from "./index.js";
+import type { Child, ElementProps, SvgTagName } from "./index.js";
 
 type Component = (props: never) => Child;
 type EventHandler<TElement extends Element, TEvent extends Event> = (
@@ -55,9 +55,9 @@ type EventProps<TElement extends Element> = {
     DomEventMap[K]
   >;
 };
-// The fields every element's props share, regardless of HTML vs SVG (Props already carries key/class/
+// What every element's props share, regardless of HTML vs SVG (ElementProps already carries key/class/
 // style). ElementProps and SvgProps differ only in `htmlFor`, so both build on this to avoid drift.
-type SharedProps<TElement extends Element> = Props &
+type SharedProps<TElement extends Element> = ElementProps &
   EventProps<TElement> & {
     children?: Child;
     // The Loom lifecycle pair; neither is a DOM event. onMount runs once on a microtask after
@@ -73,16 +73,16 @@ type SharedProps<TElement extends Element> = Props &
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;
   };
-type ElementProps<TElement extends HTMLElement> = SharedProps<TElement> & {
+type HtmlProps<TElement extends HTMLElement> = SharedProps<TElement> & {
   htmlFor?: string;
 };
 // SVG attributes are largely hyphenated (stroke-width) or camelCase (viewBox); the
-// `Record<string, unknown>` index in Props already admits both, so SVG props only need the
+// `Record<string, unknown>` index in ElementProps already admits both, so SVG props only need the
 // shared structural fields plus SVG-typed events.
 type SvgProps<TElement extends SVGElement> = SharedProps<TElement>;
 
 type HtmlIntrinsics = {
-  [K in keyof HTMLElementTagNameMap]: ElementProps<HTMLElementTagNameMap[K]>;
+  [K in keyof HTMLElementTagNameMap]: HtmlProps<HTMLElementTagNameMap[K]>;
 };
 type SvgIntrinsics = {
   [K in SvgTagName]: SvgProps<SVGElementTagNameMap[K]>;

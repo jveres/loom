@@ -8,8 +8,8 @@ import { bench, describe } from "vitest";
 import {
   batch,
   effect,
-  type Fields,
-  fields,
+  type Props,
+  props,
   type Stop,
   state,
 } from "../src/loom.js";
@@ -34,7 +34,7 @@ interface CardModel {
 }
 
 type CardCells = { readonly [K in keyof CardModel]: Cell<CardModel[K]> };
-type LoomCard = Fields<CardModel>;
+type LoomCard = Props<CardModel>;
 type AlienCard = CardCells;
 
 interface CardRef<T> {
@@ -199,7 +199,7 @@ function runLoomManualChaos(): void {
 }
 
 function makeLoomCard(initial: CardModel): CardRef<LoomCard> {
-  const model = fields(initial);
+  const model = props(initial);
   const views = bindLoomCardViews(model);
   return {
     model,

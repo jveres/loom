@@ -422,7 +422,7 @@ function Ie(e, t) {
 	t(e()), Ne(e);
 }
 function Le(e, t) {
-	if (!dt(e)) throw TypeError("fields() expects a plain object.");
+	if (!dt(e)) throw TypeError("props() expects a plain object.");
 	let n = {}, r = Object.keys(e), i = F === void 0 ? 0 : F.nextGroup();
 	for (let a = 0; a < r.length; a++) {
 		let o = r[a], s = ve(e[o], Ve(t, o));
@@ -755,4 +755,4 @@ function dt(e) {
 	return t === Object.prototype || t === null;
 }
 //#endregion
-export { re as C, o as D, i as E, r as O, ne as S, te as T, G as _, Ce as a, n as b, pe as c, Me as d, Ee as f, Ne as g, ve as h, ze as i, s as k, Be as l, ye as m, we as n, Le as o, Te as p, Se as r, de as s, fe as t, Ie as u, Pe as v, ee as w, c as x, Fe as y };
+export { re as C, o as D, i as E, r as O, ne as S, te as T, G as _, Ce as a, n as b, Be as c, Le as d, Ee as f, Ne as g, ve as h, ze as i, s as k, Ie as l, ye as m, we as n, de as o, Te as p, Se as r, pe as s, fe as t, Me as u, Pe as v, ee as w, c as x, Fe as y };

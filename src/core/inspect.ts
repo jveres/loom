@@ -36,7 +36,7 @@ export interface InspectNode extends NodeInfo {
   // erased to State<unknown>: the concrete T is unrecoverable at snapshot time, so a write here is
   // unchecked by construction — callers own that unsoundness.
   readonly source?: State<unknown>;
-  // Cells from one fields() call share a `group` id; `key` is the property name within it.
+  // Cells from one props() call share a `group` id; `key` is the property name within it.
   readonly group?: number;
   readonly key?: string;
 }
@@ -46,7 +46,7 @@ export interface InspectSnapshot {
 }
 
 let inspectId = 0;
-let fieldsGroup = 0; // shared id stamped on the cells of each fields() call (for inspector grouping)
+let propsGroup = 0; // shared id stamped on the cells of each props() call (for inspector grouping)
 // Inspection is opt-in: off by default so node creation allocates no metadata (zero cost). Turn it
 // on with configure({ inspect: true }) BEFORE creating the nodes you want visible to inspect()/the
 // inspector — nodes created while it's off carry no metadata and never appear. NOTE: enabling also
@@ -104,7 +104,7 @@ installInspectHooks({
     inspectEnabled = on;
   },
   nextGroup() {
-    return inspectEnabled ? ++fieldsGroup : 0;
+    return inspectEnabled ? ++propsGroup : 0;
   },
   trackedWrite,
 });

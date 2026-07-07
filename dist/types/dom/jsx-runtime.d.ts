@@ -1,7 +1,7 @@
-import { type Child, type Props } from "./index.js";
+import { type Child, type ElementProps } from "./index.js";
 export type { JSX } from "./jsx-types.js";
 type Component<P extends object> = (props: P) => Child;
-type JsxProps = (Props & {
+type JsxProps = (ElementProps & {
     readonly children?: Child;
 }) | null | undefined;
 type JsxType = string | Component<object>;

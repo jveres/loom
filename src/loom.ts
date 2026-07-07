@@ -43,7 +43,7 @@ export type SourceConnect<T> = (set: (value: T) => void) => Stop;
 export type NodeKind = "state" | "computed" | "effect";
 
 // Shared creation options for every primitive. `effect` adds `target` (see EffectOptions); the
-// others (state/computed/fields/source/poll/scope) take NodeOptions directly.
+// others (state/computed/props/source/poll/scope) take NodeOptions directly.
 export interface NodeOptions {
   readonly internal?: boolean;
   readonly label?: string;
@@ -91,7 +91,7 @@ type InternalEffectFn = EffectFn | CleanupEffectFn;
 
 type FieldKey<T extends object> = Extract<keyof T, string>;
 
-export type Fields<T extends object> = {
+export type Props<T extends object> = {
   readonly [K in FieldKey<T>]: State<T[K]>;
 };
 
@@ -175,7 +175,7 @@ export interface InspectMeta {
   readonly target: WeakRef<object> | undefined;
   disposed: boolean;
   runs: number;
-  group?: number; // fields() group id (set by fields() when inspection is on)
+  group?: number; // props() group id (set by props() when inspection is on)
   key?: string; // property key within that group
 }
 
@@ -697,12 +697,12 @@ export function mutate<T extends object>(
   trigger(source);
 }
 
-export function fields<T extends object>(
+export function props<T extends object>(
   initial: T,
   options?: NodeOptions,
-): Fields<T> {
+): Props<T> {
   if (!isPlainObject(initial)) {
-    throw new TypeError("fields() expects a plain object.");
+    throw new TypeError("props() expects a plain object.");
   }
   const out = {} as { [K in FieldKey<T>]: State<T[K]> };
   const keys = Object.keys(initial) as Array<FieldKey<T>>;

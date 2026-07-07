@@ -1,4 +1,4 @@
-import { _ as e, a as t, h as n, m as r, r as i, y as a } from "./loom-B3Wy1Jmk.js";
+import { _ as e, a as t, h as n, m as r, r as i, y as a } from "./loom-BE6Qi7th.js";
 import { t as o } from "./jsx-props-sAPN8GVq.js";
 //#region src/dom/attr-of.ts
 var s = /* @__PURE__ */ new WeakMap(), c = /* @__PURE__ */ new Map(), l = null;

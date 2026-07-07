@@ -47,7 +47,7 @@ export interface NodeInfo {
 }
 export type CleanupEffectFn = () => Stop;
 type FieldKey<T extends object> = Extract<keyof T, string>;
-export type Fields<T extends object> = {
+export type Props<T extends object> = {
     readonly [K in FieldKey<T>]: State<T[K]>;
 };
 export type NodeBase = ReactiveNode & {
@@ -145,7 +145,7 @@ export declare function update<T>(source: State<T>, fn: (value: T) => T): void;
  */
 export declare function watch<T>(read: Read<T>, onChange: (value: T, previous: T) => void, options?: EffectOptions): Stop;
 export declare function mutate<T extends object>(source: State<T>, fn: (value: T) => void): void;
-export declare function fields<T extends object>(initial: T, options?: NodeOptions): Fields<T>;
+export declare function props<T extends object>(initial: T, options?: NodeOptions): Props<T>;
 /**
  * Configure the runtime.
  *

@@ -1,10 +1,13 @@
 import { propsWithoutKey } from "../jsx-props.js";
-import { type Child, h, type Props } from "./index.js";
+import { type Child, type ElementProps, h } from "./index.js";
 
 export type { JSX } from "./jsx-types.js";
 
 type Component<P extends object> = (props: P) => Child;
-type JsxProps = (Props & { readonly children?: Child }) | null | undefined;
+type JsxProps =
+  | (ElementProps & { readonly children?: Child })
+  | null
+  | undefined;
 type JsxType = string | Component<object>;
 
 export function jsx<K extends keyof HTMLElementTagNameMap>(
@@ -64,7 +67,7 @@ function createIntrinsicElement(type: string, props: JsxProps): Element {
     return h(type, props, props.children);
   }
 
-  const elementProps: Props & { for?: unknown } = {};
+  const elementProps: ElementProps & { for?: unknown } = {};
   for (const name in props) {
     if (!Object.hasOwn(props, name) || name === "children" || name === "key") {
       continue;

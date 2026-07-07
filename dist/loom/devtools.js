@@ -1,7 +1,7 @@
-import { _ as e, a as t, d as n, h as r, i, m as a, p as o } from "./loom-B3Wy1Jmk.js";
-import { i as s, n as c, r as l } from "./meter-BP1riSQj.js";
-import { n as ee, t as u } from "./observe-B5KfbviS.js";
-import { g as d, h as te, l as f, m as ne, p, t as m } from "./dom-RWt-cwC0.js";
+import { _ as e, a as t, h as n, i as r, m as i, p as a, u as o } from "./loom-BE6Qi7th.js";
+import { i as s, n as c, r as l } from "./meter-DFb_yOza.js";
+import { n as ee, t as u } from "./observe-DHhsUoCi.js";
+import { g as d, h as te, l as f, m as ne, p, t as m } from "./dom-D4_Tlbqb.js";
 import { virtualList as h } from "./dom/virtual-list.js";
 import { jsx as g, jsxs as _ } from "./jsx-runtime.js";
 //#region src/devtools/bindings.ts
@@ -873,16 +873,16 @@ function lr(t) {
 		c.effect,
 		c.create,
 		c.dispose
-	]), on = l([c.flush], "samples"), z = n(ar, Yt, v), ie(() => {
+	]), on = l([c.flush], "samples"), z = o(ar, Yt, v), ie(() => {
 		z?.(), e(or);
 	}, {
 		defer: !0,
 		maxStale: Yt
 	});
-	let r;
-	return nn = o(() => {
-		wn = a(Kn, 0, v), Tn = a(qn, 0, v), En = a(Jn, 0, v), Dn = a(Xn, 0, v), rr() && (On = n(() => rr()?.usedJSHeapSize ?? 0, 5e3, v)), r = tr();
-	}, v), cr(), r;
+	let n;
+	return nn = a(() => {
+		wn = i(Kn, 0, v), Tn = i(qn, 0, v), En = i(Jn, 0, v), Dn = i(Xn, 0, v), rr() && (On = o(() => rr()?.usedJSHeapSize ?? 0, 5e3, v)), n = tr();
+	}, v), cr(), n;
 }
 function ur() {
 	nn?.pause();
@@ -1015,18 +1015,18 @@ function kr(e) {
 }
 function Ar(e = document.body) {
 	if (Y || typeof document > "u") return;
-	if (i({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
+	if (r({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
 		let e = document.createElement("style");
 		e.id = `${y}-css`, e.textContent = oe, document.head.append(e);
 	}
-	Z = r("stats", v);
-	let t = Q().theme(), n = /* @__PURE__ */ g("span", { class: "li-menu-val" }), a = () => {
-		Y?.setAttribute("data-theme", t), hr?.setAttribute("data-theme", t), n.innerHTML = le(pr[t], 13), s.title = `Theme: ${t} (click to cycle)`;
+	Z = n("stats", v);
+	let t = Q().theme(), i = /* @__PURE__ */ g("span", { class: "li-menu-val" }), o = () => {
+		Y?.setAttribute("data-theme", t), hr?.setAttribute("data-theme", t), i.innerHTML = le(pr[t], 13), s.title = `Theme: ${t} (click to cycle)`;
 	}, s = /* @__PURE__ */ _("button", {
 		type: "button",
 		class: "li-menu-item",
 		title: "Click to change theme",
-		children: [/* @__PURE__ */ g("span", { children: "Theme" }), n]
+		children: [/* @__PURE__ */ g("span", { children: "Theme" }), i]
 	});
 	f(s, () => {
 		let e = [
@@ -1034,7 +1034,7 @@ function Ar(e = document.body) {
 			"light",
 			"dark"
 		];
-		t = e[(e.indexOf(t) + 1) % e.length] ?? "system", Q().theme(t), a();
+		t = e[(e.indexOf(t) + 1) % e.length] ?? "system", Q().theme(t), o();
 	});
 	let c = /* @__PURE__ */ g("div", {
 		class: "li-menu",
@@ -1100,7 +1100,7 @@ function Ar(e = document.body) {
 			h
 		]
 	}), ce;
-	vr = o(() => {
+	vr = a(() => {
 		ce = lr({
 			activeTab: () => Z?.(),
 			isMinimized: () => Y?.classList.contains("li-min") ?? !1
@@ -1148,7 +1148,7 @@ function Ar(e = document.body) {
 		ge,
 		X,
 		_e
-	] }), Y.id = y, ae && Y.classList.add("li-min"), a(), Dr(se, Y), Or(_e, Y), gr = (e) => {
+	] }), Y.id = y, ae && Y.classList.add("li-min"), o(), Dr(se, Y), Or(_e, Y), gr = (e) => {
 		let t = e.target instanceof Node ? e.target : null;
 		!c.hidden && (t === null || !c.contains(t)) && e.target !== m && ne();
 	}, document.addEventListener("pointerdown", gr), e.append(Y), document.body.append(c);

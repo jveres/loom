@@ -14,10 +14,10 @@ import {
   configure,
   type EffectFn,
   effect,
-  fields,
   mutate,
   type Polled,
   poll,
+  props,
   type Scope,
   scope,
   source,
@@ -193,7 +193,7 @@ describe("loom core", () => {
   });
 
   it("creates fine-grained object fields", () => {
-    const model = fields({ left: 0, right: 0 });
+    const model = props({ left: 0, right: 0 });
     let leftRuns = 0;
     let rightRuns = 0;
 
@@ -217,15 +217,15 @@ describe("loom core", () => {
 
   it("creates fields from string keys only", () => {
     const hidden = Symbol("hidden");
-    const model = fields({ visible: 1, [hidden]: 2 });
+    const model = props({ visible: 1, [hidden]: 2 });
 
     expect(model.visible()).toBe(1);
     expect(Object.getOwnPropertySymbols(model)).toHaveLength(0);
   });
 
-  it("rejects non-plain field sources", () => {
-    expect(() => fields([])).toThrow(TypeError);
-    expect(() => fields(new Date())).toThrow(TypeError);
+  it("rejects non-plain prop sources", () => {
+    expect(() => props([])).toThrow(TypeError);
+    expect(() => props(new Date())).toThrow(TypeError);
   });
 
   it("update() reads untracked — no self-dependency from read-modify-write", () => {
@@ -1175,11 +1175,11 @@ describe("loom scope options", () => {
     expect(keep).toHaveLength(1);
   });
 
-  it("applies scope options to fields() cells", () => {
+  it("applies scope options to props() cells", () => {
     const keep: unknown[] = [];
     scope(
       () => {
-        keep.push(fields({ a: 1, b: 2 }, { label: "form" }));
+        keep.push(props({ a: 1, b: 2 }, { label: "form" }));
       },
       { internal: true },
     );
@@ -1375,12 +1375,12 @@ describe("loom coverage", () => {
     stop();
   });
 
-  it("covers fields() option combinations", () => {
+  it("covers props() option combinations", () => {
     const keep: unknown[] = [];
-    keep.push(fields({ a: 9001 })); // no options
-    keep.push(fields({ b: 9002 }, { label: "fcomb" })); // label only
-    keep.push(fields({ c: 9003 }, { internal: true })); // internal only
-    keep.push(fields({ d: 9004 }, { internal: false, label: "fd" })); // internal flag + label
+    keep.push(props({ a: 9001 })); // no options
+    keep.push(props({ b: 9002 }, { label: "fcomb" })); // label only
+    keep.push(props({ c: 9003 }, { internal: true })); // internal only
+    keep.push(props({ d: 9004 }, { internal: false, label: "fd" })); // internal flag + label
     const byVal = (v: number) => inspect().nodes.find((n) => n.value === v);
     expect(byVal(9001)?.key).toBe("a"); // no options -> still grouped, key is the field name
     expect(byVal(9002)?.label).toBe("fcomb.b"); // label prefixes the key

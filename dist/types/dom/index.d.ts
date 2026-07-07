@@ -17,7 +17,7 @@ type ClassProp = string | ClassBinding | ClassMap | null | undefined | readonly 
 type ClassMap = Record<string, unknown>;
 type StyleMap = Record<string, unknown>;
 type StyleProp = string | StyleMap | StyleBinding | null | undefined | readonly StyleProp[];
-export type Props = Record<string, unknown> & {
+export type ElementProps = Record<string, unknown> & {
     class?: ClassProp;
     className?: ClassProp;
     key?: string | number;
@@ -30,9 +30,9 @@ export interface ListOptions<T> {
 }
 declare const SVG_TAG_LIST: readonly ["svg", "g", "defs", "symbol", "use", "switch", "foreignObject", "image", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "textPath", "linearGradient", "radialGradient", "stop", "clipPath", "mask", "pattern", "marker", "filter", "feGaussianBlur", "feOffset", "feBlend", "feColorMatrix", "feComposite", "feFlood", "feMerge", "feMergeNode", "feMorphology", "feDropShadow", "feImage", "feTile", "feTurbulence", "feDisplacementMap"];
 export type SvgTagName = (typeof SVG_TAG_LIST)[number];
-export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: Props | null, children?: Child): HTMLElementTagNameMap[K];
-export declare function h<K extends keyof SVGElementTagNameMap>(tag: K, props?: Props | null, children?: Child): SVGElementTagNameMap[K];
-export declare function h(tag: string, props?: Props | null, children?: Child): Element;
+export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): HTMLElementTagNameMap[K];
+export declare function h<K extends keyof SVGElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): SVGElementTagNameMap[K];
+export declare function h(tag: string, props?: ElementProps | null, children?: Child): Element;
 export declare function text(read: Read<unknown>, options?: EffectOptions): Text;
 /**
  * The attribute as a cell — direction by first argument and arity:
