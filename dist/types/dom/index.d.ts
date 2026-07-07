@@ -87,6 +87,13 @@ export declare function match(selector: Read<string | number>, cases: Readonly<R
  * element.
  */
 export declare function each<T>(items: State<readonly T[]> | Read<readonly T[]>, render: (item: NoInfer<T>, key: string) => Element, key: (item: NoInfer<T>) => string | number): Child;
+/**
+ * Suspend every node-owned reactive binding in a subtree: bindings stay subscribed but do not run
+ * while paused; resume() delivers one catch-up run to anything that changed. Pause nests. Only
+ * effect-backed disposers suspend (a manual onUnmount(fn) teardown has nothing to pause).
+ */
+export declare function pause(root: Node): void;
+export declare function resume(root: Node): void;
 export declare function dispose(root: Node): void;
 export declare function remove(node: Node): void;
 /**

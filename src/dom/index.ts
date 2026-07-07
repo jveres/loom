@@ -4,7 +4,9 @@ import {
   type EffectFn,
   type EffectOptions,
   effect,
+  pauseEffectStop,
   type Read,
+  resumeEffectStop,
   type State,
   type Stop,
   untrack,
@@ -459,6 +461,35 @@ export function each<T>(
       );
     },
   } satisfies SlotDescriptor);
+}
+
+// Walk a subtree's node-owned disposers, applying `fn` to each stop. Shared by dispose (teardown)
+// and pause/resume (suspension) — one traversal protocol for every lifetime operation.
+function walkOwned(root: Node, fn: (stop: Stop) => void, clear: boolean): void {
+  const stack: Node[] = [root];
+  for (let index = 0; index < stack.length; index++) {
+    const node = stack[index] as Node;
+    const stops = ownedEffects.get(node);
+    if (stops) {
+      if (clear) ownedEffects.delete(node);
+      if (Array.isArray(stops)) for (const stop of stops) fn(stop);
+      else fn(stops);
+    }
+    for (let child = node.firstChild; child; child = child.nextSibling)
+      stack.push(child);
+  }
+}
+
+/**
+ * Suspend every node-owned reactive binding in a subtree: bindings stay subscribed but do not run
+ * while paused; resume() delivers one catch-up run to anything that changed. Pause nests. Only
+ * effect-backed disposers suspend (a manual onUnmount(fn) teardown has nothing to pause).
+ */
+export function pause(root: Node): void {
+  walkOwned(root, pauseEffectStop, false);
+}
+export function resume(root: Node): void {
+  walkOwned(root, resumeEffectStop, false);
 }
 
 export function dispose(root: Node): void {

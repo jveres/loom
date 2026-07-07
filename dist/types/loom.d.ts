@@ -72,6 +72,7 @@ interface EffectNode extends NodeBase {
     cleanup: Stop | undefined;
     scope: ScopeNode | undefined;
     scopeIndex: number;
+    pausedCount: number;
     deferred: boolean;
     deferredQueued: boolean;
     maxStale: number;
@@ -146,6 +147,8 @@ export declare function installDeferredLane(enqueue: (node: EffectNode) => void)
     clearWatching: (node: EffectNode) => void;
 };
 export type { EffectNode };
+export declare function pauseEffectStop(stop: Stop): boolean;
+export declare function resumeEffectStop(stop: Stop): boolean;
 export declare function registerScopeResource(resource: ScopeResource): void;
 export type Polled<T> = Read<T> & {
     readonly stop: Stop;

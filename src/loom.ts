@@ -129,6 +129,7 @@ interface EffectNode extends NodeBase {
   // slot in scope.effects — so a manual stop can swap-remove in O(1) instead of leaking the dead node.
   scope: ScopeNode | undefined;
   scopeIndex: number;
+  pausedCount: number; // direct pauses on THIS effect (dom subtree pause); scope pauses live on the chain
   deferred: boolean; // route re-runs to the deferred lane instead of the synchronous flush
   deferredQueued: boolean; // currently in deferredQueue (O(1) dedup, replaces an includes() scan)
   maxStale: number; // deferred lane: guaranteed-refresh floor in ms
@@ -263,8 +264,12 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
     },
     notify(node) {
       const effectNode = node as EffectNode;
-      // Effects in a paused scope chain stay dirty and re-run on resume instead of queueing now.
-      if (effectNode.scope !== undefined && scopePaused(effectNode.scope))
+      // Effects paused directly (dom subtree pause) or via a paused scope chain stay dirty and
+      // re-run on resume instead of queueing now.
+      if (
+        effectNode.pausedCount !== 0 ||
+        (effectNode.scope !== undefined && scopePaused(effectNode.scope))
+      )
         return;
       enqueueEffect(effectNode);
     },
@@ -485,6 +490,32 @@ export function installDeferredLane(enqueue: (node: EffectNode) => void): {
   };
 }
 export type { EffectNode };
+
+// Non-barrel seams for loom/dom's subtree pause: suspend/resume ONE effect through its stop
+// handle (the stop is tagged with its node at creation). Non-effect disposers return false and are
+// left alone. Resume mirrors scope resume: a run missed while paused is delivered now.
+export function pauseEffectStop(stop: Stop): boolean {
+  const node = nodeOf(stop) as EffectNode | undefined;
+  if (node === undefined || node.fn === undefined || node.flags === 0)
+    return false;
+  node.pausedCount++;
+  return true;
+}
+export function resumeEffectStop(stop: Stop): boolean {
+  const node = nodeOf(stop) as EffectNode | undefined;
+  if (node === undefined || node.fn === undefined || node.flags === 0)
+    return false;
+  if (node.pausedCount > 0) node.pausedCount--;
+  if (
+    node.pausedCount === 0 &&
+    (node.scope === undefined || !scopePaused(node.scope)) &&
+    (node.flags & (Dirty | Pending)) !== 0
+  ) {
+    enqueueEffect(node);
+    if (batchDepth === 0) flush();
+  }
+  return true;
+}
 
 // Register a resource with the ambient scope (pause/resume/stop ride the scope's lifecycle).
 // Exported for the sibling core modules (meter) — not part of the public barrel.
@@ -893,6 +924,7 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
     cleanup: undefined,
     scope: undefined,
     scopeIndex: -1,
+    pausedCount: 0,
     deferred: false,
     deferredQueued: false,
     maxStale: 0,

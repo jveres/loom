@@ -1,42 +1,42 @@
-import { _ as e, g as t, o as n, r, x as i, y as a } from "./loom-3uFiAQXi.js";
-import { t as o } from "./jsx-props-sAPN8GVq.js";
+import { C as e, f as t, g as n, o as r, r as i, v as a, x as o, y as s } from "./loom-9N47RZAW.js";
+import { t as c } from "./jsx-props-sAPN8GVq.js";
 //#region src/dom/element-reads.ts
-var s = /* @__PURE__ */ new WeakMap(), c = /* @__PURE__ */ new Map(), l = null;
-function u(e) {
+var l = /* @__PURE__ */ new WeakMap(), u = /* @__PURE__ */ new Map(), d = null;
+function f(e) {
 	for (let t of e) {
 		let e = t.attributeName;
 		if (e === null) continue;
 		let n = t.target;
-		c.get(n)?.get(e)?.(n.getAttribute(e));
+		u.get(n)?.get(e)?.(n.getAttribute(e));
 	}
 }
-function d() {
-	if (l === null) {
-		if (c.size === 0) return;
-		l = new MutationObserver(u);
-	} else if (u(l.takeRecords()), l.disconnect(), c.size === 0) {
-		l = null;
+function p() {
+	if (d === null) {
+		if (u.size === 0) return;
+		d = new MutationObserver(f);
+	} else if (f(d.takeRecords()), d.disconnect(), u.size === 0) {
+		d = null;
 		return;
 	}
-	for (let [e, t] of c) l.observe(e, {
+	for (let [e, t] of u) d.observe(e, {
 		attributes: !0,
 		attributeFilter: [...t.keys()]
 	});
 }
-function f(e, t) {
-	return p(s, e, t, () => ee(e, t));
+function m(e, t) {
+	return h(l, e, t, () => ee(e, t));
 }
-function ee(e, n) {
-	return t((t) => {
-		t(e.getAttribute(n));
-		let r = c.get(e);
-		return r || (r = /* @__PURE__ */ new Map(), c.set(e, r)), r.set(n, t), d(), () => {
-			let t = c.get(e);
-			t && (t.delete(n), t.size === 0 && c.delete(e), d());
+function ee(e, t) {
+	return a((n) => {
+		n(e.getAttribute(t));
+		let r = u.get(e);
+		return r || (r = /* @__PURE__ */ new Map(), u.set(e, r)), r.set(t, n), p(), () => {
+			let n = u.get(e);
+			n && (n.delete(t), n.size === 0 && u.delete(e), p());
 		};
-	}, e.getAttribute(n));
+	}, e.getAttribute(t));
 }
-function p(e, t, n, r) {
+function h(e, t, n, r) {
 	let i = e.get(t);
 	i || (i = /* @__PURE__ */ new Map(), e.set(t, i));
 	let a = i.get(n);
@@ -44,30 +44,30 @@ function p(e, t, n, r) {
 }
 var te = /* @__PURE__ */ new WeakMap(), ne = /* @__PURE__ */ new WeakMap();
 function re(e, t) {
-	return p(te, e, t, () => {
-		let n = f(e, "class");
-		return r(() => (n(), e.classList.contains(t)));
+	return h(te, e, t, () => {
+		let n = m(e, "class");
+		return i(() => (n(), e.classList.contains(t)));
 	});
 }
 function ie(e, t) {
-	return p(ne, e, t, () => {
-		let n = f(e, "style");
-		return r(() => (n(), e.style.getPropertyValue(t)));
+	return h(ne, e, t, () => {
+		let n = m(e, "style");
+		return i(() => (n(), e.style.getPropertyValue(t)));
 	});
 }
 //#endregion
 //#region src/dom/on-mount.ts
-var m = /* @__PURE__ */ new Map(), h = null;
+var g = /* @__PURE__ */ new Map(), _ = null;
 function ae() {
-	for (let [e, t] of m) if (e.isConnected) {
-		m.delete(e);
+	for (let [e, t] of g) if (e.isConnected) {
+		g.delete(e);
 		for (let n of t) n(e);
 	}
-	m.size === 0 && (h?.disconnect(), h = null);
+	g.size === 0 && (_?.disconnect(), _ = null);
 }
 function oe(e, t) {
-	let n = m.get(e);
-	n || (n = /* @__PURE__ */ new Set(), m.set(e, n)), n.add(t), h ??= (() => {
+	let n = g.get(e);
+	n || (n = /* @__PURE__ */ new Set(), g.set(e, n)), n.add(t), _ ??= (() => {
 		let e = new MutationObserver(ae);
 		return e.observe(document.documentElement, {
 			childList: !0,
@@ -75,7 +75,7 @@ function oe(e, t) {
 		}), e;
 	})();
 }
-function g(e, t) {
+function v(e, t) {
 	let n = !1, r = (e) => {
 		n || (n = !0, t(e));
 	};
@@ -84,18 +84,18 @@ function g(e, t) {
 	});
 	let i = () => {
 		n = !0;
-		let t = m.get(e);
-		t && (t.delete(r), t.size === 0 && (m.delete(e), m.size === 0 && (h?.disconnect(), h = null)));
+		let t = g.get(e);
+		t && (t.delete(r), t.size === 0 && (g.delete(e), g.size === 0 && (_?.disconnect(), _ = null)));
 	};
 	return B(e, i), i;
 }
 //#endregion
 //#region src/dom/place.ts
-function _(e, t, n) {
+function y(e, t, n) {
 	let r = e;
 	r.moveBefore !== void 0 && t.parentNode === e ? r.moveBefore(t, n) : e.insertBefore(t, n);
 }
-function v(e, t, n) {
+function b(e, t, n) {
 	let r = t.length;
 	if (r === 0) return;
 	let i = /* @__PURE__ */ new Map();
@@ -109,7 +109,7 @@ function v(e, t, n) {
 		let i = n;
 		for (let n = r - 1; n >= 0; n--) {
 			let r = t[n];
-			r.parentNode !== e && _(e, r, i), i = r;
+			r.parentNode !== e && y(e, r, i), i = r;
 		}
 		return;
 	}
@@ -126,34 +126,34 @@ function v(e, t, n) {
 	let f = n;
 	for (let n = r - 1; n >= 0; n--) {
 		let r = t[n];
-		c.has(r) || _(e, r, f), f = r;
+		c.has(r) || y(e, r, f), f = r;
 	}
 }
 //#endregion
 //#region src/dom/connected.ts
-var y = /* @__PURE__ */ new WeakMap(), b = /* @__PURE__ */ new Map(), x = null;
+var x = /* @__PURE__ */ new WeakMap(), S = /* @__PURE__ */ new Map(), C = null;
 function se() {
-	for (let [e, t] of b) t(e.isConnected);
+	for (let [e, t] of S) t(e.isConnected);
 }
 function ce(e) {
-	let n = y.get(e);
-	if (n) return n;
-	let r = t((t) => (t(e.isConnected), b.set(e, t), x === null && (x = new MutationObserver(se), x.observe(document.documentElement, {
+	let t = x.get(e);
+	if (t) return t;
+	let n = a((t) => (t(e.isConnected), S.set(e, t), C === null && (C = new MutationObserver(se), C.observe(document.documentElement, {
 		childList: !0,
 		subtree: !0
 	})), () => {
-		b.delete(e), b.size === 0 && (x?.disconnect(), x = null);
+		S.delete(e), S.size === 0 && (C?.disconnect(), C = null);
 	}), e.isConnected);
-	return y.set(e, r), r;
+	return x.set(e, n), n;
 }
 //#endregion
 //#region src/dom/morph.ts
-function S(e, t) {
+function w(e, t) {
 	let n = t.skip;
 	return n === void 0 ? !1 : typeof n == "string" ? e.matches(n) : n(e);
 }
-function C(e, t, n = {}) {
-	return n.skip !== void 0 && S(e, n) ? e : e.tagName === t.tagName ? (le(e, t), ue(e, t), fe(e, t, n), e) : (e.replaceWith(t), t);
+function T(e, t, n = {}) {
+	return n.skip !== void 0 && w(e, n) ? e : e.tagName === t.tagName ? (le(e, t), ue(e, t), fe(e, t, n), e) : (e.replaceWith(t), t);
 }
 function le(e, t) {
 	let n = e.attributes;
@@ -183,7 +183,7 @@ function de(e) {
 	let t = e.ownerDocument.activeElement;
 	return t instanceof HTMLInputElement && t !== e && t.type === "radio" && t.name === e.name && t.form === e.form;
 }
-var w = (e, t) => t.key && e.nodeType === 1 ? t.key(e) : null;
+var E = (e, t) => t.key && e.nodeType === 1 ? t.key(e) : null;
 function fe(e, t, n) {
 	let r = e.firstChild, i = t.firstChild;
 	if (r === null && i === null) return;
@@ -193,7 +193,7 @@ function fe(e, t, n) {
 	}
 	let a = Array.from(e.childNodes), o = /* @__PURE__ */ new Map(), s = /* @__PURE__ */ new Set();
 	if (n.key) for (let e of a) {
-		let t = w(e, n);
+		let t = E(e, n);
 		if (t !== null) {
 			if (o.has(t)) throw Error(`Duplicate morph key "${t}".`);
 			o.set(t, e), s.add(e);
@@ -201,7 +201,7 @@ function fe(e, t, n) {
 	}
 	let c = /* @__PURE__ */ new Set(), l = n.key ? /* @__PURE__ */ new Set() : null, u = [], d = 0;
 	for (let e = i; e !== null; e = e.nextSibling) {
-		let t, r = w(e, n);
+		let t, r = E(e, n);
 		if (r !== null) {
 			if (l !== null) {
 				if (l.has(r)) throw Error(`Duplicate morph key "${r}".`);
@@ -218,14 +218,14 @@ function fe(e, t, n) {
 			let n = a[d];
 			n && n.nodeType === e.nodeType && (n.nodeType !== 1 || n.tagName === e.tagName) && (t = n, d++);
 		}
-		t ? (c.add(t), t.nodeType === 1 ? C(t, e, n) : t.nodeValue !== e.nodeValue && (t.nodeValue = e.nodeValue), u.push(t)) : u.push(e);
+		t ? (c.add(t), t.nodeType === 1 ? T(t, e, n) : t.nodeValue !== e.nodeValue && (t.nodeValue = e.nodeValue), u.push(t)) : u.push(e);
 	}
-	for (let t of a) c.has(t) || t.parentNode !== e || t.nodeType === 1 && n.skip !== void 0 && S(t, n) || e.removeChild(t);
-	v(e, u, null);
+	for (let t of a) c.has(t) || t.parentNode !== e || t.nodeType === 1 && n.skip !== void 0 && w(t, n) || e.removeChild(t);
+	b(e, u, null);
 }
 //#endregion
 //#region src/dom/once.ts
-function T(e) {
+function D(e) {
 	let t = !1;
 	return () => {
 		t || (t = !0, e());
@@ -233,13 +233,13 @@ function T(e) {
 }
 //#endregion
 //#region src/dom/observe-intersection.ts
-var E = /* @__PURE__ */ new Map();
+var O = /* @__PURE__ */ new Map();
 function pe(e) {
 	let t = e?.threshold;
 	return `${e?.rootMargin ?? ""}|${Array.isArray(t) ? t.join(",") : t ?? 0}`;
 }
 function me(e, t, n, r) {
-	let i = E.get(n);
+	let i = O.get(n);
 	if (!i) {
 		let e = /* @__PURE__ */ new Map();
 		i = {
@@ -253,14 +253,14 @@ function me(e, t, n, r) {
 				threshold: r?.threshold ?? 0
 			}),
 			watched: e
-		}, E.set(n, i);
+		}, O.set(n, i);
 	}
 	let a = i.watched.get(e);
-	return a || (a = /* @__PURE__ */ new Set(), i.watched.set(e, a), i.observer.observe(e)), a.add(t), T(() => {
-		let r = E.get(n);
+	return a || (a = /* @__PURE__ */ new Set(), i.watched.set(e, a), i.observer.observe(e)), a.add(t), D(() => {
+		let r = O.get(n);
 		if (!r) return;
 		let i = r.watched.get(e);
-		i && (i.delete(t), i.size === 0 && (r.watched.delete(e), r.observer.unobserve(e), r.watched.size === 0 && (r.observer.disconnect(), E.delete(n))));
+		i && (i.delete(t), i.size === 0 && (r.watched.delete(e), r.observer.unobserve(e), r.watched.size === 0 && (r.observer.disconnect(), O.delete(n))));
 	});
 }
 function he(e, t, n) {
@@ -273,7 +273,7 @@ function he(e, t, n) {
 			rootMargin: n.rootMargin ?? "0px",
 			threshold: n.threshold ?? 0
 		});
-		i.observe(e), r = T(() => i.disconnect());
+		i.observe(e), r = D(() => i.disconnect());
 	} else r = me(e, t, pe(n), n);
 	return B(e, r), r;
 }
@@ -282,24 +282,24 @@ function he(e, t, n) {
 function ge(e, t, n) {
 	let r = new MutationObserver(t);
 	r.observe(e, n);
-	let i = T(() => r.disconnect());
+	let i = D(() => r.disconnect());
 	return B(e, i), i;
 }
 //#endregion
 //#region src/dom/observe-size.ts
-var D = /* @__PURE__ */ new Map(), O = null;
+var k = /* @__PURE__ */ new Map(), A = null;
 function _e(e) {
 	for (let t of e) {
-		let e = D.get(t.target);
+		let e = k.get(t.target);
 		if (e) for (let n of e) n(t);
 	}
 }
 function ve(e, t) {
-	let n = D.get(e);
-	n || (n = /* @__PURE__ */ new Set(), D.set(e, n), O ??= new ResizeObserver(_e), O.observe(e)), n.add(t);
-	let r = T(() => {
-		let n = D.get(e);
-		n && (n.delete(t), n.size === 0 && (D.delete(e), O?.unobserve(e), D.size === 0 && (O?.disconnect(), O = null)));
+	let n = k.get(e);
+	n || (n = /* @__PURE__ */ new Set(), k.set(e, n), A ??= new ResizeObserver(_e), A.observe(e)), n.add(t);
+	let r = D(() => {
+		let n = k.get(e);
+		n && (n.delete(t), n.size === 0 && (k.delete(e), A?.unobserve(e), k.size === 0 && (A?.disconnect(), A = null)));
 	});
 	return B(e, r), r;
 }
@@ -313,49 +313,49 @@ function ye() {
 	}
 }
 function be(t, n, r = {}) {
-	let a = r.storage ?? ye(), o = r.serialize ?? JSON.stringify, s = r.parse ?? JSON.parse, c = n;
-	if (a) try {
-		let e = a.getItem(t);
+	let i = r.storage ?? ye(), a = r.serialize ?? JSON.stringify, o = r.parse ?? JSON.parse, c = n;
+	if (i) try {
+		let e = i.getItem(t);
 		if (e !== null) {
-			let t = s(e);
+			let t = o(e);
 			r.validate?.(t) !== !1 && (c = t);
 		}
 	} catch {}
-	let l = r.label ?? `persisted:${t}`, u = e(c, r.internal === void 0 ? { label: l } : {
+	let l = r.label ?? `persisted:${t}`, u = s(c, r.internal === void 0 ? { label: l } : {
 		label: l,
 		internal: r.internal
 	});
-	return a && i(u, (e) => {
+	return i && e(u, (e) => {
 		try {
-			a.setItem(t, o(e));
+			i.setItem(t, a(e));
 		} catch {}
 	}), u;
 }
 //#endregion
 //#region src/dom/index.ts
-var k = (e) => e, A = /* @__PURE__ */ new WeakMap(), xe = "http://www.w3.org/2000/svg", Se = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
-function j(e, t = null, n) {
+var j = (e) => e, M = /* @__PURE__ */ new WeakMap(), xe = "http://www.w3.org/2000/svg", Se = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
+function Ce(e, t = null, n) {
 	let r = Se.has(e) ? document.createElementNS(xe, e) : document.createElement(e);
-	return t && je(r, t), V(r, n), r;
+	return t && Ie(r, t), V(r, n), r;
 }
-function M(e, t) {
+function N(e, t) {
 	let n = document.createTextNode("");
-	return J(n, "dom.text", () => Re(e()), (e) => {
+	return J(n, "dom.text", () => Ue(e()), (e) => {
 		n.data = e;
 	}, "", t), n;
 }
-function Ce(e, t, n, r) {
-	if (typeof e == "string") return k({
+function we(e, t, n, r) {
+	if (typeof e == "string") return j({
 		kind: "attr",
 		name: e,
 		read: t
 	});
 	let i = t;
-	if (n === void 0) return f(e, i);
+	if (n === void 0) return m(e, i);
 	K(e, i, n, r);
 }
-function we(e, t, n, r) {
-	if (typeof e == "string") return k({
+function Te(e, t, n, r) {
+	if (typeof e == "string") return j({
 		kind: "class",
 		name: e,
 		read: t
@@ -368,13 +368,13 @@ function we(e, t, n, r) {
 		read: n
 	}, r);
 }
-function Te(e, t, n, r) {
-	if (typeof e == "string") return k({
+function Ee(e, t, n, r) {
+	if (typeof e == "string") return j({
 		kind: "style",
 		name: e,
 		read: t
 	});
-	let i = o(t);
+	let i = c(t);
 	if (n === void 0) return ie(e, i);
 	q(e, {
 		kind: "style",
@@ -382,7 +382,7 @@ function Te(e, t, n, r) {
 		read: n
 	}, r);
 }
-function N(e, t, n, r) {
+function P(e, t, n, r) {
 	let i = /* @__PURE__ */ new Set(), a = [];
 	for (let o of e) {
 		let e = String(n(o));
@@ -394,63 +394,78 @@ function N(e, t, n, r) {
 	for (let [e, n] of t) i.has(e) || (L(n), t.delete(e));
 	return a;
 }
-function Ee(e, t, r) {
-	let i = /* @__PURE__ */ new Map(), o = a(() => n(() => {
-		let n = r.reorder?.() !== !1, a = N(t(), i, r.key, r.render);
-		if (n) v(e, a, null);
+function De(e, t, n) {
+	let i = /* @__PURE__ */ new Map(), a = o(() => r(() => {
+		let r = n.reorder?.() !== !1, a = P(t(), i, n.key, n.render);
+		if (r) b(e, a, null);
 		else for (let t of a) t.parentNode || e.appendChild(t);
 	}, {
 		label: "dom.list",
 		target: e
 	})), s = () => {
-		o();
+		a();
 		for (let e of i.values()) L(e);
 		i.clear();
 	};
 	return B(e, s), s;
 }
-function P(e, t) {
-	return k({
+function F(e, t) {
+	return j({
 		__loomDynamic: !0,
-		mount(r) {
-			let i = [], o;
-			return a(() => n(() => {
-				let n = e();
-				if (n === o) return;
-				o = n;
+		mount(n) {
+			let i = [], a;
+			return o(() => r(() => {
+				let r = e();
+				if (r === a) return;
+				a = r;
 				for (let e of i) L(e);
 				let s = document.createDocumentFragment();
-				a(() => V(s, t(n))), i = [...s.childNodes], r.parentNode?.insertBefore(s, r);
-			}, H(r, "dom.dynamic")));
+				o(() => V(s, t(r))), i = [...s.childNodes], n.parentNode?.insertBefore(s, n);
+			}, H(n, "dom.dynamic")));
 		}
 	});
 }
-function De(e, t, n) {
-	return P(() => e() ? "1" : "0", (e) => e === "1" ? t() : n ? n() : null);
+function Oe(e, t, n) {
+	return F(() => e() ? "1" : "0", (e) => e === "1" ? t() : n ? n() : null);
 }
-function F(e, t, n) {
-	return P(() => String(e()), (e) => {
+function ke(e, t, n) {
+	return F(() => String(e()), (e) => {
 		let r = t[e] ?? n;
 		return r ? r() : null;
 	});
 }
-function Oe(e, t, r) {
-	return k({
+function Ae(e, t, n) {
+	return j({
 		__loomDynamic: !0,
 		mount(i) {
-			let o = /* @__PURE__ */ new Map();
-			return a(() => n(() => {
-				let n = N(e(), o, r, t), a = i.parentNode;
-				a && v(a, n, i);
+			let a = /* @__PURE__ */ new Map();
+			return o(() => r(() => {
+				let r = P(e(), a, n, t), o = i.parentNode;
+				o && b(o, r, i);
 			}, H(i, "dom.each")));
 		}
 	});
 }
+function je(e, t, n) {
+	let r = [e];
+	for (let e = 0; e < r.length; e++) {
+		let i = r[e], a = M.get(i);
+		if (a) if (n && M.delete(i), Array.isArray(a)) for (let e of a) t(e);
+		else t(a);
+		for (let e = i.firstChild; e; e = e.nextSibling) r.push(e);
+	}
+}
+function Me(e) {
+	je(e, t, !1);
+}
+function Ne(e) {
+	je(e, n, !1);
+}
 function I(e) {
 	let t = [e];
 	for (let e = 0; e < t.length; e++) {
-		let n = t[e], r = A.get(n);
-		r && (A.delete(n), Ae(r));
+		let n = t[e], r = M.get(n);
+		r && (M.delete(n), Fe(r));
 		for (let e = n.firstChild; e; e = e.nextSibling) t.push(e);
 	}
 }
@@ -474,21 +489,21 @@ function z(e, t) {
 	});
 }
 function B(e, t) {
-	let n = A.get(e);
-	n ? Array.isArray(n) ? n.push(t) : A.set(e, [n, t]) : A.set(e, t);
+	let n = M.get(e);
+	n ? Array.isArray(n) ? n.push(t) : M.set(e, [n, t]) : M.set(e, t);
 }
-function ke(e, t, r) {
-	let i = n(t, {
+function Pe(e, t, n) {
+	let i = r(t, {
 		target: e,
-		...r
+		...n
 	});
 	return B(e, i), i;
 }
-function Ae(e) {
+function Fe(e) {
 	if (Array.isArray(e)) for (let t of e) t();
 	else e();
 }
-function je(e, t) {
+function Ie(e, t) {
 	for (let n in t) {
 		if (!Object.hasOwn(t, n) || n === "children") continue;
 		let r = t[n];
@@ -506,15 +521,15 @@ function je(e, t) {
 				continue;
 			}
 			if ((n === "onmount" || n === "onMount") && typeof r == "function") {
-				g(e, r);
+				v(e, r);
 				continue;
 			}
 			if ((n === "onunmount" || n === "onUnmount") && typeof r == "function") {
 				B(e, r);
 				continue;
 			}
-			if (Be(r)) {
-				let t = k(r);
+			if (Ge(r)) {
+				let t = j(r);
 				K(e, t.name, t.read);
 				continue;
 			}
@@ -523,14 +538,14 @@ function je(e, t) {
 				continue;
 			}
 			if (n.startsWith("on") && typeof r == "function") {
-				e.addEventListener(ze(n), r);
+				e.addEventListener(We(n), r);
 				continue;
 			}
 			if (typeof r == "function") {
 				K(e, n, r);
 				continue;
 			}
-			Le(e, n, r);
+			He(e, n, r);
 		}
 	}
 }
@@ -539,13 +554,13 @@ function V(e, t) {
 		for (let n of t) V(e, n);
 		return;
 	}
-	if (Me(t)) {
-		Ne(e, t);
+	if (Le(t)) {
+		Re(e, t);
 		return;
 	}
 	if (!(t == null || t === !0 || t === !1)) {
 		if (typeof t == "function") {
-			e.appendChild(M(t));
+			e.appendChild(N(t));
 			return;
 		}
 		if (t instanceof Node) {
@@ -556,12 +571,12 @@ function V(e, t) {
 		e.appendChild(document.createTextNode(String(t)));
 	}
 }
-function Me(e) {
+function Le(e) {
 	return typeof e == "object" && !!e && e.__loomDynamic === !0;
 }
-function Ne(e, t) {
+function Re(e, t) {
 	let n = document.createComment("loom-slot");
-	e.appendChild(n), B(n, k(t).mount(n));
+	e.appendChild(n), B(n, j(t).mount(n));
 }
 function H(e, t) {
 	let n = e.parentNode;
@@ -577,23 +592,23 @@ function U(e, t) {
 	}
 	if (t) {
 		if (typeof t == "string") {
-			Pe(e, t);
+			ze(e, t);
 			return;
 		}
-		if (Ve(t)) {
-			G(e, k(t));
+		if (Ke(t)) {
+			G(e, j(t));
 			return;
 		}
-		if (Q(t)) for (let n in t) Object.hasOwn(t, n) && Ie(e, n, t[n]);
+		if (Q(t)) for (let n in t) Object.hasOwn(t, n) && Ve(e, n, t[n]);
 	}
 }
-function Pe(e, t) {
+function ze(e, t) {
 	let n = t.trim();
 	if (!n) return;
 	let r = e.getAttribute("class");
 	e.setAttribute("class", r ? `${r} ${n}` : n);
 }
-function Fe(e, t) {
+function Be(e, t) {
 	let n = e.getAttribute("class");
 	return n ? n.split(/\s+/).includes(t) : !1;
 }
@@ -607,15 +622,15 @@ function W(e, t) {
 		e.setAttribute("style", t);
 		return;
 	}
-	if (He(t)) {
-		q(e, k(t));
+	if (qe(t)) {
+		q(e, j(t));
 		return;
 	}
 	if (!Q(t)) return;
 	let n = e.style;
 	for (let r in t) {
 		if (!Object.hasOwn(t, r)) continue;
-		let i = t[r], a = o(r);
+		let i = t[r], a = c(r);
 		typeof i == "function" ? q(e, {
 			kind: "style",
 			name: a,
@@ -623,7 +638,7 @@ function W(e, t) {
 		}) : i != null && n.setProperty(a, String(i));
 	}
 }
-function Ie(e, t, n) {
+function Ve(e, t, n) {
 	typeof n == "function" ? G(e, {
 		kind: "class",
 		name: t,
@@ -631,7 +646,7 @@ function Ie(e, t, n) {
 	}) : n && e.classList.add(t);
 }
 function G(e, t, n) {
-	J(e, `dom.class.${t.name}`, () => !!t.read(), (n) => e.classList.toggle(t.name, n), Fe(e, t.name), n);
+	J(e, `dom.class.${t.name}`, () => !!t.read(), (n) => e.classList.toggle(t.name, n), Be(e, t.name), n);
 }
 function K(e, t, n, r) {
 	J(e, `dom.attr.${t}`, () => X(t, n()), (n) => Y(e, t, n), void 0, r);
@@ -642,10 +657,10 @@ function q(e, t, n) {
 		e === null ? r.removeProperty(t.name) : r.setProperty(t.name, e);
 	}, void 0, n);
 }
-function J(e, t, r, i, o, s) {
-	let c = o;
-	B(e, a(() => n(() => {
-		let e = r();
+function J(e, t, n, i, a, s) {
+	let c = a;
+	B(e, o(() => r(() => {
+		let e = n();
 		e !== c && (c = e, i(e));
 	}, {
 		label: t,
@@ -653,7 +668,7 @@ function J(e, t, r, i, o, s) {
 		...s
 	})));
 }
-function Le(e, t, n) {
+function He(e, t, n) {
 	Y(e, t, X(t, n));
 }
 function Y(e, t, n) {
@@ -665,19 +680,19 @@ function X(e, t) {
 function Z(e) {
 	return e.startsWith("aria-");
 }
-function Re(e) {
+function Ue(e) {
 	return e == null || e === !1 ? "" : String(e);
 }
-function ze(e) {
+function We(e) {
 	return e.slice(2).toLowerCase();
 }
-function Be(e) {
+function Ge(e) {
 	return $(e, "attr");
 }
-function Ve(e) {
+function Ke(e) {
 	return $(e, "class");
 }
-function He(e) {
+function qe(e) {
 	return $(e, "style");
 }
 function Q(e) {
@@ -687,4 +702,4 @@ function $(e, t) {
 	return typeof e == "object" && !!e && e.kind === t && typeof e.name == "string" && typeof e.read == "function";
 }
 //#endregion
-export { ge as _, Oe as a, ce as b, F as c, L as d, Te as f, ve as g, be as h, I as i, z as l, De as m, ke as n, j as o, M as p, we as r, Ee as s, Ce as t, B as u, he as v, g as x, C as y };
+export { v as C, ce as S, be as _, Ae as a, he as b, ke as c, Me as d, L as f, Oe as g, N as h, I as i, z as l, Ee as m, Pe as n, Ce as o, Ne as p, Te as r, De as s, we as t, B as u, ve as v, T as x, ge as y };

@@ -2,7 +2,7 @@
 // Kit helpers: bind / observeSize / observeIntersection / observeMutation / onMount / persisted.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { state } from "../loom.js";
-import { bind, h, onMount, remove } from "./index.js";
+import { bind, h, onMount, onUnmount, pause, remove, resume } from "./index.js";
 import { observeIntersection } from "./observe-intersection.js";
 import { observeMutation } from "./observe-mutation.js";
 import { observeSize } from "./observe-size.js";
@@ -365,5 +365,66 @@ describe("observeIntersection", () => {
     expect(instances.length).toBe(2); // no pooling across roots
     remove(el);
     expect(instances.every((i) => i.disconnected)).toBe(true);
+  });
+});
+
+describe("pause/resume (subtree)", () => {
+  it("suspends bindings, delivers one catch-up on resume, nests", () => {
+    const label = state("a");
+    const root = h("section");
+    const child = h("div");
+    root.append(child);
+    let runs = 0;
+    bind(child, () => {
+      label();
+      runs++;
+    });
+    expect(runs).toBe(1);
+
+    pause(root);
+    label("b");
+    label("c");
+    expect(runs).toBe(1); // suspended, stays subscribed
+
+    pause(root); // nested pause
+    resume(root);
+    label("d");
+    expect(runs).toBe(1); // still one level deep
+
+    resume(root);
+    expect(runs).toBe(2); // one coalesced catch-up at the latest value
+    expect(child.textContent).toBe("");
+    label("e");
+    expect(runs).toBe(3);
+    remove(root);
+  });
+
+  it("leaves manual disposers and unrelated subtrees alone", () => {
+    const value = state(0);
+    const inside = h("div");
+    const outside = h("div");
+    let insideRuns = 0;
+    let outsideRuns = 0;
+    const manual = vi.fn();
+    bind(inside, () => {
+      value();
+      insideRuns++;
+    });
+    onUnmount(inside, manual); // non-effect disposer: not pausable, not called
+    bind(outside, () => {
+      value();
+      outsideRuns++;
+    });
+
+    pause(inside);
+    value(1);
+    expect(insideRuns).toBe(1);
+    expect(outsideRuns).toBe(2);
+    expect(manual).not.toHaveBeenCalled();
+    resume(inside);
+    expect(insideRuns).toBe(2);
+    remove(inside);
+    remove(outside);
+    expect(manual).toHaveBeenCalledTimes(1);
   });
 });

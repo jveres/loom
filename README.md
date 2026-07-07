@@ -533,6 +533,13 @@ watch(
 - `bind(el, fn, options?)` — reactive DOM state that dies with this node:
   `effect(fn)` target-attributed to `el` and disposed with it. The one-call
   form of `onUnmount(el, effect(fn, { target: el }))`. Returns the stop.
+- `pause(root)` / `resume(root)` suspend and wake every node-owned reactive
+  binding in a DOM subtree: paused bindings stay subscribed but do not run;
+  resume delivers one coalesced catch-up to anything that changed. Pause
+  nests, composes with `scope()` pause (either suspends), and skips manual
+  `onUnmount` disposers (nothing to pause). The DOM-structural counterpart
+  of a scope's `pause()` — freeze an offscreen tab's subtree without having
+  built it inside one scope.
 
 `onMount` and `onUnmount` are also JSX props — see the prop documentation
 below.
@@ -592,6 +599,7 @@ inspector's own scrollers use it.
 | `list` | [DOM and events](#dom-and-events) |
 | `each`, `when`, `match` | [Conditional rendering](#conditional-rendering) |
 | `dispose`, `remove`, `onUnmount`, `bind` | [Ownership & disposal](#ownership--disposal) |
+| `pause`, `resume` | [Lifecycle](#lifecycle) |
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `connected`, `persisted`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
