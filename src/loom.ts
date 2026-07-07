@@ -179,6 +179,17 @@ export interface InspectMeta {
   key?: string; // property key within that group
 }
 
+// The deferred-lane seam. loom.ts routes a deferred effect's re-run through `lane.enqueue`; the
+// implementation (queue, drain, scheduler) lives in ./core/defer.ts and installs itself when that
+// module loads — apps that never use { defer: true } bundle none of it. A property on a stable
+// const object (not a live `let` binding), same reasoning as the channels sampler: one property
+// load per call in every module system. `scheduler` carries the configure({ deferScheduler })
+// override to the lane.
+export const deferredLane: {
+  enqueue: ((node: EffectNode) => void) | undefined;
+  scheduler: DeferScheduler | undefined;
+} = { enqueue: undefined, scheduler: undefined };
+
 let cycle = 0;
 let runDepth = 0;
 let batchDepth = 0;
@@ -190,14 +201,7 @@ const queued: Array<EffectNode | undefined> = [];
 // Deferred lane: effects whose re-runs run off the critical path (see deferEffect/drainDeferred).
 // A head index makes the drain O(1)-per-item (no shift); drained slots are nulled and the backing
 // array reset once fully consumed.
-const deferredQueue: Array<EffectNode | undefined> = [];
-let deferHead = 0;
-let drainScheduled = false;
-let drainDeadline = Number.POSITIVE_INFINITY; // absolute time (now()+maxStale) the pending drain fires by
-let drainCancel: (() => void) | undefined;
 const deferTimeout = 200; // default maxStale (ms) for a deferred effect that doesn't set its own
-let deferScheduler: DeferScheduler = defaultDeferScheduler;
-const DEFER_BUDGET_MS = 5; // a forced (no-idle) drain runs at most ~this long, then yields
 let liveScopes = 0; // non-internal scopes alive now (for inspectResources; off the reactive path)
 let onError: ErrorHandler | undefined;
 // The inspection subsystem's seam. core/inspect.ts installs these when it is loaded (any import
@@ -370,6 +374,11 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     activeScope.effects.push(node);
   }
   if (options?.defer === true) {
+    if (deferredLane.enqueue === undefined) {
+      throw new Error(
+        'effect({ defer: true }) requires the deferred lane — import "loom/defer" once at startup.',
+      );
+    }
     node.deferred = true;
     node.maxStale = options.maxStale ?? deferTimeout;
   }
@@ -458,6 +467,24 @@ export function scope(fn: () => void, options?: NodeOptions): Scope {
     resume: () => resumeScope(node),
   };
 }
+
+// Non-barrel seam for the deferred lane (./core/defer.ts): hands the lane plain function
+// references ONCE at install. Under live-binding transforms an imported binding is a getter per
+// access (the measured 10x write lesson); returning the internals lets the lane capture them into
+// module-local consts and pay a plain call forever after.
+export function installDeferredLane(enqueue: (node: EffectNode) => void): {
+  runEffect: (node: EffectNode) => void;
+  clearWatching: (node: EffectNode) => void;
+} {
+  deferredLane.enqueue = enqueue;
+  return {
+    runEffect,
+    clearWatching: (node) => {
+      node.flags &= ~Watching;
+    },
+  };
+}
+export type { EffectNode };
 
 // Register a resource with the ambient scope (pause/resume/stop ride the scope's lifecycle).
 // Exported for the sibling core modules (meter) — not part of the public barrel.
@@ -561,7 +588,7 @@ function flushScope(node: ScopeNode): void {
 // Route an effect to its lane: deferred re-runs go off the critical path, the rest queue for the
 // synchronous flush.
 function enqueueEffect(node: EffectNode): void {
-  if (node.deferred) deferEffect(node);
+  if (node.deferred) (deferredLane.enqueue as (node: EffectNode) => void)(node);
   else queueEffect(node);
 }
 
@@ -775,7 +802,7 @@ export function configure(options: ConfigureOptions): void {
   }
   if ("onError" in options) onError = options.onError;
   if (options.deferScheduler !== undefined)
-    deferScheduler = options.deferScheduler;
+    deferredLane.scheduler = options.deferScheduler;
 }
 
 // Merge two option sets, letting the second (more specific) win; either may be undefined. The union
@@ -1137,113 +1164,6 @@ function flush(): void {
         undefined,
       );
     }
-  }
-}
-
-/* ----------------------------------------------------- deferred effect lane --------- */
-
-// Default scheduler: requestIdleCallback (idle-first, with a maxStale timeout floor) where present,
-// else a setTimeout floor. Both give the drain a budget so a forced (no-idle) run yields the frame.
-function defaultDeferScheduler(
-  drain: (hasBudget: () => boolean) => void,
-  maxStale: number,
-): () => void {
-  const g = globalThis as unknown as {
-    requestIdleCallback?: (
-      cb: (d: {
-        timeRemaining(): number;
-        readonly didTimeout: boolean;
-      }) => void,
-      opts?: { timeout?: number },
-    ) => number;
-    cancelIdleCallback?: (id: number) => void;
-  };
-  if (typeof g.requestIdleCallback === "function") {
-    const id = g.requestIdleCallback(
-      (dl) => {
-        const end = now() + DEFER_BUDGET_MS;
-        // Idle: ride the remaining idle time. Forced (no idle): a fixed budget so we make bounded
-        // progress instead of either starving or blocking the frame.
-        drain(() => (dl.didTimeout ? now() < end : dl.timeRemaining() > 0));
-      },
-      { timeout: maxStale },
-    );
-    return () => g.cancelIdleCallback?.(id);
-  }
-  const id = setTimeout(() => {
-    const end = now() + DEFER_BUDGET_MS;
-    drain(() => now() < end);
-  }, maxStale);
-  return () => clearTimeout(id);
-}
-
-// Add a deferred effect to the lane (clearing Watching, as queueEffect does, so the system won't
-// re-notify until it runs) and ensure a drain is scheduled to fire by its deadline. Dedup the
-// queue: flushScope can re-offer a still-dirty effect that's already queued (pause→resume
-// mid-flight) — an already-queued effect's deadline is covered by the drain scheduled when it was
-// enqueued (or by the end-of-drain reschedule), so the re-offer path stays clock-free.
-function deferEffect(node: EffectNode): void {
-  node.flags &= ~Watching;
-  if (node.deferredQueued) return;
-  node.deferredQueued = true;
-  deferredQueue.push(node);
-  const deadline = now() + node.maxStale;
-  node.deferDeadline = deadline;
-  scheduleDrain(deadline, node.maxStale);
-}
-
-// Compare absolute fire-by times: a pending drain that already fires in time stands; a tighter
-// deadline replaces it. `timeout` is the relative floor handed to the scheduler.
-function scheduleDrain(deadline: number, timeout: number): void {
-  if (drainScheduled && drainDeadline <= deadline) return;
-  drainCancel?.();
-  drainScheduled = true;
-  drainDeadline = deadline;
-  drainCancel = deferScheduler(drainDeferred, timeout);
-}
-
-// Run queued deferred effects while there's budget; reschedule any leftover. Each runs via runEffect
-// (honouring the dirty check, re-tracking deps, skipping a now-paused scope), which coalesces every
-// change since it was queued into one run at the latest value.
-function drainDeferred(hasBudget: () => boolean): void {
-  drainScheduled = false;
-  drainDeadline = Number.POSITIVE_INFINITY;
-  drainCancel = undefined;
-  while (deferHead < deferredQueue.length && hasBudget()) {
-    const node = deferredQueue[deferHead];
-    deferredQueue[deferHead] = undefined; // release the slot as we pass the head
-    deferHead++;
-    if (node !== undefined) {
-      node.deferredQueued = false;
-      if (node.flags !== 0) {
-        // flags 0 = stopped while queued
-        try {
-          runEffect(node);
-        } catch (error) {
-          // Only reachable with no onError boundary (reportEffectError rethrows). Aborting the
-          // drain here would wedge every effect queued behind this one — the tail reschedule
-          // never runs and their deferredQueued flags block re-enqueueing forever. Re-throw on a
-          // fresh task instead: window.onerror still fires, the drain keeps going.
-          setTimeout(() => {
-            throw error;
-          }, 0);
-        }
-      }
-    }
-  }
-  if (deferHead >= deferredQueue.length) {
-    deferredQueue.length = 0;
-    deferHead = 0;
-  } else {
-    // Leftovers keep their enqueue-time deadlines: reschedule with the time remaining to the
-    // soonest one, not a fresh maxStale.
-    let soonest = Number.POSITIVE_INFINITY;
-    for (let i = deferHead; i < deferredQueue.length; i++) {
-      const n = deferredQueue[i];
-      if (n !== undefined && n.deferDeadline < soonest)
-        soonest = n.deferDeadline;
-    }
-    scheduleDrain(soonest, Math.max(0, soonest - now()));
   }
 }
 

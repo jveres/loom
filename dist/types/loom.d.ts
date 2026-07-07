@@ -46,6 +46,7 @@ export interface NodeInfo {
     readonly label: string;
 }
 export type CleanupEffectFn = () => Stop;
+type InternalEffectFn = EffectFn | CleanupEffectFn;
 type PropKey<T extends object> = Extract<keyof T, string>;
 export type Props<T extends object> = {
     readonly [K in PropKey<T>]: State<T[K]>;
@@ -66,10 +67,31 @@ export interface ComputedNode<T> extends NodeBase {
     value: T | undefined;
     getter(previousValue?: T): T;
 }
+interface EffectNode extends NodeBase {
+    fn: InternalEffectFn;
+    cleanup: Stop | undefined;
+    scope: ScopeNode | undefined;
+    scopeIndex: number;
+    deferred: boolean;
+    deferredQueued: boolean;
+    maxStale: number;
+    deferDeadline: number;
+}
 interface ScopeResource {
     pause(): void;
     resume(): void;
     stop(): void;
+}
+interface ScopeNode {
+    readonly effects: EffectNode[];
+    readonly resources: ScopeResource[];
+    readonly children: ScopeNode[];
+    readonly parent: ScopeNode | undefined;
+    childIndex: number;
+    readonly options: NodeOptions | undefined;
+    paused: boolean;
+    pausedCount: number;
+    stopped: boolean;
 }
 export interface InspectMeta {
     readonly id: number;
@@ -82,6 +104,10 @@ export interface InspectMeta {
     group?: number;
     key?: string;
 }
+export declare const deferredLane: {
+    enqueue: ((node: EffectNode) => void) | undefined;
+    scheduler: DeferScheduler | undefined;
+};
 export interface InspectHooks {
     register(node: NodeBase, kind: NodeKind, options: NodeOptions | EffectOptions | undefined): InspectMeta | undefined;
     unregister(id: number): void;
@@ -115,6 +141,11 @@ export declare function batch<T>(fn: () => T): T;
  * child suspended.
  */
 export declare function scope(fn: () => void, options?: NodeOptions): Scope;
+export declare function installDeferredLane(enqueue: (node: EffectNode) => void): {
+    runEffect: (node: EffectNode) => void;
+    clearWatching: (node: EffectNode) => void;
+};
+export type { EffectNode };
 export declare function registerScopeResource(resource: ScopeResource): void;
 export type Polled<T> = Read<T> & {
     readonly stop: Stop;
@@ -167,4 +198,3 @@ export interface ConfigureOptions {
 }
 export declare function configure(options: ConfigureOptions): void;
 export declare function mergeOptions(defaults: NodeOptions | undefined, own: NodeOptions | EffectOptions | undefined): NodeOptions | EffectOptions | undefined;
-export {};

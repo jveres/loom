@@ -1,4 +1,4 @@
-import { C as e, D as t, E as n, O as r, S as i, T as a, b as o, f as s, k as c, w as l, x as u } from "./loom-BE6Qi7th.js";
+import { A as e, C as t, D as n, E as r, O as i, S as a, T as o, j as s, k as c, m as l, w as u } from "./loom-3uFiAQXi.js";
 //#region src/core/meter.ts
 var d = 1 << 20, f = 5;
 function p(e) {
@@ -8,10 +8,10 @@ function p(e) {
 	for (; t < e;) t <<= 1;
 	return t;
 }
-function m(e, t, r) {
-	let i = p(t);
-	if (r.length > f) throw RangeError(`A channel records up to ${f} fields; "${e}" declares ${r.length}.`);
-	return n(e, i, r);
+function m(e, t, n) {
+	let r = p(t);
+	if (n.length > f) throw RangeError(`A channel records up to ${f} fields; "${e}" declares ${n.length}.`);
+	return i(e, r, n);
 }
 function h(e) {
 	if (e.cap !== 0 && e.cols === void 0) {
@@ -36,7 +36,7 @@ function g(e, t, n, r, i, a) {
 	}
 	e.seq++;
 }
-r.record = g;
+e.record = g;
 var _ = [];
 function v(e) {
 	return {
@@ -51,8 +51,8 @@ function v(e) {
 }
 function y(e, t) {
 	if (e.startsWith("loom:")) throw Error(`Channel name "${e}" uses the reserved "loom:" prefix (built-in runtime channels).`);
-	let n = o.get(e);
-	if (n === void 0) n = m(e, t?.capacity ?? 0, t?.fields ?? []), o.set(e, n);
+	let n = a.get(e);
+	if (n === void 0) n = m(e, t?.capacity ?? 0, t?.fields ?? []), a.set(e, n);
 	else if (t !== void 0 && (p(t.capacity ?? 0) !== n.cap || !b(t.fields ?? [], n.fields))) throw Error(`Channel "${e}" already declared with different options.`);
 	return v(n);
 }
@@ -64,27 +64,27 @@ function b(e, t) {
 function x(e, t = "count") {
 	let n = t === "samples", r = [];
 	for (let t of e) {
-		let e = o.get(t.name);
+		let e = a.get(t.name);
 		e !== void 0 && r.push({
 			node: e,
 			cursor: e.seq
 		});
 	}
-	let i = !1, a = () => {
+	let i = !1, o = () => {
 		if (!i) {
 			i = !0;
 			for (let e of r) e.node.meters++, n && (e.node.samples++, h(e.node)), e.cursor = e.node.seq;
 		}
-	}, c = () => {
+	}, s = () => {
 		if (i) {
 			i = !1;
 			for (let e of r) e.node.meters--, n && e.node.samples--;
 		}
 	};
-	return a(), s({
-		pause: c,
-		resume: a,
-		stop: c
+	return o(), l({
+		pause: s,
+		resume: o,
+		stop: s
 	}), {
 		read() {
 			let e = {};
@@ -109,17 +109,17 @@ function x(e, t = "count") {
 			}
 			return e;
 		},
-		stop: c
+		stop: s
 	};
 }
 var S = {
-	read: /* @__PURE__ */ v(t),
-	write: /* @__PURE__ */ v(c),
-	compute: /* @__PURE__ */ v(u),
-	effect: /* @__PURE__ */ v(l),
-	flush: /* @__PURE__ */ v(a),
-	create: /* @__PURE__ */ v(i),
-	dispose: /* @__PURE__ */ v(e)
+	read: /* @__PURE__ */ v(c),
+	write: /* @__PURE__ */ v(s),
+	compute: /* @__PURE__ */ v(t),
+	effect: /* @__PURE__ */ v(r),
+	flush: /* @__PURE__ */ v(n),
+	create: /* @__PURE__ */ v(u),
+	dispose: /* @__PURE__ */ v(o)
 };
 function C(e) {
 	return e;

@@ -40,8 +40,9 @@
   `meter` for any event or sample stream — zero allocation until metered. Loom uses them
   to instrument itself; that self-watching surface is the opt-in `loom/observe`.
 - **Lean core, opt-in surfaces.** `loom` (reactivity, lifecycle, channel/meter) ·
-  `loom/observe` (watch loom's internals) · `loom/async` (async resources) ·
-  `loom/dom` · `loom/html` (SSR/SSG) · `loom/devtools` (dev panel).
+  `loom/defer` (deferred-effect lane) · `loom/observe` (watch loom's
+  internals) · `loom/async` (async resources) · `loom/dom` · `loom/html`
+  (SSR/SSG) · `loom/devtools` (dev panel).
 
 ## At a glance
 
@@ -117,7 +118,8 @@ stop();
   dependencies change. `fn` may return a cleanup that runs before each re-run
   and on stop. `{ target }` associates the effect with the DOM node it writes
   (inspector attribution); `{ defer, maxStale }` moves re-runs off the
-  critical path ([Deferred effects](#deferred-effects)).
+  critical path — requires `import "loom/defer"`
+  ([Deferred effects](#deferred-effects)).
 - `batch(fn)` groups writes and flushes effects once after the batch. A
   top-level write outside `batch` flushes synchronously before it returns.
 - `untrack(fn)` reads state inside `fn` without subscribing the active
@@ -165,6 +167,7 @@ deferred-lane scheduler ([Deferred effects](#deferred-effects)).
 | `scope` | [Scopes](#scopes) |
 | `channel`, `meter` | [Observability](#observability) |
 | `configure` | [Runtime configuration](#runtime-configuration) |
+| `import "loom/defer"` | [Deferred effects](#deferred-effects) |
 
 Types: `State<T>` (callable read/write signal), `Read<T>`, `Stop`, `Scope`,
 `Polled<T>` (`poll`'s `Read<T> & { stop }`), `SourceConnect<T>`, `EffectFn`,
@@ -369,6 +372,19 @@ heartbeat, the web-vital sources and the heap timer are filtered from the
 observability it reports — without passing options to each one.
 
 ### Deferred effects
+
+Deferred effects are an opt-in module: import `"loom/defer"` once at startup
+to install the lane (same contract as `loom/observe` — the option alone
+cannot reach machinery that was never bundled). Creating an
+`effect({ defer: true })` without it throws. Apps that never defer bundle
+none of the lane (~290 B gzip).
+
+```ts
+import "loom/defer";
+import { effect } from "loom";
+
+effect(() => console.log("re-runs off the critical path"), { defer: true });
+```
 
 Pass `{ defer: true }` to run an effect's **re-runs** off the critical
 path — idle-first and coalesced — instead of in the synchronous flush. The

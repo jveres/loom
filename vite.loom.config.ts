@@ -16,6 +16,7 @@ export default defineConfig({
         async: resolve(root, "src/async/index.ts"),
         dom: resolve(root, "src/dom/index.ts"),
         "dom/virtual-list": resolve(root, "src/dom/virtual-list.ts"),
+        defer: resolve(root, "src/core/defer.ts"),
         "dom/scroll-fade": resolve(root, "src/dom/scroll-fade.ts"),
         devtools: resolve(root, "src/devtools/index.ts"),
         "jsx-runtime": resolve(root, "src/dom/jsx-runtime.ts"),

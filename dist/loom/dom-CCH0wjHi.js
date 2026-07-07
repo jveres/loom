@@ -1,4 +1,4 @@
-import { _ as e, a as t, h as n, m as r, r as i, y as a } from "./loom-BE6Qi7th.js";
+import { _ as e, g as t, o as n, r, x as i, y as a } from "./loom-3uFiAQXi.js";
 import { t as o } from "./jsx-props-sAPN8GVq.js";
 //#region src/dom/element-reads.ts
 var s = /* @__PURE__ */ new WeakMap(), c = /* @__PURE__ */ new Map(), l = null;
@@ -26,15 +26,15 @@ function d() {
 function f(e, t) {
 	return p(s, e, t, () => ee(e, t));
 }
-function ee(e, t) {
-	return r((n) => {
-		n(e.getAttribute(t));
+function ee(e, n) {
+	return t((t) => {
+		t(e.getAttribute(n));
 		let r = c.get(e);
-		return r || (r = /* @__PURE__ */ new Map(), c.set(e, r)), r.set(t, n), d(), () => {
-			let n = c.get(e);
-			n && (n.delete(t), n.size === 0 && c.delete(e), d());
+		return r || (r = /* @__PURE__ */ new Map(), c.set(e, r)), r.set(n, t), d(), () => {
+			let t = c.get(e);
+			t && (t.delete(n), t.size === 0 && c.delete(e), d());
 		};
-	}, e.getAttribute(t));
+	}, e.getAttribute(n));
 }
 function p(e, t, n, r) {
 	let i = e.get(t);
@@ -46,13 +46,13 @@ var te = /* @__PURE__ */ new WeakMap(), ne = /* @__PURE__ */ new WeakMap();
 function re(e, t) {
 	return p(te, e, t, () => {
 		let n = f(e, "class");
-		return i(() => (n(), e.classList.contains(t)));
+		return r(() => (n(), e.classList.contains(t)));
 	});
 }
 function ie(e, t) {
 	return p(ne, e, t, () => {
 		let n = f(e, "style");
-		return i(() => (n(), e.style.getPropertyValue(t)));
+		return r(() => (n(), e.style.getPropertyValue(t)));
 	});
 }
 //#endregion
@@ -136,15 +136,15 @@ function se() {
 	for (let [e, t] of b) t(e.isConnected);
 }
 function ce(e) {
-	let t = y.get(e);
-	if (t) return t;
-	let n = r((t) => (t(e.isConnected), b.set(e, t), x === null && (x = new MutationObserver(se), x.observe(document.documentElement, {
+	let n = y.get(e);
+	if (n) return n;
+	let r = t((t) => (t(e.isConnected), b.set(e, t), x === null && (x = new MutationObserver(se), x.observe(document.documentElement, {
 		childList: !0,
 		subtree: !0
 	})), () => {
 		b.delete(e), b.size === 0 && (x?.disconnect(), x = null);
 	}), e.isConnected);
-	return y.set(e, n), n;
+	return y.set(e, r), r;
 }
 //#endregion
 //#region src/dom/morph.ts
@@ -312,22 +312,22 @@ function ye() {
 		return;
 	}
 }
-function be(e, t, r = {}) {
-	let i = r.storage ?? ye(), o = r.serialize ?? JSON.stringify, s = r.parse ?? JSON.parse, c = t;
-	if (i) try {
-		let t = i.getItem(e);
-		if (t !== null) {
-			let e = s(t);
-			r.validate?.(e) !== !1 && (c = e);
+function be(t, n, r = {}) {
+	let a = r.storage ?? ye(), o = r.serialize ?? JSON.stringify, s = r.parse ?? JSON.parse, c = n;
+	if (a) try {
+		let e = a.getItem(t);
+		if (e !== null) {
+			let t = s(e);
+			r.validate?.(t) !== !1 && (c = t);
 		}
 	} catch {}
-	let l = r.label ?? `persisted:${e}`, u = n(c, r.internal === void 0 ? { label: l } : {
+	let l = r.label ?? `persisted:${t}`, u = e(c, r.internal === void 0 ? { label: l } : {
 		label: l,
 		internal: r.internal
 	});
-	return i && a(u, (t) => {
+	return a && i(u, (e) => {
 		try {
-			i.setItem(e, o(t));
+			a.setItem(t, o(e));
 		} catch {}
 	}), u;
 }
@@ -394,34 +394,34 @@ function N(e, t, n, r) {
 	for (let [e, n] of t) i.has(e) || (L(n), t.delete(e));
 	return a;
 }
-function Ee(n, r, i) {
-	let a = /* @__PURE__ */ new Map(), o = e(() => t(() => {
-		let e = i.reorder?.() !== !1, t = N(r(), a, i.key, i.render);
-		if (e) v(n, t, null);
-		else for (let e of t) e.parentNode || n.appendChild(e);
+function Ee(e, t, r) {
+	let i = /* @__PURE__ */ new Map(), o = a(() => n(() => {
+		let n = r.reorder?.() !== !1, a = N(t(), i, r.key, r.render);
+		if (n) v(e, a, null);
+		else for (let t of a) t.parentNode || e.appendChild(t);
 	}, {
 		label: "dom.list",
-		target: n
+		target: e
 	})), s = () => {
 		o();
-		for (let e of a.values()) L(e);
-		a.clear();
+		for (let e of i.values()) L(e);
+		i.clear();
 	};
-	return B(n, s), s;
+	return B(e, s), s;
 }
-function P(n, r) {
+function P(e, t) {
 	return k({
 		__loomDynamic: !0,
-		mount(i) {
-			let a = [], o;
-			return e(() => t(() => {
-				let t = n();
-				if (t === o) return;
-				o = t;
-				for (let e of a) L(e);
+		mount(r) {
+			let i = [], o;
+			return a(() => n(() => {
+				let n = e();
+				if (n === o) return;
+				o = n;
+				for (let e of i) L(e);
 				let s = document.createDocumentFragment();
-				e(() => V(s, r(t))), a = [...s.childNodes], i.parentNode?.insertBefore(s, i);
-			}, H(i, "dom.dynamic")));
+				a(() => V(s, t(n))), i = [...s.childNodes], r.parentNode?.insertBefore(s, r);
+			}, H(r, "dom.dynamic")));
 		}
 	});
 }
@@ -434,15 +434,15 @@ function F(e, t, n) {
 		return r ? r() : null;
 	});
 }
-function Oe(n, r, i) {
+function Oe(e, t, r) {
 	return k({
 		__loomDynamic: !0,
-		mount(a) {
+		mount(i) {
 			let o = /* @__PURE__ */ new Map();
-			return e(() => t(() => {
-				let e = N(n(), o, i, r), t = a.parentNode;
-				t && v(t, e, a);
-			}, H(a, "dom.each")));
+			return a(() => n(() => {
+				let n = N(e(), o, r, t), a = i.parentNode;
+				a && v(a, n, i);
+			}, H(i, "dom.each")));
 		}
 	});
 }
@@ -477,8 +477,8 @@ function B(e, t) {
 	let n = A.get(e);
 	n ? Array.isArray(n) ? n.push(t) : A.set(e, [n, t]) : A.set(e, t);
 }
-function ke(e, n, r) {
-	let i = t(n, {
+function ke(e, t, r) {
+	let i = n(t, {
 		target: e,
 		...r
 	});
@@ -642,14 +642,14 @@ function q(e, t, n) {
 		e === null ? r.removeProperty(t.name) : r.setProperty(t.name, e);
 	}, void 0, n);
 }
-function J(n, r, i, a, o, s) {
+function J(e, t, r, i, o, s) {
 	let c = o;
-	B(n, e(() => t(() => {
-		let e = i();
-		e !== c && (c = e, a(e));
+	B(e, a(() => n(() => {
+		let e = r();
+		e !== c && (c = e, i(e));
 	}, {
-		label: r,
-		target: n,
+		label: t,
+		target: e,
 		...s
 	})));
 }

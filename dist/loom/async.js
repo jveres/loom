@@ -1,26 +1,26 @@
-import { _ as e, a as t, g as n, h as r, n as i } from "./loom-BE6Qi7th.js";
+import { _ as e, n as t, o as n, v as r, y as i } from "./loom-3uFiAQXi.js";
 //#region src/async/index.ts
 function a(a, o) {
-	let s = r(void 0, o), c = r(!0, o), l = r(void 0, o), u = r(0, o), d = t(() => {
+	let s = e(void 0, o), c = e(!0, o), l = e(void 0, o), u = e(0, o), d = n(() => {
 		u();
-		let t = !0, n = new AbortController();
-		return c(!0), a(e(() => s()), n.signal).then((e) => {
-			t && i(() => {
-				s(e), l(void 0), c(!1);
+		let e = !0, n = new AbortController();
+		return c(!0), a(i(() => s()), n.signal).then((n) => {
+			e && t(() => {
+				s(n), l(void 0), c(!1);
 			});
-		}, (e) => {
-			t && i(() => {
-				l(e), c(!1);
+		}, (n) => {
+			e && t(() => {
+				l(n), c(!1);
 			});
 		}), () => {
-			t = !1, n.abort();
+			e = !1, n.abort();
 		};
 	}, o);
 	return Object.assign(() => s(), {
 		loading: () => c(),
 		error: () => l(),
 		refresh: () => {
-			n(u);
+			r(u);
 		},
 		stop: d
 	});

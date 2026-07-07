@@ -1,3 +1,4 @@
+import "../src/core/defer.js";
 import { bench, describe } from "vitest";
 import {
   computed,

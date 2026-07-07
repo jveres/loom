@@ -156,6 +156,7 @@ writeFileSync(
         loom: [join(root, "src/index.ts")],
         "loom/observe": [join(root, "src/observe.ts")],
         "loom/async": [join(root, "src/async/index.ts")],
+        "loom/defer": [join(root, "src/core/defer.ts")],
         "loom/dom": [join(root, "src/dom/index.ts")],
         "loom/dom/virtual-list": [join(root, "src/dom/virtual-list.ts")],
         "loom/dom/scroll-fade": [join(root, "src/dom/scroll-fade.ts")],

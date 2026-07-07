@@ -1,16 +1,17 @@
-import { _ as e, a as t, h as n, i as r, m as i, p as a, u as o } from "./loom-BE6Qi7th.js";
-import { i as s, n as c, r as l } from "./meter-DFb_yOza.js";
-import { n as ee, t as u } from "./observe-DAHMNNFv.js";
-import { h as d, l as f, m as te, p as ne, t as p } from "./dom-CjuQZBbq.js";
+import { _ as e, f as t, g as n, h as r, i, o as a, y as o } from "./loom-3uFiAQXi.js";
+import { i as s, n as c, r as l } from "./meter-DylO89Dd.js";
+import { n as ee, t as u } from "./observe-gkMxuXAE.js";
+import { h as d, l as f, m as te, p as ne, t as p } from "./dom-CCH0wjHi.js";
 import { virtualList as m } from "./dom/virtual-list.js";
+import "./defer.js";
 import { scrollFade as re } from "./dom/scroll-fade.js";
 import { jsx as h, jsxs as g } from "./jsx-runtime.js";
 //#region src/devtools/bindings.ts
 var _ = { internal: !0 }, ie = [];
-function ae(e, n) {
-	ie.push(t(e, n ? {
+function ae(e, t) {
+	ie.push(a(e, t ? {
 		..._,
-		...n
+		...t
 	} : _));
 }
 function oe() {
@@ -872,24 +873,24 @@ function dr() {
 	};
 	nn = requestAnimationFrame(e);
 }
-function fr(t) {
-	$t = t.activeTab, en = t.isMinimized, on = l([
+function fr(e) {
+	$t = e.activeTab, en = e.isMinimized, on = l([
 		c.read,
 		c.write,
 		c.compute,
 		c.effect,
 		c.create,
 		c.dispose
-	]), sn = l([c.flush], "samples"), R = o(cr, Xt, _), ae(() => {
-		R?.(), e(lr);
+	]), sn = l([c.flush], "samples"), R = t(cr, Xt, _), ae(() => {
+		R?.(), o(lr);
 	}, {
 		defer: !0,
 		maxStale: Xt
 	});
-	let n;
-	return rn = a(() => {
-		Tn = i(Yn, 0, _), En = i(Xn, 0, _), Dn = i(Zn, 0, _), On = i($n, 0, _), or() && (kn = o(() => or()?.usedJSHeapSize ?? 0, 5e3, _)), n = ir();
-	}, _), dr(), n;
+	let i;
+	return rn = r(() => {
+		Tn = n(Yn, 0, _), En = n(Xn, 0, _), Dn = n(Zn, 0, _), On = n($n, 0, _), or() && (kn = t(() => or()?.usedJSHeapSize ?? 0, 5e3, _)), i = ir();
+	}, _), dr(), i;
 }
 function pr() {
 	rn?.pause();
@@ -1020,20 +1021,20 @@ function Ar(e, t) {
 function jr(e) {
 	return Te(`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="-8.571 -8.571 41.143 41.143" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${e}</svg>`);
 }
-function Mr(e = document.body) {
+function Mr(t = document.body) {
 	if (J || typeof document > "u") return;
-	if (r({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
+	if (i({ inspect: !0 }), !document.getElementById("loom-inspector-css")) {
 		let e = document.createElement("style");
 		e.id = `${v}-css`, e.textContent = se, document.head.append(e);
 	}
-	Z = n("stats", _);
-	let t = Q().theme(), i = /* @__PURE__ */ h("span", { class: "li-menu-val" }), o = () => {
-		J?.setAttribute("data-theme", t), vr?.setAttribute("data-theme", t), i.innerHTML = ue(gr[t], 13), s.title = `Theme: ${t} (click to cycle)`;
+	Z = e("stats", _);
+	let n = Q().theme(), a = /* @__PURE__ */ h("span", { class: "li-menu-val" }), o = () => {
+		J?.setAttribute("data-theme", n), vr?.setAttribute("data-theme", n), a.innerHTML = ue(gr[n], 13), s.title = `Theme: ${n} (click to cycle)`;
 	}, s = /* @__PURE__ */ g("button", {
 		type: "button",
 		class: "li-menu-item",
 		title: "Click to change theme",
-		children: [/* @__PURE__ */ h("span", { children: "Theme" }), i]
+		children: [/* @__PURE__ */ h("span", { children: "Theme" }), a]
 	});
 	f(s, () => {
 		let e = [
@@ -1041,7 +1042,7 @@ function Mr(e = document.body) {
 			"light",
 			"dark"
 		];
-		t = e[(e.indexOf(t) + 1) % e.length] ?? "system", Q().theme(t), o();
+		n = e[(e.indexOf(n) + 1) % e.length] ?? "system", Q().theme(n), o();
 	});
 	let c = /* @__PURE__ */ h("div", {
 		class: "li-menu",
@@ -1107,7 +1108,7 @@ function Mr(e = document.body) {
 			m
 		]
 	}), le;
-	X = a(() => {
+	X = r(() => {
 		le = fr({
 			activeTab: () => Z?.(),
 			isMinimized: () => J?.classList.contains("li-min") ?? !1
@@ -1158,7 +1159,7 @@ function Mr(e = document.body) {
 	] }), J.id = v, oe && J.classList.add("li-min"), o(), kr(ce, J), Ar(ve, J), yr = (e) => {
 		let t = e.target instanceof Node ? e.target : null;
 		!c.hidden && (t === null || !c.contains(t)) && e.target !== p && te();
-	}, document.addEventListener("pointerdown", yr), e.append(J), document.body.append(c);
+	}, document.addEventListener("pointerdown", yr), t.append(J), document.body.append(c);
 	let ye = Q().size(), be = Q().pos();
 	if (ye && (J.style.width = `${Math.max(240, Math.min(ye.width, window.innerWidth - 16))}px`, J.style.height = `${Math.max(160, Math.min(ye.height, window.innerHeight - 16))}px`), be) {
 		let { left: e, top: t } = Er(J, be.left, be.top);

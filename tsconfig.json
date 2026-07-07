@@ -14,6 +14,7 @@
       "loom/observe": ["./src/observe.ts"],
       "loom/async": ["./src/async/index.ts"],
       "loom/dom": ["./src/dom/index.ts"],
+      "loom/defer": ["./src/core/defer.ts"],
       "loom/dom/virtual-list": ["./src/dom/virtual-list.ts"],
       "loom/dom/scroll-fade": ["./src/dom/scroll-fade.ts"],
       "loom/devtools": ["./src/devtools/index.ts"],

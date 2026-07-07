@@ -21,7 +21,7 @@ const root = new URL("..", import.meta.url).pathname;
 const APPS = [
   {
     name: "minimal (state+computed+effect)",
-    budget: 3550,
+    budget: 3300,
     source: `
       import { computed, effect, state } from "loom";
       const a = state(1);
@@ -32,13 +32,13 @@ const APPS = [
   },
   {
     name: "full core (export * from loom)",
-    budget: 5750,
+    budget: 5500,
     source: `export * from "loom";`,
   },
   {
     // Gates the README claim that loom/async adds ~0.3 kB gzip over the minimal core.
     name: "minimal + async (resource)",
-    budget: 3750,
+    budget: 3500,
     source: `
       import { effect } from "loom";
       import { resource } from "loom/async";
@@ -48,7 +48,7 @@ const APPS = [
   },
   {
     name: "minimal dom (h+text)",
-    budget: 5500,
+    budget: 5100,
     source: `
       import { state } from "loom";
       import { h, text } from "loom/dom";
@@ -74,6 +74,7 @@ try {
       // loader); keep in sync when an entrypoint file moves.
       alias: {
         "loom/async": join(root, "src/async/index.ts"),
+        "loom/defer": join(root, "src/core/defer.ts"),
         "loom/dom": join(root, "src/dom/index.ts"),
         loom: join(root, "src/index.ts"),
       },

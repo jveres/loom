@@ -34,6 +34,10 @@
       "types": "./dist/types/index.d.ts",
       "default": "./dist/loom/loom.js"
     },
+    "./defer": {
+      "types": "./dist/types/core/defer.d.ts",
+      "default": "./dist/loom/defer.js"
+    },
     "./observe": {
       "types": "./dist/types/observe.d.ts",
       "default": "./dist/loom/observe.js"

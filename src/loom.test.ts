@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "./core/defer.js";
 import { inspect, inspectResources } from "./core/inspect.js";
 import {
   channel,
