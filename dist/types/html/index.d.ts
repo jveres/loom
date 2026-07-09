@@ -1,4 +1,7 @@
+declare const htmlTypeBrand: unique symbol;
 export interface Html {
+    /** Nominal brand: trusted HTML values can only be constructed by this module. */
+    readonly [htmlTypeBrand]: true;
     readonly value: string;
     toString(): string;
 }
@@ -9,3 +12,4 @@ export declare function renderToString(value: HtmlChild): string;
 export declare function isHtml(value: unknown): value is Html;
 export declare function escapeText(value: string): string;
 export declare function escapeAttribute(value: string): string;
+export {};

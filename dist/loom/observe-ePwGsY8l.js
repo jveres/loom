@@ -1,22 +1,22 @@
-import { c as e, l as t, t as n, u as r, w as i } from "./loom-m9Kepz9L.js";
+import { T as e, d as t, l as n, t as r, u as i } from "./loom-Doq0e1ZU.js";
 //#region src/core/inspect.ts
 var a = 0, o = 0, s = !1, c = /* @__PURE__ */ new Map(), l = typeof FinalizationRegistry > "u" ? void 0 : new FinalizationRegistry((e) => {
 	c.delete(e);
 });
-function u(e, t, i) {
+function u(e, n, i) {
 	if (!s) return;
-	let o = r(n(), i), u = ++a, d = {
+	let o = t(r(), i), u = ++a, d = {
 		id: u,
 		disposed: !1,
 		internal: o?.internal === !0,
-		kind: t,
-		label: o?.label ?? `${t} #${u}`,
+		kind: n,
+		label: o?.label ?? `${n} #${u}`,
 		runs: 0,
 		target: o && "target" in o && o.target ? new WeakRef(o.target) : void 0
 	};
 	return e.meta = d, c.set(u, new WeakRef(e)), l?.register(e, u), d;
 }
-e({
+n({
 	register: u,
 	unregister(e) {
 		c.delete(e);
@@ -56,24 +56,24 @@ function p(e) {
 	return { nodes: n };
 }
 function m() {
-	let e = 0, n = 0, r = 0, a = 0, o = 0, s = 0;
-	for (let [t, i] of c) {
+	let t = 0, n = 0, r = 0, a = 0, o = 0, s = 0;
+	for (let [e, i] of c) {
 		let l = i.deref();
 		if (l === void 0) {
-			c.delete(t);
+			c.delete(e);
 			continue;
 		}
 		let u = l.meta;
-		!u || u.internal || (u.kind === "computed" ? (n++, l.subs === void 0 && s++) : u.kind === "effect" ? (r++, u.target !== void 0 && a++) : "connect" in l ? o++ : (e++, l.subs === void 0 && s++));
+		!u || u.internal || (u.kind === "computed" ? (n++, l.subs === void 0 && s++) : u.kind === "effect" ? (r++, u.target !== void 0 && a++) : "connect" in l ? o++ : (t++, l.subs === void 0 && s++));
 	}
 	return {
-		states: e,
+		states: t,
 		computeds: n,
 		effects: r,
 		targetedEffects: a,
 		sources: o,
-		scopes: t(),
-		channels: i.size,
+		scopes: i(),
+		channels: e.size,
 		unread: s
 	};
 }

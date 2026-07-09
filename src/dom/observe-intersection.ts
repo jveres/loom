@@ -2,12 +2,11 @@
 // callback runs on the IntersectionObserver clock (including the spec's initial delivery on
 // attach) and detaches when the node is torn down. Returns a Stop for early manual detach.
 //
-// Pooling: observers with the same rootMargin/threshold and the default (viewport) root are
-// shared, routed per entry.target. A custom `root` gets a dedicated observer per call — roots are
-// objects and rare enough that keying pools on them buys nothing.
+// Pooling: observers with the same root/rootMargin/threshold are shared and routed per target.
+// Viewport pools use a normal Map; custom roots use a WeakMap so pooling never extends root lifetime.
 import type { Stop } from "../loom.js";
-import { onUnmount } from "./index.js";
 import { once } from "./once.js";
+import { onUnmount } from "./ownership-base.js";
 
 export type IntersectionCallback = (entry: IntersectionObserverEntry) => void;
 
@@ -22,18 +21,66 @@ interface Pool {
   readonly watched: Map<Element, Set<IntersectionCallback>>;
 }
 
-const pools = new Map<string, Pool>();
+const viewportPools = new Map<string, Pool>();
+const rootedPools = new WeakMap<Element | Document, Map<string, Pool>>();
 
-function poolKey(options?: IntersectionOptions): string {
-  const threshold = options?.threshold;
-  return `${options?.rootMargin ?? ""}|${Array.isArray(threshold) ? threshold.join(",") : (threshold ?? 0)}`;
+interface NormalizedOptions {
+  readonly rootMargin: string;
+  readonly threshold: number | number[];
+}
+
+function normalizeMargin(value = "0px"): string {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) =>
+      /^[+-]?0(?:\.0+)?(?:[a-z%]+)?$/i.test(part) ? "0px" : part,
+    );
+  const [top = "0px", right = top, bottom = top, left = right] =
+    parts.length === 3
+      ? [parts[0], parts[1], parts[2], parts[1]]
+      : parts.length === 2
+        ? [parts[0], parts[1], parts[0], parts[1]]
+        : parts;
+  return `${top} ${right} ${bottom} ${left}`;
+}
+
+function normalizeOptions(options?: IntersectionOptions): NormalizedOptions {
+  const raw = options?.threshold;
+  const values = (typeof raw === "number" ? [raw] : raw ? [...raw] : [0]).sort(
+    (a, b) => a - b,
+  );
+  if (values.length === 0) values.push(0);
+  const unique = values.filter((value, index) => value !== values[index - 1]);
+  return {
+    rootMargin: normalizeMargin(options?.rootMargin),
+    threshold: unique.length === 1 ? (unique[0] ?? 0) : unique,
+  };
+}
+
+function poolKey(options: NormalizedOptions): string {
+  const threshold = options.threshold;
+  return `${options.rootMargin}|${Array.isArray(threshold) ? threshold.join(",") : threshold}`;
+}
+
+function poolsFor(root: Element | Document | null): Map<string, Pool> {
+  if (root === null) return viewportPools;
+  let pools = rootedPools.get(root);
+  if (!pools) {
+    pools = new Map();
+    rootedPools.set(root, pools);
+  }
+  return pools;
 }
 
 function pooled(
   el: Element,
   cb: IntersectionCallback,
+  root: Element | Document | null,
+  pools: Map<string, Pool>,
   key: string,
-  options?: IntersectionOptions,
+  options: NormalizedOptions,
 ): Stop {
   let pool = pools.get(key);
   if (!pool) {
@@ -47,8 +94,9 @@ function pooled(
         }
       },
       {
-        rootMargin: options?.rootMargin ?? "0px",
-        threshold: (options?.threshold ?? 0) as number | number[],
+        root,
+        rootMargin: options.rootMargin,
+        threshold: options.threshold,
       },
     );
     pool = { observer, watched };
@@ -73,6 +121,7 @@ function pooled(
       if (current.watched.size === 0) {
         current.observer.disconnect();
         pools.delete(key);
+        if (root !== null && pools.size === 0) rootedPools.delete(root);
       }
     }
   });
@@ -83,23 +132,9 @@ export function observeIntersection(
   cb: IntersectionCallback,
   options?: IntersectionOptions,
 ): Stop {
-  let stop: Stop;
-  if (options?.root != null) {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) cb(entry);
-      },
-      {
-        root: options.root,
-        rootMargin: options.rootMargin ?? "0px",
-        threshold: (options.threshold ?? 0) as number | number[],
-      },
-    );
-    observer.observe(el);
-    stop = once(() => observer.disconnect());
-  } else {
-    stop = pooled(el, cb, poolKey(options), options);
-  }
-  onUnmount(el, stop);
-  return stop;
+  const root = options?.root ?? null;
+  const normalized = normalizeOptions(options);
+  const pools = poolsFor(root);
+  const stop = pooled(el, cb, root, pools, poolKey(normalized), normalized);
+  return onUnmount(el, stop);
 }

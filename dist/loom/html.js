@@ -21,7 +21,7 @@ function r(e) {
 	return e == null || e === !0 || e === !1 ? "" : i(e) ? e.value : o(String(e));
 }
 function i(t) {
-	return typeof t == "object" && !!t && e in t && typeof t.value == "string";
+	return typeof t == "object" && !!t && Object.hasOwn(t, e) && t[e] === !0 && typeof t.value == "string" && typeof t.toString == "function";
 }
 var a = {
 	"&": "&amp;",

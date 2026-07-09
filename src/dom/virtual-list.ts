@@ -3,10 +3,14 @@
 // placed inside an existing scroll container — it does not introduce its own scrollbar; the visible
 // window is computed from that parent's scroll position. Rows are positioned with translateY (a
 // compositor transform, no per-row layout). `render(item, reuse)` creates a row when reuse is null,
-// else updates it in place. Standalone: no framework or DOM-binding dependency.
+// else updates it in place. Standalone from the full DOM binding entrypoint; it shares only Loom's
+// small node-ownership layer so reactive rows are torn down correctly.
 //
 // Contract: the elements returned by `render` must be absolutely positioned within `el` (which this
-// module sets to `position: relative`); this module only sets their `transform`.
+// module sets to `position: relative`); this module only sets their `transform`. Rows participate in
+// Loom's node ownership: replacement, eviction, and destroy dispose their subtree before removal.
+
+import { dispose, remove } from "./ownership-base.js";
 
 // The backing data: the windower needs only the total count (for scroll height) and random access
 // to the items currently in the viewport — never the whole list. A plain array satisfies this
@@ -52,9 +56,26 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
   sizer.style.cssText = "width:1px;pointer-events:none";
   el.append(sizer);
   let items: ListSource<T> = [];
-  const mounted = new Map<string | number, HTMLElement>();
+  interface MountedRow {
+    row: HTMLElement;
+    /** Source revision/index last rendered; unchanged stationary rows need no render call. */
+    revision: number;
+    index: number;
+  }
+  const mounted = new Map<string | number, MountedRow>();
   let scroller: HTMLElement | null = null;
   let raf = 0;
+  let revision = 0;
+
+  const throwDisposalErrors = (errors: unknown[]): void => {
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        "Multiple virtual-list rows failed to dispose.",
+      );
+    }
+  };
 
   const reconcile = (): void => {
     const sp = scroller;
@@ -70,6 +91,7 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
     let end = Math.ceil((offset + vh) / h) + overscan;
     if (end > total) end = total;
     const live = new Set<string | number>();
+    const disposalErrors: unknown[] = [];
     for (let i = start; i < end; i++) {
       // `at` is caller-supplied on ListSource; a lazy source whose length/at disagree could return
       // undefined inside the window. Skip rather than feed undefined to key()/render() typed as T.
@@ -77,23 +99,44 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
       if (item === undefined) continue;
       const k = options.key(item);
       live.add(k);
-      const existing = mounted.get(k) ?? null;
-      const row = options.render(item, existing);
+      const existing = mounted.get(k);
+      if (
+        existing !== undefined &&
+        existing.revision === revision &&
+        existing.index === i
+      ) {
+        continue;
+      }
+      const previousRow = existing?.row ?? null;
+      const row = options.render(item, previousRow);
       row.style.transform = `translateY(${i * h}px)`;
-      if (existing === null) {
+      if (existing === undefined) {
         el.append(row);
-        mounted.set(k, row);
-      } else if (row !== existing) {
+      } else if (row !== existing.row) {
         // render() is meant to update `existing` in place, but tolerate a fresh element too.
-        existing.replaceWith(row);
-        mounted.set(k, row);
+        existing.row.before(row);
+        // Publish the replacement before cleanup: remove() still detaches the old row when one of
+        // its disposers throws, and the list must not retain that detached element afterward.
+        mounted.set(k, { row, revision, index: i });
+        try {
+          remove(existing.row);
+        } catch (error) {
+          disposalErrors.push(error);
+        }
+        continue;
       }
+      mounted.set(k, { row, revision, index: i });
     }
-    for (const [k, row] of mounted)
+    for (const [k, entry] of mounted)
       if (!live.has(k)) {
-        row.remove();
         mounted.delete(k);
+        try {
+          remove(entry.row);
+        } catch (error) {
+          disposalErrors.push(error);
+        }
       }
+    throwDisposalErrors(disposalErrors);
   };
 
   const schedule = (): void => {
@@ -117,6 +160,7 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
     el,
     setItems(next) {
       items = next;
+      revision++;
       sizer.style.height = `${items.length * h}px`;
       ensureScroller();
       reconcile();
@@ -140,8 +184,17 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
       if (raf) cancelAnimationFrame(raf);
       scroller?.removeEventListener("scroll", schedule);
       scroller = null;
+      let disposalFailed = false;
+      let disposalError: unknown;
+      try {
+        dispose(el);
+      } catch (error) {
+        disposalFailed = true;
+        disposalError = error;
+      }
       mounted.clear();
       el.replaceChildren();
+      if (disposalFailed) throw disposalError;
     },
   };
 }

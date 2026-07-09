@@ -88,7 +88,12 @@ export interface NodeInfo {
 // An effect body that returns a cleanup run before each re-run and on dispose (the shape the first
 // effect() overload documents). Exported so callers can name the contract, not just satisfy it.
 export type CleanupEffectFn = () => Stop;
-type InternalEffectFn = EffectFn | CleanupEffectFn;
+type InternalEffectFn = () => unknown;
+
+// `() => void` deliberately accepts value-returning callbacks in TypeScript, including async
+// functions. Keep that convenient effect API for ordinary expression bodies, but exclude promises
+// from direct effect()/scope() calls so their tracked/owned work cannot silently escape an await.
+type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
 
 type PropKey<T extends object> = Extract<keyof T, string>;
 
@@ -130,14 +135,17 @@ interface EffectNode extends NodeBase {
   // slot in scope.effects — so a manual stop can swap-remove in O(1) instead of leaking the dead node.
   scope: ScopeNode | undefined;
   scopeIndex: number;
-  pausedCount: number; // direct pauses on THIS effect (dom subtree pause); scope pauses live on the chain
+  // Combined direct + owning-scope pause depth. Keeping the effective value on the effect makes
+  // notify/run a single field check; scope pause/resume pays the rare traversal instead.
+  pausedCount: number;
+  directPausedCount: number;
   deferred: boolean; // route re-runs to the deferred lane instead of the synchronous flush
-  deferredQueued: boolean; // currently in deferredQueue (O(1) dedup, replaces an includes() scan)
-  maxStale: number; // deferred lane: guaranteed-refresh floor in ms
+  deferredQueued?: boolean; // currently in deferredQueue (O(1) dedup, replaces an includes() scan)
+  maxStale?: number; // deferred lane: guaranteed-refresh floor in ms
   // Deferred lane: absolute fire-by time (now()+maxStale) stamped at enqueue. A leftover from a
   // budget-exhausted drain reschedules with the time REMAINING to this, not a fresh maxStale — so
   // sustained load can't stretch staleness past the documented floor.
-  deferDeadline: number;
+  deferDeadline?: number;
 }
 
 // A non-effect resource owned by a scope (a poll timer, a lazy source's connection): suspended
@@ -148,12 +156,18 @@ interface ScopeResource {
   stop(): void;
 }
 
+interface OwnedScopeResource extends ScopeResource {
+  owner: ScopeNode | undefined;
+  ownerIndex: number;
+  stopped: boolean;
+}
+
 // An ownership group for effects, resources, and nested scopes. Effects/resources created while a
 // scope is active register here; the scope can stop them, or pause/resume them collectively. An
 // effect runs (and a resource stays live) only while no scope in its parent chain is paused.
 interface ScopeNode {
   readonly effects: EffectNode[];
-  readonly resources: ScopeResource[];
+  readonly resources: OwnedScopeResource[];
   readonly children: ScopeNode[];
   readonly parent: ScopeNode | undefined;
   // This scope's slot in parent.children — so stopping a child swap-removes in O(1) instead of an
@@ -163,8 +177,8 @@ interface ScopeNode {
   // already merged with any ancestor scope's defaults.
   readonly options: NodeOptions | undefined;
   paused: boolean;
-  // Number of paused scopes in this node's ancestor chain (including itself). scopePaused() is then
-  // an O(1) `> 0` test instead of walking to the root on every notify; maintained on pause/resume.
+  // Number of paused scopes in this node's ancestor chain (including itself), maintained on
+  // pause/resume so readers never walk to the root.
   pausedCount: number;
   stopped: boolean;
 }
@@ -197,6 +211,7 @@ let runDepth = 0;
 let batchDepth = 0;
 let notifyIndex = 0;
 let queuedLength = 0;
+let flushing = false;
 let activeSub: NodeBase | undefined;
 let activeScope: ScopeNode | undefined;
 const queued: Array<EffectNode | undefined> = [];
@@ -250,43 +265,31 @@ function nodeOf(accessor: object): NodeBase | undefined {
 const { link, unlink, propagate, checkDirty, shallowPropagate } =
   createReactiveSystem({
     update(node) {
-      switch (kindOf(node)) {
-        case "computed":
-          return updateComputed(node as ComputedNode<unknown>);
-        case "state":
-          return updateState(node as StateNode<unknown>);
-        default:
-          node.flags = Mutable;
-          return true;
-      }
+      if ("getter" in node)
+        return updateComputed(node as ComputedNode<unknown>);
+      if ("currentValue" in node)
+        return updateState(node as StateNode<unknown>);
+      node.flags = Mutable;
+      return true;
     },
     notify(node) {
       const effectNode = node as EffectNode;
-      // Effects paused directly (dom subtree pause) or via a paused scope chain stay dirty and
-      // re-run on resume instead of queueing now.
-      if (
-        effectNode.pausedCount !== 0 ||
-        (effectNode.scope !== undefined && scopePaused(effectNode.scope))
-      )
-        return;
+      // Paused effects stay dirty and catch up on resume.
+      if (effectNode.pausedCount !== 0) return;
       enqueueEffect(effectNode);
     },
     unwatched(node) {
-      switch (kindOf(node)) {
-        case "computed":
-          if (node.depsTail !== undefined) {
-            node.flags = Mutable | Dirty;
-            disposeDeps(node as ComputedNode<unknown>);
-          }
-          return;
-        case "state":
-          if ("connect" in node) disconnectSource(node as SourceNode<unknown>);
-          return;
-        case "effect":
-          stopEffect.call(node as EffectNode);
-          return;
-        default:
-          disposeDeps(node as NodeBase);
+      if ("getter" in node) {
+        if (node.depsTail !== undefined) {
+          node.flags = Mutable | Dirty;
+          disposeDeps(node as ComputedNode<unknown>);
+        }
+      } else if ("currentValue" in node) {
+        if ("connect" in node) disconnectSource(node as SourceNode<unknown>);
+      } else if ("fn" in node) {
+        stopEffect.call(node as EffectNode);
+      } else {
+        disposeDeps(node as NodeBase);
       }
     },
   });
@@ -294,8 +297,10 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
 export function state<T>(initial: T, options?: NodeOptions): State<T> {
   const node = createStateNode(initial);
   const source = stateOper.bind(node) as State<T>;
-  node.source = source as State<unknown>;
   const meta = inspectHooks?.register(node, "state", options);
+  // Only inspected states need the reverse accessor used by the editor. Keep ordinary state nodes
+  // on the smaller hot shape.
+  if (meta !== undefined) node.source = source as State<unknown>;
   tagNode(source, node);
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return source;
@@ -320,11 +325,13 @@ export function source<T>(
   // When created inside a scope, pausing the scope disconnects the producer even though paused
   // subscribers stay linked; resuming reconnects it if anything is still observing.
   const erased = node as SourceNode<unknown>;
-  activeScope?.resources.push({
-    pause: () => disconnectSource(erased),
-    resume: () => reconnectSource(erased),
-    stop: () => disconnectSource(erased),
-  });
+  if (activeScope !== undefined) {
+    registerScopeResource({
+      pause: () => disconnectSource(erased),
+      resume: () => reconnectSource(erased),
+      stop: () => disconnectSource(erased),
+    });
+  }
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
   return read;
 }
@@ -367,13 +374,16 @@ export function computed<T>(
   return read;
 }
 
-export function effect(fn: CleanupEffectFn, options?: EffectOptions): Stop;
-export function effect(fn: EffectFn, options?: EffectOptions): Stop;
+export function effect<Result>(
+  fn: () => SyncResult<Result>,
+  options?: EffectOptions,
+): Stop;
 export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   const node = createEffectNode(fn);
   if (activeScope !== undefined) {
     node.scope = activeScope;
     node.scopeIndex = activeScope.effects.length;
+    node.pausedCount = activeScope.pausedCount;
     activeScope.effects.push(node);
   }
   if (options?.defer === true) {
@@ -383,7 +393,9 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
       );
     }
     node.deferred = true;
+    node.deferredQueued = false;
     node.maxStale = options.maxStale ?? deferTimeout;
+    node.deferDeadline = 0;
   }
   const meta = inspectHooks?.register(node, "effect", options);
   if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
@@ -393,14 +405,15 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     previous.flags |= HasChildEffect;
   }
   let caught: { error: unknown } | undefined;
+  let result: unknown;
   try {
     runDepth++;
-    node.cleanup = asCleanup(node.fn());
+    result = node.fn();
   } catch (error) {
     caught = { error };
   } finally {
     runDepth--;
-    activeSub = previous;
+    restoreActiveSub(previous);
     node.flags &= ~RecursedCheck;
   }
   if (caught !== undefined) {
@@ -412,6 +425,16 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     }
     reportEffectError(caught.error, node);
   }
+  // Most effects return undefined. Keep that overwhelmingly common path to one branch instead of
+  // paying promise/cleanup classification helpers after every run.
+  if (result !== undefined) {
+    if (isPromiseLike(result)) {
+      stopEffect.call(node);
+      ignorePromiseRejection(result);
+      throw new TypeError("effect() callbacks must be synchronous.");
+    }
+    node.cleanup = typeof result === "function" ? (result as Stop) : undefined;
+  }
   if (meta) meta.runs++;
   if (effectCh.meters !== 0 && meta?.internal !== true) effectCh.seq++;
   const stop = stopEffect.bind(node);
@@ -419,12 +442,36 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
   return stop;
 }
 
+/** @internal Create a node-owned DOM effect without linking it to the currently running effect. */
+export function domEffect(
+  fn: InternalEffectFn,
+  label: string,
+  target: Node,
+  options?: EffectOptions,
+): Stop {
+  // The default DOM binding path needs options only when inspection is installed. Avoid allocating
+  // one options object per binding in ordinary applications while retaining labels/targets whenever
+  // the inspector can consume them. Explicit options always win over the DOM defaults.
+  const resolved =
+    options !== undefined
+      ? { label, target, ...options }
+      : inspectHooks !== undefined
+        ? { label, target }
+        : undefined;
+  const previous = setActiveSub(undefined);
+  try {
+    return effect(fn, resolved);
+  } finally {
+    restoreActiveSub(previous);
+  }
+}
+
 export function batch<T>(fn: () => T): T {
   batchDepth++;
   try {
     return fn();
   } finally {
-    if (--batchDepth === 0) flush();
+    if (--batchDepth === 0 && !flushing && notifyIndex < queuedLength) flush();
   }
 }
 
@@ -436,7 +483,10 @@ export function batch<T>(fn: () => T): T {
  * So pausing a parent freezes its whole subtree, and resuming it leaves an independently-paused
  * child suspended.
  */
-export function scope(fn: () => void, options?: NodeOptions): Scope {
+export function scope<Result>(
+  fn: () => SyncResult<Result>,
+  options?: NodeOptions,
+): Scope {
   const node: ScopeNode = {
     effects: [],
     resources: [],
@@ -455,7 +505,11 @@ export function scope(fn: () => void, options?: NodeOptions): Scope {
   const previous = activeScope;
   activeScope = node;
   try {
-    fn();
+    const result = fn();
+    if (isPromiseLike(result)) {
+      ignorePromiseRejection(result);
+      throw new TypeError("scope() callbacks must be synchronous.");
+    }
   } catch (error) {
     // The body threw partway through: tear down whatever it already created so those effects and
     // resources aren't orphaned — the caller never receives a disposer. See alien-signals #118.3.
@@ -496,6 +550,7 @@ export function pauseEffectStop(stop: Stop): boolean {
   const node = nodeOf(stop) as EffectNode | undefined;
   if (node === undefined || node.fn === undefined || node.flags === 0)
     return false;
+  node.directPausedCount++;
   node.pausedCount++;
   return true;
 }
@@ -503,33 +558,43 @@ export function resumeEffectStop(stop: Stop): boolean {
   const node = nodeOf(stop) as EffectNode | undefined;
   if (node === undefined || node.fn === undefined || node.flags === 0)
     return false;
-  if (node.pausedCount > 0) node.pausedCount--;
-  if (
-    node.pausedCount === 0 &&
-    (node.scope === undefined || !scopePaused(node.scope)) &&
-    (node.flags & (Dirty | Pending)) !== 0
-  ) {
+  if (node.directPausedCount > 0) {
+    node.directPausedCount--;
+    node.pausedCount--;
+  }
+  if (node.pausedCount === 0 && (node.flags & (Dirty | Pending)) !== 0) {
     enqueueEffect(node);
     // Ride an in-progress flush (resume from inside an effect run) instead of re-entering.
-    if (batchDepth === 0 && runDepth === 0) flush();
+    if (
+      batchDepth === 0 &&
+      runDepth === 0 &&
+      !flushing &&
+      notifyIndex < queuedLength
+    )
+      flush();
   }
   return true;
 }
 
-// Register a resource with the ambient scope (pause/resume/stop ride the scope's lifecycle).
-// Exported for the sibling core modules (meter) — not part of the public barrel.
-export function registerScopeResource(resource: ScopeResource): void {
-  activeScope?.resources.push(resource);
-}
-
-function scopePaused(node: ScopeNode): boolean {
-  return node.pausedCount > 0;
+// Register a resource with the ambient scope (pause/resume/stop ride the scope's lifecycle) and
+// return its terminal stop. Manual stop swap-removes the registration in O(1), so a later scope
+// resume cannot resurrect the resource and a long-lived scope cannot retain it. Exported for the
+// sibling core modules (meter) — not part of the public barrel.
+export function registerScopeResource(resource: ScopeResource): Stop {
+  const owner = activeScope;
+  const owned = resource as OwnedScopeResource;
+  owned.owner = owner;
+  owned.ownerIndex = owner?.resources.length ?? -1;
+  owned.stopped = false;
+  owner?.resources.push(owned);
+  return () => stopScopeResource(owned);
 }
 
 // Add `delta` to the paused-ancestor count of `node` and its whole subtree (every descendant gains
 // or loses this scope as a paused ancestor). Walks all children, including independently-paused ones.
 function bumpPausedCount(node: ScopeNode, delta: number): void {
   node.pausedCount += delta;
+  for (const effectNode of node.effects) effectNode.pausedCount += delta;
   for (const child of node.children) bumpPausedCount(child, delta);
 }
 
@@ -537,13 +602,31 @@ function stopScope(node: ScopeNode): void {
   if (node.stopped) return;
   node.stopped = true;
   if (node.options?.internal !== true) liveScopes--;
-  for (const child of node.children) stopScope(child);
+  let caught: [unknown] | undefined;
+  for (const child of node.children) {
+    try {
+      stopScope(child);
+    } catch (error) {
+      caught ??= [error];
+    }
+  }
   node.children.length = 0;
   for (const effectNode of node.effects) {
-    if (effectNode.flags !== 0) stopEffect.call(effectNode);
+    if (effectNode.flags === 0) continue;
+    try {
+      stopEffect.call(effectNode);
+    } catch (error) {
+      caught ??= [error];
+    }
   }
   node.effects.length = 0;
-  for (const resource of node.resources) resource.stop();
+  for (const resource of node.resources) {
+    try {
+      stopScopeResource(resource);
+    } catch (error) {
+      caught ??= [error];
+    }
+  }
   node.resources.length = 0;
   const parent = node.parent;
   // When the parent is tearing us down it clears its own list, so only self-detach otherwise.
@@ -554,6 +637,21 @@ function stopScope(node: ScopeNode): void {
     });
     node.childIndex = -1;
   }
+  if (caught !== undefined) throw caught[0];
+}
+
+function stopScopeResource(resource: OwnedScopeResource): void {
+  if (resource.stopped) return;
+  resource.stopped = true;
+  const owner = resource.owner;
+  if (owner !== undefined && !owner.stopped) {
+    swapRemove(owner.resources, resource.ownerIndex, (moved, index) => {
+      moved.ownerIndex = index;
+    });
+  }
+  resource.owner = undefined;
+  resource.ownerIndex = -1;
+  resource.stop();
 }
 
 // O(1) list removal: move the last element into slot `i` (telling it its new index via `reindex`)
@@ -572,46 +670,86 @@ function swapRemove<T>(
 }
 
 function pauseScope(node: ScopeNode): void {
-  if (node.paused) return;
+  if (node.paused || node.stopped) return;
   // Suspend resources only when this newly pauses the chain (an ancestor pause already did so).
-  const newlySuspends = !scopePaused(node);
+  const newlySuspends = node.pausedCount === 0;
   node.paused = true;
   bumpPausedCount(node, 1);
   if (newlySuspends) walkResources(node, (r) => r.pause());
 }
 
 function resumeScope(node: ScopeNode): void {
-  if (!node.paused) return;
+  if (!node.paused || node.stopped) return;
   node.paused = false;
   bumpPausedCount(node, -1);
   // If an ancestor is still paused, the chain stays suspended — do nothing yet.
-  if (scopePaused(node)) return;
-  walkResources(node, (r) => r.resume());
-  flushScope(node);
-  // If we're resuming from inside an effect run (e.g. a tab switch), the re-queued effects ride
-  // the in-progress flush; only drive a fresh flush when at the top level.
-  if (batchDepth === 0 && runDepth === 0) flush();
+  if (node.pausedCount > 0) return;
+  let caught: [unknown] | undefined;
+  try {
+    walkResources(node, (r) => r.resume());
+  } catch (error) {
+    caught = [error];
+  }
+  // A broken resource must not strand dirty effects after the scope itself became active again.
+  try {
+    flushScope(node);
+    // If we're resuming from inside an effect run (e.g. a tab switch), the re-queued effects ride
+    // the in-progress flush; only drive a fresh flush when at the top level.
+    if (
+      batchDepth === 0 &&
+      runDepth === 0 &&
+      !flushing &&
+      notifyIndex < queuedLength
+    )
+      flush();
+  } catch (error) {
+    caught ??= [error];
+  }
+  if (caught !== undefined) throw caught[0];
 }
 
-// Apply `act` to every resource in the subtree, skipping independently-paused children (theirs are
-// already in the matching state).
+// Snapshot every resource before invoking user hooks: a hook may stop itself, a sibling resource,
+// or a child scope, all of which swap-remove live ownership arrays. Complete every still-live hook
+// in the snapshot before surfacing the first failure.
 function walkResources(
   node: ScopeNode,
-  act: (resource: ScopeResource) => void,
+  act: (resource: OwnedScopeResource) => void,
 ): void {
-  for (const resource of node.resources) act(resource);
+  const resources: OwnedScopeResource[] = [];
+  collectResources(node, resources);
+  let caught: [unknown] | undefined;
+  for (const resource of resources) {
+    if (resource.stopped) continue;
+    try {
+      act(resource);
+    } catch (error) {
+      caught ??= [error];
+    }
+  }
+  if (caught !== undefined) throw caught[0];
+}
+
+// Independently-paused child subtrees are already in the matching resource state.
+function collectResources(
+  node: ScopeNode,
+  resources: OwnedScopeResource[],
+): void {
+  for (const resource of node.resources) resources.push(resource);
   for (const child of node.children) {
-    if (!child.paused) walkResources(child, act);
+    if (!child.paused) collectResources(child, resources);
   }
 }
 
 // Queue every dirty effect in the subtree whose chain is now unpaused; independently-paused
 // children stay deferred. The caller flushes the queued effects.
 function flushScope(node: ScopeNode): void {
-  if (scopePaused(node)) return;
-  for (const effectNode of node.effects) {
-    if (effectNode.pausedCount !== 0) continue; // still directly paused (dom subtree pause)
-    if (effectNode.flags & (Dirty | Pending)) enqueueEffect(effectNode);
+  if (node.pausedCount > 0) return;
+  // A synchronous deferred scheduler can stop/swap-remove an effect while it is enqueued. Iterate
+  // a stable snapshot so that mutation cannot skip the sibling moved into its slot.
+  for (const effectNode of node.effects.slice()) {
+    if (effectNode.flags === 0) continue;
+    if (effectNode.pausedCount !== 0) continue;
+    if ((effectNode.flags & (Dirty | Pending)) !== 0) enqueueEffect(effectNode);
   }
   for (const child of node.children) flushScope(child);
 }
@@ -654,7 +792,7 @@ export function poll<T>(
   start();
   // When created inside a scope, the timer suspends while the scope is paused (resuming with an
   // immediate catch-up sample) and clears when the scope stops.
-  activeScope?.resources.push({
+  const stop = registerScopeResource({
     pause: clear,
     resume: () => {
       if (timer === undefined) {
@@ -664,7 +802,7 @@ export function poll<T>(
     },
     stop: clear,
   });
-  return Object.assign((): T => signal(), { stop: clear });
+  return Object.assign((): T => signal(), { stop });
 }
 
 export function trigger(source: Read<unknown>): void {
@@ -677,7 +815,7 @@ export function trigger(source: Read<unknown>): void {
       propagate(subs, runDepth > 0);
       shallowPropagate(subs);
     }
-    if (batchDepth === 0) flush();
+    if (batchDepth === 0 && !flushing && notifyIndex < queuedLength) flush();
     return;
   }
   const sub = createWatcherNode();
@@ -685,7 +823,7 @@ export function trigger(source: Read<unknown>): void {
   try {
     source();
   } finally {
-    activeSub = previous;
+    restoreActiveSub(previous);
     sub.flags = 0;
     let dep = sub.deps;
     while (dep !== undefined) {
@@ -697,16 +835,18 @@ export function trigger(source: Read<unknown>): void {
         shallowPropagate(subs);
       }
     }
-    if (batchDepth === 0) flush();
+    if (batchDepth === 0 && !flushing && notifyIndex < queuedLength) flush();
   }
 }
 
 export function untrack<T>(fn: () => T): T {
-  const previous = setActiveSub(undefined);
+  const previous = activeSub;
+  if (previous === undefined) return fn();
+  activeSub = undefined;
   try {
     return fn();
   } finally {
-    setActiveSub(previous);
+    restoreActiveSub(previous);
   }
 }
 
@@ -762,7 +902,11 @@ export function props<T extends object>(
   if (!isPlainObject(initial)) {
     throw new TypeError("props() expects a plain object.");
   }
-  const out = {} as { [K in PropKey<T>]: State<T[K]> };
+  // A null-prototype result makes every string key data, including `__proto__`, `constructor`, and
+  // `toString`; assigning those onto `{}` would mutate/inherit from Object.prototype instead.
+  const out = Object.create(null) as {
+    [K in PropKey<T>]: State<T[K]>;
+  };
   const keys = Object.keys(initial) as Array<PropKey<T>>;
   // One group id per call so the inspector can re-nest the signals under a single parent.
   const group = inspectHooks !== undefined ? inspectHooks.nextGroup() : 0;
@@ -806,6 +950,28 @@ function trackRead(node: NodeBase, sub: NodeBase): void {
   }
 }
 
+// Cold instrumentation for state writes. Keeping it out of stateOper lets V8 optimize the normal
+// uninspected/unmetered accessor as a small graph operation.
+function recordStateWrite<T>(node: StateNode<T>, previous: T, next: T): void {
+  const meta = node.meta;
+  const writer = activeSub;
+  if (meta !== undefined && writer !== undefined)
+    inspectHooks?.trackedWrite?.(node, writer);
+  if (writeCh.meters === 0 || meta?.internal === true) return;
+  if (meta !== undefined && writeCh.samples !== 0) {
+    sampler.record(
+      writeCh,
+      meta.id,
+      previous,
+      next,
+      writer?.meta?.id,
+      Date.now(),
+    );
+  } else {
+    writeCh.seq++;
+  }
+}
+
 /**
  * Configure the runtime.
  *
@@ -823,17 +989,23 @@ export interface ConfigureOptions {
   readonly inspect?: boolean;
   readonly onError?: ErrorHandler | undefined;
   /** Override the deferred-effect scheduler (e.g. synchronous in tests, no-op on the server). */
-  readonly deferScheduler?: DeferScheduler;
+  readonly deferScheduler?: DeferScheduler | undefined;
 }
 
-export function configure(options: ConfigureOptions): void {
+export function configure(options: ConfigureOptions): ConfigureOptions {
+  const previous: ConfigureOptions = {
+    inspect: inspectRequested,
+    onError,
+    deferScheduler: deferredLane.scheduler,
+  };
   if (options.inspect !== undefined) {
     inspectRequested = options.inspect;
     inspectHooks?.setEnabled(options.inspect);
   }
   if ("onError" in options) onError = options.onError;
-  if (options.deferScheduler !== undefined)
+  if ("deferScheduler" in options)
     deferredLane.scheduler = options.deferScheduler;
+  return previous;
 }
 
 // Merge two option sets, letting the second (more specific) win; either may be undefined. The union
@@ -861,13 +1033,6 @@ function propOptions(
     : out;
 }
 
-function kindOf(node: ReactiveNode): NodeKind | "watcher" {
-  if ("getter" in node) return "computed";
-  if ("currentValue" in node) return "state";
-  if ("fn" in node) return "effect";
-  return "watcher";
-}
-
 // Resolved once at module load — this sits on the deferred-lane scheduling paths, so no per-call
 // typeof-global check. Never called during module init, so the const's position is safe.
 const now: () => number =
@@ -878,7 +1043,6 @@ function createStateNode<T>(initial: T): StateNode<T> {
     currentValue: initial,
     meta: undefined,
     pendingValue: initial,
-    source: undefined,
     subs: undefined,
     subsTail: undefined,
     flags: Mutable,
@@ -892,7 +1056,6 @@ function createSourceNode<T>(
   return nodeShape<SourceNode<T>>({
     currentValue: initial,
     pendingValue: initial,
-    source: undefined,
     connect,
     disconnect: undefined,
     active: false,
@@ -925,11 +1088,8 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
     scope: undefined,
     scopeIndex: -1,
     pausedCount: 0,
+    directPausedCount: 0,
     deferred: false,
-    deferredQueued: false,
-    maxStale: 0,
-    deferDeadline: 0,
-    meta: undefined,
     subs: undefined,
     subsTail: undefined,
     deps: undefined,
@@ -961,37 +1121,30 @@ function setActiveSub(sub: NodeBase | undefined): NodeBase | undefined {
   return previous;
 }
 
+function restoreActiveSub(previous: NodeBase | undefined): void {
+  activeSub = previous?.flags ? previous : undefined;
+}
+
 function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
   if (value.length) {
     const next = value[0] as T;
     const previous = this.pendingValue;
     if (previous !== next) {
       this.pendingValue = next;
+      if (
+        writeCh.meters !== 0 ||
+        (this.meta !== undefined && activeSub !== undefined)
+      )
+        recordStateWrite(this, previous, next);
+      // The first pending write already dirtied the complete downstream graph. Until a read
+      // commits this state, later writes only replace its pending value and need no second walk.
+      if (this.flags & Dirty) return undefined;
       this.flags = Mutable | Dirty;
-      // Dev self-dependency warning (inspection on — `meta` exists only then, so production
-      // writes pay a single undefined compare): an effect writing a signal it subscribes to
-      // re-triggers itself, the v(v()+1) phantom-write class of bug.
-      if (this.meta !== undefined && activeSub !== undefined)
-        inspectHooks?.trackedWrite?.(this, activeSub);
-      // Idle path unchanged (the `meters !== 0` short-circuit gates everything). When metered with
-      // inspection on, record id + prev→next for the samples view; otherwise just count.
-      if (writeCh.meters !== 0 && this.meta?.internal !== true) {
-        const meta = this.meta;
-        if (meta !== undefined && writeCh.samples !== 0)
-          sampler.record(
-            writeCh,
-            meta.id,
-            previous,
-            next,
-            activeSub?.meta?.id, // the effect/computed writing during a cascade, else external
-            Date.now(),
-          );
-        else writeCh.seq++; // count only when no samples consumer (the Trace) is attached
-      }
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);
-        if (batchDepth === 0) flush();
+        if (batchDepth === 0 && !flushing && notifyIndex < queuedLength)
+          flush();
       }
     }
     return undefined;
@@ -1041,11 +1194,12 @@ function sourceOper<T>(this: SourceNode<T>): T {
 function sourceSet<T>(node: SourceNode<T>, value: T): void {
   if (node.pendingValue === value) return;
   node.pendingValue = value;
+  if (node.flags & Dirty) return;
   node.flags = Mutable | Dirty;
   const subs = node.subs;
   if (subs !== undefined) {
     propagate(subs, runDepth > 0);
-    if (batchDepth === 0) flush();
+    if (batchDepth === 0 && !flushing && notifyIndex < queuedLength) flush();
   }
 }
 
@@ -1070,7 +1224,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
       if (computeCh.meters !== 0 && this.meta?.internal !== true)
         computeCh.seq++;
     } finally {
-      activeSub = previous;
+      restoreActiveSub(previous);
       this.flags &= ~RecursedCheck;
     }
   }
@@ -1082,7 +1236,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
 
 function updateComputed<T>(node: ComputedNode<T>): boolean {
   if (node.flags & HasChildEffect) disposeChildDeps(node);
-  clearDepsTail(node);
+  node.depsTail = undefined;
   node.flags = Mutable | RecursedCheck;
   const previous = setActiveSub(node);
   try {
@@ -1096,7 +1250,7 @@ function updateComputed<T>(node: ComputedNode<T>): boolean {
     }
     return changed;
   } finally {
-    activeSub = previous;
+    restoreActiveSub(previous);
     node.flags &= ~RecursedCheck;
     purgeDeps(node);
   }
@@ -1129,13 +1283,8 @@ function queueEffect(effect: EffectNode): void {
 }
 
 function runEffect(node: EffectNode): boolean {
-  // Paused after this effect was already queued (directly, or via its scope chain): leave it
-  // dirty for resume.
-  if (
-    node.pausedCount !== 0 ||
-    (node.scope !== undefined && scopePaused(node.scope))
-  )
-    return false;
+  // Paused after this effect was already queued: leave it dirty for resume.
+  if (node.pausedCount !== 0) return false;
   const flags = node.flags;
   if (
     flags & Dirty ||
@@ -1143,29 +1292,62 @@ function runEffect(node: EffectNode): boolean {
   ) {
     if (flags & HasChildEffect) disposeChildDeps(node);
     if (node.cleanup) {
-      runCleanup(node);
+      try {
+        runCleanup(node);
+      } catch (error) {
+        // queueEffect cleared Watching before this run. If the cleanup escapes the boundary, keep
+        // the old dependency set armed so a later write gets another chance to run the effect.
+        // A cleanup that stopped its own effect remains terminal.
+        if (node.flags !== 0) node.flags = Watching;
+        reportEffectError(error, node);
+      }
       if (!node.flags) return false;
     }
-    clearDepsTail(node);
+    node.depsTail = undefined;
     node.flags = Watching | RecursedCheck;
     const previous = setActiveSub(node);
+    let result: unknown;
+    let caught: { error: unknown } | undefined;
     try {
       cycle++;
       runDepth++;
-      node.cleanup = asCleanup(node.fn());
+      result = node.fn();
     } catch (error) {
-      reportEffectError(error, node);
+      caught = { error };
     } finally {
       runDepth--;
-      activeSub = previous;
+      restoreActiveSub(previous);
       node.flags &= ~RecursedCheck;
-      purgeDeps(node);
+      // stop() can run midway through this callback; detach any reads made after that terminal
+      // transition instead of letting them resurrect the dead subscriber.
+      if (node.flags === 0) disposeDeps(node);
+      else purgeDeps(node);
+    }
+    if (caught !== undefined) reportEffectError(caught.error, node);
+    // Avoid two helper calls on the dominant `undefined` result path.
+    if (result !== undefined) {
+      if (isPromiseLike(result)) {
+        stopEffect.call(node);
+        ignorePromiseRejection(result);
+        throw new TypeError("effect() callbacks must be synchronous.");
+      }
+      const cleanup =
+        typeof result === "function" ? (result as Stop) : undefined;
+      if (node.flags === 0 && cleanup !== undefined) {
+        // A cleanup returned after self-stop belongs to already-disposed work, so run it now.
+        node.cleanup = cleanup;
+        try {
+          runCleanup(node);
+        } catch (error) {
+          reportEffectError(error, node);
+        }
+      } else {
+        node.cleanup = cleanup;
+      }
     }
     const meta = node.meta;
-    if (meta) {
-      meta.runs++;
-      if (effectCh.meters !== 0 && meta.internal !== true) effectCh.seq++;
-    }
+    if (meta) meta.runs++;
+    if (effectCh.meters !== 0 && meta?.internal !== true) effectCh.seq++;
     return meta === undefined || meta.internal !== true;
   } else if (node.deps !== undefined) {
     node.flags = Watching | (flags & HasChildEffect);
@@ -1174,24 +1356,39 @@ function runEffect(node: EffectNode): boolean {
 }
 
 function flush(): void {
-  const batchSize = queuedLength - notifyIndex;
-  const start = batchSize > 0 && flushCh.meters !== 0 ? now() : 0;
+  // Writes from an effect append to this same queue. The active drain will reach them; recursively
+  // entering flush here turns a long but valid cascade into call-stack depth.
+  if (flushing) return;
+  flushing = true;
+  const metered = flushCh.meters !== 0;
+  const start = metered ? now() : 0;
   let appBatchSize = 0;
   try {
-    while (notifyIndex < queuedLength) {
-      const node = queued[notifyIndex];
-      queued[notifyIndex++] = undefined;
-      if (node && runEffect(node)) appBatchSize++;
+    if (metered) {
+      while (notifyIndex < queuedLength) {
+        const node = queued[notifyIndex] as EffectNode;
+        queued[notifyIndex++] = undefined;
+        if (runEffect(node)) appBatchSize++;
+      }
+    } else {
+      while (notifyIndex < queuedLength) {
+        const node = queued[notifyIndex] as EffectNode;
+        queued[notifyIndex++] = undefined;
+        runEffect(node);
+      }
     }
   } finally {
     while (notifyIndex < queuedLength) {
-      const node = queued[notifyIndex];
+      const node = queued[notifyIndex] as EffectNode;
       queued[notifyIndex++] = undefined;
-      if (node) node.flags |= Watching | Recursed;
+      if (node.flags !== 0) node.flags |= Watching | Recursed;
     }
     notifyIndex = 0;
     queuedLength = 0;
-    if (appBatchSize > 0 && flushCh.meters !== 0) {
+    // Keep the backing store for ordinary batches; release only unusually large burst capacity.
+    if (queued.length > 4096) queued.length = 0;
+    flushing = false;
+    if (appBatchSize > 0) {
       sampler.record(
         flushCh,
         appBatchSize,
@@ -1205,9 +1402,11 @@ function flush(): void {
 }
 
 function stopEffect(this: EffectNode): void {
+  if (this.flags === 0) return;
   const meta = this.meta;
+  if (activeSub === this) activeSub = undefined;
   this.flags = 0; // drainDeferred skips flags===0; a still-queued deferred node is compacted next drain
-  this.deferredQueued = false;
+  if (this.deferred) this.deferredQueued = false;
   const owner = this.scope;
   if (owner !== undefined && !owner.stopped) {
     // Swap-remove from scope.effects so a long-lived scope doesn't retain dead effects. Skipped while
@@ -1221,17 +1420,39 @@ function stopEffect(this: EffectNode): void {
   disposeDeps(this);
   const sub = this.subs;
   if (sub !== undefined) unlink(sub);
-  if (this.cleanup) runCleanup(this);
-  if (!meta || meta.disposed) return;
-  meta.disposed = true;
-  inspectHooks?.unregister(meta.id);
-  if (disposeCh.meters !== 0 && meta.internal !== true) disposeCh.seq++;
+  let failed = false;
+  let cleanupError: unknown;
+  if (this.cleanup) {
+    try {
+      runCleanup(this);
+    } catch (error) {
+      failed = true;
+      cleanupError = error;
+    }
+  }
+  if (meta) {
+    meta.disposed = true;
+    inspectHooks?.unregister(meta.id);
+  }
+  if (disposeCh.meters !== 0 && meta?.internal !== true) disposeCh.seq++;
+  if (failed) reportEffectError(cleanupError, this);
 }
 
 // Only a returned function is a cleanup; any other return (e.g. an expression-body effect like
 // `effect(() => count())`) is ignored rather than crashing on the next run.
-function asCleanup(result: unknown): Stop | undefined {
-  return typeof result === "function" ? (result as Stop) : undefined;
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
+function ignorePromiseRejection(promise: PromiseLike<unknown>): void {
+  // The callback contract is rejected synchronously, but an already-created native Promise can
+  // still reject later. Observe that rejection so API misuse does not also emit an unrelated
+  // unhandled-rejection process error.
+  void promise.then(undefined, () => undefined);
 }
 
 // An effect threw. With a handler installed, route it there (and let the flush continue with the
@@ -1253,12 +1474,8 @@ function runCleanup(node: EffectNode): void {
   try {
     cleanup?.();
   } finally {
-    activeSub = previous;
+    restoreActiveSub(previous);
   }
-}
-
-function clearDepsTail(node: NodeBase): void {
-  (node as { depsTail: Link | undefined }).depsTail = undefined;
 }
 
 function disposeChildDeps(sub: NodeBase): void {
@@ -1266,8 +1483,7 @@ function disposeChildDeps(sub: NodeBase): void {
   while (dep !== undefined) {
     const previous = dep.prevDep;
     const node = dep.dep;
-    const kind = kindOf(node);
-    if (kind === "effect" || kind === "watcher") unlink(dep, sub);
+    if (!("getter" in node) && !("currentValue" in node)) unlink(dep, sub);
     dep = previous;
   }
 }

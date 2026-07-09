@@ -16,13 +16,45 @@ import { type Read, source } from "../loom.js";
 // Signal cache: one pooled signal per node, so N readers share one registry entry. WeakMap — a
 // forgotten node drops its signal with it.
 const signals = new WeakMap<Node, Read<boolean>>();
-// Nodes currently observed (subscribed signals only): iterated per mutation batch. Entries are
-// removed by each source's disconnect, so this map never outlives its subscribers.
-const watched = new Map<Node, (value: boolean) => void>();
-let observer: MutationObserver | null = null;
+interface DocumentPool {
+  readonly document: Document;
+  readonly watched: Map<Node, (value: boolean) => void>;
+  observer: MutationObserver | null;
+}
 
-function sweep(): void {
-  for (const [node, set] of watched) set(node.isConnected);
+const pools = new WeakMap<Document, DocumentPool>();
+
+function nodeDocument(node: Node): Document | null {
+  return node.nodeType === 9 ? (node as Document) : node.ownerDocument;
+}
+
+function poolFor(document: Document): DocumentPool {
+  const found = pools.get(document);
+  if (found) return found;
+  const pool: DocumentPool = {
+    document,
+    watched: new Map(),
+    observer: null,
+  };
+  pools.set(document, pool);
+  return pool;
+}
+
+function observerFor(pool: DocumentPool): MutationObserver {
+  if (pool.observer) return pool.observer;
+  const view = pool.document.defaultView as
+    | (Window & { readonly MutationObserver?: typeof MutationObserver })
+    | null;
+  const Observer = view?.MutationObserver ?? globalThis.MutationObserver;
+  const observer = new Observer(() => {
+    for (const [node, set] of pool.watched) set(node.isConnected);
+  });
+  observer.observe(pool.document.documentElement ?? pool.document, {
+    childList: true,
+    subtree: true,
+  });
+  pool.observer = observer;
+  return observer;
 }
 
 export function connected(node: Node): Read<boolean> {
@@ -30,19 +62,16 @@ export function connected(node: Node): Read<boolean> {
   if (cached) return cached;
   const read = source<boolean>((set) => {
     set(node.isConnected); // resync: it may have (dis)connected while unobserved
-    watched.set(node, set);
-    if (observer === null) {
-      observer = new MutationObserver(sweep);
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-      });
-    }
+    const document = nodeDocument(node);
+    if (!document) return () => undefined;
+    const pool = poolFor(document);
+    pool.watched.set(node, set);
+    observerFor(pool);
     return () => {
-      watched.delete(node);
-      if (watched.size === 0) {
-        observer?.disconnect();
-        observer = null;
+      pool.watched.delete(node);
+      if (pool.watched.size === 0) {
+        pool.observer?.disconnect();
+        pool.observer = null;
       }
     };
   }, node.isConnected);

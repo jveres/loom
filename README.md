@@ -441,8 +441,9 @@ count(1); // does not throw here; onError fires and `seen` still runs
 ```
 
 The handler is a single global boundary; pass `configure({ onError: undefined })`
-to remove it. Errors raised while *reading* a `computed` still surface at the
-reader — `onError` covers effect runs, the push side of the graph.
+to remove it. It covers effect bodies and their cleanup callbacks. Errors
+raised while *reading* a `computed` still surface at the reader — `onError`
+covers effect runs, the push side of the graph.
 
 ### DOM and events
 
@@ -474,6 +475,10 @@ document.body.append(
 The construction and binding core:
 
 - `h(tag, props, children)` creates an element (JSX compiles to it).
+- `svgElement(tag, props, children)` explicitly creates an SVG-namespaced
+  element. Use it for names shared with HTML, such as `title`, `a`, `style`,
+  and `script`, because an already-created JSX child doesn't carry its future
+  parent namespace.
 - `text(read)` creates a text node bound to a reactive read.
 - `attr`, `classed`, `style` treat an attribute, a class, and an inline style
   property as signals — see
@@ -508,9 +513,9 @@ attr(el, "data-mode", () => mode()); // node-owned write binding
 - Write bindings coerce like JSX attributes (nullish/false removes, true sets
   empty); `options` relabels the binding or marks it `internal`.
 
-The reads share one app-wide `MutationObserver`: each watched element carries
-an `attributeFilter` of exactly its subscribed names, and the observation set
-is rebuilt only when a subscription changes, never per mutation.
+The reads share one app-wide `MutationObserver`. New elements are observed
+incrementally, and removals are coalesced into one microtask rebuild. Records
+for unrelated attributes are filtered through the subscribed-name map.
 Subscriber-counted like every source — nothing observed, nothing exists.
 Typical guardrail:
 
@@ -569,8 +574,9 @@ observers where a callback reacts:
   observer serves the whole app. Returns a stop.
 - `observeIntersection(el, cb, options?)` — `cb(entry)` on
   IntersectionObserver's clock, detached on node teardown. Observers with
-  equal `rootMargin`/`threshold` and the default root are shared; a custom
-  `root` gets a dedicated observer. Returns a stop.
+  equivalent `root`, `rootMargin`, and `threshold` options are shared. Custom
+  roots use weakly keyed pools, so pooling doesn't extend their lifetime.
+  Returns a stop.
 - `observeMutation(el, cb, options)` — the raw `MutationObserver` contract
   (`cb(records)`, batched per microtask, `MutationObserverInit` options),
   detached on node teardown. One observer per call: with `subtree` a
@@ -597,7 +603,7 @@ scrollers use a 120 ms transition.
 
 | Export | Documented in |
 | --- | --- |
-| `h`, `text` | [DOM and events](#dom-and-events) |
+| `h`, `svgElement`, `text` | [DOM and events](#dom-and-events) |
 | `attr`, `classed`, `style` | [Element state as signals](#element-state-as-signals) |
 | `list` | [DOM and events](#dom-and-events) |
 | `each`, `when`, `match` | [Conditional rendering](#conditional-rendering) |
@@ -610,7 +616,7 @@ scrollers use a 120 ms transition.
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
 
-Types: `Child`, `ElementProps` (the props bag `h()` and JSX accept),
+Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX accept),
 `PersistedOptions` (adds `storage` to override the backing `Storage`),
 `ListOptions`, `SvgTagName`, the binding handles
 `AttrBinding`/`ClassBinding`/`StyleBinding`/`DynamicChild`, `MorphOptions`,
@@ -720,8 +726,8 @@ virtualizer — only the rows in (and just around) the viewport stay in the DOM.
 `virtualList(options)` takes a `VirtualListOptions` (`{ rowHeight, key, render,
 overscan? }`) and windows against an existing scroll container, returning a
 `VirtualList` handle: `el` (mount it inside the scroller), `setItems(source)`,
-`refresh()`, `scrollToIndex(i)`, `scrollToEnd()`, and `destroy()` to tear it down. The inspector's
-graph tree is built on it.
+`refresh()`, `scrollToIndex(i)`, `scrollToEnd()`, and `destroy()` to tear it
+down. The inspector's graph tree is built on it.
 
 Two contracts the virtualizer relies on: **`render(item, reuse)` reuses rows** —
 it's called with `reuse = null` to build a row and with the existing element to
@@ -730,6 +736,11 @@ what keeps DOM churn flat as you scroll). And the elements it returns **must be
 absolutely positioned** within `el` (which the module sets to
 `position: relative`); it only sets each row's `transform`, so rows without
 absolute positioning stack in the wrong place.
+
+Scrolling only calls `render` for entering or index-changed rows. Calling
+`setItems()` starts a new source revision and updates every visible row. Row
+replacement, eviction, and `destroy()` run Loom subtree disposal, so rows built
+with `text()` or other Loom DOM bindings don't leave detached live effects.
 
 #### Ownership & disposal
 
@@ -852,6 +863,12 @@ A selector string is shorthand: `skip: "[data-chrome]"`.
 Loom supports JSX through standard automatic JSX runtime entrypoints. The
 browser runtime returns live DOM nodes and uses the same DOM binding helpers as
 `h()`. Function components are plain functions; there is no virtual DOM.
+
+TypeScript provides one global `JSX.Element` type, which Loom declares as
+`HTMLElement` to keep intrinsic browser JSX ergonomic. If a component can
+return `null`, an array, text, or SVG, treat its result as `Child` instead of
+calling element methods on it. Direct `h()`, `svgElement()`, and `jsx()` calls
+retain their precise return types.
 
 Configure TypeScript for browser JSX with `jsxImportSource: "loom"`:
 
@@ -1123,8 +1140,8 @@ const rates = meter([events.write, events.effect]);
 // Records — the "samples" view; for example, each flush's batch size + duration:
 const flushes = meter([events.flush], "samples");
 setInterval(() => {
-  console.log("writes/s≈", rates.read()["loom:write"].count * 4);
-  const last = flushes.read()["loom:flush"].samples.at(-1);
+  console.log("writes/s≈", (rates.read()["loom:write"]?.count ?? 0) * 4);
+  const last = flushes.read()["loom:flush"]?.samples.at(-1);
   if (last) console.log("last flush", last.batchSize, last.durationMs);
 }, 250);
 
@@ -1257,13 +1274,13 @@ full-chaos workload (`vitest bench`). It runs three variants on the same machine
 pnpm run bench
 ```
 
-With inspection off (the default), Loom measures statistically at parity with
-native `alien-signals` — the three variants land within each other's error
-margins run to run. The per-operation read/write/effect hot paths carry only
-branch-predicted channel guards and otherwise match the native primitives — see
-[Design notes](#design-notes) for the attribution. Enabling inspection
-(`configure({ inspect: true })`) adds one metadata object plus a `WeakRef` per
-node created, which widens the gap to ~`1.2x` on create-heavy work.
+Use the local results as a regression signal rather than a cross-machine score.
+Current runs keep Loom in the same performance range as native
+`alien-signals`, with workload and runtime variance determining the exact gap.
+The per-operation read/write/effect hot paths carry branch-predicted channel
+guards — see [Design notes](#design-notes) for the attribution. Enabling
+inspection (`configure({ inspect: true })`) adds one metadata object plus a
+`WeakRef` per node created, which primarily affects create-heavy work.
 
 Two browser benchmarks run from the dev server. `/bench/` compares Loom DOM
 bindings against a hand-written vanilla baseline on a js-framework-benchmark

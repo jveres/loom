@@ -1,6 +1,9 @@
 const htmlMarker = Symbol.for("loom.html");
+declare const htmlTypeBrand: unique symbol;
 
 export interface Html {
+  /** Nominal brand: trusted HTML values can only be constructed by this module. */
+  readonly [htmlTypeBrand]: true;
   readonly value: string;
   toString(): string;
 }
@@ -22,7 +25,7 @@ export function unsafeHtml(value: string): Html {
     [htmlMarker]: true,
     value,
     toString: () => value,
-  } as Html;
+  } as unknown as Html;
 }
 
 export function html(
@@ -52,8 +55,10 @@ export function isHtml(value: unknown): value is Html {
   return (
     typeof value === "object" &&
     value !== null &&
-    htmlMarker in value &&
-    typeof (value as { readonly value?: unknown }).value === "string"
+    Object.hasOwn(value, htmlMarker) &&
+    (value as { readonly [htmlMarker]?: unknown })[htmlMarker] === true &&
+    typeof (value as { readonly value?: unknown }).value === "string" &&
+    typeof (value as { readonly toString?: unknown }).toString === "function"
   );
 }
 

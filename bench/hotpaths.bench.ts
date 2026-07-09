@@ -10,6 +10,10 @@ import {
   trigger,
 } from "../src/loom.js";
 
+const benchGlobal = globalThis as typeof globalThis & {
+  __loomBenchmarkSink?: unknown;
+};
+
 // Focused benches for the hot paths flagged by the API/perf audit. Baselines to measure the fixes
 // against: deferred-queue O(n²), create-only WeakMap registration, trigger/mutate watcher alloc,
 // and deep scope pause/resume ancestor walks.
@@ -32,6 +36,26 @@ describe("deferred queue", () => {
       for (const s of stops) s();
     });
   }
+
+  bench("10k deferred effects: budgeted continuation chunks", () => {
+    const pending: Array<(hasBudget: () => boolean) => void> = [];
+    configure({
+      deferScheduler: (drain) => {
+        pending.push(drain);
+        return () => {};
+      },
+    });
+    const signals = Array.from({ length: 10_000 }, () => state(0));
+    const stops = signals.map((signal) =>
+      effect(() => void signal(), { defer: true }),
+    );
+    for (let i = 0; i < signals.length; i++) signals[i]?.(i + 1);
+    while (pending.length > 0) {
+      let budget = 32;
+      pending.shift()?.(() => budget-- > 0);
+    }
+    for (const stop of stops) stop();
+  });
 });
 
 // 2. Create-only throughput — node creation + the always-on stateNodes/computedNodes/effectNodes.
@@ -39,13 +63,13 @@ describe("create-only", () => {
   bench("create 10k states", () => {
     const out: unknown[] = [];
     for (let i = 0; i < 10_000; i++) out.push(state(i));
-    if (out.length < 0) throw new Error("sink");
+    benchGlobal.__loomBenchmarkSink = out;
   });
   bench("create 10k computeds", () => {
     const s = state(0);
     const out: unknown[] = [];
     for (let i = 0; i < 10_000; i++) out.push(computed(() => s()));
-    if (out.length < 0) throw new Error("sink");
+    benchGlobal.__loomBenchmarkSink = out;
   });
   bench("create 10k effects", () => {
     const s = state(0);

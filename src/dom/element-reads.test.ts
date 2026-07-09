@@ -147,4 +147,24 @@ describe("attr(el, name) — reactive reads", () => {
     width("30px");
     expect(el.style.getPropertyValue("max-width")).toBe("20px");
   });
+
+  it("adds targets incrementally and batches target removals", async () => {
+    // Let a teardown queued by the preceding test finish before measuring this subscription batch.
+    await Promise.resolve();
+    const observe = vi.spyOn(MutationObserver.prototype, "observe");
+    const disconnect = vi.spyOn(MutationObserver.prototype, "disconnect");
+    const elements = Array.from({ length: 100 }, () =>
+      document.createElement("div"),
+    );
+
+    const stops = elements.map((el) => effect(() => attr(el, "data-x")()));
+
+    expect(observe).toHaveBeenCalledTimes(elements.length);
+    expect(disconnect).not.toHaveBeenCalled();
+
+    for (const stop of stops) stop();
+    expect(disconnect).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
 });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { state } from "../loom.js";
 import {
   attr,
+  bind,
   classed,
   dispose,
   each,
@@ -47,6 +48,45 @@ describe("loom DOM ownership", () => {
     remove(parent); // disposal reaches descendants' owned disposers too
     expect(order.sort()).toEqual(["child", "parent"]);
   });
+
+  it("snapshots descendants and finishes disposal when a disposer throws", () => {
+    const parent = h("div");
+    const first = h("span");
+    const second = h("span");
+    parent.append(first, second);
+    document.body.append(parent);
+    const order: string[] = [];
+    const failure = new Error("first cleanup failed");
+
+    onUnmount(first, () => {
+      order.push("first");
+      throw failure;
+    });
+    onUnmount(second, () => order.push("second"));
+    onUnmount(parent, () => {
+      order.push("parent");
+      parent.replaceChildren();
+    });
+
+    expect(() => remove(parent)).toThrow(failure);
+    expect(order).toEqual(["first", "second", "parent"]);
+    expect(parent.parentNode).toBeNull();
+
+    // Entries are cleared before callbacks run, so a failed disposer is never retried.
+    dispose(parent);
+    expect(order).toEqual(["first", "second", "parent"]);
+  });
+
+  it("unregisters a manually stopped binding from its owner", () => {
+    const node = h("div");
+    const cleanup = vi.fn();
+    const stop = bind(node, () => cleanup);
+
+    stop();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    dispose(node);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("loom DOM wrong-runtime guard", () => {
@@ -61,13 +101,39 @@ describe("loom DOM wrong-runtime guard", () => {
       /loom\/html Html value/,
     );
   });
+
+  it("accepts nodes from another window realm", () => {
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const foreign = iframe.contentDocument?.createElement("span");
+    expect(foreign).toBeDefined();
+    if (!foreign) return;
+    foreign.textContent = "foreign";
+
+    const globalNode = globalThis.Node;
+    Object.defineProperty(globalThis, "Node", {
+      configurable: true,
+      value: class OtherRealmNode {},
+    });
+    try {
+      const root = h("div", null, foreign);
+      expect(root.firstChild).toBe(foreign);
+      expect(root.textContent).toBe("foreign");
+    } finally {
+      Object.defineProperty(globalThis, "Node", {
+        configurable: true,
+        value: globalNode,
+      });
+      iframe.remove();
+    }
+  });
 });
 
 describe("loom DOM list", () => {
   it("reorders keyed nodes by default", () => {
     const root = document.createElement("section");
     const rows = state<readonly Row[]>([{ id: "a" }, { id: "b" }]);
-    const stop = list(root, rows, {
+    const stop = list<Row>(root, rows, {
       key: (row) => row.id,
       render: renderRow,
     });
@@ -109,7 +175,7 @@ describe("loom DOM list", () => {
   it("can skip keyed node reordering for externally positioned layouts", () => {
     const root = document.createElement("section");
     const rows = state<readonly Row[]>([{ id: "a" }, { id: "b" }]);
-    const stop = list(root, rows, {
+    const stop = list<Row>(root, rows, {
       key: (row) => row.id,
       render: renderRow,
       reorder: () => false,
@@ -128,6 +194,33 @@ describe("loom DOM list", () => {
 
     rows([{ id: "b" }, { id: "c" }]);
     expect(keys(root)).toEqual(["b", "c"]);
+    stop();
+  });
+
+  it("keeps numeric and string keys as distinct identities", () => {
+    interface MixedRow {
+      readonly id: string;
+      readonly key: string | number;
+    }
+    const root = document.createElement("section");
+    const rows = state<readonly MixedRow[]>([
+      { id: "number", key: 1 },
+      { id: "string", key: "1" },
+    ]);
+    const stop = list<MixedRow>(root, rows, {
+      key: (row) => row.key,
+      render: (row) => h("div", { "data-id": row.id }, row.id),
+    });
+    const numberNode = root.children[0];
+    const stringNode = root.children[1];
+
+    expect(root.children).toHaveLength(2);
+    rows([
+      { id: "string", key: "1" },
+      { id: "number", key: 1 },
+    ]);
+    expect(root.children[0]).toBe(stringNode);
+    expect(root.children[1]).toBe(numberNode);
     stop();
   });
 });
@@ -261,6 +354,61 @@ describe("loom DOM props and bindings", () => {
     expect(el.hasAttribute("required")).toBe(false); // null -> removed
   });
 
+  it("binds form state through properties after options are mounted", () => {
+    const inputValue = state("initial");
+    const checked = state(false);
+    const selectedValue = state("b");
+    const optionSelected = state(false);
+    const input = h("input", { value: inputValue, checked });
+    const select = h("select", { value: selectedValue }, [
+      h("option", { value: "a", selected: optionSelected }, "A"),
+      h("option", { value: "b" }, "B"),
+    ]);
+
+    expect(input.value).toBe("initial");
+    expect(input.getAttribute("value")).toBe("initial");
+    expect(input.checked).toBe(false);
+    expect(select.value).toBe("b");
+
+    input.value = "user edit";
+    inputValue("programmatic");
+    checked(true);
+    selectedValue("a");
+    expect(input.value).toBe("programmatic");
+    expect(input.getAttribute("value")).toBe("programmatic");
+    expect(input.checked).toBe(true);
+    expect(input.hasAttribute("checked")).toBe(true);
+    expect(select.value).toBe("a");
+
+    optionSelected(true);
+    expect((select.options[0] as HTMLOptionElement).selected).toBe(true);
+  });
+
+  it("applies static form values as properties", () => {
+    const input = h("input", { value: "typed", checked: true });
+    const select = h("select", { value: "b" }, [
+      h("option", { value: "a" }, "A"),
+      h("option", { value: "b" }, "B"),
+    ]);
+    expect(input.value).toBe("typed");
+    expect(input.getAttribute("value")).toBe("typed");
+    expect(input.checked).toBe(true);
+    expect(input.hasAttribute("checked")).toBe(true);
+    expect(select.value).toBe("b");
+    expect(select.getAttribute("value")).toBe("b");
+  });
+
+  it("does not assign a forbidden non-empty file-input value property", () => {
+    const value = state("first.txt");
+    const input = h("input", { type: "file", value });
+    expect(input.getAttribute("value")).toBe("first.txt");
+    expect(input.value).toBe("");
+
+    expect(() => value("second.txt")).not.toThrow();
+    expect(input.getAttribute("value")).toBe("second.txt");
+    expect(input.value).toBe("");
+  });
+
   it("dedupes reactive text updates that stringify the same", () => {
     const value = state<unknown>(false);
     const node = text(() => value());
@@ -387,6 +535,20 @@ describe("loom DOM branch coverage", () => {
     expect(el.textContent).toBe("c");
     v("d");
     expect(el.textContent).toBe("d");
+  });
+
+  it("keeps a sole reactive text child stable across empty values and later siblings", () => {
+    const value = state("");
+    const el = h("div", null, value);
+    const textNode = el.firstChild;
+    const sibling = h("span", null, "tail");
+    el.append(sibling);
+
+    expect(textNode).toBeInstanceOf(Text);
+    value("head");
+    expect(el.firstChild).toBe(textNode);
+    expect(el.textContent).toBe("headtail");
+    expect(el.lastChild).toBe(sibling);
   });
 
   it("handles falsy and inherited entries in class maps/arrays", () => {
@@ -543,6 +705,28 @@ describe("loom DOM when/match", () => {
     expect(root.querySelector(".v")?.textContent).toBe("graph");
     tab("trace"); // no case -> fallback
     expect(root.querySelector(".v")?.textContent).toBe("none");
+  });
+
+  it("match ignores inherited properties and supports null-prototype cases", () => {
+    const key = state("constructor");
+    const inherited = Object.create({
+      constructor: () => h("span", { class: "v" }, "inherited"),
+    }) as Record<string, () => Element>;
+    inherited["safe"] = () => h("span", { class: "v" }, "safe");
+    const root = h(
+      "div",
+      null,
+      match(key, inherited, () => h("span", { class: "v" }, "fallback")),
+    );
+    expect(root.querySelector(".v")?.textContent).toBe("fallback");
+    key("safe");
+    expect(root.querySelector(".v")?.textContent).toBe("safe");
+
+    const nullPrototype = Object.create(null) as Record<string, () => Element>;
+    nullPrototype.constructor = () => h("span", { class: "v" }, "own");
+    const ownRoot = h("div", null, match(key, nullPrototype));
+    key("constructor");
+    expect(ownRoot.querySelector(".v")?.textContent).toBe("own");
   });
 
   it("removing the host disposes the dynamic slot's effect", () => {

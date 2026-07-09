@@ -141,7 +141,6 @@ function renderAttribute(
 ): string {
   if (
     value == null ||
-    value === false ||
     name === "key" ||
     name === "__proto__" ||
     name === "constructor" ||
@@ -155,6 +154,13 @@ function renderAttribute(
   if (attrName === "className") attrName = "class";
   if (attrName === "htmlFor") attrName = "for";
   if (attrName.startsWith("on")) return "";
+
+  // DOM JSX treats function-valued props as reactive reads. SSR has no reactive lifetime, but it
+  // must produce the same initial markup, so evaluate each read exactly once.
+  if (typeof attrValue === "function") attrValue = attrValue();
+  if (attrValue == null || (attrValue === false && !isAriaAttr(attrName))) {
+    return "";
+  }
   if (!safeAttrNamePattern.test(attrName)) {
     if (dev) warnDropped(tag, name, "not a valid HTML attribute name");
     return "";
@@ -180,6 +186,7 @@ function renderAttribute(
 }
 
 function normalizeClass(value: unknown): string {
+  if (typeof value === "function") return normalizeClass(value());
   if (Array.isArray(value)) {
     const parts: string[] = [];
     for (const item of value) {
@@ -191,7 +198,9 @@ function normalizeClass(value: unknown): string {
   }
   if (value && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)
-      .filter(([, enabled]) => Boolean(enabled))
+      .filter(([, enabled]) =>
+        Boolean(typeof enabled === "function" ? enabled() : enabled),
+      )
       .map(([name]) => name)
       .join(" ");
   }
@@ -201,9 +210,10 @@ function normalizeClass(value: unknown): string {
 function serializeStyle(value: Record<string, unknown>): string {
   const parts: string[] = [];
   for (const [name, rawValue] of Object.entries(value)) {
-    if (rawValue == null || !safeCssPropPattern.test(name)) continue;
+    const resolved = typeof rawValue === "function" ? rawValue() : rawValue;
+    if (resolved == null || !safeCssPropPattern.test(name)) continue;
 
-    const cssValue = String(rawValue).replace(/["<>{};]/g, "");
+    const cssValue = String(resolved).replace(/["<>{};]/g, "");
     // Test the scheme guard against a control-char-stripped copy, same as the URL-attribute path —
     // otherwise `jav\tascript:` slips through here too (lower risk, since CSS url() schemes don't
     // execute in modern browsers, but the evasion shape is identical).
@@ -215,6 +225,10 @@ function serializeStyle(value: Record<string, unknown>): string {
     parts.push(`${cssPropName(name)}:${cssValue}`);
   }
   return parts.join(";");
+}
+
+function isAriaAttr(name: string): boolean {
+  return name.startsWith("aria-");
 }
 
 function isUrlAttr(name: string): boolean {

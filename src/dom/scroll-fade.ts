@@ -127,10 +127,15 @@ export function scrollFade(
   const observer = new ResizeObserver(sync);
   observer.observe(el);
   for (const child of el.children) observer.observe(child);
-  const mutations = new MutationObserver(() => {
-    observer.disconnect();
-    observer.observe(el);
-    for (const child of el.children) observer.observe(child);
+  const mutations = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.removedNodes) {
+        if (node.nodeType === 1) observer.unobserve(node as Element);
+      }
+      for (const node of record.addedNodes) {
+        if (node.nodeType === 1) observer.observe(node as Element);
+      }
+    }
     sync();
   });
   mutations.observe(el, { childList: true });

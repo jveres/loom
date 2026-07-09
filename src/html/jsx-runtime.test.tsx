@@ -1,6 +1,6 @@
 /** @jsxImportSource loom/html */
 import { describe, expect, it, vi } from "vitest";
-import { html, renderToString, unsafeHtml } from "./index.js";
+import { html, isHtml, renderToString, unsafeHtml } from "./index.js";
 import { Fragment, jsx, jsxDEV, jsxs } from "./jsx-runtime.js";
 
 describe("loom HTML JSX runtime", () => {
@@ -195,5 +195,29 @@ describe("loom HTML JSX runtime", () => {
     expect(renderToString(out)).toBe(
       '<div style="background-color:red;--gap:4px"></div>',
     );
+  });
+
+  it("matches DOM initial semantics for reads and ARIA booleans", () => {
+    const out = jsx("button", {
+      "aria-pressed": false,
+      class: { active: () => true, hidden: () => false },
+      style: { color: () => "red" },
+      title: () => "ready",
+    });
+
+    expect(renderToString(out)).toBe(
+      '<button aria-pressed="false" class="active" style="color:red" title="ready"></button>',
+    );
+  });
+
+  it("accepts only fully branded Html values", () => {
+    const trusted = unsafeHtml("<b>ok</b>");
+    expect(isHtml(trusted)).toBe(true);
+
+    const malformed = Object.assign(Object.create(null), {
+      [Symbol.for("loom.html")]: true,
+      value: "<b>bad</b>",
+    });
+    expect(isHtml(malformed)).toBe(false);
   });
 });

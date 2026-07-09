@@ -1,18 +1,19 @@
 import { cssPropName } from "../jsx-props.js";
 import {
   type CleanupEffectFn,
+  domEffect,
   type EffectFn,
   type EffectOptions,
   effect,
-  pauseEffectStop,
   type Read,
-  resumeEffectStop,
   type State,
   type Stop,
   untrack,
 } from "../loom.js";
 import { attrRead, classRead, styleRead } from "./element-reads.js";
 import { onMount } from "./on-mount.js";
+import { onUnmount, remove } from "./ownership.js";
+import { own } from "./ownership-base.js";
 import { positionOrdered } from "./place.js";
 
 export type Child =
@@ -91,14 +92,12 @@ export interface ListOptions<T> {
   readonly reorder?: Read<boolean>;
 }
 
-type OwnedEffect = Stop | Stop[];
-
-const ownedEffects = new WeakMap<Node, OwnedEffect>();
+type LoomKey = string | number;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 // SVG-only tag names — elements that must be created in the SVG namespace. Tags shared with
-// HTML (a, title, script, style) are intentionally omitted so they keep rendering as HTML;
-// the descendants of an <svg> are created namespaced because each SVG tag is listed here.
+// HTML (a, title, script, style) are intentionally omitted so standalone h()/JSX calls keep
+// rendering as HTML. Use svgElement() for those context-dependent shared names.
 // Single source of truth: the JSX IntrinsicElements SVG keys derive from this list (SvgTagName),
 // so the types can never offer an SVG tag the runtime would create in the wrong namespace.
 const SVG_TAG_LIST = [
@@ -166,11 +165,45 @@ export function h(
   props: ElementProps | null = null,
   children?: Child,
 ): Element {
-  const node = SVG_TAGS.has(tag)
+  const isSvg = SVG_TAGS.has(tag);
+  const node = isSvg
     ? document.createElementNS(SVG_NS, tag)
     : document.createElement(tag);
-  if (props) applyProps(node, props);
-  appendChild(node, children);
+  // Children precede props so form properties such as <select value={...}> are applied only after
+  // their options exist. Every prop is still installed synchronously before h() returns.
+  if (children !== undefined) {
+    if (typeof children === "string") node.textContent = children;
+    else appendChild(node, children);
+  }
+  if (props) applyProps(node, props, !isSvg);
+  return node;
+}
+
+/**
+ * Create an explicitly SVG-namespaced element. Use this for names shared with HTML (`a`, `title`,
+ * `script`, and `style`), whose namespace cannot be inferred from an already-evaluated JSX child.
+ */
+export function svgElement<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  props?: ElementProps | null,
+  children?: Child,
+): SVGElementTagNameMap[K];
+export function svgElement(
+  tag: string,
+  props?: ElementProps | null,
+  children?: Child,
+): SVGElement;
+export function svgElement(
+  tag: string,
+  props: ElementProps | null = null,
+  children?: Child,
+): SVGElement {
+  const node = document.createElementNS(SVG_NS, tag);
+  if (children !== undefined) {
+    if (typeof children === "string") node.textContent = children;
+    else appendChild(node, children);
+  }
+  if (props) applyProps(node, props, false);
   return node;
 }
 
@@ -178,15 +211,20 @@ export function h(
 // it isn't observed by the inspector (which uses this to bind its own text without self-reporting).
 export function text(read: Read<unknown>, options?: EffectOptions): Text {
   const node = document.createTextNode("");
-  bindReactiveValue(
+  let previous = "";
+  own(
     node,
-    "dom.text",
-    () => stringValue(read()),
-    (next) => {
-      node.data = next;
-    },
-    "",
-    options,
+    domEffect(
+      () => {
+        const next = stringValue(read());
+        if (next === previous) return;
+        previous = next;
+        node.data = next;
+      },
+      "dom.text",
+      node,
+      options,
+    ),
   );
   return node;
 }
@@ -295,30 +333,57 @@ export function style(
 // `data-loom-key`), collect them in item order, and drop keys that vanished (disposing their owned
 // effects). Positioning the result — into a container's children or around an anchor — is the caller's
 // job, which is the only thing the two entry points differ on.
+function mountKeyed<T>(
+  parent: Node,
+  before: Node | null,
+  items: readonly T[],
+  nodes: Map<LoomKey, Element>,
+  key: (item: T) => LoomKey,
+  render: (item: T, key: string) => Element,
+): void {
+  const fragment = (parent.ownerDocument ?? document).createDocumentFragment();
+  for (const item of items) {
+    const k = key(item);
+    if (nodes.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
+    const keyText = String(k);
+    const node = render(item, keyText);
+    node.setAttribute("data-loom-key", keyText);
+    nodes.set(k, node);
+    fragment.appendChild(node);
+  }
+  parent.insertBefore(fragment, before);
+}
+
 function reconcileKeyed<T>(
   items: readonly T[],
-  nodes: Map<string, Element>,
-  key: (item: T) => string | number,
+  nodes: Map<LoomKey, Element>,
+  key: (item: T) => LoomKey,
   render: (item: T, key: string) => Element,
 ): Element[] {
-  const seen = new Set<string>();
-  const ordered: Element[] = [];
+  const seen = new Set<LoomKey>();
+  const ordered = new Array<Element>(items.length);
+  let index = 0;
   for (const item of items) {
-    const k = String(key(item));
+    const k = key(item);
     if (seen.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
     seen.add(k);
     let node = nodes.get(k);
     if (!node) {
-      node = render(item, k);
-      node.setAttribute("data-loom-key", k);
+      const keyText = String(k);
+      node = render(item, keyText);
+      node.setAttribute("data-loom-key", keyText);
       nodes.set(k, node);
     }
-    ordered.push(node);
+    ordered[index++] = node;
   }
-  for (const [k, node] of nodes) {
-    if (seen.has(k)) continue;
-    remove(node);
-    nodes.delete(k);
+  // The overwhelmingly common initial/append/reorder cases retain every known key. The equal
+  // cardinality proves there can be no stale map entry, avoiding a second full hash walk.
+  if (seen.size !== nodes.size) {
+    for (const [k, node] of nodes) {
+      if (seen.has(k)) continue;
+      remove(node);
+      nodes.delete(k);
+    }
   }
   return ordered;
 }
@@ -328,13 +393,25 @@ export function list<T>(
   read: Read<readonly T[]>,
   options: ListOptions<T>,
 ): Stop {
-  const nodes = new Map<string, Element>();
+  const nodes = new Map<LoomKey, Element>();
   const stop = untrack(() =>
     effect(
       () => {
         const shouldReorder = options.reorder?.() !== false;
+        const items = read();
+        if (nodes.size === 0 && items.length !== 0) {
+          mountKeyed(
+            container,
+            null,
+            items,
+            nodes,
+            options.key,
+            options.render,
+          );
+          return;
+        }
         const ordered = reconcileKeyed(
-          read(),
+          items,
           nodes,
           options.key,
           options.render,
@@ -357,8 +434,7 @@ export function list<T>(
     for (const node of nodes.values()) remove(node);
     nodes.clear();
   };
-  onUnmount(container, stopList);
-  return stopList;
+  return onUnmount(container, stopList);
 }
 
 // Single-branch slot: an effect keyed off `key()`. On a key change the previous subtree is removed —
@@ -424,7 +500,8 @@ export function match(
   return dynamic(
     () => String(selector()),
     (key) => {
-      const branch = cases[key] ?? fallback;
+      const branch =
+        (Object.hasOwn(cases, key) ? cases[key] : undefined) ?? fallback;
       return branch ? branch() : null;
     },
   );
@@ -448,7 +525,7 @@ export function each<T>(
   return brand<DynamicChild>({
     __loomDynamic: true,
     mount(anchor) {
-      const nodes = new Map<string, Element>();
+      const nodes = new Map<LoomKey, Element>();
       return untrack(() =>
         effect(
           () => {
@@ -463,44 +540,11 @@ export function each<T>(
   } satisfies SlotDescriptor);
 }
 
-// Walk a subtree's node-owned disposers, applying `fn` to each stop; `clear` drops the entries
-// (teardown). One traversal protocol for every lifetime operation — dispose, pause, resume.
-function walkOwned(root: Node, fn: (stop: Stop) => void, clear: boolean): void {
-  const stack: Node[] = [root];
-  for (let index = 0; index < stack.length; index++) {
-    const node = stack[index] as Node;
-    const stops = ownedEffects.get(node);
-    if (stops) {
-      if (clear) ownedEffects.delete(node);
-      if (Array.isArray(stops)) for (const stop of stops) fn(stop);
-      else fn(stops);
-    }
-    for (let child = node.firstChild; child; child = child.nextSibling)
-      stack.push(child);
-  }
-}
-
 /**
  * Suspend every node-owned reactive binding in a subtree: bindings stay subscribed but do not run
  * while paused; resume() delivers one catch-up run to anything that changed. Pause nests. Only
  * effect-backed disposers suspend (a manual onUnmount(fn) teardown has nothing to pause).
  */
-export function pause(root: Node): void {
-  walkOwned(root, pauseEffectStop, false);
-}
-export function resume(root: Node): void {
-  walkOwned(root, resumeEffectStop, false);
-}
-
-export function dispose(root: Node): void {
-  walkOwned(root, (stop) => stop(), true);
-}
-
-export function remove(node: Node): void {
-  dispose(node);
-  node.parentNode?.removeChild(node);
-}
-
 // px: a pointerup within this distance of the pointerdown counts as a tap, not a drag/scroll.
 const TAP_SLOP = 10;
 
@@ -544,13 +588,6 @@ export function onTap(
  * effects/listeners for an element they build. (This is ownership; `effect`'s `target` option is
  * inspector attribution only.)
  */
-export function onUnmount(node: Node, stop: Stop): void {
-  const owned = ownedEffects.get(node);
-  if (!owned) ownedEffects.set(node, stop);
-  else if (Array.isArray(owned)) owned.push(stop);
-  else ownedEffects.set(node, [owned, stop]);
-}
-
 /**
  * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
  * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
@@ -566,21 +603,39 @@ export function bind(
 export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
 export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop {
   const stop = effect(fn, { target: node, ...options });
-  onUnmount(node, stop);
-  return stop;
+  return onUnmount(node, stop);
 }
 
-function applyProps(node: Element, props: ElementProps): void {
+function applyProps(
+  node: Element,
+  props: ElementProps,
+  htmlElement: boolean,
+): void {
+  let classApplied = false;
   for (const name in props) {
     if (!Object.hasOwn(props, name) || name === "children") continue;
     const value = props[name];
-    if (value == null || (value === false && !isAriaAttr(name))) continue;
     if (name === "key") {
-      node.setAttribute("data-loom-key", String(value));
+      if (value != null) node.setAttribute("data-loom-key", String(value));
       continue;
     }
     if (name === "class" || name === "className") {
-      applyClassProp(node, value as ClassProp);
+      // h()/JSX creates a fresh element, so the first plain class string can be installed directly.
+      // Avoid the read/append path used for arrays and a second class/className prop.
+      if (!classApplied && typeof value === "string") {
+        const next = value.trim();
+        if (next) {
+          if (htmlElement) (node as HTMLElement).className = next;
+          else node.setAttribute("class", next);
+        }
+      } else if (!classApplied && isClassBinding(value)) {
+        // The new node cannot already have this class. Skip a DOM read before installing the
+        // reactive binding (the direct classed(existingNode, ...) form still reads its baseline).
+        bindClass(node, brand<PropBinding>(value), undefined, false);
+      } else {
+        applyClassProp(node, value as ClassProp);
+      }
+      classApplied = true;
       continue;
     }
     if (name === "style") {
@@ -602,7 +657,7 @@ function applyProps(node: Element, props: ElementProps): void {
       (name === "onunmount" || name === "onUnmount") &&
       typeof value === "function"
     ) {
-      onUnmount(node, value as Stop);
+      own(node, value as Stop);
       continue;
     }
     if (isAttrBinding(value)) {
@@ -618,6 +673,15 @@ function applyProps(node: Element, props: ElementProps): void {
       node.addEventListener(eventName(name), value as EventListener);
       continue;
     }
+    if (isFormControlProperty(node, name)) {
+      if (typeof value === "function") {
+        applyPropertyBinding(node, name, value as Read<unknown>);
+      } else {
+        setFormControlProperty(node, name, value);
+      }
+      continue;
+    }
+    if (value == null || (value === false && !isAriaAttr(name))) continue;
     if (typeof value === "function") {
       applyAttrBinding(node, name, value as Read<unknown>);
       continue;
@@ -640,7 +704,12 @@ function appendChild(parent: Node, child: Child): void {
     parent.appendChild(text(child as Read<unknown>));
     return;
   }
-  if (child instanceof Node) {
+  // Primitive text is the dominant h()/JSX child. Keep it off the cross-realm node path.
+  if (typeof child !== "object") {
+    parent.appendChild(document.createTextNode(String(child)));
+    return;
+  }
+  if (isNode(child)) {
     parent.appendChild(child);
     return;
   }
@@ -648,12 +717,28 @@ function appendChild(parent: Node, child: Child): void {
   // fallback below would render escaped HTML as visible text — the most confusing possible
   // symptom of a mixed-up jsxImportSource. The brand is a registered symbol, so this costs no
   // import from loom/html.
-  if (typeof child === "object" && Symbol.for("loom.html") in child) {
+  if (Symbol.for("loom.html") in child) {
     throw new Error(
       "loom/html Html value used as a loom/dom child — wrong jsxImportSource? Mount SSR strings via morph()/innerHTML.",
     );
   }
   parent.appendChild(document.createTextNode(String(child)));
+}
+
+function isNode(value: object): value is Node {
+  const globalNode = (globalThis as { readonly Node?: typeof Node }).Node;
+  if (globalNode !== undefined && value instanceof globalNode) return true;
+  // `instanceof globalThis.Node` rejects nodes created by an iframe or another Window. Prefer the
+  // common same-realm check above; discover the candidate's own realm only on that uncommon miss.
+  const candidate = value as {
+    readonly defaultView?: Window | null;
+    readonly ownerDocument?: Document | null;
+  };
+  const view = candidate.ownerDocument?.defaultView ?? candidate.defaultView;
+  const ownNode = (
+    view as (Window & { readonly Node?: typeof Node }) | null | undefined
+  )?.Node;
+  return ownNode !== undefined && value instanceof ownNode;
 }
 
 function isDynamic(child: Child): child is DynamicChild {
@@ -670,7 +755,7 @@ function isDynamic(child: Child): child is DynamicChild {
 function mountSlot(parent: Node, desc: DynamicChild): void {
   const anchor = document.createComment("loom-slot");
   parent.appendChild(anchor);
-  onUnmount(anchor, brand<SlotDescriptor>(desc).mount(anchor));
+  own(anchor, brand<SlotDescriptor>(desc).mount(anchor));
 }
 
 // Effect options for a slot: label it, and target its parent element (when there is one) so the
@@ -758,14 +843,23 @@ function bindClass(
   node: Element,
   binding: PropBinding,
   options?: EffectOptions,
+  initial?: boolean,
 ): void {
-  bindReactiveValue(
+  let previous =
+    initial === undefined ? hasClassName(node, binding.name) : initial;
+  own(
     node,
-    `dom.class.${binding.name}`,
-    () => Boolean(binding.read()),
-    (next) => node.classList.toggle(binding.name, next),
-    hasClassName(node, binding.name),
-    options,
+    domEffect(
+      () => {
+        const next = Boolean(binding.read());
+        if (next === previous) return;
+        previous = next;
+        node.classList.toggle(binding.name, next);
+      },
+      `dom.class.${binding.name}`,
+      node,
+      options,
+    ),
   );
 }
 
@@ -782,6 +876,82 @@ function applyAttrBinding(
     (next) => setAttrValue(node, name, next),
     undefined,
     options,
+  );
+}
+
+type FormControlProperty = "checked" | "selected" | "value";
+const FORM_CONTROL_UNSET = Symbol("form-control-unset");
+type FormControlElement = Element & {
+  checked?: boolean;
+  selected?: boolean;
+  value?: string;
+};
+
+function isFormControlProperty(
+  node: Element,
+  name: string,
+): name is FormControlProperty {
+  if (name !== "checked" && name !== "selected" && name !== "value")
+    return false;
+  if (node.namespaceURI !== "http://www.w3.org/1999/xhtml") return false;
+  const tag = node.localName;
+  if (name === "checked") return tag === "input";
+  if (name === "selected") return tag === "option";
+  return (
+    name === "value" &&
+    (tag === "button" ||
+      tag === "input" ||
+      tag === "option" ||
+      tag === "select" ||
+      tag === "textarea")
+  );
+}
+
+function formControlValue(
+  name: FormControlProperty,
+  value: unknown,
+): boolean | string {
+  return name === "value"
+    ? value == null
+      ? ""
+      : String(value)
+    : Boolean(value);
+}
+
+function setFormControlProperty(
+  node: Element,
+  name: FormControlProperty,
+  value: unknown,
+): void {
+  setAttrValue(node, name, attrValue(name, value));
+  const control = node as FormControlElement;
+  if (name === "value") {
+    const next = formControlValue(name, value) as string;
+    // Browsers reject non-empty programmatic values on file inputs. Preserve the declarative
+    // attribute without turning h()/a reactive update into a DOMException.
+    if (
+      next === "" ||
+      node.localName !== "input" ||
+      node.getAttribute("type")?.toLowerCase() !== "file"
+    ) {
+      control.value = next;
+    }
+  } else {
+    control[name] = formControlValue(name, value) as boolean;
+  }
+}
+
+function applyPropertyBinding(
+  node: Element,
+  name: FormControlProperty,
+  read: Read<unknown>,
+): void {
+  bindReactiveValue(
+    node,
+    `dom.prop.${name}`,
+    () => read(),
+    (next) => setFormControlProperty(node, name, next),
+    FORM_CONTROL_UNSET,
   );
 }
 
@@ -804,9 +974,8 @@ function bindStyle(
   );
 }
 
-// The one dedup-effect scaffold behind every binding (text/attr/class/style): run `read` in an
-// untracked-created effect, apply only on change, own the disposer on the node. `options` merges
-// over the defaults so a caller can relabel or mark the binding `internal`.
+// Shared dedup scaffold for the less common attr/property/style paths. Text and class keep
+// specialized bodies above so large mounts do not retain two extra wrapper closures per binding.
 function bindReactiveValue<T>(
   node: Node,
   label: string,
@@ -816,18 +985,20 @@ function bindReactiveValue<T>(
   options?: EffectOptions,
 ): void {
   let previous = initial;
-  const stop = untrack(() =>
-    effect(
+  own(
+    node,
+    domEffect(
       () => {
         const next = read();
         if (next === previous) return;
         previous = next;
         apply(next);
       },
-      { label, target: node, ...options },
+      label,
+      node,
+      options,
     ),
   );
-  onUnmount(node, stop);
 }
 
 function setAttr(node: Element, name: string, value: unknown): void {
@@ -856,7 +1027,8 @@ function stringValue(value: unknown): string {
 }
 
 function eventName(name: string): string {
-  return name.slice(2).toLowerCase();
+  const event = name.slice(2).toLowerCase();
+  return event === "doubleclick" ? "dblclick" : event;
 }
 
 function isAttrBinding(value: unknown): value is AttrBinding {
@@ -905,4 +1077,5 @@ export {
 } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
 export { onMount } from "./on-mount.js";
+export { dispose, onUnmount, pause, remove, resume } from "./ownership.js";
 export { type PersistedOptions, persisted } from "./persisted.js";

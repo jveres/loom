@@ -54,6 +54,30 @@ describe("loom/async resource", () => {
     r.stop();
   });
 
+  it("captures a synchronous fetcher throw and can recover", async () => {
+    const failure = new Error("sync boom");
+    let fail = true;
+    const r = resource(() => {
+      if (fail) throw failure;
+      return Promise.resolve(7);
+    });
+
+    expect(r()).toBeUndefined();
+    expect(r.loading()).toBe(true);
+    await settle();
+    expect(r.error()).toBe(failure);
+    expect(r.loading()).toBe(false);
+
+    fail = false;
+    r.refresh();
+    expect(r.loading()).toBe(true);
+    await settle();
+    expect(r()).toBe(7);
+    expect(r.error()).toBeUndefined();
+    expect(r.loading()).toBe(false);
+    r.stop();
+  });
+
   it("refetches when a tracked read changes, passing the previous value", async () => {
     const page = state(1);
     const seen: Array<number | undefined> = [];

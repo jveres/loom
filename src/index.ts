@@ -14,6 +14,7 @@ export type {
 export { channel, meter } from "./core/meter.js";
 export type {
   CleanupEffectFn,
+  ConfigureOptions,
   DeferScheduler,
   EffectFn,
   EffectOptions,

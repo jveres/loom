@@ -12,7 +12,10 @@
   },
   "sideEffects": [
     "./dist/loom/defer.js",
-    "./src/core/defer.ts"
+    "./dist/loom/observe*.js",
+    "./src/core/defer.ts",
+    "./src/core/inspect.ts",
+    "./src/observe.ts"
   ],
   "files": [
     "dist",
@@ -29,7 +32,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build --config vite.loom.config.ts && rm -rf dist/types && tsc -p tsconfig.build.json",
     "build:demo": "vite build",
-    "size": "node scripts/size.mjs",
+    "size": "pnpm run build && node scripts/size.mjs",
     "samples": "node scripts/samples.mjs"
   },
   "exports": {

@@ -1,4 +1,4 @@
-import { A as e, D as t, E as n, M as r, N as i, O as a, T as o, h as s, j as c, k as l, w as u } from "./loom-m9Kepz9L.js";
+import { A as e, D as t, E as n, M as r, N as i, O as a, P as o, T as s, g as c, j as l, k as u } from "./loom-Doq0e1ZU.js";
 //#region src/core/meter.ts
 var d = 1 << 20, f = 5;
 function p(e) {
@@ -8,10 +8,10 @@ function p(e) {
 	for (; t < e;) t <<= 1;
 	return t;
 }
-function m(t, n, r) {
-	let i = p(n);
-	if (r.length > f) throw RangeError(`A channel records up to ${f} fields; "${t}" declares ${r.length}.`);
-	return e(t, i, r);
+function m(e, t, n) {
+	let r = p(t);
+	if (n.length > f) throw RangeError(`A channel records up to ${f} fields; "${e}" declares ${n.length}.`);
+	return l(e, r, n);
 }
 function h(e) {
 	if (e.cap !== 0 && e.cols === void 0) {
@@ -36,8 +36,8 @@ function g(e, t, n, r, i, a) {
 	}
 	e.seq++;
 }
-r.record = g;
-var _ = [];
+i.record = g;
+var _ = Object.freeze([]);
 function v(e) {
 	return {
 		name: e.name,
@@ -51,8 +51,8 @@ function v(e) {
 }
 function y(e, t) {
 	if (e.startsWith("loom:")) throw Error(`Channel name "${e}" uses the reserved "loom:" prefix (built-in runtime channels).`);
-	let n = u.get(e);
-	if (n === void 0) n = m(e, t?.capacity ?? 0, t?.fields ?? []), u.set(e, n);
+	let n = s.get(e);
+	if (n === void 0) n = m(e, t?.capacity ?? 0, t?.fields ?? []), s.set(e, n);
 	else if (t !== void 0 && (p(t.capacity ?? 0) !== n.cap || !b(t.fields ?? [], n.fields))) throw Error(`Channel "${e}" already declared with different options.`);
 	return v(n);
 }
@@ -64,7 +64,7 @@ function b(e, t) {
 function x(e, t = "count") {
 	let n = t === "samples", r = [];
 	for (let t of e) {
-		let e = u.get(t.name);
+		let e = s.get(t.name);
 		e !== void 0 && r.push({
 			node: e,
 			cursor: e.seq
@@ -78,16 +78,12 @@ function x(e, t = "count") {
 	}, o = () => {
 		if (i) {
 			i = !1;
-			for (let e of r) e.node.meters--, n && e.node.samples--;
+			for (let e of r) e.node.meters--, n && (e.node.samples--, e.node.samples === 0 && (e.node.cols = void 0, e.node.head = 0));
 		}
 	};
-	return a(), s({
-		pause: o,
-		resume: a,
-		stop: o
-	}), {
+	return a(), {
 		read() {
-			let e = {};
+			let e = Object.create(null);
 			for (let t of r) {
 				let r = t.node, i = r.seq, a = i - t.cursor, o = 0, s = _;
 				if (n && r.cap !== 0 && a > 0) {
@@ -95,7 +91,7 @@ function x(e, t = "count") {
 					o = a - e;
 					let { fields: t, mask: n, head: i, cap: c } = r, l = r.cols ?? [], u = [];
 					for (let r = 0; r < e; r++) {
-						let a = i + c - e + r & n, o = {};
+						let a = i + c - e + r & n, o = Object.create(null);
 						for (let e = 0; e < t.length; e++) o[t[e]] = l[e]?.[a];
 						u.push(o);
 					}
@@ -109,17 +105,21 @@ function x(e, t = "count") {
 			}
 			return e;
 		},
-		stop: o
+		stop: c({
+			pause: o,
+			resume: a,
+			stop: o
+		})
 	};
 }
 var S = {
-	read: /* @__PURE__ */ v(c),
-	write: /* @__PURE__ */ v(i),
-	compute: /* @__PURE__ */ v(o),
-	effect: /* @__PURE__ */ v(a),
-	flush: /* @__PURE__ */ v(l),
-	create: /* @__PURE__ */ v(n),
-	dispose: /* @__PURE__ */ v(t)
+	read: /* @__PURE__ */ v(r),
+	write: /* @__PURE__ */ v(o),
+	compute: /* @__PURE__ */ v(n),
+	effect: /* @__PURE__ */ v(u),
+	flush: /* @__PURE__ */ v(e),
+	create: /* @__PURE__ */ v(t),
+	dispose: /* @__PURE__ */ v(a)
 };
 function C(e) {
 	return e;

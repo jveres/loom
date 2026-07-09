@@ -37,9 +37,11 @@ function a(r, a = {}) {
 	let C = new ResizeObserver(S);
 	C.observe(r);
 	for (let e of r.children) C.observe(e);
-	let w = new MutationObserver(() => {
-		C.disconnect(), C.observe(r);
-		for (let e of r.children) C.observe(e);
+	let w = new MutationObserver((e) => {
+		for (let t of e) {
+			for (let e of t.removedNodes) e.nodeType === 1 && C.unobserve(e);
+			for (let e of t.addedNodes) e.nodeType === 1 && C.observe(e);
+		}
 		S();
 	});
 	return w.observe(r, { childList: !0 }), S(), () => {

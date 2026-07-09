@@ -7,8 +7,8 @@
 // ONE ResizeObserver serves every observeSize in the app; per-element callback sets route each
 // entry. With nothing observed the observer is disconnected and this module costs zero.
 import type { Stop } from "../loom.js";
-import { onUnmount } from "./index.js";
 import { once } from "./once.js";
+import { onUnmount } from "./ownership-base.js";
 
 export type SizeCallback = (entry: ResizeObserverEntry) => void;
 
@@ -45,6 +45,5 @@ export function observeSize(el: Element, cb: SizeCallback): Stop {
       }
     }
   });
-  onUnmount(el, stop);
-  return stop;
+  return onUnmount(el, stop);
 }

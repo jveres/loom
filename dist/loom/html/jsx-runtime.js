@@ -56,15 +56,16 @@ function v(e, t, n) {
 	console.warn(`[loom/html] dropped <${e}> attribute "${t}": ${n}`);
 }
 function y(e, t, r, i) {
-	if (r == null || r === !1 || t === "key" || t === "__proto__" || t === "constructor" || t === "prototype") return "";
+	if (r == null || t === "key" || t === "__proto__" || t === "constructor" || t === "prototype") return "";
 	let a = t, s = r;
-	if (a === "className" && (a = "class"), a === "htmlFor" && (a = "for"), a.startsWith("on")) return "";
+	if (a === "className" && (a = "class"), a === "htmlFor" && (a = "for"), a.startsWith("on") || (typeof s == "function" && (s = s()), s == null || s === !1 && !S(a))) return "";
 	if (!o.test(a)) return i && v(e, t, "not a valid HTML attribute name"), "";
 	if (a === "class" && (s = b(s)), a === "style" && s && typeof s == "object" && (s = x(s)), s === !0) return ` ${a}`;
 	let u = String(s);
-	return S(a) && c.test(u.replace(l, "")) ? (i && v(e, t, "unsafe URL scheme"), "") : ` ${a}="${n(u)}"`;
+	return C(a) && c.test(u.replace(l, "")) ? (i && v(e, t, "unsafe URL scheme"), "") : ` ${a}="${n(u)}"`;
 }
 function b(e) {
+	if (typeof e == "function") return b(e());
 	if (Array.isArray(e)) {
 		let t = [];
 		for (let n of e) {
@@ -74,18 +75,22 @@ function b(e) {
 		}
 		return t.join(" ");
 	}
-	return e && typeof e == "object" ? Object.entries(e).filter(([, e]) => !!e).map(([e]) => e).join(" ") : String(e);
+	return e && typeof e == "object" ? Object.entries(e).filter(([, e]) => !!(typeof e == "function" ? e() : e)).map(([e]) => e).join(" ") : String(e);
 }
 function x(e) {
 	let n = [];
 	for (let [r, i] of Object.entries(e)) {
-		if (i == null || !s.test(r)) continue;
-		let e = String(i).replace(/["<>{};]/g, ""), a = e.replace(l, "");
-		/expression\(/i.test(a) || /^\s*javascript:/i.test(a) || n.push(`${t(r)}:${e}`);
+		let e = typeof i == "function" ? i() : i;
+		if (e == null || !s.test(r)) continue;
+		let a = String(e).replace(/["<>{};]/g, ""), o = a.replace(l, "");
+		/expression\(/i.test(o) || /^\s*javascript:/i.test(o) || n.push(`${t(r)}:${a}`);
 	}
 	return n.join(";");
 }
 function S(e) {
+	return e.startsWith("aria-");
+}
+function C(e) {
 	return u.has(e) || /:(href|src|action|formaction|cite|data|poster)$/.test(e);
 }
 //#endregion

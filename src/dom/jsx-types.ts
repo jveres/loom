@@ -53,7 +53,57 @@ type EventProps<TElement extends Element> = {
     TElement,
     DomEventMap[K]
   >;
+} & {
+  [K in keyof CamelDomEventNames as `on${K & string}`]?: EventHandler<
+    TElement,
+    DomEventMap[CamelDomEventNames[K]]
+  >;
 };
+
+// Runtime event names are case-insensitive after the `on` prefix. These aliases retain the DOM
+// event's precise type while supporting conventional camelCase JSX spelling.
+interface CamelDomEventNames {
+  Blur: "blur";
+  Change: "change";
+  Click: "click";
+  ContextMenu: "contextmenu";
+  DblClick: "dblclick";
+  DoubleClick: "dblclick";
+  Drag: "drag";
+  DragEnd: "dragend";
+  DragEnter: "dragenter";
+  DragLeave: "dragleave";
+  DragOver: "dragover";
+  DragStart: "dragstart";
+  Drop: "drop";
+  Focus: "focus";
+  FocusIn: "focusin";
+  FocusOut: "focusout";
+  Input: "input";
+  KeyDown: "keydown";
+  KeyPress: "keypress";
+  KeyUp: "keyup";
+  MouseDown: "mousedown";
+  MouseEnter: "mouseenter";
+  MouseLeave: "mouseleave";
+  MouseMove: "mousemove";
+  MouseOut: "mouseout";
+  MouseOver: "mouseover";
+  MouseUp: "mouseup";
+  PointerCancel: "pointercancel";
+  PointerDown: "pointerdown";
+  PointerEnter: "pointerenter";
+  PointerLeave: "pointerleave";
+  PointerMove: "pointermove";
+  PointerUp: "pointerup";
+  Scroll: "scroll";
+  Submit: "submit";
+  TouchCancel: "touchcancel";
+  TouchEnd: "touchend";
+  TouchMove: "touchmove";
+  TouchStart: "touchstart";
+  Wheel: "wheel";
+}
 // What every element's props share, regardless of HTML vs SVG (ElementProps already carries key/class/
 // style). ElementProps and SvgProps differ only in `htmlFor`, so both build on this to avoid drift.
 type SharedProps<TElement extends Element> = ElementProps &
@@ -88,13 +138,8 @@ type SvgIntrinsics = {
 };
 
 export namespace JSX {
-  // Deliberate pragmatism: every JSX expression types as HTMLElement, including SVG (`<svg>`,
-  // `<circle>`) and components (which may return text/null/arrays). A truthful `HTMLElement |
-  // SVGElement | Child` union would type as the common base `Element` at every `return <jsx>` and so
-  // force narrowing casts through every builder, the panel wiring, and each `.style`/`.offsetHeight`
-  // access — trading a rare, localized SVG cast for pervasive ones. Consumers of SVG-specific APIs
-  // (rare here) cast at the point of use instead; `jsx()`'s overloads still return precise element
-  // types when called directly. Same tradeoff React/Preact make with an opaque JSX.Element.
+  // TypeScript exposes one global result type for every JSX expression, so it cannot preserve the
+  // intrinsic overload's per-tag return type. Direct jsx()/h()/svgElement() calls remain precise.
   export type Element = HTMLElement;
   export type ElementType = string | Component;
 

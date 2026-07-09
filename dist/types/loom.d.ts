@@ -47,7 +47,8 @@ export interface NodeInfo {
     readonly label: string;
 }
 export type CleanupEffectFn = () => Stop;
-type InternalEffectFn = EffectFn | CleanupEffectFn;
+type InternalEffectFn = () => unknown;
+type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
 type PropKey<T extends object> = Extract<keyof T, string>;
 export type Props<T extends object> = {
     readonly [K in PropKey<T>]: State<T[K]>;
@@ -74,19 +75,25 @@ interface EffectNode extends NodeBase {
     scope: ScopeNode | undefined;
     scopeIndex: number;
     pausedCount: number;
+    directPausedCount: number;
     deferred: boolean;
-    deferredQueued: boolean;
-    maxStale: number;
-    deferDeadline: number;
+    deferredQueued?: boolean;
+    maxStale?: number;
+    deferDeadline?: number;
 }
 interface ScopeResource {
     pause(): void;
     resume(): void;
     stop(): void;
 }
+interface OwnedScopeResource extends ScopeResource {
+    owner: ScopeNode | undefined;
+    ownerIndex: number;
+    stopped: boolean;
+}
 interface ScopeNode {
     readonly effects: EffectNode[];
-    readonly resources: ScopeResource[];
+    readonly resources: OwnedScopeResource[];
     readonly children: ScopeNode[];
     readonly parent: ScopeNode | undefined;
     childIndex: number;
@@ -131,8 +138,9 @@ export declare function state<T>(initial: T, options?: NodeOptions): State<T>;
  */
 export declare function source<T>(connect: SourceConnect<T>, initial: T, options?: NodeOptions): Read<T>;
 export declare function computed<T>(getter: (previousValue?: T) => T, options?: NodeOptions): Read<T>;
-export declare function effect(fn: CleanupEffectFn, options?: EffectOptions): Stop;
-export declare function effect(fn: EffectFn, options?: EffectOptions): Stop;
+export declare function effect<Result>(fn: () => SyncResult<Result>, options?: EffectOptions): Stop;
+/** @internal Create a node-owned DOM effect without linking it to the currently running effect. */
+export declare function domEffect(fn: InternalEffectFn, label: string, target: Node, options?: EffectOptions): Stop;
 export declare function batch<T>(fn: () => T): T;
 /**
  * Group the effects created inside `fn` so they can be torn down or suspended together: `stop()`
@@ -142,7 +150,7 @@ export declare function batch<T>(fn: () => T): T;
  * So pausing a parent freezes its whole subtree, and resuming it leaves an independently-paused
  * child suspended.
  */
-export declare function scope(fn: () => void, options?: NodeOptions): Scope;
+export declare function scope<Result>(fn: () => SyncResult<Result>, options?: NodeOptions): Scope;
 export declare function installDeferredLane(enqueue: (node: EffectNode) => void): {
     runEffect: (node: EffectNode) => void;
     clearWatching: (node: EffectNode) => void;
@@ -150,7 +158,7 @@ export declare function installDeferredLane(enqueue: (node: EffectNode) => void)
 export type { EffectNode };
 export declare function pauseEffectStop(stop: Stop): boolean;
 export declare function resumeEffectStop(stop: Stop): boolean;
-export declare function registerScopeResource(resource: ScopeResource): void;
+export declare function registerScopeResource(resource: ScopeResource): Stop;
 export type Polled<T> = Read<T> & {
     readonly stop: Stop;
 };
@@ -198,7 +206,7 @@ export interface ConfigureOptions {
     readonly inspect?: boolean;
     readonly onError?: ErrorHandler | undefined;
     /** Override the deferred-effect scheduler (e.g. synchronous in tests, no-op on the server). */
-    readonly deferScheduler?: DeferScheduler;
+    readonly deferScheduler?: DeferScheduler | undefined;
 }
-export declare function configure(options: ConfigureOptions): void;
+export declare function configure(options: ConfigureOptions): ConfigureOptions;
 export declare function mergeOptions(defaults: NodeOptions | undefined, own: NodeOptions | EffectOptions | undefined): NodeOptions | EffectOptions | undefined;

@@ -78,4 +78,24 @@ describe("connected", () => {
     expect(seen).toEqual([true]); // deduped — no false/true flicker
     stop();
   });
+
+  it("observes the node's ownerDocument", async () => {
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const foreignDocument = iframe.contentDocument;
+    expect(foreignDocument).not.toBeNull();
+    if (!foreignDocument) return;
+    const el = foreignDocument.createElement("div");
+    const seen: boolean[] = [];
+    const stop = effect(() => {
+      seen.push(connected(el)());
+    });
+
+    foreignDocument.body.append(el);
+    await vi.waitFor(() => expect(seen).toEqual([false, true]));
+    el.remove();
+    await vi.waitFor(() => expect(seen).toEqual([false, true, false]));
+    stop();
+    iframe.remove();
+  });
 });

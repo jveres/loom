@@ -777,7 +777,8 @@ export function stopStats(): void {
   heartbeat = null;
   if (lagTimer != null) clearInterval(lagTimer);
   lagTimer = null;
-  document.removeEventListener("visibilitychange", onLagVisibility);
+  if (typeof document !== "undefined")
+    document.removeEventListener("visibilitychange", onLagVisibility);
   if (rafHandle != null) cancelAnimationFrame(rafHandle);
   rafHandle = null;
   // statsScope owns the heap + web-vital sources and the Info-pane bindings; stopping it tears them

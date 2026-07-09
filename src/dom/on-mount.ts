@@ -13,65 +13,98 @@
 // entry is dropped by `remove()`/`dispose()` like any node-owned resource, so an element that
 // never mounts doesn't pin the observer).
 import type { Stop } from "../loom.js";
-import { onUnmount } from "./index.js";
+import { onUnmount } from "./ownership-base.js";
 
-const pending = new Map<Node, Set<(node: Node) => void>>();
-let observer: MutationObserver | null = null;
+interface DocumentPool {
+  readonly document: Document;
+  readonly pending: Map<Node, Set<(node: Node) => void>>;
+  observer: MutationObserver | null;
+}
 
-function sweep(): void {
-  for (const [node, fns] of pending) {
+const pools = new WeakMap<Document, DocumentPool>();
+
+function nodeDocument(node: Node): Document | null {
+  return node.nodeType === 9 ? (node as Document) : node.ownerDocument;
+}
+
+function sweep(pool: DocumentPool): void {
+  for (const [node, fns] of pool.pending) {
     if (!node.isConnected) continue;
-    pending.delete(node);
+    pool.pending.delete(node);
     for (const fn of fns) fn(node);
   }
-  if (pending.size === 0) {
-    observer?.disconnect();
-    observer = null;
+  if (pool.pending.size === 0) {
+    pool.observer?.disconnect();
+    pool.observer = null;
   }
 }
 
-function enqueue(node: Node, fn: (node: Node) => void): void {
-  let fns = pending.get(node);
+function enqueue(
+  node: Node,
+  fn: (node: Node) => void,
+): DocumentPool | undefined {
+  const document = nodeDocument(node);
+  if (!document) return undefined;
+  let pool = pools.get(document);
+  if (!pool) {
+    pool = { document, pending: new Map(), observer: null };
+    pools.set(document, pool);
+  }
+  let fns = pool.pending.get(node);
   if (!fns) {
     fns = new Set();
-    pending.set(node, fns);
+    pool.pending.set(node, fns);
   }
   fns.add(fn);
-  observer ??= (() => {
-    const mo = new MutationObserver(sweep);
-    mo.observe(document.documentElement, { childList: true, subtree: true });
+  pool.observer ??= (() => {
+    const view = document.defaultView as
+      | (Window & { readonly MutationObserver?: typeof MutationObserver })
+      | null;
+    const Observer = view?.MutationObserver ?? globalThis.MutationObserver;
+    const mo = new Observer(() => sweep(pool as DocumentPool));
+    mo.observe(document.documentElement ?? document, {
+      childList: true,
+      subtree: true,
+    });
     return mo;
   })();
+  return pool;
 }
 
 export function onMount(node: Node, fn: (node: Node) => void): Stop {
   let cancelled = false;
+  let pendingPool: DocumentPool | undefined;
+  let release: Stop = () => undefined;
   const run = (n: Node): void => {
-    if (!cancelled) {
-      cancelled = true; // once
+    if (cancelled) return;
+    cancelled = true; // once
+    try {
       fn(n);
+    } finally {
+      // A successful (or throwing) one-shot no longer needs to be retained by its mounted node.
+      release();
     }
   };
   queueMicrotask(() => {
     if (cancelled) return;
     if (node.isConnected) run(node);
-    else enqueue(node, run);
+    else pendingPool = enqueue(node, run);
   });
   const cancel = (): void => {
     cancelled = true;
-    const fns = pending.get(node);
+    const fns = pendingPool?.pending.get(node);
     if (fns) {
       fns.delete(run);
       if (fns.size === 0) {
-        pending.delete(node);
-        if (pending.size === 0) {
-          observer?.disconnect();
-          observer = null;
+        pendingPool?.pending.delete(node);
+        if (pendingPool?.pending.size === 0) {
+          pendingPool.observer?.disconnect();
+          pendingPool.observer = null;
         }
       }
     }
   };
   // A node torn down the Loom way before it ever mounts must not pin the transient observer.
-  onUnmount(node, cancel);
-  return cancel;
+  release = onUnmount(node, cancel);
+  return release;
 }

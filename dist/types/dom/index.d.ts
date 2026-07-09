@@ -33,6 +33,12 @@ export type SvgTagName = (typeof SVG_TAG_LIST)[number];
 export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): HTMLElementTagNameMap[K];
 export declare function h<K extends keyof SVGElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): SVGElementTagNameMap[K];
 export declare function h(tag: string, props?: ElementProps | null, children?: Child): Element;
+/**
+ * Create an explicitly SVG-namespaced element. Use this for names shared with HTML (`a`, `title`,
+ * `script`, and `style`), whose namespace cannot be inferred from an already-evaluated JSX child.
+ */
+export declare function svgElement<K extends keyof SVGElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): SVGElementTagNameMap[K];
+export declare function svgElement(tag: string, props?: ElementProps | null, children?: Child): SVGElement;
 export declare function text(read: Read<unknown>, options?: EffectOptions): Text;
 /**
  * The attribute as a signal — direction by first argument and arity:
@@ -88,15 +94,6 @@ export declare function match(selector: Read<string | number>, cases: Readonly<R
  */
 export declare function each<T>(items: State<readonly T[]> | Read<readonly T[]>, render: (item: NoInfer<T>, key: string) => Element, key: (item: NoInfer<T>) => string | number): Child;
 /**
- * Suspend every node-owned reactive binding in a subtree: bindings stay subscribed but do not run
- * while paused; resume() delivers one catch-up run to anything that changed. Pause nests. Only
- * effect-backed disposers suspend (a manual onUnmount(fn) teardown has nothing to pause).
- */
-export declare function pause(root: Node): void;
-export declare function resume(root: Node): void;
-export declare function dispose(root: Node): void;
-export declare function remove(node: Node): void;
-/**
  * Bind a robust tap handler. Unlike `click`, this is not dropped by iOS Safari when the DOM mutates
  * mid-gesture, because it is built from raw pointer events rather than a hit-test-synthesized click.
  * `handler` fires on pointerup when the release is the same pointer as the press and within
@@ -111,7 +108,6 @@ export declare function onTap(node: Element, handler: (event: PointerEvent) => v
  * effects/listeners for an element they build. (This is ownership; `effect`'s `target` option is
  * inspector attribution only.)
  */
-export declare function onUnmount(node: Node, stop: Stop): void;
 /**
  * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
  * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
@@ -127,4 +123,5 @@ export { type IntersectionCallback, type IntersectionOptions, observeIntersectio
 export { type MutationsCallback, observeMutation, } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
 export { onMount } from "./on-mount.js";
+export { dispose, onUnmount, pause, remove, resume } from "./ownership.js";
 export { type PersistedOptions, persisted } from "./persisted.js";

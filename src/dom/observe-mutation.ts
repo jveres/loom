@@ -5,8 +5,8 @@
 // One observer per call: with `subtree: true` a record's target is the mutated descendant, so
 // records on a shared observer cannot be routed to the right subscriber.
 import type { Stop } from "../loom.js";
-import { onUnmount } from "./index.js";
 import { once } from "./once.js";
+import { onUnmount } from "./ownership-base.js";
 
 export type MutationsCallback = (records: MutationRecord[]) => void;
 
@@ -18,6 +18,5 @@ export function observeMutation(
   const observer = new MutationObserver(cb);
   observer.observe(el, options);
   const stop = once(() => observer.disconnect());
-  onUnmount(el, stop);
-  return stop;
+  return onUnmount(el, stop);
 }

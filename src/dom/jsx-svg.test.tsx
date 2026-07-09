@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { state } from "../loom.js";
+import { svgElement } from "./index.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -44,6 +45,71 @@ describe("JSX SVG", () => {
     expect(circle?.getAttribute("stroke-dasharray")).toBe("0 100");
     dash("50 100");
     expect(circle?.getAttribute("stroke-dasharray")).toBe("50 100");
+  });
+
+  it("creates shared HTML/SVG tag names with an explicit SVG namespace", () => {
+    const label = state("first");
+    const clicked = vi.fn();
+    const svg = svgElement("svg", null, [
+      svgElement("title", { "data-label": () => label() }, "A title"),
+      svgElement(
+        "a",
+        {
+          href: "#target",
+          onClick: (_event: MouseEvent) => clicked(),
+        },
+        svgElement("title", null, "Link title"),
+      ),
+      svgElement("style", null, "circle { fill: red; }"),
+      svgElement("script", { type: "application/ecmascript" }),
+    ]);
+
+    for (const selector of ["title", "a", "style", "script"]) {
+      expect(svg.querySelector(selector)?.namespaceURI).toBe(SVG_NS);
+    }
+    const title = svg.querySelector("title");
+    expect(title?.getAttribute("data-label")).toBe("first");
+    label("second");
+    expect(title?.getAttribute("data-label")).toBe("second");
+    svg.querySelector("a")?.dispatchEvent(new MouseEvent("click"));
+    expect(clicked).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps shared names HTML outside SVG and below foreignObject", () => {
+    const htmlTitle = <title>Document title</title>;
+    const svg = (
+      <svg aria-label="foreign content">
+        <foreignObject>
+          <a href="#html">HTML link</a>
+        </foreignObject>
+      </svg>
+    );
+    expect(htmlTitle.namespaceURI).not.toBe(SVG_NS);
+    expect(svg.querySelector("a")?.namespaceURI).not.toBe(SVG_NS);
+  });
+
+  it("contextually types lowercase and camelCase event props", () => {
+    const input = (
+      <input
+        oninput={(event) => {
+          const value: string = event.currentTarget.value;
+          const inputEvent: InputEvent = event;
+          void value;
+          void inputEvent;
+        }}
+        onInput={(event) => {
+          const value: string = event.currentTarget.value;
+          const inputEvent: InputEvent = event;
+          void value;
+          void inputEvent;
+        }}
+        onPointerDown={(event) => {
+          const pointerEvent: PointerEvent = event;
+          void pointerEvent;
+        }}
+      />
+    );
+    expect(input.tagName).toBe("INPUT");
   });
 
   it("types every HTMLElementTagNameMap tag and only runtime-supported SVG tags", () => {

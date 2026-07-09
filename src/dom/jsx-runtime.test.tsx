@@ -7,6 +7,10 @@ class FakeNode {
   parentNode: FakeNode | null = null;
   readonly childNodes: FakeNode[] = [];
 
+  get firstChild(): FakeNode | null {
+    return this.childNodes[0] ?? null;
+  }
+
   appendChild(node: FakeNode): FakeNode {
     node.parentNode = this;
     this.childNodes.push(node);
@@ -15,6 +19,11 @@ class FakeNode {
 
   get textContent(): string {
     return this.childNodes.map((node) => node.textContent).join("");
+  }
+
+  set textContent(value: string) {
+    this.childNodes.length = 0;
+    if (value) this.appendChild(new FakeText(value));
   }
 }
 

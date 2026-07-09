@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { scrollFade } from "./scroll-fade.js";
 
 // happy-dom has no layout: drive the scroll metrics by hand.
@@ -36,6 +36,8 @@ beforeEach(() => {
     },
   );
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("scrollFade", () => {
   it("fades only the edges with content beyond them", () => {
@@ -163,6 +165,40 @@ describe("scrollFade", () => {
     el.scrollLeft = 200; // at the end
     el.dispatchEvent(new Event("scroll"));
     expect(el.style.getPropertyValue("--loom-scroll-fade-end")).toBe("0px");
+    dispose();
+  });
+
+  it("updates resize observation incrementally when children change", async () => {
+    const observed: Element[] = [];
+    const unobserved: Element[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(node: Element): void {
+          observed.push(node);
+        }
+        unobserve(node: Element): void {
+          unobserved.push(node);
+        }
+        disconnect(): void {}
+      },
+    );
+    const el = scrollable({
+      scrollHeight: 300,
+      clientHeight: 100,
+      scrollTop: 0,
+    });
+    const first = document.createElement("span");
+    el.append(first);
+    const dispose = scrollFade(el);
+    expect(observed).toEqual([el, first]);
+
+    const second = document.createElement("span");
+    el.append(second);
+    await vi.waitFor(() => expect(observed).toEqual([el, first, second]));
+
+    first.remove();
+    await vi.waitFor(() => expect(unobserved).toEqual([first]));
     dispose();
   });
 });

@@ -4,8 +4,8 @@ export interface ChannelOptions {
     /** Field names recorded per event on a detail channel (up to 5); emit() takes one value each. */
     readonly fields?: readonly string[];
 }
-export interface Channel {
-    readonly name: string;
+export interface Channel<Name extends string = string> {
+    readonly name: Name;
     /** True while ≥1 meter is attached — gate expensive argument prep behind it. */
     readonly active: boolean;
     /** Record one event. No-op and zero-allocation when inactive. One value per declared field. */
@@ -29,22 +29,22 @@ export interface Frame {
  *   retained ring records. For event streams and histograms.
  */
 export type MeterAggregation = "count" | "samples";
-export interface Meter {
+export interface Meter<Name extends string = string> {
     /** Pull one Frame per metered channel, keyed by channel name. Call on your own clock. */
-    read(): Readonly<Record<string, Frame>>;
+    read(): Readonly<Partial<Record<Name, Frame>>>;
     /** Detach from every channel (drops their gate). */
     stop(): void;
 }
-export declare function channel(name: string, options?: ChannelOptions): Channel;
-export declare function meter(channels: ReadonlyArray<Channel>, aggregation?: MeterAggregation): Meter;
+export declare function channel<const Name extends string>(name: Name, options?: ChannelOptions): Channel<Name>;
+export declare function meter<const Channels extends ReadonlyArray<Channel>>(channels: Channels, aggregation?: MeterAggregation): Meter<Channels[number]["name"]>;
 export declare const events: {
-    readonly read: Channel;
-    readonly write: Channel;
-    readonly compute: Channel;
-    readonly effect: Channel;
-    readonly flush: Channel;
-    readonly create: Channel;
-    readonly dispose: Channel;
+    readonly read: Channel<"loom:read">;
+    readonly write: Channel<"loom:write">;
+    readonly compute: Channel<"loom:compute">;
+    readonly effect: Channel<"loom:effect">;
+    readonly flush: Channel<"loom:flush">;
+    readonly create: Channel<"loom:create">;
+    readonly dispose: Channel<"loom:dispose">;
 };
 export interface ReadSample {
     readonly id: number;

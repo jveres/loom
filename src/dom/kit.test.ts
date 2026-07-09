@@ -192,6 +192,23 @@ describe("onMount", () => {
     el.remove();
     el2.remove();
   });
+
+  it("observes late insertion in the node's ownerDocument", async () => {
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const foreignDocument = iframe.contentDocument;
+    expect(foreignDocument).not.toBeNull();
+    if (!foreignDocument) return;
+    const el = foreignDocument.createElement("div");
+    const mounted = vi.fn();
+    onMount(el, mounted);
+
+    await Promise.resolve();
+    foreignDocument.body.append(el);
+    await vi.waitFor(() => expect(mounted).toHaveBeenCalledWith(el));
+    remove(el);
+    iframe.remove();
+  });
 });
 
 describe("persisted", () => {
@@ -356,14 +373,20 @@ describe("observeIntersection", () => {
     expect(instances[1]?.disconnected).toBe(true);
   });
 
-  it("a custom root gets a dedicated observer", () => {
+  it("pools equivalent options for viewport and custom roots", () => {
     stubIO();
-    const el = h("div");
+    const a = h("div");
+    const b = h("div");
     const root = h("div");
-    observeIntersection(el, () => {}, { root });
-    observeIntersection(el, () => {}, { root });
-    expect(instances.length).toBe(2); // no pooling across roots
-    remove(el);
+    observeIntersection(a, () => {});
+    observeIntersection(b, () => {}, { rootMargin: "0" });
+    expect(instances.length).toBe(1);
+
+    observeIntersection(a, () => {}, { root, threshold: [0.5, 0] });
+    observeIntersection(b, () => {}, { root, threshold: [0, 0.5] });
+    expect(instances.length).toBe(2);
+    remove(a);
+    remove(b);
     expect(instances.every((i) => i.disconnected)).toBe(true);
   });
 });

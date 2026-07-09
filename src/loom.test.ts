@@ -5,6 +5,7 @@ import {
   channel,
   events,
   type FlushSample,
+  type Frame,
   type Meter,
   meter,
   sampleOf,
@@ -17,8 +18,11 @@ import {
   effect,
   mutate,
   type Polled,
+  pauseEffectStop,
   poll,
   props,
+  registerScopeResource,
+  resumeEffectStop,
   type Scope,
   scope,
   source,
@@ -68,6 +72,113 @@ describe("loom core", () => {
     stop();
   });
 
+  it("coalesces repeated pending writes without changing batch semantics", () => {
+    const value = state(0);
+    const seen: number[] = [];
+    const stop = effect(() => {
+      seen.push(value());
+    });
+
+    batch(() => {
+      value(1);
+      value(2);
+      value(3);
+    });
+    batch(() => {
+      value(4);
+      value(3);
+    });
+
+    expect(seen).toEqual([0, 3]);
+    stop();
+  });
+
+  it("notifies an effect created between coalesced writes", () => {
+    const value = state(0);
+    const first: number[] = [];
+    const late: number[] = [];
+    const stops: Array<() => void> = [
+      effect(() => {
+        first.push(value());
+      }),
+    ];
+
+    batch(() => {
+      value(1);
+      stops.push(
+        effect(() => {
+          late.push(value());
+        }),
+      );
+      value(2);
+      value(3);
+    });
+
+    expect(first).toEqual([0, 3]);
+    expect(late).toEqual([1, 3]);
+    for (const stop of stops) stop();
+  });
+
+  it("coalesces repeated source pushes in a batch", () => {
+    let push: ((value: number) => void) | undefined;
+    const value = source<number>((set) => {
+      push = set;
+      return () => {};
+    }, 0);
+    const seen: number[] = [];
+    const stop = effect(() => {
+      seen.push(value());
+    });
+
+    batch(() => {
+      push?.(1);
+      push?.(2);
+      push?.(3);
+    });
+
+    expect(seen).toEqual([0, 3]);
+    stop();
+  });
+
+  it("does not record flushes for empty or equality-only batches", () => {
+    const value = state(0);
+    const m = meter([events.flush]);
+    const stop = effect(() => {
+      value();
+    });
+
+    batch(() => {});
+    batch(() => value(0));
+
+    expect(m.read()["loom:flush"]?.count).toBe(0);
+    stop();
+    m.stop();
+  });
+
+  it("drains long synchronous cascades without recursive flushes", () => {
+    const length = 5_000;
+    const values = Array.from({ length }, () => state(0));
+    const stops: Array<() => void> = [];
+    for (let index = 0; index < length - 1; index++) {
+      const current = values[index] as ReturnType<typeof state<number>>;
+      const next = values[index + 1] as ReturnType<typeof state<number>>;
+      stops.push(
+        effect(() => {
+          next(current());
+        }),
+      );
+    }
+
+    (values[0] as ReturnType<typeof state<number>>)(1);
+    expect((values.at(-1) as ReturnType<typeof state<number>>)()).toBe(1);
+
+    // The first burst crosses the retained-queue high-water mark; a fresh drain still works after
+    // that oversized backing store is released.
+    (values[0] as ReturnType<typeof state<number>>)(2);
+    expect((values.at(-1) as ReturnType<typeof state<number>>)()).toBe(2);
+    for (const stop of stops) stop();
+  });
+
   it("runs effect cleanup callbacks", () => {
     const count = state(0);
     let cleanups = 0;
@@ -84,6 +195,97 @@ describe("loom core", () => {
 
     stop();
     expect(cleanups).toBe(2);
+  });
+
+  it("does not relink reads made after an effect stops itself", () => {
+    const fire = state(false);
+    let connects = 0;
+    let disconnects = 0;
+    const lazy = source(() => {
+      connects++;
+      return () => {
+        disconnects++;
+      };
+    }, 0);
+    let stop!: () => void;
+    stop = effect(() => {
+      if (fire()) {
+        stop();
+        lazy();
+      }
+    });
+
+    fire(true);
+
+    expect({ connects, disconnects }).toEqual({ connects: 0, disconnects: 0 });
+    fire(false);
+    expect({ connects, disconnects }).toEqual({ connects: 0, disconnects: 0 });
+  });
+
+  it("does not restore a parent stopped by its nested child", () => {
+    const tick = state(0);
+    let connects = 0;
+    const lazy = source(() => {
+      connects++;
+      return () => {};
+    }, 0);
+    let stopParent!: () => void;
+    stopParent = effect(() => {
+      const current = tick();
+      effect(() => {
+        if (current === 1) stopParent();
+      });
+      if (current === 1) lazy();
+    });
+
+    tick(1);
+
+    expect(connects).toBe(0);
+    tick(2);
+    expect(connects).toBe(0);
+  });
+
+  it("runs a cleanup returned after self-stop exactly once", () => {
+    const fire = state(false);
+    let cleanups = 0;
+    let stop!: () => void;
+    stop = effect(() => {
+      if (!fire()) return;
+      stop();
+      return () => {
+        cleanups++;
+      };
+    });
+
+    fire(true);
+    stop();
+
+    expect(cleanups).toBe(1);
+  });
+
+  it("routes a cleanup returned after self-stop through the error boundary", () => {
+    const errors: unknown[] = [];
+    configure({ onError: (error) => errors.push(error) });
+    const fire = state(false);
+    let siblingRuns = 0;
+    let stop!: () => void;
+    stop = effect(() => {
+      if (!fire()) return;
+      stop();
+      return () => {
+        throw new Error("late cleanup");
+      };
+    });
+    const stopSibling = effect(() => {
+      fire();
+      siblingRuns++;
+    });
+
+    expect(() => fire(true)).not.toThrow();
+
+    expect(errors).toEqual([new Error("late cleanup")]);
+    expect(siblingRuns).toBe(2);
+    stopSibling();
   });
 
   it("accepts reusable void effect callbacks", () => {
@@ -224,6 +426,24 @@ describe("loom core", () => {
     expect(Object.getOwnPropertySymbols(model)).toHaveLength(0);
   });
 
+  it("creates prototype-safe property signals for every own string key", () => {
+    const initial = Object.create(null) as Record<string, number>;
+    Reflect.set(initial, "__proto__", 1);
+    initial["constructor"] = 2;
+    initial["toString"] = 3;
+
+    const model = props(initial);
+
+    expect(Object.getPrototypeOf(model)).toBeNull();
+    expect(Object.hasOwn(model, "__proto__")).toBe(true);
+    const protoSignal = Reflect.get(model, "__proto__") as
+      | (() => number)
+      | undefined;
+    expect(protoSignal?.()).toBe(1);
+    expect(model["constructor"]?.()).toBe(2);
+    expect(model["toString"]?.()).toBe(3);
+  });
+
   it("rejects non-plain prop sources", () => {
     expect(() => props([])).toThrow(TypeError);
     expect(() => props(new Date())).toThrow(TypeError);
@@ -342,6 +562,23 @@ describe("loom core", () => {
     expect(f["loom:effect"]?.count ?? 0).toBeGreaterThan(0);
 
     stop();
+    m.stop();
+  });
+
+  it("counts effect reruns and disposal while inspection is disabled", () => {
+    configure({ inspect: false });
+    const m = meter([events.effect, events.dispose]);
+    const value = state(0);
+    const stop = effect(() => {
+      value();
+    });
+
+    value(1);
+    stop();
+
+    const frame = m.read();
+    expect(frame["loom:effect"]?.count).toBe(2);
+    expect(frame["loom:dispose"]?.count).toBe(1);
     m.stop();
   });
 
@@ -476,6 +713,115 @@ describe("loom core", () => {
     stopBad();
     stopOther();
   });
+
+  it("routes cleanup errors to the boundary and continues the flush", () => {
+    const errors: unknown[] = [];
+    configure({ onError: (error) => errors.push(error) });
+    const value = state(0);
+    let siblingRuns = 0;
+    let cleanupShouldThrow = true;
+    const stopBad = effect(() => {
+      value();
+      return () => {
+        if (cleanupShouldThrow) throw new Error("cleanup failed");
+      };
+    });
+    const stopSibling = effect(() => {
+      value();
+      siblingRuns++;
+    });
+    siblingRuns = 0;
+
+    expect(() => value(1)).not.toThrow();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toEqual(new Error("cleanup failed"));
+    expect(siblingRuns).toBe(1);
+    cleanupShouldThrow = false;
+    stopBad();
+    stopSibling();
+  });
+
+  it("re-arms an effect after an unhandled cleanup error", () => {
+    const value = state(0);
+    let runs = 0;
+    let cleanupShouldThrow = true;
+    const stop = effect(() => {
+      value();
+      runs++;
+      return () => {
+        if (cleanupShouldThrow) throw new Error("cleanup failed");
+      };
+    });
+
+    expect(() => value(1)).toThrow("cleanup failed");
+    expect(runs).toBe(1);
+
+    cleanupShouldThrow = false;
+    value(2);
+    expect(runs).toBe(2);
+    stop();
+  });
+
+  it("does not resurrect a stopped effect left behind an aborted flush", () => {
+    const value = state(0);
+    const m = meter([events.dispose]);
+    let stopSibling!: () => void;
+    const stopThrower = effect(() => {
+      if (value() === 1) {
+        stopSibling();
+        throw new Error("abort flush");
+      }
+    });
+    stopSibling = effect(() => {
+      value();
+    });
+
+    expect(() => value(1)).toThrow("abort flush");
+    expect(m.read()["loom:dispose"]?.count).toBe(1);
+    stopSibling();
+
+    expect(m.read()["loom:dispose"]?.count).toBe(0);
+    stopThrower();
+    m.stop();
+  });
+
+  it("rejects promise-returning effects at runtime and disposes their subscriptions", () => {
+    const value = state(0);
+    let runs = 0;
+    // `EffectFn` is reusable and intentionally void-returning, so runtime validation still protects
+    // code whose async implementation arrived through that wider callback type.
+    const asyncEffect: EffectFn = async () => {
+      value();
+      runs++;
+    };
+
+    expect(() => effect(asyncEffect)).toThrow(
+      "effect() callbacks must be synchronous",
+    );
+    value(1);
+    expect(runs).toBe(1);
+  });
+
+  it("returns the previous runtime configuration and permits scheduler reset", () => {
+    const scheduler = vi.fn(() => () => {});
+
+    const before = configure({ inspect: false, deferScheduler: scheduler });
+    const changed = configure(before);
+
+    expect(before.inspect).toBe(true);
+    expect(changed.inspect).toBe(false);
+    expect(changed.deferScheduler).toBe(scheduler);
+  });
+
+  const verifySyncCallbackTypes = (): void => {
+    // These calls are compile-time API regressions only; promise callbacks must not type-check.
+    // @ts-expect-error effect callbacks are synchronous
+    effect(async () => {});
+    // @ts-expect-error scope callbacks are synchronous
+    scope(async () => {});
+  };
+  void verifySyncCallbackTypes;
 
   it("allocates no inspect metadata while inspection is disabled", () => {
     configure({ inspect: false });
@@ -705,6 +1051,87 @@ describe("loom channels", () => {
     ]);
     m.stop();
   });
+
+  it("treats prototype-like channel and field names as ordinary own keys", () => {
+    const ch = channel("__proto__", {
+      capacity: 1,
+      fields: ["__proto__", "constructor"],
+    });
+    const m = meter([ch], "samples");
+    ch.emit("value", "ctor");
+
+    const frames = m.read();
+    const frame = Reflect.get(frames, "__proto__") as Frame | undefined;
+    const sample = frame?.samples[0];
+    expect(Object.getPrototypeOf(frames)).toBeNull();
+    expect(Object.hasOwn(frames, "__proto__")).toBe(true);
+    expect(sample).not.toBeUndefined();
+    expect(Object.getPrototypeOf(sample)).toBeNull();
+    expect(Object.hasOwn(sample as object, "__proto__")).toBe(true);
+    expect(sample && Reflect.get(sample, "__proto__")).toBe("value");
+    expect(sample && Reflect.get(sample, "constructor")).toBe("ctor");
+    m.stop();
+  });
+
+  it("shares an immutable empty samples collection", () => {
+    const ch = channel("test:frozen-empty");
+    const m = meter([ch]);
+
+    const first = m.read()["test:frozen-empty"]?.samples;
+    const second = m.read()["test:frozen-empty"]?.samples;
+    expect(first).toBe(second);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Reflect.set(first as object, "0", {})).toBe(false);
+    m.stop();
+  });
+
+  it("does not reattach a manually stopped scoped meter", () => {
+    const ch = channel("test:stopped-scoped-meter");
+    let m!: Meter;
+    const owner = scope(() => {
+      m = meter([ch]);
+    });
+
+    m.stop();
+    owner.pause();
+    owner.resume();
+
+    expect(ch.active).toBe(false);
+    owner.stop();
+  });
+
+  it.skipIf(typeof globalThis.gc !== "function")(
+    "releases retained sample values when the last samples meter stops",
+    async () => {
+      const ch = channel("test:released-ring", {
+        capacity: 4,
+        fields: ["value"],
+      });
+      const m = meter([ch], "samples");
+      let ref!: WeakRef<object>;
+      (() => {
+        const marker = {};
+        ref = new WeakRef(marker);
+        ch.emit(marker);
+      })();
+
+      m.stop();
+      for (let i = 0; i < 6; i++) {
+        globalThis.gc?.();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      expect(ref.deref()).toBeUndefined();
+    },
+  );
+
+  const verifyMeterNameTypes = (): void => {
+    const named = channel("test:typed-name");
+    const frames = meter([named]).read();
+    void frames["test:typed-name"];
+    // @ts-expect-error meter reads are keyed by the declared channel names
+    void frames["test:other-name"];
+  };
+  void verifyMeterNameTypes;
 });
 
 describe("loom poll", () => {
@@ -765,6 +1192,23 @@ describe("loom poll", () => {
     value = 9;
     vi.advanceTimersByTime(500);
     expect(p()).toBe(0);
+  });
+
+  it("does not restart a manually stopped scoped poll", () => {
+    vi.useFakeTimers();
+    let samples = 0;
+    let p!: Polled<number>;
+    const owner = scope(() => {
+      p = poll(() => ++samples, 100);
+    });
+
+    p.stop();
+    owner.pause();
+    owner.resume();
+    vi.advanceTimersByTime(300);
+
+    expect(samples).toBe(1);
+    owner.stop();
   });
 
   it("honours state options: an internal poll is excluded from the channels", () => {
@@ -1212,6 +1656,143 @@ describe("loom scope edge cases", () => {
     expect(runs).toBe(afterCreate);
   });
 
+  it("rejects promise-returning scope callbacks and disposes their synchronous prefix", () => {
+    const value = state(0);
+    let runs = 0;
+    const asyncScope: () => void = async () => {
+      effect(() => {
+        value();
+        runs++;
+      });
+      await Promise.resolve();
+    };
+
+    expect(() => scope(asyncScope)).toThrow(
+      "scope() callbacks must be synchronous",
+    );
+    value(1);
+    expect(runs).toBe(1);
+  });
+
+  it("finishes scope teardown when one effect cleanup throws", () => {
+    const value = state(0);
+    let firstRuns = 0;
+    let siblingRuns = 0;
+    const owner = scope(() => {
+      effect(
+        () => {
+          value();
+          firstRuns++;
+          return () => {
+            throw new Error("cleanup failed");
+          };
+        },
+        { label: "throwing-cleanup" },
+      );
+      effect(
+        () => {
+          value();
+          siblingRuns++;
+        },
+        { label: "cleanup-sibling" },
+      );
+    });
+
+    expect(() => owner.stop()).toThrow("cleanup failed");
+    value(1);
+
+    expect(firstRuns).toBe(1);
+    expect(siblingRuns).toBe(1);
+    expect(
+      inspect().nodes.some(
+        (node) =>
+          node.label === "throwing-cleanup" || node.label === "cleanup-sibling",
+      ),
+    ).toBe(false);
+  });
+
+  it("completes snapshotted resource transitions despite throws and stops", () => {
+    const events: string[] = [];
+    const value = state(0);
+    let effectRuns = 0;
+    let stopSelf!: () => void;
+    let stopTarget!: () => void;
+    const owner = scope(() => {
+      effect(() => {
+        value();
+        effectRuns++;
+      });
+      stopSelf = registerScopeResource({
+        pause: () => {
+          events.push("self:pause");
+          stopSelf();
+        },
+        resume: () => events.push("self:resume"),
+        stop: () => events.push("self:stop"),
+      });
+      registerScopeResource({
+        pause: () => {
+          events.push("thrower:pause");
+          throw new Error("pause failed");
+        },
+        resume: () => {
+          events.push("thrower:resume");
+          throw new Error("resume failed");
+        },
+        stop: () => events.push("thrower:stop"),
+      });
+      registerScopeResource({
+        pause: () => {
+          events.push("stopper:pause");
+          stopTarget();
+        },
+        resume: () => events.push("stopper:resume"),
+        stop: () => events.push("stopper:stop"),
+      });
+      stopTarget = registerScopeResource({
+        pause: () => events.push("target:pause"),
+        resume: () => events.push("target:resume"),
+        stop: () => events.push("target:stop"),
+      });
+      registerScopeResource({
+        pause: () => events.push("last:pause"),
+        resume: () => events.push("last:resume"),
+        stop: () => events.push("last:stop"),
+      });
+      scope(() => {
+        registerScopeResource({
+          pause: () => events.push("child:pause"),
+          resume: () => events.push("child:resume"),
+          stop: () => events.push("child:stop"),
+        });
+      });
+    });
+
+    expect(() => owner.pause()).toThrow("pause failed");
+    expect(events).toEqual([
+      "self:pause",
+      "self:stop",
+      "thrower:pause",
+      "stopper:pause",
+      "target:stop",
+      "last:pause",
+      "child:pause",
+    ]);
+    value(1);
+    expect(effectRuns).toBe(1);
+
+    events.length = 0;
+    expect(() => owner.resume()).toThrow("resume failed");
+    expect(events).toEqual([
+      "last:resume",
+      "thrower:resume",
+      "stopper:resume",
+      "child:resume",
+    ]);
+    expect(effectRuns).toBe(2);
+    owner.stop();
+  });
+
   it("pause/resume/stop are idempotent", () => {
     const a = state(0);
     let runs = 0;
@@ -1236,6 +1817,28 @@ describe("loom scope edge cases", () => {
     s.stop(); // second stop is a no-op
     a(2);
     expect(runs).toBe(2);
+  });
+
+  it("combines direct and scope pause depths without resuming early", () => {
+    const value = state(0);
+    let runs = 0;
+    let stop!: () => void;
+    const owner = scope(() => {
+      stop = effect(() => {
+        value();
+        runs++;
+      });
+    });
+
+    expect(pauseEffectStop(stop)).toBe(true);
+    owner.pause();
+    value(1);
+    expect(resumeEffectStop(stop)).toBe(true);
+    expect(runs).toBe(1);
+    owner.resume();
+
+    expect(runs).toBe(2);
+    owner.stop();
   });
 
   it("does not connect a source that nothing observes when resumed", () => {
@@ -1741,6 +2344,38 @@ describe("loom deferred effects", () => {
     } finally {
       clock.mockRestore();
     }
+  });
+
+  it("ignores stopped entries when selecting the next leftover deadline", () => {
+    const timeouts: number[] = [];
+    configure({
+      deferScheduler: (drain, maxStale) => {
+        timeouts.push(maxStale);
+        fire = drain;
+        return () => {};
+      },
+    });
+    const soon = state(0);
+    const later = state(0);
+    const stopSoon = effect(() => soon(), {
+      defer: true,
+      maxStale: 50,
+    });
+    const stopLater = effect(() => later(), {
+      defer: true,
+      maxStale: 200,
+    });
+
+    soon(1);
+    later(1);
+    expect(timeouts).toEqual([50]);
+    stopSoon();
+    fire?.(() => false);
+
+    expect(timeouts).toHaveLength(2);
+    expect(timeouts[1]).toBeGreaterThan(190);
+    fire?.(() => true);
+    stopLater();
   });
 });
 

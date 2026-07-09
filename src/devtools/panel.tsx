@@ -62,6 +62,8 @@ const scrollFades: Array<() => void> = [];
 // Scopes for collective pause: the whole panel (paused when minimized) and, nested inside it, the
 // stats tab (paused when it isn't the active tab) — so a hidden subtree does no reactive work.
 let inspectorScope: Scope | null = null;
+let signalScope: Scope | null = null;
+let previousInspect: boolean | null = null;
 
 // Inspector-owned UI state (internal: filtered from observation). Lazily created on first mount.
 let ui: State<TabId> | null = null;
@@ -91,37 +93,47 @@ interface PanelSignals {
 // validate is the choke point that drops a clobbered or out-of-range stored value.
 let signals: PanelSignals | null = null;
 function panelSignals(): PanelSignals {
-  signals ??= {
-    theme: persisted<Theme>(`${PANEL_ID}-theme`, "system", {
-      internal: true,
-      serialize: (t) => t,
-      parse: (raw) => raw as Theme,
-      validate: (t) => t === "light" || t === "dark" || t === "system",
-    }),
-    min: persisted<boolean>(`${PANEL_ID}-min`, false, {
-      internal: true,
-      serialize: (v) => (v ? "1" : "0"),
-      parse: (raw) => raw === "1",
-    }),
-    logSize: persisted<number>(`${PANEL_ID}-logsize`, 1000, {
-      internal: true,
-      serialize: String,
-      parse: Number,
-      validate: (n) => LOG_SIZES.includes(n),
-    }),
-    pos: persisted<PanelPos>(`${PANEL_ID}-pos`, null, {
-      internal: true,
-      validate: (v) =>
-        v !== null && typeof v.left === "number" && typeof v.top === "number",
-    }),
-    size: persisted<PanelSize>(`${PANEL_ID}-size`, null, {
-      internal: true,
-      validate: (v) =>
-        v !== null &&
-        typeof v.width === "number" &&
-        typeof v.height === "number",
-    }),
-  };
+  if (!signals) {
+    // persisted() owns a watch effect. Build those watches in a small scope so unmount can release
+    // them instead of retaining five module-lifetime subscriptions after the panel is gone.
+    let created!: PanelSignals;
+    signalScope = scope(() => {
+      created = {
+        theme: persisted<Theme>(`${PANEL_ID}-theme`, "system", {
+          internal: true,
+          serialize: (t) => t,
+          parse: (raw) => raw as Theme,
+          validate: (t) => t === "light" || t === "dark" || t === "system",
+        }),
+        min: persisted<boolean>(`${PANEL_ID}-min`, false, {
+          internal: true,
+          serialize: (v) => (v ? "1" : "0"),
+          parse: (raw) => raw === "1",
+        }),
+        logSize: persisted<number>(`${PANEL_ID}-logsize`, 1000, {
+          internal: true,
+          serialize: String,
+          parse: Number,
+          validate: (n) => LOG_SIZES.includes(n),
+        }),
+        pos: persisted<PanelPos>(`${PANEL_ID}-pos`, null, {
+          internal: true,
+          validate: (v) =>
+            v !== null &&
+            typeof v.left === "number" &&
+            typeof v.top === "number",
+        }),
+        size: persisted<PanelSize>(`${PANEL_ID}-size`, null, {
+          internal: true,
+          validate: (v) =>
+            v !== null &&
+            typeof v.width === "number" &&
+            typeof v.height === "number",
+        }),
+      };
+    }, PANEL_OPTS);
+    signals = created;
+  }
   return signals;
 }
 
@@ -295,13 +307,14 @@ function barIcon(inner: string): Element {
 /* ============================================================ mount / unmount ====== */
 
 /** Mount the floating inspector panel (dev only). Idempotent; a no-op until called. */
-export function mountInspector(target: Element = document.body): void {
+export function mountInspector(target?: Element): void {
   if (panel || typeof document === "undefined") return;
+  const mountTarget = target ?? document.body;
 
   // Inspection is opt-in and off by default; mounting the panel is the explicit request for it, so
   // turn it on. Only nodes created from here on carry metadata — enable earlier (configure({ inspect:
   // true }) at startup) if you want pre-existing nodes in the census too.
-  configure({ inspect: true });
+  previousInspect = configure({ inspect: true }).inspect ?? false;
 
   if (!document.getElementById(`${PANEL_ID}-css`)) {
     const style = document.createElement("style");
@@ -526,7 +539,7 @@ export function mountInspector(target: Element = document.body): void {
   };
   document.addEventListener("pointerdown", closeMenuOnOutside);
 
-  target.append(panel);
+  mountTarget.append(panel);
   document.body.append(menu);
 
   const savedSize = panelSignals().size();
@@ -596,6 +609,7 @@ export function mountInspector(target: Element = document.body): void {
 
 /** Remove the panel and stop all observation/timers. Safe to call when not mounted. */
 export function unmountInspector(): void {
+  if (typeof document === "undefined") return;
   stopStats();
   for (const dispose of scrollFades) dispose();
   scrollFades.length = 0;
@@ -605,6 +619,9 @@ export function unmountInspector(): void {
   // returned — e.g. the tab switcher — are node-owned and die with remove(panel) below.)
   inspectorScope?.stop();
   inspectorScope = null;
+  signalScope?.stop();
+  signalScope = null;
+  signals = null;
   if (closeMenuOnOutside)
     document.removeEventListener("pointerdown", closeMenuOnOutside);
   closeMenuOnOutside = null;
@@ -618,6 +635,8 @@ export function unmountInspector(): void {
   prevTab = null;
   teardownGraph();
   teardownTrace();
+  if (previousInspect !== null) configure({ inspect: previousInspect });
+  previousInspect = null;
 }
 
 /** Whether the inspector is currently mounted. */
@@ -626,7 +645,7 @@ export function inspectorMounted(): boolean {
 }
 
 /** Show the inspector if hidden, hide it if shown. */
-export function toggleInspector(target: Element = document.body): void {
+export function toggleInspector(target?: Element): void {
   if (panel) unmountInspector();
   else mountInspector(target);
 }

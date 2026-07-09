@@ -1,55 +1,94 @@
+import { a as e, t } from "../ownership-base-DfUs28hK.js";
 //#region src/dom/virtual-list.ts
-function e(e) {
-	let t = e.rowHeight, n = e.overscan ?? 6, r = document.createElement("div");
-	r.style.position = "relative";
-	let i = document.createElement("div");
-	i.style.cssText = "width:1px;pointer-events:none", r.append(i);
-	let a = [], o = /* @__PURE__ */ new Map(), s = null, c = 0, l = () => {
-		let i = s;
-		if (!i) return;
-		let c = i.clientHeight;
-		if (c === 0) return;
-		let l = i.getBoundingClientRect().top - r.getBoundingClientRect().top, u = a.length, d = Math.floor(l / t) - n;
-		d < 0 && (d = 0);
-		let f = Math.ceil((l + c) / t) + n;
-		f > u && (f = u);
-		let p = /* @__PURE__ */ new Set();
-		for (let n = d; n < f; n++) {
-			let i = a.at(n);
+function n(n) {
+	let r = n.rowHeight, i = n.overscan ?? 6, a = document.createElement("div");
+	a.style.position = "relative";
+	let o = document.createElement("div");
+	o.style.cssText = "width:1px;pointer-events:none", a.append(o);
+	let s = [], c = /* @__PURE__ */ new Map(), l = null, u = 0, d = 0, f = (e) => {
+		if (e.length === 1) throw e[0];
+		if (e.length > 1) throw AggregateError(e, "Multiple virtual-list rows failed to dispose.");
+	}, p = () => {
+		let t = l;
+		if (!t) return;
+		let o = t.clientHeight;
+		if (o === 0) return;
+		let u = t.getBoundingClientRect().top - a.getBoundingClientRect().top, p = s.length, m = Math.floor(u / r) - i;
+		m < 0 && (m = 0);
+		let h = Math.ceil((u + o) / r) + i;
+		h > p && (h = p);
+		let g = /* @__PURE__ */ new Set(), _ = [];
+		for (let t = m; t < h; t++) {
+			let i = s.at(t);
 			if (i === void 0) continue;
-			let s = e.key(i);
-			p.add(s);
-			let c = o.get(s) ?? null, l = e.render(i, c);
-			l.style.transform = `translateY(${n * t}px)`, c === null ? (r.append(l), o.set(s, l)) : l !== c && (c.replaceWith(l), o.set(s, l));
+			let o = n.key(i);
+			g.add(o);
+			let l = c.get(o);
+			if (l !== void 0 && l.revision === d && l.index === t) continue;
+			let u = l?.row ?? null, f = n.render(i, u);
+			if (f.style.transform = `translateY(${t * r}px)`, l === void 0) a.append(f);
+			else if (f !== l.row) {
+				l.row.before(f), c.set(o, {
+					row: f,
+					revision: d,
+					index: t
+				});
+				try {
+					e(l.row);
+				} catch (e) {
+					_.push(e);
+				}
+				continue;
+			}
+			c.set(o, {
+				row: f,
+				revision: d,
+				index: t
+			});
 		}
-		for (let [e, t] of o) p.has(e) || (t.remove(), o.delete(e));
-	}, u = () => {
-		c ||= requestAnimationFrame(() => {
-			c = 0, l();
+		for (let [t, n] of c) if (!g.has(t)) {
+			c.delete(t);
+			try {
+				e(n.row);
+			} catch (e) {
+				_.push(e);
+			}
+		}
+		f(_);
+	}, m = () => {
+		u ||= requestAnimationFrame(() => {
+			u = 0, p();
 		});
-	}, d = () => {
-		if (s) return;
-		let e = r.parentElement;
-		e && (s = e, e.addEventListener("scroll", u, { passive: !0 }));
+	}, h = () => {
+		if (l) return;
+		let e = a.parentElement;
+		e && (l = e, e.addEventListener("scroll", m, { passive: !0 }));
 	};
 	return {
-		el: r,
+		el: a,
 		setItems(e) {
-			a = e, i.style.height = `${a.length * t}px`, d(), l();
+			s = e, d++, o.style.height = `${s.length * r}px`, h(), p();
 		},
 		refresh() {
-			d(), l();
+			h(), p();
 		},
 		scrollToEnd() {
-			s && (s.scrollTop = s.scrollHeight);
+			l && (l.scrollTop = l.scrollHeight);
 		},
 		scrollToIndex(e) {
-			s && (s.scrollTop = Math.max(0, e * t - (s.clientHeight - t) / 2), l());
+			l && (l.scrollTop = Math.max(0, e * r - (l.clientHeight - r) / 2), p());
 		},
 		destroy() {
-			c && cancelAnimationFrame(c), s?.removeEventListener("scroll", u), s = null, o.clear(), r.replaceChildren();
+			u && cancelAnimationFrame(u), l?.removeEventListener("scroll", m), l = null;
+			let e = !1, n;
+			try {
+				t(a);
+			} catch (t) {
+				e = !0, n = t;
+			}
+			if (c.clear(), a.replaceChildren(), e) throw n;
 		}
 	};
 }
 //#endregion
-export { e as virtualList };
+export { n as virtualList };

@@ -1,9 +1,9 @@
-// Reactive attribute/class/style reads, backed by ONE shared MutationObserver — observe() takes
-// per-target options, so each watched element carries an attributeFilter of exactly its
-// subscribed names. Subscribing or unsubscribing rebuilds the observation set (drain pending
-// records, disconnect, re-observe the survivors) — an O(watched elements) walk paid only when a
-// subscription changes, never per mutation. Everything is subscriber-counted through source():
-// with nothing observed the observer is disconnected and this module costs zero.
+// Reactive attribute/class/style reads, backed by ONE shared MutationObserver. Adding the first
+// subscription for an element observes only that target; its callback filters records through the
+// subscribed-name map. MutationObserver has no unobserve(target), so final-target removals are
+// batched into one microtask rebuild instead of repeatedly walking all survivors. Everything is
+// subscriber-counted through source(): with nothing observed the observer is disconnected and this
+// module costs zero.
 //
 // attrRead/classRead/styleRead are the element forms of attr()/classed()/style() in ./index.ts;
 // class and style reads derive from the class/style attribute signals, deduped by computed().
@@ -15,6 +15,7 @@ const signals = new WeakMap<Element, Map<string, Read<string | null>>>();
 // Entries are removed by each source's disconnect, so this map never outlives its subscribers.
 const watched = new Map<Element, Map<string, (value: string | null) => void>>();
 let observer: MutationObserver | null = null;
+let rebuildQueued = false;
 
 function deliver(records: MutationRecord[]): void {
   for (const record of records) {
@@ -25,26 +26,62 @@ function deliver(records: MutationRecord[]): void {
   }
 }
 
-// Rebuild the observation set after a registry change. disconnect() is the only way to drop a
-// target, so drain what's pending, reset, and re-observe every survivor with its exact filter.
-function reobserve(): void {
-  if (observer === null) {
-    if (watched.size === 0) return;
-    observer = new MutationObserver(deliver);
-  } else {
-    deliver(observer.takeRecords());
-    observer.disconnect();
+function observeTarget(el: Element): void {
+  observer ??= new MutationObserver(deliver);
+  observer.observe(el, { attributes: true });
+}
+
+// MutationObserver can update an existing target's options but cannot stop observing one target.
+// Coalesce any number of final-target removals, then rebuild the survivors once.
+function scheduleRebuild(): void {
+  if (rebuildQueued) return;
+  rebuildQueued = true;
+  queueMicrotask(() => {
+    rebuildQueued = false;
+    const current = observer;
+    if (current === null) return;
+    deliver(current.takeRecords());
+    current.disconnect();
     if (watched.size === 0) {
       observer = null;
       return;
     }
+    for (const el of watched.keys()) observeTarget(el);
+  });
+}
+
+function addSetter(
+  el: Element,
+  name: string,
+  set: (value: string | null) => void,
+): void {
+  let setters = watched.get(el);
+  if (!setters) {
+    setters = new Map();
+    watched.set(el, setters);
+    observeTarget(el);
   }
-  for (const [el, setters] of watched) {
-    observer.observe(el, {
-      attributes: true,
-      attributeFilter: [...setters.keys()],
-    });
-  }
+  setters.set(name, set);
+}
+
+function removeSetter(el: Element, name: string): void {
+  const current = watched.get(el);
+  if (!current) return;
+  current.delete(name);
+  if (current.size !== 0) return;
+  watched.delete(el);
+  scheduleRebuild();
+}
+
+// Kept separate from attrSource so subscriber setup/teardown stays symmetric and the registry
+// cannot retain an element after its last source disconnects.
+function connectAttribute(
+  el: Element,
+  name: string,
+  set: (value: string | null) => void,
+): () => void {
+  addSetter(el, name, set);
+  return () => removeSetter(el, name);
 }
 
 export function attrRead(el: Element, name: string): Read<string | null> {
@@ -54,20 +91,7 @@ export function attrRead(el: Element, name: string): Read<string | null> {
 function attrSource(el: Element, name: string): Read<string | null> {
   return source<string | null>((set) => {
     set(el.getAttribute(name)); // resync: it may have changed while unobserved
-    let setters = watched.get(el);
-    if (!setters) {
-      setters = new Map();
-      watched.set(el, setters);
-    }
-    setters.set(name, set);
-    reobserve();
-    return () => {
-      const current = watched.get(el);
-      if (!current) return;
-      current.delete(name);
-      if (current.size === 0) watched.delete(el);
-      reobserve();
-    };
+    return connectAttribute(el, name, set);
   }, el.getAttribute(name));
 }
 

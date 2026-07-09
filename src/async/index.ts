@@ -55,7 +55,15 @@ export function resource<T>(
     // Only the previous-value read is untracked — the fetcher's own synchronous reads are the
     // resource's dependencies.
     const previous = untrack(() => value());
-    fetcher(previous, controller.signal).then(
+    let pending: Promise<T>;
+    try {
+      pending = fetcher(previous, controller.signal);
+    } catch (rejection) {
+      // A fetcher is allowed to fail before it returns its promise. Treat that exactly like an
+      // asynchronous rejection instead of letting it escape the effect and strand loading=true.
+      pending = Promise.reject(rejection);
+    }
+    pending.then(
       (next) => {
         if (!live) return;
         batch(() => {

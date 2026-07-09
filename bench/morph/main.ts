@@ -63,7 +63,7 @@ function skipLayer(blockMorph: (old: Element, next: Element) => void): Engine {
 }
 
 const idiomorphSkip: Engine = skipLayer((old, next) => {
-  Idiomorph.morph(old, next.outerHTML, { morphStyle: "outerHTML" });
+  Idiomorph.morph(old, next, { morphStyle: "outerHTML" });
 });
 
 const loomSkip: Engine = skipLayer((old, next) => {

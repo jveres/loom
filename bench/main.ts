@@ -67,6 +67,7 @@ interface LoomRow {
   readonly id: number;
   readonly label: State<string>;
   readonly selected: State<boolean>;
+  element?: HTMLTableRowElement;
 }
 
 interface VanillaRow {
@@ -114,6 +115,7 @@ const updateButton = getElement("upd", HTMLButtonElement);
 const swapButton = getElement("swp", HTMLButtonElement);
 const clearButton = getElement("clr", HTMLButtonElement);
 const resultsBody = getElement("res", HTMLTableSectionElement);
+const resultsTitle = getElement("result-title", HTMLElement);
 const referenceBody = getElement("refbody", HTMLTableSectionElement);
 const noteNode = getElement("note", HTMLElement);
 
@@ -162,7 +164,6 @@ const operations: readonly Operation[] = [
 
 let loomRows: LoomRow[] = [];
 let loomSelected: LoomRow | undefined;
-let loomNodes = new Map<number, HTMLTableRowElement>();
 
 const loomImplementation: BenchImplementation = {
   name: "Loom",
@@ -188,8 +189,8 @@ const loomImplementation: BenchImplementation = {
   swap() {
     const left = loomRows[1];
     const right = loomRows[998];
-    const leftNode = left ? loomNodes.get(left.id) : undefined;
-    const rightNode = right ? loomNodes.get(right.id) : undefined;
+    const leftNode = left?.element;
+    const rightNode = right?.element;
     if (!left || !right || !leftNode || !rightNode) return;
 
     const afterLeft = leftNode.nextSibling;
@@ -206,10 +207,9 @@ const loomImplementation: BenchImplementation = {
     const row = loomRows[index];
     if (!row) return;
 
-    const node = loomNodes.get(row.id);
+    const node = row.element;
     if (loomSelected === row) loomSelected = undefined;
     if (node) remove(node);
-    loomNodes.delete(row.id);
     loomRows.splice(index, 1);
   },
   clear() {
@@ -306,8 +306,7 @@ function renderLoomRow(row: LoomRow): HTMLTableRowElement {
     class: classed("danger", row.selected),
   });
   tableRow.setAttribute("data-loom-key", String(row.id));
-  loomNodes.set(row.id, tableRow);
-
+  row.element = tableRow;
   const idCell = h("td", { class: "col-md-1" }, String(row.id));
   const labelCell = h("td", { class: "col-md-4" });
   const labelLink = h("a");
@@ -385,7 +384,6 @@ function mountVanillaRows(): void {
 
 function mountLoomRows(rows: readonly LoomRow[]): void {
   tbody.textContent = "";
-  loomNodes = new Map();
   appendLoomRows(rows);
 }
 
@@ -400,7 +398,6 @@ function clearLoomRows(): void {
   tbody.textContent = "";
   loomRows = [];
   loomSelected = undefined;
-  loomNodes = new Map();
 }
 
 function buildData(count: number): DataRow[] {
@@ -431,13 +428,9 @@ async function runBenchmark(): Promise<void> {
   vanillaImplementation.clear();
   await afterPaint();
 
-  const loom = await runSuite(loomImplementation, setStatus);
-  loomImplementation.clear();
-  await afterPaint();
-
-  const vanilla = await runSuite(vanillaImplementation, setStatus);
+  const { loom, vanilla, ratios } = await runComparison(setStatus);
   vanillaImplementation.clear();
-  renderResults(loom, vanilla);
+  renderResults(loom, vanilla, ratios);
   setStatus("done");
   setButtonsDisabled(false);
   busy = false;
@@ -458,24 +451,24 @@ async function profilePatchLayout(): Promise<void> {
   busy = false;
 }
 
-async function runSuite(
-  implementation: BenchImplementation,
-  status: (message: string) => void,
-): Promise<Map<string, number>> {
-  const results = new Map<string, number>();
-  for (const operation of operations) {
-    status(`${implementation.name} - ${operation.name}`);
-    results.set(
-      operation.name,
-      await timeOperation(
-        () => operation.setup(implementation),
-        () => operation.action(implementation),
-      ),
-    );
+async function runComparison(status: (message: string) => void): Promise<{
+  loom: Map<string, number>;
+  vanilla: Map<string, number>;
+  ratios: Map<string, number>;
+}> {
+  const loom = new Map<string, number>();
+  const vanilla = new Map<string, number>();
+  const ratios = new Map<string, number>();
+  for (let index = 0; index < operations.length; index++) {
+    const operation = operations[index];
+    if (!operation) continue;
+    status(`paired - ${operation.name}`);
+    const result = await timeComparison(operation, index);
+    loom.set(operation.name, result.loom);
+    vanilla.set(operation.name, result.vanilla);
+    if (result.ratio !== undefined) ratios.set(operation.name, result.ratio);
   }
-  implementation.clear();
-  await afterPaint();
-  return results;
+  return { loom, vanilla, ratios };
 }
 
 async function runSplitSuite(
@@ -497,21 +490,53 @@ async function runSplitSuite(
   return results;
 }
 
-async function timeOperation(
-  setup: () => void,
-  action: () => void,
-  runs = 5,
-): Promise<number> {
-  const times: number[] = [];
-  for (let index = 0; index < runs + 1; index++) {
-    setup();
-    await afterPaint();
-    const start = performance.now();
-    action();
-    await afterPaint();
-    if (index > 0) times.push(performance.now() - start);
+async function timeComparison(
+  operation: Operation,
+  operationIndex: number,
+  warmups = 4,
+  samples = 12,
+): Promise<{ loom: number; vanilla: number; ratio: number | undefined }> {
+  const loom: number[] = [];
+  const vanilla: number[] = [];
+  const ratios: number[] = [];
+  for (let round = 0; round < warmups + samples; round++) {
+    // ABBA ordering gives each implementation the same number of first/second slots, so garbage
+    // left by a 10k-row sample cannot consistently land on only one side of the comparison.
+    const phase = (round + operationIndex) & 3;
+    const implementations =
+      phase === 0 || phase === 3
+        ? [loomImplementation, vanillaImplementation]
+        : [vanillaImplementation, loomImplementation];
+    let loomElapsed = 0;
+    let vanillaElapsed = 0;
+    for (const implementation of implementations) {
+      seed = 1;
+      nextId = 1;
+      operation.setup(implementation);
+      await afterPaint();
+      const start = performance.now();
+      operation.action(implementation);
+      const elapsed = performance.now() - start;
+      if (round >= warmups) {
+        (implementation === loomImplementation ? loom : vanilla).push(elapsed);
+        if (implementation === loomImplementation) loomElapsed = elapsed;
+        else vanillaElapsed = elapsed;
+      }
+      implementation.clear();
+      await afterPaint();
+    }
+    if (loomElapsed > 0 && vanillaElapsed > 0)
+      ratios.push(loomElapsed / vanillaElapsed);
   }
-  return median(times);
+  const loomMedian = median(loom);
+  const vanillaMedian = median(vanilla);
+  // Ratios below a 1ms median are clock-quantization artifacts in privacy-coarsened browsers.
+  // Require enough non-zero pairs as well, rather than selecting only a few slow outliers.
+  const ratio =
+    loomMedian >= 1 && vanillaMedian >= 1 && ratios.length >= samples / 2
+      ? median(ratios)
+      : undefined;
+  return { loom: loomMedian, vanilla: vanillaMedian, ratio };
 }
 
 async function timeSplit(
@@ -550,7 +575,9 @@ async function timeSplit(
 function renderResults(
   loom: ReadonlyMap<string, number>,
   vanilla: ReadonlyMap<string, number>,
+  ratios: ReadonlyMap<string, number>,
 ): void {
+  resultsTitle.textContent = "Results - median script ms";
   const measured = operations.map((operation) => {
     const loomTime = requiredResult(loom, operation.name);
     const vanillaTime = requiredResult(vanilla, operation.name);
@@ -558,7 +585,7 @@ function renderResults(
       name: operation.name,
       loomTime,
       vanillaTime,
-      ratio: ratioOf(loomTime, vanillaTime),
+      ratio: ratios.get(operation.name),
     };
   });
   const rows = measured.map(({ name, loomTime, vanillaTime, ratio }) => {
@@ -587,27 +614,22 @@ function renderResults(
         )}x</b></td>`;
   const excluded = measured.length - logRatios.length;
 
-  resultsBody.innerHTML = `<tr><th>operation</th><th>Loom</th><th>Vanilla</th><th>Loom/van</th></tr>${rows.join(
+  resultsBody.innerHTML = `<tr><th>operation</th><th>Loom script</th><th>Vanilla script</th><th>paired Loom/van</th></tr>${rows.join(
     "",
   )}<tr><td><b>geo-mean ratio</b></td><td></td><td></td>${meanCell}</tr>`;
-  referenceBody.innerHTML =
-    "<tr><th>published slowdown vs vanilla</th><th></th></tr>" +
-    "<tr><td>Solid</td><td>~1.05-1.15x</td></tr>" +
-    "<tr><td>Svelte / Vue</td><td>~1.1-1.4x</td></tr>" +
-    "<tr><td>Preact / Angular</td><td>~1.4-1.6x</td></tr>" +
-    "<tr><td>React</td><td>~1.6-2.0x</td></tr>";
+  referenceBody.innerHTML = "";
   noteNode.innerHTML =
-    "Loom vs a hand-written vanilla keyed baseline on this machine. " +
-    "The published rows are indicative ranges from js-framework-benchmark; " +
-    "compare ratios, not absolute milliseconds." +
+    "Loom vs a hand-written vanilla keyed baseline on this machine. The comparison " +
+    "times synchronous action code only; use Profile patch/layout for rendered totals." +
     (excluded > 0
-      ? ` ${excluded} operation${excluded === 1 ? "" : "s"} ran below the ` +
-        "timer's resolution (0.0ms median) and are shown as &mdash;, " +
+      ? ` ${excluded} operation${excluded === 1 ? "" : "s"} had a median below 1ms ` +
+        "and are shown as &mdash;, " +
         "excluded from the geo-mean."
       : "");
 }
 
 function renderSplitResults(split: ReadonlyMap<string, SplitTiming>): void {
+  resultsTitle.textContent = "Results - median script/layout ms";
   const rows = operations.map((operation) => {
     const timing = requiredSplit(split, operation.name);
     const total = timing.total || 1;
@@ -648,14 +670,6 @@ function requiredSplit(
   const value = results.get(name);
   if (value === undefined) throw new Error(`Missing split result for ${name}.`);
   return value;
-}
-
-// A 0.0 median means the operation ran below the clock's resolution (browsers coarsen
-// performance.now(), some to a full 1ms) — a ratio against it is meaningless (0 → Infinity and
-// log(0) → -Infinity would poison the geo-mean), so such rows carry no ratio.
-function ratioOf(loomTime: number, vanillaTime: number): number | undefined {
-  if (loomTime <= 0 || vanillaTime <= 0) return undefined;
-  return loomTime / vanillaTime;
 }
 
 function ratioClass(value: number): string {

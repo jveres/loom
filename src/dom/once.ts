@@ -3,10 +3,13 @@
 import type { Stop } from "../loom.js";
 
 export function once(stop: Stop): Stop {
-  let done = false;
+  let current: Stop | undefined = stop;
   return () => {
-    if (done) return;
-    done = true;
-    stop();
+    const run = current;
+    if (!run) return;
+    // Release captured observer/element state immediately after manual teardown, even when the
+    // idempotent wrapper itself remains registered with a longer-lived owner node.
+    current = undefined;
+    run();
   };
 }

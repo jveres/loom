@@ -99,8 +99,8 @@ export interface ChannelOptions {
   readonly fields?: readonly string[];
 }
 
-export interface Channel {
-  readonly name: string;
+export interface Channel<Name extends string = string> {
+  readonly name: Name;
   /** True while ≥1 meter is attached — gate expensive argument prep behind it. */
   readonly active: boolean;
   /** Record one event. No-op and zero-allocation when inactive. One value per declared field. */
@@ -127,20 +127,23 @@ export interface Frame {
  */
 export type MeterAggregation = "count" | "samples";
 
-export interface Meter {
+export interface Meter<Name extends string = string> {
   /** Pull one Frame per metered channel, keyed by channel name. Call on your own clock. */
-  read(): Readonly<Record<string, Frame>>;
+  read(): Readonly<Partial<Record<Name, Frame>>>;
   /** Detach from every channel (drops their gate). */
   stop(): void;
 }
 
 // Shared by every count-only channel's Frame (and any channel with no new samples) so meter.read()
 // allocates nothing on the common path.
-const EMPTY_SAMPLES: ReadonlyArray<Readonly<Record<string, unknown>>> = [];
+const EMPTY_SAMPLES: ReadonlyArray<Readonly<Record<string, unknown>>> =
+  Object.freeze([]);
 
-function channelOf(node: ChannelNode): Channel {
+function channelOf<Name extends string = string>(
+  node: ChannelNode,
+): Channel<Name> {
   return {
-    name: node.name,
+    name: node.name as Name,
     get active() {
       return node.meters !== 0;
     },
@@ -150,7 +153,10 @@ function channelOf(node: ChannelNode): Channel {
   };
 }
 
-export function channel(name: string, options?: ChannelOptions): Channel {
+export function channel<const Name extends string>(
+  name: Name,
+  options?: ChannelOptions,
+): Channel<Name> {
   // `loom:` is reserved for the runtime's own built-in event channels (the `events` registry behind
   // loom/observe), which share this registry. Reject it so app channels can't collide with internals.
   if (name.startsWith("loom:")) {
@@ -174,7 +180,7 @@ export function channel(name: string, options?: ChannelOptions): Channel {
       );
     }
   }
-  return channelOf(node);
+  return channelOf<Name>(node);
 }
 
 // Element-wise field comparison: a `.join()` compare would treat ["a,b"] and ["a","b"] as equal.
@@ -184,10 +190,10 @@ function sameFields(a: readonly string[], b: readonly string[]): boolean {
   return true;
 }
 
-export function meter(
-  channels: ReadonlyArray<Channel>,
+export function meter<const Channels extends ReadonlyArray<Channel>>(
+  channels: Channels,
   aggregation: MeterAggregation = "count",
-): Meter {
+): Meter<Channels[number]["name"]> {
   const withSamples = aggregation === "samples";
   const members: Array<{ readonly node: ChannelNode; cursor: number }> = [];
   for (const ch of channels) {
@@ -214,16 +220,34 @@ export function meter(
     attached = false;
     for (const m of members) {
       m.node.meters--;
-      if (withSamples) m.node.samples--;
+      if (withSamples) {
+        m.node.samples--;
+        if (m.node.samples === 0) {
+          // A detail ring can be very large and may retain arbitrary application objects. Release
+          // it as soon as its last samples reader detaches; a future reader starts with a fresh
+          // ring and a cursor at the then-current sequence.
+          m.node.cols = undefined;
+          m.node.head = 0;
+        }
+      }
     }
   };
   attach();
   // A meter is a scope resource: pause() detaches (the channels can go inactive → the core's emit
   // sites become no-ops again), resume() re-attaches fresh, stop()/scope teardown detaches.
-  registerScopeResource({ pause: detach, resume: attach, stop: detach });
+  const stop = registerScopeResource({
+    pause: detach,
+    resume: attach,
+    stop: detach,
+  });
   return {
     read() {
-      const frame: Record<string, Frame> = {};
+      // Dynamic channel/field names are data, not object structure. Null prototypes keep names
+      // such as "__proto__" and "constructor" as ordinary own keys.
+      const frame = Object.create(null) as Record<
+        Channels[number]["name"],
+        Frame
+      >;
       for (const m of members) {
         const node = m.node;
         const seq = node.seq;
@@ -241,7 +265,7 @@ export function meter(
           const out: Array<Record<string, unknown>> = [];
           for (let k = 0; k < avail; k++) {
             const idx = (head + cap - avail + k) & mask;
-            const rec: Record<string, unknown> = {};
+            const rec = Object.create(null) as Record<string, unknown>;
             for (let f = 0; f < fields.length; f++) {
               rec[fields[f] as string] = cols[f]?.[idx];
             }
@@ -250,11 +274,15 @@ export function meter(
           samples = out;
         }
         m.cursor = seq;
-        frame[node.name] = { count, dropped, samples };
+        frame[node.name as Channels[number]["name"]] = {
+          count,
+          dropped,
+          samples,
+        };
       }
       return frame;
     },
-    stop: detach,
+    stop,
   };
 }
 
@@ -262,13 +290,13 @@ export function meter(
 // public `events` accessors when an app never meters. The built-in channel *nodes* above stay (the
 // core's emit gates reference them); only these wrappers tree-shake away.
 export const events = {
-  read: /* @__PURE__ */ channelOf(readCh),
-  write: /* @__PURE__ */ channelOf(writeCh),
-  compute: /* @__PURE__ */ channelOf(computeCh),
-  effect: /* @__PURE__ */ channelOf(effectCh),
-  flush: /* @__PURE__ */ channelOf(flushCh),
-  create: /* @__PURE__ */ channelOf(createCh),
-  dispose: /* @__PURE__ */ channelOf(disposeCh),
+  read: /* @__PURE__ */ channelOf<"loom:read">(readCh),
+  write: /* @__PURE__ */ channelOf<"loom:write">(writeCh),
+  compute: /* @__PURE__ */ channelOf<"loom:compute">(computeCh),
+  effect: /* @__PURE__ */ channelOf<"loom:effect">(effectCh),
+  flush: /* @__PURE__ */ channelOf<"loom:flush">(flushCh),
+  create: /* @__PURE__ */ channelOf<"loom:create">(createCh),
+  dispose: /* @__PURE__ */ channelOf<"loom:dispose">(disposeCh),
 } as const;
 
 // The record shape each built-in detail channel writes into a Frame's `samples`, keyed by the
