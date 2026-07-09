@@ -45,18 +45,18 @@ describe("scrollFade", () => {
       scrollTop: 0,
     });
     const dispose = scrollFade(el);
-    expect(el.style.maskImage).toContain("#000 0px");
-    expect(el.style.maskImage).toContain("calc(100% - 14px)");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-start")).toBe("0px");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-end")).toBe("14px");
 
     el.scrollTop = 50;
     el.dispatchEvent(new Event("scroll"));
-    expect(el.style.maskImage).toContain("#000 14px");
-    expect(el.style.maskImage).toContain("calc(100% - 14px)");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-start")).toBe("14px");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-end")).toBe("14px");
 
     el.scrollTop = 200; // at the bottom
     el.dispatchEvent(new Event("scroll"));
-    expect(el.style.maskImage).toContain("#000 14px");
-    expect(el.style.maskImage).toContain("calc(100% - 0px)");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-start")).toBe("14px");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-end")).toBe("0px");
     dispose();
   });
 
@@ -69,7 +69,9 @@ describe("scrollFade", () => {
     const dispose = scrollFade(el);
     // Opaque, not "": clearing would flip the element off the masked raster
     // path and the next fade-in flashes for a frame.
-    expect(el.style.maskImage).toBe("linear-gradient(#000 0 0)");
+    expect(el.style.maskImage).not.toBe("");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-start")).toBe("0px");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-end")).toBe("0px");
 
     const tall = scrollable({
       scrollHeight: 300,
@@ -90,8 +92,55 @@ describe("scrollFade", () => {
       scrollTop: 50,
     });
     const dispose = scrollFade(el, { size: 24 });
-    expect(el.style.maskImage).toContain("#000 24px");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-start")).toBe("24px");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-end")).toBe("24px");
     dispose();
+  });
+
+  it("keeps a CSS-driven sticky-header inset opaque", () => {
+    const el = scrollable({
+      scrollHeight: 300,
+      clientHeight: 100,
+      scrollTop: 50,
+    });
+    el.style.setProperty("--scroll-fade-inset", "32px");
+
+    const dispose = scrollFade(el);
+
+    expect(el.style.maskImage).toBe(
+      "linear-gradient(to bottom, #000 0, #000 var(--scroll-fade-inset, 0px), transparent var(--scroll-fade-inset, 0px), #000 calc(var(--scroll-fade-inset, 0px) + var(--loom-scroll-fade-start, 0px)), #000 calc(100% - var(--loom-scroll-fade-end, 0px)), transparent 100%)",
+    );
+    dispose();
+  });
+
+  it("animates an edge when a transition duration is set", () => {
+    const registerProperty = vi.fn();
+    vi.stubGlobal("CSS", { ...globalThis.CSS, registerProperty });
+    const el = scrollable({
+      scrollHeight: 300,
+      clientHeight: 100,
+      scrollTop: 0,
+    });
+    const cancel = vi.fn();
+    const animate = vi.fn(() => ({ cancel }));
+    Object.defineProperty(el, "animate", {
+      configurable: true,
+      value: animate,
+    });
+    const dispose = scrollFade(el, { transition: 120 });
+
+    el.scrollTop = 50;
+    el.dispatchEvent(new Event("scroll"));
+
+    expect(animate).toHaveBeenCalledWith(
+      [
+        { "--loom-scroll-fade-start": "0px" },
+        { "--loom-scroll-fade-start": "14px" },
+      ],
+      { duration: 120, easing: "ease-out" },
+    );
+    dispose();
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('fades horizontally with axis: "x"', () => {
@@ -110,10 +159,10 @@ describe("scrollFade", () => {
     document.body.append(el);
     const dispose = scrollFade(el, { axis: "x" });
     expect(el.style.maskImage).toContain("to right");
-    expect(el.style.maskImage).toContain("#000 14px");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-start")).toBe("14px");
     el.scrollLeft = 200; // at the end
     el.dispatchEvent(new Event("scroll"));
-    expect(el.style.maskImage).toContain("calc(100% - 0px)");
+    expect(el.style.getPropertyValue("--loom-scroll-fade-end")).toBe("0px");
     dispose();
   });
 });

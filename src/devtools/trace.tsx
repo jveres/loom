@@ -161,7 +161,7 @@ export function buildTracePane(): HTMLElement {
 
   traceScroll = <div class="li-tr-scroll" />;
   traceScroll.append(traceVList.el);
-  traceFade = scrollFade(traceScroll); // same edge fade as the panel body
+  traceFade = scrollFade(traceScroll, { transition: 120 }); // same edge fade as the panel body
   // Hover a row to outline the DOM node(s) that signal drives — same overlay the Graph uses. Delegated
   // (rows are reused) and guarded so moving within a row doesn't re-snapshot.
   traceScroll.addEventListener("pointerover", (e) => {

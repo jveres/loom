@@ -87,14 +87,12 @@
     }
   },
   "devDependencies": {
-    "@arrow-js/core": "^1.0.6",
-    "@biomejs/biome": "2.5.1",
-    "@types/node": "^26.0.1",
+    "@biomejs/biome": "2.5.3",
+    "@types/node": "^26.1.1",
     "alien-signals": "3.2.1",
     "idiomorph": "^0.7.4",
-    "shablon": "0.0.1-rc.21",
-    "typescript": "7.0.1-rc",
-    "vite": "8.1.0",
-    "vitest": "^4.1.8"
+    "typescript": "7.0.2",
+    "vite": "8.1.3",
+    "vitest": "^4.1.10"
   }
 }

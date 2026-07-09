@@ -353,7 +353,7 @@ function Et() {
 	});
 	return n.addEventListener("input", () => {
 		I = n.value.trim().toLowerCase(), N = I ? M.filter((e) => e.name.toLowerCase().includes(I)) : [], R();
-	}), k = /* @__PURE__ */ h("div", { class: "li-tr-scroll" }), k.append(D.el), vt = ie(k), k.addEventListener("pointerover", (e) => {
+	}), k = /* @__PURE__ */ h("div", { class: "li-tr-scroll" }), k.append(D.el), vt = ie(k, { transition: 120 }), k.addEventListener("pointerover", (e) => {
 		let t = ((e.target instanceof Element ? e.target : null)?.closest(".li-tr"))?.dataset.id;
 		t !== void 0 && Number(t) !== L && (L = Number(t), Ge(L));
 	}), k.addEventListener("pointerleave", () => {
@@ -1169,7 +1169,10 @@ function Ar(n = document.body) {
 			X.scrollTop = Math.min(t, n), e === "graph" ? ot() : e === "trace" && Nt();
 		}
 		wt(e === "trace" && Y?.classList.contains("li-min") !== !0), br = e ?? null;
-	}), _r.push(ie(X), ie(he, { axis: "x" }));
+	}), _r.push(ie(X, { transition: 120 }), ie(he, {
+		axis: "x",
+		transition: 120
+	}));
 }
 function jr() {
 	fr();

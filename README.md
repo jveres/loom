@@ -585,10 +585,13 @@ exactly while more lies beyond — driven by scroll position and kept current
 across resizes and content changes (no styling opinions; the effect is a
 `mask-image` on the element). `options.size` sets the fade length in px
 (default 14); `options.axis` picks the scroll axis (`"y"` default, `"x"` for
-horizontal strips). Returns a disposer. While no edge fades, the mask is an
-opaque gradient rather than none — clearing it would flip the element off the
-masked raster path and the next fade-in flashes for a frame. The dev
-inspector's own scrollers use it.
+horizontal strips). `options.transition` sets an optional edge transition
+duration in milliseconds (default 0). Current browsers animate registered
+gradient-stop properties; reduced-motion users and older browsers get an
+instant update. Returns a disposer. While no edge fades, the mask is an opaque
+gradient rather than none — clearing it would flip the element off the masked
+raster path and the next fade-in flashes for a frame. The dev inspector's own
+scrollers use a 120 ms transition.
 
 #### API index — `loom/dom`
 
@@ -1264,22 +1267,8 @@ node created, which widens the gap to ~`1.2x` on create-heavy work.
 
 Two browser benchmarks run from the dev server. `/bench/` compares Loom DOM
 bindings against a hand-written vanilla baseline on a js-framework-benchmark
-style table workload. `/bench/compare/` drives Loom, ArrowJS, Shablon, and the
-vanilla baseline through one shared command surface (create/update/swap/clear
-1k rows, create 10k). Medians (ms, July 2026, Apple M2, Chrome; two runs):
-
-| op | vanilla | loom | arrow | shablon |
-| --- | --- | --- | --- | --- |
-| create-1k | 8.5 | 7.0 | 7.6 | 10.0 |
-| update-1k (10th) | 1.1 | 0.9 | 1.0 | 1.7 |
-| swap-1k | 0.5 | 0.8 | 1.3 | 1.8 |
-| clear-1k | 2.3 | 2.5 | 2.2 | 3.8 |
-| create-10k | 51.9 | 46.4 | 60.6 | 86.5 |
-
-Loom beats the vanilla baseline on the create-heavy ops (keyed reconcile
-amortizes better than rebuild-and-append) and trades single-op wins with
-ArrowJS on swap/clear; Shablon trails throughout. `/bench/morph/` benches `morph()` against Idiomorph on a
-streaming-markdown workload (full-document and per-block-skip modes).
+style table workload. `/bench/morph/` compares `morph()` against Idiomorph on a
+streaming-markdown workload in full-document and per-block-skip modes.
 
 ## Design notes
 

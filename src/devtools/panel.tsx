@@ -588,7 +588,10 @@ export function mountInspector(target: Element = document.body): void {
     prevTab = tab ?? null;
   });
 
-  scrollFades.push(scrollFade(bodyEl), scrollFade(tabscroll, { axis: "x" }));
+  scrollFades.push(
+    scrollFade(bodyEl, { transition: 120 }),
+    scrollFade(tabscroll, { axis: "x", transition: 120 }),
+  );
 }
 
 /** Remove the panel and stop all observation/timers. Safe to call when not mounted. */

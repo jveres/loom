@@ -1,4 +1,4 @@
-// scrollFade(el, { size?, axis? }) — soft-edge masks on a scrollable container: content fades
+// scrollFade(el, { size?, axis?, transition? }) — soft-edge masks on a scrollable container: content fades
 // out at an edge exactly while more content lies beyond it. Behavior only,
 // no styling opinions: the effect is a mask-image on the element itself,
 // driven by scroll position and kept current across resizes and content
@@ -9,9 +9,36 @@ export interface ScrollFadeOptions {
   readonly size?: number;
   /** Scroll axis to fade (default "y"). */
   readonly axis?: "x" | "y";
+  /** Edge transition duration in ms (default 0). */
+  readonly transition?: number;
 }
 
 const EPSILON = 4;
+const START_STOP = "--loom-scroll-fade-start";
+const END_STOP = "--loom-scroll-fade-end";
+const registeredCSS = new WeakSet<object>();
+
+function registerAnimatedStops(): boolean {
+  if (typeof CSS === "undefined") return false;
+  const css = CSS;
+  if (typeof css.registerProperty !== "function") return false;
+  if (registeredCSS.has(css)) return true;
+
+  for (const name of [START_STOP, END_STOP]) {
+    try {
+      css.registerProperty({
+        name,
+        syntax: "<length>",
+        inherits: false,
+        initialValue: "0px",
+      });
+    } catch {
+      // Another copy of Loom may already have registered the global name.
+    }
+  }
+  registeredCSS.add(css);
+  return true;
+}
 
 export function scrollFade(
   el: HTMLElement,
@@ -20,30 +47,78 @@ export function scrollFade(
   const size = options.size ?? 14;
   const horizontal = options.axis === "x";
   const direction = horizontal ? "to right" : "to bottom";
+  const inset = "var(--scroll-fade-inset, 0px)";
+  const startStop = `var(${START_STOP}, 0px)`;
+  const endStop = `var(${END_STOP}, 0px)`;
+  const requestedDuration = options.transition ?? 0;
+  const duration = Number.isFinite(requestedDuration)
+    ? Math.max(0, requestedDuration)
+    : 0;
+  const view = el.ownerDocument.defaultView;
+  const animateStops =
+    duration > 0 &&
+    view !== null &&
+    typeof el.animate === "function" &&
+    !view.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+    registerAnimatedStops();
   let start = -1;
   let end = -1;
+  let startAnimation: Animation | undefined;
+  let endAnimation: Animation | undefined;
+
+  // Keep one gradient installed: mask-image itself animates discretely, while
+  // registered length properties interpolate without flipping compositing.
+  const mask = `linear-gradient(${direction}, #000 0, #000 ${inset}, transparent ${inset}, #000 calc(${inset} + ${startStop}), #000 calc(100% - ${endStop}), transparent 100%)`;
+  el.style.maskImage = mask;
+  // Safari still needs the prefixed property.
+  el.style.webkitMaskImage = mask;
+
+  const setStop = (
+    property: string,
+    next: number,
+    previous: number,
+    animation: Animation | undefined,
+  ): Animation | undefined => {
+    const nextValue = `${next}px`;
+    if (!animateStops || view === null || previous < 0) {
+      animation?.cancel();
+      el.style.setProperty(property, nextValue);
+      return undefined;
+    }
+
+    const currentValue =
+      view.getComputedStyle(el).getPropertyValue(property).trim() ||
+      `${previous}px`;
+    animation?.cancel();
+    el.style.setProperty(property, nextValue);
+    if (currentValue === nextValue) return undefined;
+    return el.animate(
+      [{ [property]: currentValue }, { [property]: nextValue }],
+      { duration, easing: "ease-out" },
+    );
+  };
 
   const sync = (): void => {
     const scrolled = horizontal ? el.scrollLeft : el.scrollTop;
     const overflow = horizontal
       ? el.scrollWidth - el.clientWidth
       : el.scrollHeight - el.clientHeight;
+    // Sticky-header allowance, CSS-driven (--scroll-fade-inset on the
+    // host): the first N px stay fully visible — a sticky bar must
+    // not be shadowed by its own container's fade — and the start
+    // fade runs just below it (content emerging from under the bar). Keep the
+    // variable in CSS so scroll events never need computed-style resolution.
     const nextStart = scrolled > EPSILON ? size : 0;
     const nextEnd = overflow - scrolled > EPSILON ? size : 0;
     if (nextStart === start && nextEnd === end) return;
+    if (nextStart !== start) {
+      startAnimation = setStop(START_STOP, nextStart, start, startAnimation);
+    }
+    if (nextEnd !== end) {
+      endAnimation = setStop(END_STOP, nextEnd, end, endAnimation);
+    }
     start = nextStart;
     end = nextEnd;
-    // No-fade state is an OPAQUE mask, not no mask: clearing mask-image moves
-    // the element off the masked raster path, and the compositing flip when a
-    // fade first appears shows up as a one-frame flash (found by seam, which
-    // worked around it with a permanent base mask in CSS).
-    const mask =
-      start === 0 && end === 0
-        ? "linear-gradient(#000 0 0)"
-        : `linear-gradient(${direction}, transparent 0, #000 ${start}px, #000 calc(100% - ${end}px), transparent 100%)`;
-    el.style.maskImage = mask;
-    // Safari still needs the prefixed property.
-    el.style.webkitMaskImage = mask;
   };
 
   el.addEventListener("scroll", sync, { passive: true });
@@ -65,6 +140,10 @@ export function scrollFade(
     el.removeEventListener("scroll", sync);
     observer.disconnect();
     mutations.disconnect();
+    startAnimation?.cancel();
+    endAnimation?.cancel();
+    el.style.removeProperty(START_STOP);
+    el.style.removeProperty(END_STOP);
     el.style.maskImage = "";
     el.style.webkitMaskImage = "";
   };
