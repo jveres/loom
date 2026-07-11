@@ -13,6 +13,7 @@ import {
   onTap,
   onUnmount,
   remove,
+  replaceChildren,
   style,
   text,
   when,
@@ -86,6 +87,158 @@ describe("loom DOM ownership", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
     dispose(node);
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaceChildren disposes outgoing trees and preserves incoming descendants", () => {
+    const oldValue = state("old");
+    const keptValue = state("kept");
+    const old = h("span", null, () => oldValue());
+    const kept = h("strong", null, () => keptValue());
+    const outgoing = h("section", null, [old, kept]);
+    const parent = h("div", null, outgoing);
+
+    replaceChildren(parent, kept, " tail");
+    oldValue("stale");
+    keptValue("live");
+
+    expect(parent.textContent).toBe("live tail");
+    expect(old.textContent).toBe("old");
+    expect(kept.textContent).toBe("live");
+  });
+
+  it("replaceChildren settles the DOM and reports every disposal failure", () => {
+    const parent = h("div");
+    const first = h("span");
+    const second = h("span");
+    const next = h("b", null, "next");
+    const calls: string[] = [];
+    onUnmount(first, () => {
+      calls.push("first");
+      throw new Error("first failed");
+    });
+    onUnmount(second, () => {
+      calls.push("second");
+      throw new Error("second failed");
+    });
+    parent.append(first, second);
+
+    expect(() => replaceChildren(parent, next)).toThrow(AggregateError);
+    expect(calls).toEqual(["first", "second"]);
+    expect([...parent.childNodes]).toEqual([next]);
+  });
+
+  it("replaceChildren keeps outgoing bindings live when native replacement fails", () => {
+    const value = state("before");
+    const old = h("span", null, () => value());
+    const parent = h("div", null, old);
+    vi.spyOn(parent, "replaceChildren").mockImplementationOnce(() => {
+      throw new DOMException("invalid hierarchy", "HierarchyRequestError");
+    });
+
+    expect(() => replaceChildren(parent, h("b", null, "next"))).toThrow(
+      DOMException,
+    );
+    value("after");
+
+    expect(parent.firstChild).toBe(old);
+    expect(old.textContent).toBe("after");
+  });
+
+  it("replaceChildren rolls back incoming nodes and staged bindings on failure", () => {
+    const keptValue = state("kept");
+    const stagedValue = state("staged");
+    let stagedReads = 0;
+    const kept = h("strong", null, () => keptValue());
+    const outgoing = h("section", null, kept);
+    const parent = h("div", null, outgoing);
+    vi.spyOn(parent, "replaceChildren").mockImplementationOnce(() => {
+      throw new DOMException("invalid hierarchy", "HierarchyRequestError");
+    });
+
+    expect(() =>
+      replaceChildren(parent, kept, () => {
+        stagedReads++;
+        return stagedValue();
+      }),
+    ).toThrow(DOMException);
+    keptValue("still live");
+    stagedValue("must be stopped");
+
+    expect(kept.parentNode).toBe(outgoing);
+    expect(parent.textContent).toBe("still live");
+    expect(stagedReads).toBe(1);
+  });
+
+  it("replaceChildren restores moved siblings in their original DOM order", () => {
+    const parent = h("div");
+    const first = h("span", null, "first");
+    const second = h("span", null, "second");
+    const third = h("span", null, "third");
+    parent.append(first, second, third);
+    vi.spyOn(parent, "replaceChildren").mockImplementationOnce(() => {
+      throw new DOMException("invalid hierarchy", "HierarchyRequestError");
+    });
+
+    expect(() => replaceChildren(parent, second, first)).toThrow(DOMException);
+
+    expect([...parent.childNodes]).toEqual([first, second, third]);
+  });
+
+  it("replaceChildren restores a supplied fragment and its live children", () => {
+    const value = state("before");
+    const fragment = document.createDocumentFragment();
+    const first = h("span", null, () => value());
+    const second = h("span", null, "second");
+    fragment.append(first, second);
+    const parent = h("div", null, "old");
+    vi.spyOn(parent, "replaceChildren").mockImplementationOnce(() => {
+      throw new DOMException("invalid hierarchy", "HierarchyRequestError");
+    });
+
+    expect(() => replaceChildren(parent, fragment)).toThrow(DOMException);
+    value("after");
+
+    expect([...fragment.childNodes]).toEqual([first, second]);
+    expect(first.textContent).toBe("after");
+    expect(parent.textContent).toBe("old");
+  });
+
+  it("replaceChildren disposes reactive staging when child normalization fails", () => {
+    const stagedValue = state("staged");
+    let stagedReads = 0;
+    const parent = h("div", null, "old");
+    const wrongRuntime = {
+      [Symbol.for("loom.html")]: true,
+      toString: () => "<b>wrong runtime</b>",
+    };
+
+    expect(() =>
+      replaceChildren(
+        parent,
+        () => {
+          stagedReads++;
+          return stagedValue();
+        },
+        wrongRuntime as never,
+      ),
+    ).toThrow("wrong jsxImportSource");
+    stagedValue("must be stopped");
+
+    expect(parent.textContent).toBe("old");
+    expect(stagedReads).toBe(1);
+  });
+
+  it("replaceChildren disposes all children when clearing a parent", () => {
+    const parent = h("div");
+    const child = h("span");
+    const cleanup = vi.fn();
+    onUnmount(child, cleanup);
+    parent.append(child);
+
+    replaceChildren(parent);
+
+    expect(parent.childNodes).toHaveLength(0);
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 });
 

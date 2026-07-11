@@ -12,7 +12,7 @@ import {
 } from "../loom.js";
 import { attrRead, classRead, styleRead } from "./element-reads.js";
 import { onMount } from "./on-mount.js";
-import { onUnmount, remove } from "./ownership.js";
+import { dispose, onUnmount, remove } from "./ownership.js";
 import { own } from "./ownership-base.js";
 import { positionOrdered } from "./place.js";
 
@@ -177,6 +177,135 @@ export function h(
   }
   if (props) applyProps(node, props, !isSvg);
   return node;
+}
+
+/** Replace a node's children while preserving Loom ownership. Incoming
+ *  descendants are moved aside first. After native replacement succeeds,
+ *  every outgoing subtree is disposed; disposal failures are rethrown only
+ *  after all outgoing resources have been given a chance to stop. A staging
+ *  or native failure restores supplied nodes and disposes newly staged
+ *  reactive children before it is rethrown. */
+export function replaceChildren(
+  parent: Node & ParentNode,
+  ...children: readonly Child[]
+): void {
+  const owner =
+    parent.nodeType === Node.DOCUMENT_NODE
+      ? (parent as Document)
+      : parent.ownerDocument;
+  const next = (owner ?? document).createDocumentFragment();
+  const incoming = new Set<Node>();
+  const originalChildren = new Map<Node, readonly Node[]>();
+  const remember = (child: Child): void => {
+    if (Array.isArray(child)) {
+      for (const item of child) remember(item);
+      return;
+    }
+    if (
+      typeof child !== "object" ||
+      child === null ||
+      !isNode(child) ||
+      incoming.has(child)
+    ) {
+      return;
+    }
+    incoming.add(child);
+    if (child.parentNode) {
+      const parent = child.parentNode;
+      if (!originalChildren.has(parent)) {
+        originalChildren.set(parent, [...parent.childNodes]);
+      }
+    }
+    // Appending a DocumentFragment consumes its children rather than moving
+    // the fragment node. Treat those children as caller-owned inputs too so
+    // failure can reconstruct the fragment verbatim.
+    if (child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+      for (const nested of [...child.childNodes]) remember(nested);
+    }
+  };
+  for (const child of children) remember(child);
+
+  const rollback = (failure: unknown): never => {
+    const errors = [failure];
+    // Reconstruct every original parent from right to left. Using the
+    // parent's captured child order (not argument/move order) restores
+    // reversed siblings and nested inputs exactly.
+    for (const [originalParent, children] of originalChildren) {
+      let before: Node | null = null;
+      for (let index = children.length - 1; index >= 0; index--) {
+        const child = children[index];
+        if (!child) continue;
+        if (incoming.has(child)) {
+          try {
+            originalParent.insertBefore(child, before);
+            before = child;
+          } catch (error) {
+            errors.push(error);
+          }
+        } else if (child.parentNode === originalParent) {
+          before = child;
+        }
+      }
+    }
+    // Nodes supplied already detached still belong to the caller. Detach the
+    // outermost ones from the staging fragment so cleanup cannot consume them.
+    for (const node of incoming) {
+      if (!next.contains(node)) continue;
+      let ancestor = node.parentNode;
+      let nestedIncoming = false;
+      while (ancestor && ancestor !== next) {
+        if (incoming.has(ancestor)) {
+          nestedIncoming = true;
+          break;
+        }
+        ancestor = ancestor.parentNode;
+      }
+      if (!nestedIncoming) node.parentNode?.removeChild(node);
+    }
+    try {
+      dispose(next);
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length === 1) throw failure;
+    throw new AggregateError(
+      errors,
+      "Loom DOM child replacement and staging cleanup failed.",
+    );
+  };
+
+  try {
+    for (const child of children) appendChild(next, child);
+  } catch (error) {
+    rollback(error);
+  }
+
+  const outgoing = [...parent.childNodes];
+  // Do not stop live bindings until native replacement has succeeded. A
+  // hierarchy error can leave the old DOM in place, where those resources
+  // must remain live.
+  try {
+    parent.replaceChildren(next);
+  } catch (error) {
+    rollback(error);
+  }
+
+  const errors: unknown[] = [];
+  for (const child of outgoing) {
+    try {
+      dispose(child);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) {
+    throw new AggregateError(
+      errors,
+      "Multiple Loom DOM child-replacement operations failed.",
+    );
+  }
 }
 
 /**

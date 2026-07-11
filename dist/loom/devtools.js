@@ -1,7 +1,7 @@
 import { S as e, b as t, i as n, m as r, v as i, y as a } from "./loom-Doq0e1ZU.js";
 import { i as o, n as s, r as c } from "./meter-6h-O7R_x.js";
 import { n as l, t as u } from "./observe-ePwGsY8l.js";
-import { c as d, d as ee, f as te, n as ne, p as f, t as re } from "./dom-DLx4HptF.js";
+import { c as d, f as ee, m as f, n as te, p as ne, t as re } from "./dom-yBllepv3.js";
 import { a as ie } from "./ownership-base-DfUs28hK.js";
 import { virtualList as p } from "./dom/virtual-list.js";
 import "./defer.js";
@@ -652,7 +652,7 @@ function er() {
 				transform: "rotate(135 44 44)",
 				"stroke-dasharray": `${qt} ${Kt}`
 			}),
-			te(Vn(() => jn), $n, Qn),
+			ne(Vn(() => jn), $n, Qn),
 			/* @__PURE__ */ m("text", {
 				class: "li-glbl",
 				x: 44,
@@ -694,7 +694,7 @@ function tr() {
 			children: e
 		})
 	});
-	return ne(r, n, g), r;
+	return te(r, n, g), r;
 }
 function K(e, t, n = "", r = "") {
 	let i = /* @__PURE__ */ m("span", { class: `li-stat-v ${n}` });
@@ -873,7 +873,7 @@ function ur(t) {
 	let n;
 	return tn = i(() => {
 		Cn = a(qn, 0, g), wn = a(Jn, 0, g), Tn = a(Yn, 0, g), En = a(Zn, 0, g), ir() && (Dn = r(() => ir()?.usedJSHeapSize ?? 0, 5e3, g)), n = nr();
-	}, g), ne(n, () => {
+	}, g), te(n, () => {
 		R?.(), e(sr);
 	}, {
 		...g,
@@ -1045,17 +1045,17 @@ function Mr(e) {
 		hidden: !0
 	});
 	l.id = `${_}-menu`, l.append(c), gr = l;
-	let u = Q().logSize(), ee = /* @__PURE__ */ m("span", { class: "li-menu-val" }), te = () => {
+	let u = Q().logSize(), ee = /* @__PURE__ */ m("span", { class: "li-menu-val" }), f = () => {
 		ee.textContent = `${u / 1e3}k`, jt(u);
-	}, f = /* @__PURE__ */ h("button", {
+	}, ne = /* @__PURE__ */ h("button", {
 		type: "button",
 		class: "li-menu-item",
 		title: "Trace log size (click to cycle)",
 		children: [/* @__PURE__ */ m("span", { children: "Log size" }), ee]
 	});
-	d(f, () => {
-		u = Cr[(Cr.indexOf(u) + 1) % Cr.length] ?? 1e3, Q().logSize(u), te();
-	}), l.append(f), te();
+	d(ne, () => {
+		u = Cr[(Cr.indexOf(u) + 1) % Cr.length] ?? 1e3, Q().logSize(u), f();
+	}), l.append(ne), f();
 	let re = () => {
 		l.hidden = !0;
 	}, ie = /* @__PURE__ */ h("button", {
@@ -1161,7 +1161,7 @@ function Mr(e) {
 		let { left: e, top: t } = Er(J, xe.left, xe.top);
 		J.style.left = `${e}px`, J.style.top = `${t}px`, J.style.right = "auto", J.style.bottom = "auto";
 	}
-	ne(J, () => {
+	te(J, () => {
 		let e = Z?.();
 		Sr && Sr !== e && Y && xr.set(Sr, Y.scrollTop), e === "stats" ? fr() : dr(), e !== "graph" && it();
 		for (let t of hr) {

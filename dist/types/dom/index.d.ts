@@ -33,6 +33,13 @@ export type SvgTagName = (typeof SVG_TAG_LIST)[number];
 export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): HTMLElementTagNameMap[K];
 export declare function h<K extends keyof SVGElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): SVGElementTagNameMap[K];
 export declare function h(tag: string, props?: ElementProps | null, children?: Child): Element;
+/** Replace a node's children while preserving Loom ownership. Incoming
+ *  descendants are moved aside first. After native replacement succeeds,
+ *  every outgoing subtree is disposed; disposal failures are rethrown only
+ *  after all outgoing resources have been given a chance to stop. A staging
+ *  or native failure restores supplied nodes and disposes newly staged
+ *  reactive children before it is rethrown. */
+export declare function replaceChildren(parent: Node & ParentNode, ...children: readonly Child[]): void;
 /**
  * Create an explicitly SVG-namespaced element. Use this for names shared with HTML (`a`, `title`,
  * `script`, and `style`), whose namespace cannot be inferred from an already-evaluated JSX child.

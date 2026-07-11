@@ -491,7 +491,9 @@ The construction and binding core:
   `match(selector, cases, fallback?)` are the child-expression forms —
   [Conditional rendering](#conditional-rendering).
 - `dispose(root)` disposes effects owned by a node subtree; `remove(node)`
-  disposes and detaches — [Ownership & disposal](#ownership--disposal).
+  disposes and detaches; `replaceChildren(parent, ...children)` preserves
+  incoming nodes and disposes every outgoing subtree —
+  [Ownership & disposal](#ownership--disposal).
 
 #### Element state as signals
 
@@ -607,7 +609,7 @@ scrollers use a 120 ms transition.
 | `attr`, `classed`, `style` | [Element state as signals](#element-state-as-signals) |
 | `list` | [DOM and events](#dom-and-events) |
 | `each`, `when`, `match` | [Conditional rendering](#conditional-rendering) |
-| `dispose`, `remove`, `onUnmount`, `bind` | [Ownership & disposal](#ownership--disposal) |
+| `dispose`, `remove`, `replaceChildren`, `onUnmount`, `bind` | [Ownership & disposal](#ownership--disposal) |
 | `pause`, `resume` | [Lifecycle](#lifecycle) |
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
@@ -702,10 +704,18 @@ sites:
 </div>
 ```
 
-`onUnmount` does **not** fire on a raw `node.remove()` / `replaceChildren()`
-that bypasses Loom's teardown — same caveat as every Loom binding. For
-grouping many effects, prefer a `scope()`; `onUnmount` is the per-node escape
-hatch, and `bind(el, fn)` is the effect-shaped shorthand for the common case.
+`onUnmount` does **not** fire on raw `node.remove()` or
+`node.replaceChildren()` calls that bypass Loom's teardown. Use the function
+forms `remove(node)` and `replaceChildren(parent, ...children)` when discarded
+nodes can own Loom resources. The replacement form first preserves incoming
+descendants, performs the native replacement, then disposes every outgoing
+subtree. If disposal fails, it still tries every outgoing subtree and rethrows
+after the new DOM is installed; if native replacement itself fails, outgoing
+bindings remain live, moved input nodes return to their original positions,
+and newly staged reactive children are disposed. For grouping many effects,
+prefer a `scope()`;
+`onUnmount` is the per-node escape hatch, and `bind(el, fn)` is the
+effect-shaped shorthand for the common case.
 
 `list()` reorders keyed nodes by default. Pass `reorder: () => false` when an
 external layout system positions existing keyed nodes and only needs Loom to
