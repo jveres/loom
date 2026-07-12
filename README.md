@@ -87,6 +87,29 @@ To use browser JSX, point TypeScript (and your bundler) at Loom's automatic
 runtime — see [JSX](#jsx). For local development of Loom itself, see
 [Develop](#develop).
 
+### App-shell checklist
+
+Loom ships as ES modules, and modules are deferred by spec — so a few
+document-level policies must live in your `index.html` itself, where they run
+before the module graph (Loom code always arrives too late for them):
+
+```html
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>
+  // iOS Safari restores a deep scroll position during document
+  // reconstruction BEFORE first paint: a reloaded page can arrive fully
+  // loaded but UNPAINTED (fixed-position chrome still shows; any scroll
+  // forces the repaint) — it presents as a blank page with a silent
+  // console. Opting out must happen synchronously in <head>; a deferred
+  // module runs after the restore has already happened.
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+</script>
+```
+
+The tradeoff of `manual` is intentional: full reloads start at the top instead
+of restoring scroll. In-page updates (and dev-server HMR that does not reload
+the document) keep their position.
+
 ## Guide
 
 ### Core primitives
