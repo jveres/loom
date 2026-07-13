@@ -84,6 +84,8 @@ declare global {
   type Read<T> = import("loom").Read<T>;
   // free identifiers used by illustrative fragments
   const el: HTMLElement;
+  const handle: HTMLElement;
+  const panel: HTMLElement;
   const hot: State<boolean>;
   const mode: State<string>;
   const doc: State<string>;
@@ -99,6 +101,7 @@ declare global {
   const renderSpinner: () => void;
   const renderList: (items: unknown) => void;
   const clampIntoView: () => void;
+  const savePosition: () => void;
   const measureAndClassify: (el: Node) => void;
   const socket: { close(): void };
   const syncSomething: (el: Element) => void;
@@ -156,6 +159,7 @@ writeFileSync(
         loom: [join(root, "src/index.ts")],
         "loom/observe": [join(root, "src/observe.ts")],
         "loom/async": [join(root, "src/async/index.ts")],
+        "loom/settle": [join(root, "src/settle.ts")],
         "loom/defer": [join(root, "src/core/defer.ts")],
         "loom/dom": [join(root, "src/dom/index.ts")],
         "loom/dom/virtual-list": [join(root, "src/dom/virtual-list.ts")],

@@ -48,6 +48,37 @@ describe("loom/devtools", () => {
     unmountInspector();
   });
 
+  it("keeps the selection lock balanced when a second panel gesture takes over", () => {
+    mountInspector();
+    const panel = document.getElementById(PANEL_ID);
+    const bar = panel?.querySelector<HTMLElement>(".li-bar");
+    const resize = panel?.querySelector<HTMLElement>(".li-resize");
+    if (!bar || !resize)
+      throw new Error("inspector gesture handles are missing");
+    for (const handle of [bar, resize]) {
+      Object.defineProperties(handle, {
+        setPointerCapture: { configurable: true, value: () => {} },
+        releasePointerCapture: { configurable: true, value: () => {} },
+      });
+    }
+
+    bar.dispatchEvent(
+      new PointerEvent("pointerdown", { pointerId: 1, bubbles: true }),
+    );
+    expect(document.body.style.userSelect).toBe("none");
+
+    resize.dispatchEvent(
+      new PointerEvent("pointerdown", { pointerId: 2, bubbles: true }),
+    );
+    expect(document.body.style.userSelect).toBe("none");
+    expect(bar.style.cursor).toBe("");
+
+    resize.dispatchEvent(
+      new PointerEvent("pointerup", { pointerId: 2, bubbles: true }),
+    );
+    expect(document.body.style.userSelect).toBe("");
+  });
+
   it("restores the inspection setting that existed before mounting", () => {
     configure({ inspect: false });
     mountInspector();

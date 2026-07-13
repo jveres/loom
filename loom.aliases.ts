@@ -9,6 +9,7 @@ export const loomAliases = [
   { find: /^loom$/, replacement: r("src/index.ts") },
   { find: /^loom\/observe$/, replacement: r("src/observe.ts") },
   { find: /^loom\/async$/, replacement: r("src/async/index.ts") },
+  { find: /^loom\/settle$/, replacement: r("src/settle.ts") },
   { find: /^loom\/dom$/, replacement: r("src/dom/index.ts") },
   {
     find: /^loom\/defer$/,

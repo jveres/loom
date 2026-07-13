@@ -13,6 +13,7 @@
       "loom": ["./src/index.ts"],
       "loom/observe": ["./src/observe.ts"],
       "loom/async": ["./src/async/index.ts"],
+      "loom/settle": ["./src/settle.ts"],
       "loom/dom": ["./src/dom/index.ts"],
       "loom/defer": ["./src/core/defer.ts"],
       "loom/dom/virtual-list": ["./src/dom/virtual-list.ts"],

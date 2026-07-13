@@ -4,8 +4,15 @@
 //
 // All of the inspector's own reactive bindings and UI state are created `internal`, so Loom's
 // observability filters them out: the inspector measures the app, never itself.
-import { configure, type Scope, type State, scope, state } from "loom";
-import { bind, onTap, persisted, remove } from "loom/dom";
+import {
+  configure,
+  type Scope,
+  type State,
+  type Stop,
+  scope,
+  state,
+} from "loom";
+import { bind, onTap, persisted, remove, startPointerSession } from "loom/dom";
 import { scrollFade } from "loom/dom/scroll-fade";
 import { PANEL_OPTS } from "./bindings.js";
 import { CSS, PANEL_ID } from "./css.js";
@@ -64,6 +71,7 @@ const scrollFades: Array<() => void> = [];
 let inspectorScope: Scope | null = null;
 let signalScope: Scope | null = null;
 let previousInspect: boolean | null = null;
+let activePanelGesture: Stop | null = null;
 
 // Inspector-owned UI state (internal: filtered from observation). Lazily created on first mount.
 let ui: State<TabId> | null = null;
@@ -175,21 +183,6 @@ function clampOnScreen(
   };
 }
 
-function bindPointerDrag(
-  handle: HTMLElement,
-  onMove: (event: PointerEvent) => void,
-  onUp: () => void,
-): () => void {
-  handle.addEventListener("pointermove", onMove);
-  handle.addEventListener("pointerup", onUp);
-  handle.addEventListener("pointercancel", onUp);
-  return () => {
-    handle.removeEventListener("pointermove", onMove);
-    handle.removeEventListener("pointerup", onUp);
-    handle.removeEventListener("pointercancel", onUp);
-  };
-}
-
 // The shared pointer-gesture session behind drag and resize: snapshot the rect, pin the panel to
 // left/top positioning (dragging/resizing can't work against right/bottom anchoring), capture the
 // pointer, and freeze text selection for the duration. `onMove` gets the pointerdown-time rect to do
@@ -201,22 +194,26 @@ function startDragSession(
   onMove: (ev: PointerEvent, rect: DOMRect) => void,
   onCommit: () => void,
 ): void {
+  // Panel drag and resize are mutually exclusive. Ending the prior gesture first also restores
+  // its selection lock before the next session snapshots document.body.style.userSelect.
+  activePanelGesture?.();
   const rect = target.getBoundingClientRect();
   target.style.left = `${snapPx(rect.left)}px`;
   target.style.top = `${snapPx(rect.top)}px`;
   target.style.right = "auto";
   target.style.bottom = "auto";
-  handle.setPointerCapture?.(e.pointerId);
   const prevUserSelect = document.body.style.userSelect;
   document.body.style.userSelect = "none";
-  let unbindDrag = (): void => {};
-  const onUp = (): void => {
-    handle.releasePointerCapture?.(e.pointerId);
-    document.body.style.userSelect = prevUserSelect;
-    onCommit();
-    unbindDrag();
-  };
-  unbindDrag = bindPointerDrag(handle, (ev) => onMove(ev, rect), onUp);
+  let stop: Stop = () => {};
+  stop = startPointerSession(handle, e, {
+    move: (event) => onMove(event, rect),
+    end: () => {
+      if (activePanelGesture === stop) activePanelGesture = null;
+      document.body.style.userSelect = prevUserSelect;
+      onCommit();
+    },
+  });
+  activePanelGesture = stop;
 }
 
 function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
@@ -610,6 +607,10 @@ export function mountInspector(target?: Element): void {
 /** Remove the panel and stop all observation/timers. Safe to call when not mounted. */
 export function unmountInspector(): void {
   if (typeof document === "undefined") return;
+  // Finish a live gesture while its persistence signals still exist. Its node-owned stop is then
+  // unregistered, so remove(panel) below cannot recreate signals during teardown.
+  activePanelGesture?.();
+  activePanelGesture = null;
   stopStats();
   for (const dispose of scrollFades) dispose();
   scrollFades.length = 0;

@@ -96,6 +96,19 @@ const APPS = [
     `,
   },
   {
+    // Quiet-period observation is opt-in: apps that do not import loom/settle keep timer and
+    // settlement-control code out of the default reactive bundle.
+    name: "minimal + settle",
+    budget: 4000,
+    source: `
+      import { state } from "loom";
+      import { settle } from "loom/settle";
+      const query = state("");
+      settle(query, (value) => console.log(value), 200);
+      query("loom");
+    `,
+  },
+  {
     name: "minimal dom (h+text)",
     // Includes allocation-free default binding metadata and node-local ownership for large mounts.
     budget: 6000,

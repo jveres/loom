@@ -14,6 +14,7 @@ export default defineConfig({
         loom: resolve(root, "src/index.ts"),
         observe: resolve(root, "src/observe.ts"),
         async: resolve(root, "src/async/index.ts"),
+        settle: resolve(root, "src/settle.ts"),
         dom: resolve(root, "src/dom/index.ts"),
         "dom/virtual-list": resolve(root, "src/dom/virtual-list.ts"),
         defer: resolve(root, "src/core/defer.ts"),

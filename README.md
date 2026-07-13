@@ -40,8 +40,8 @@
   `meter` for any event or sample stream — zero allocation until metered. Loom uses them
   to instrument itself; that self-watching surface is the opt-in `loom/observe`.
 - **Lean core, opt-in surfaces.** `loom` (reactivity, lifecycle, channel/meter) ·
-  `loom/defer` (deferred-effect lane) · `loom/observe` (watch loom's
-  internals) · `loom/async` (async resources) · `loom/dom` · `loom/html`
+  `loom/defer` (deferred-effect lane) · `loom/settle` (quiet-period changes) ·
+  `loom/observe` (watch loom's internals) · `loom/async` (async resources) · `loom/dom` · `loom/html`
   (SSR/SSG) · `loom/devtools` (dev panel).
 
 ## At a glance
@@ -157,6 +157,9 @@ stop();
 - `watch(read, onChange, options?)` reacts to a source's **changes**: `read`
   is tracked, `onChange(value, previous)` runs untracked, and it is skipped
   on the initial evaluation and when the derived value is unchanged.
+- `settle(read, onSettled, ms, options?)`, imported from `loom/settle`,
+  observes every change but delivers only after a full quiet period —
+  [Settled changes](#settled-changes).
 
 > **Self-dependency warning (dev):** with inspection on
 > (`configure({ inspect: true })` + `loom/observe` loaded), loom warns once
@@ -184,6 +187,7 @@ deferred-lane scheduler ([Deferred effects](#deferred-effects)).
 | --- | --- |
 | `state`, `computed`, `effect`, `batch`, `untrack` | [Core primitives](#core-primitives) |
 | `update`, `watch` | [Deriving and reacting](#deriving-and-reacting) |
+| `settle` (`loom/settle`) | [Settled changes](#settled-changes) |
 | `mutate`, `trigger` | [In-place mutation](#in-place-mutation) |
 | `props` | [Object properties](#object-properties) |
 | `poll`, `source` | [External data](#external-data) |
@@ -204,6 +208,41 @@ what an `onError` boundary receives), `NodeKind`, `Channel`, `Meter`,
 Pass `{ label }` to `state`, `computed`, `effect`, or `props` when you want
 meaningful names in tooling. Pass `{ internal: true }` for Loom-owned tooling
 state that must not appear in app-level event streams by default.
+
+### Settled changes
+
+Use `settle` when the sink should run only after a derived value has stopped
+changing — search requests, validation, or external asset synchronization.
+Unlike a deferred effect, every source change is observed synchronously and
+restarts a quiet-period timer; only the sink waits.
+
+```ts
+import { state } from "loom";
+import { settle } from "loom/settle";
+
+const query = state("");
+const request = settle(query, (value, previous) => {
+  console.log(`search changed from ${previous} to ${value}`);
+}, 250);
+
+query("lo");
+query("loom"); // one delivery: ("loom", "") after 250 ms of quiet
+```
+
+The initial read is silent, as with `watch`. A burst receives the latest
+value and the last **delivered** value; returning to that baseline cancels the
+pending delivery. `{ equals }` supplies semantic equality without moving the
+deadline for equivalent representations. Delays must be finite and
+non-negative; `0` still coalesces synchronous writes into the next timer task.
+Inside a scope, pause clears the timer but retains pending work, resume starts
+a fresh full interval, and stop is terminal. `flush()` is deliberately a no-op
+while paused. Call `flush()` to deliver pending work at an explicit boundary,
+`cancel()` to discard only that pending delivery, and `stop()` for terminal
+teardown. Like `watch`, an unchanged object identity is not a new value; derive
+an immutable value, scalar, or explicit version for in-place mutations.
+
+Types: `Settlement` (`stop`/`cancel`/`flush`) and `SettleOptions<T>` (adds
+`equals` to `NodeOptions`).
 
 ### Object properties
 
@@ -413,7 +452,8 @@ Pass `{ defer: true }` to run an effect's **re-runs** off the critical
 path — idle-first and coalesced — instead of in the synchronous flush. The
 first run stays synchronous (deps are tracked, the initial output is
 immediate); only re-runs defer. Use it for non-frame-critical reactive work:
-telemetry, debounced persistence, secondary UI, or a tool's own rendering.
+telemetry, coalesced persistence, secondary UI, or a tool's own rendering.
+For work that must wait until changes stop, use `settle` from `loom/settle`.
 A deferred effect that throws (with no `onError` boundary) is re-thrown on a
 fresh task — it reaches `window.onerror` like any uncaught error — and never
 stalls the lane: the remaining queued effects still run.
@@ -517,6 +557,9 @@ The construction and binding core:
   disposes and detaches; `replaceChildren(parent, ...children)` preserves
   incoming nodes and disposes every outgoing subtree —
   [Ownership & disposal](#ownership--disposal).
+- `startPointerSession(handle, start, options)` captures and routes one
+  pointer ID until release, cancellation, capture loss, manual stop, or
+  Loom-managed unmount — [Pointer sessions](#pointer-sessions).
 
 #### Element state as signals
 
@@ -636,6 +679,7 @@ scrollers use a 120 ms transition.
 | `pause`, `resume` | [Lifecycle](#lifecycle) |
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
+| `startPointerSession` | [Pointer sessions](#pointer-sessions) |
 | `connected`, `persisted`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
@@ -647,6 +691,7 @@ Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX acc
 `AttrBinding`/`ClassBinding`/`StyleBinding`/`DynamicChild`, `MorphOptions`,
 `ScrollFadeOptions`, `SizeCallback`,
 `IntersectionCallback`/`IntersectionOptions`, `MutationsCallback`,
+`PointerSessionOptions`/`PointerSessionEndReason`,
 `ListSource`/`VirtualList`/`VirtualListOptions` (virtual list).
 
 #### Naming convention
@@ -689,6 +734,34 @@ with standard bubbling and the precise DOM event type in the handler:
 ```tsx
 <input oninput={(event) => value(event.currentTarget.valueAsNumber)} />;
 ```
+
+#### Pointer sessions
+
+`startPointerSession(handle, pointerdownEvent, { move, end })` is the
+mechanical lifetime beneath drag and resize controls. It filters events to
+the starting pointer ID, attempts pointer capture, and finishes exactly once
+on `pointerup`, `pointercancel`, `lostpointercapture`, manual stop, or
+Loom-managed unmount. If capture is unavailable, routing falls back to the
+handle's document so leaving the handle cannot strand the session. Listeners
+and capture are released before `end(reason, event)` runs.
+
+```ts
+import { startPointerSession } from "loom/dom";
+
+handle.addEventListener("pointerdown", (start) => {
+  const left = panel.offsetLeft;
+  startPointerSession(handle, start, {
+    move: (event) => {
+      panel.style.left = `${left + event.clientX - start.clientX}px`;
+    },
+    end: () => savePosition(),
+  });
+});
+```
+
+The helper intentionally owns no styling or gesture policy: callers decide
+whether to prevent default, suppress selection, set cursors, clamp geometry,
+or persist the result.
 
 #### The `onTap` synthetic event
 

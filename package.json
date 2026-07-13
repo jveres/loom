@@ -52,6 +52,10 @@
       "types": "./dist/types/async/index.d.ts",
       "default": "./dist/loom/async.js"
     },
+    "./settle": {
+      "types": "./dist/types/settle.d.ts",
+      "default": "./dist/loom/settle.js"
+    },
     "./dom": {
       "types": "./dist/types/dom/index.d.ts",
       "default": "./dist/loom/dom.js"
