@@ -115,6 +115,28 @@ describe("scrollFade", () => {
     dispose();
   });
 
+  it("keeps a classic scrollbar's gutter unmasked", () => {
+    // Mask layers composite additively: a solid second layer sized to
+    // the measured gutter keeps the scrollbar strip opaque while the
+    // fade layer stops where the gutter begins (review: the fade
+    // faded the scrollbar's ends with the content).
+    const el = scrollable({
+      scrollHeight: 300,
+      clientHeight: 100,
+      scrollTop: 50,
+    });
+    Object.defineProperty(el, "offsetWidth", { value: 240 });
+    Object.defineProperty(el, "clientWidth", { value: 229 });
+    const dispose = scrollFade(el);
+    expect(el.style.maskImage).toContain("linear-gradient(#000, #000)");
+    expect(el.style.getPropertyValue("mask-size")).toBe(
+      "calc(100% - 11px) 100%, 11px 100%",
+    );
+    expect(el.style.getPropertyValue("mask-position")).toBe("0 0, 100% 0");
+    dispose();
+    expect(el.style.getPropertyValue("mask-size")).toBe("");
+  });
+
   it("exempts an END inset from the fade (a pinned trailing region)", () => {
     // A sticky bottom group must stay fully opaque: the fade zone
     // ends where the pinned region begins, and the region itself is
