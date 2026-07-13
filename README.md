@@ -244,6 +244,22 @@ an immutable value, scalar, or explicit version for in-place mutations.
 Types: `Settlement` (`stop`/`cancel`/`flush`) and `SettleOptions<T>` (adds
 `equals` to `NodeOptions`).
 
+When the settled thing is a **value** rather than a sink, `settled(read, ms,
+options?)` returns a lagging reactive `Read` carrying the same controls: it
+serves the initial evaluation immediately, then follows its source only after
+the quiet period. `flush()` is the host's "apply now" override (bump the
+source, then flush, and the pending burst folds in); reads track like any
+state. The source is evaluated twice at construction (the seed and the
+settlement's silent baseline). Type: `SettledState<T>`.
+
+```ts
+import { settled } from "loom/settle";
+
+const treeVersion = settled(refreshRequest, 120);
+// bind(list, () => rebuild(treeVersion())) — rebuilds settle off typing;
+// refreshRequest(n + 1); treeVersion.flush();  // structural ops apply NOW
+```
+
 ### Object properties
 
 Use `props()` when you want fine-grained updates for a plain object. Each
