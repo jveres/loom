@@ -129,12 +129,10 @@ describe("scrollFade", () => {
     Object.defineProperty(el, "clientWidth", { value: 229 });
     const dispose = scrollFade(el);
     expect(el.style.maskImage).toContain("linear-gradient(#000, #000)");
-    expect(el.style.getPropertyValue("mask-size")).toBe(
-      "calc(100% - 11px) 100%, 11px 100%",
-    );
-    expect(el.style.getPropertyValue("mask-position")).toBe("0 0, 100% 0");
+    expect(el.style.maskSize).toBe("calc(100% - 11px) 100%, 11px 100%");
+    expect(el.style.maskPosition).toBe("0 0, 100% 0");
     dispose();
-    expect(el.style.getPropertyValue("mask-size")).toBe("");
+    expect(el.style.maskSize).toBe("");
   });
 
   it("exempts an END inset from the fade (a pinned trailing region)", () => {

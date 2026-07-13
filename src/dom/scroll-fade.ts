@@ -80,33 +80,38 @@ export function scrollFade(
   // layer stops where the gutter begins. Gutter 0 (overlay scrollbars)
   // degrades to the single full-bleed fade.
   let gutter = -1;
+  // Camelcase property assignment throughout (not setProperty):
+  // engines expose the standard and -webkit- mask longhands there
+  // uniformly, and test DOMs drop setProperty for names outside
+  // their parser.
+  const styles = el.style as CSSStyleDeclaration & Record<string, string>;
   const applyMask = (nextGutter: number): void => {
     if (nextGutter === gutter) return;
     gutter = nextGutter;
-    const styles = el.style;
     if (gutter <= 0) {
       styles.maskImage = fade;
       styles.webkitMaskImage = fade;
-      styles.removeProperty("mask-size");
-      styles.removeProperty("mask-position");
-      styles.removeProperty("mask-repeat");
-      styles.removeProperty("-webkit-mask-size");
-      styles.removeProperty("-webkit-mask-position");
-      styles.removeProperty("-webkit-mask-repeat");
+      styles.maskSize = "";
+      styles.maskPosition = "";
+      styles.maskRepeat = "";
+      styles.webkitMaskSize = "";
+      styles.webkitMaskPosition = "";
+      styles.webkitMaskRepeat = "";
       return;
     }
-    const solid = "linear-gradient(#000, #000)";
-    const mask = `${fade}, ${solid}`;
+    const mask = `${fade}, linear-gradient(#000, #000)`;
     const size = horizontal
       ? `100% calc(100% - ${gutter}px), 100% ${gutter}px`
       : `calc(100% - ${gutter}px) 100%, ${gutter}px 100%`;
     const position = horizontal ? "0 0, 0 100%" : "0 0, 100% 0";
-    for (const prefix of ["", "-webkit-"] as const) {
-      styles.setProperty(`${prefix}mask-image`, mask);
-      styles.setProperty(`${prefix}mask-size`, size);
-      styles.setProperty(`${prefix}mask-position`, position);
-      styles.setProperty(`${prefix}mask-repeat`, "no-repeat");
-    }
+    styles.maskImage = mask;
+    styles.webkitMaskImage = mask;
+    styles.maskSize = size;
+    styles.webkitMaskSize = size;
+    styles.maskPosition = position;
+    styles.webkitMaskPosition = position;
+    styles.maskRepeat = "no-repeat";
+    styles.webkitMaskRepeat = "no-repeat";
   };
   applyMask(0);
 
@@ -196,10 +201,11 @@ export function scrollFade(
     el.style.removeProperty(END_STOP);
     el.style.maskImage = "";
     el.style.webkitMaskImage = "";
-    for (const prefix of ["", "-webkit-"] as const) {
-      el.style.removeProperty(`${prefix}mask-size`);
-      el.style.removeProperty(`${prefix}mask-position`);
-      el.style.removeProperty(`${prefix}mask-repeat`);
-    }
+    styles.maskSize = "";
+    styles.maskPosition = "";
+    styles.maskRepeat = "";
+    styles.webkitMaskSize = "";
+    styles.webkitMaskPosition = "";
+    styles.webkitMaskRepeat = "";
   };
 }
