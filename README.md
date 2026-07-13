@@ -110,6 +110,31 @@ The tradeoff of `manual` is intentional: full reloads start at the top instead
 of restoring scroll. In-page updates (and dev-server HMR that does not reload
 the document) keep their position.
 
+The same rule governs dark mode: your stylesheet arrives with the module
+graph, so until it executes the UA paints the DEFAULT WHITE canvas — a white
+flash before dark mode lands. Declare the scheme (and your shell background)
+inline in `<head>`:
+
+```html
+<style>
+  :root {
+    color-scheme: light dark;
+  }
+  /* An explicit stored choice (a data-theme pinned by an inline script)
+     must win in both directions. */
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+  body {
+    /* Mirror your app shell's background tokens. */
+    background: light-dark(#ffffff, #151518);
+  }
+</style>
+```
+
 ## Guide
 
 ### Core primitives
