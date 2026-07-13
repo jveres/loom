@@ -706,7 +706,13 @@ across resizes and content changes (no styling opinions; the effect is a
 horizontal strips). `options.transition` sets an optional edge transition
 duration in milliseconds (default 0). Current browsers animate registered
 gradient-stop properties; reduced-motion users and older browsers get an
-instant update. Returns a disposer. While no edge fades, the mask is an opaque
+instant update. Returns a disposer. The host tunes the mask with CSS custom
+properties on the element: `--scroll-fade-inset` keeps a leading sticky
+region opaque, `--scroll-fade-inset-end` a pinned trailing region, and
+`--scroll-fade-gutter` exempts a classic scrollbar — the fades subtract from
+an always-opaque base layer (`mask-composite: exclude`) and are sized that
+much short of the box on the cross axis, so a gutter-wide strip at the
+trailing cross edge is never touched. While no edge fades, the mask is an opaque
 gradient rather than none — clearing it would flip the element off the masked
 raster path and the next fade-in flashes for a frame. The dev inspector's own
 scrollers use a 120 ms transition.

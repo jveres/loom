@@ -1,8 +1,18 @@
 // scrollFade(el, { size?, axis?, transition? }) — soft-edge masks on a scrollable container: content fades
 // out at an edge exactly while more content lies beyond it. Behavior only,
-// no styling opinions: the effect is a mask-image on the element itself,
+// no styling opinions: the effect is a layered mask on the element itself,
 // driven by scroll position and kept current across resizes and content
 // changes. Returns a disposer that removes listeners and clears the mask.
+//
+// Mask geometry (after Jhey Tompkins' scroll-mask pens): the fades are
+// SUBTRACT layers over an always-opaque base, composited with
+// `mask-composite: exclude`. The base spans the whole box, so whatever the
+// fade layers don't reach stays opaque — most importantly a classic
+// scrollbar's gutter, which the host exempts declaratively by setting
+// `--scroll-fade-gutter` to the scrollbar's width (the fades are sized
+// that much short of the box on the cross axis). Fail-safe in the right
+// direction: a carve narrower than the real scrollbar fades a sliver of
+// it, a wider one merely leaves a sliver of content unfaded.
 
 export interface ScrollFadeOptions {
   /** Fade length in px (default 14). */
@@ -70,12 +80,30 @@ export function scrollFade(
   let startAnimation: Animation | undefined;
   let endAnimation: Animation | undefined;
 
-  // Keep one gradient installed: mask-image itself animates discretely, while
-  // registered length properties interpolate without flipping compositing.
-  const mask = `linear-gradient(${direction}, #000 0, #000 ${inset}, transparent ${inset}, #000 calc(${inset} + ${startStop}), #000 calc(100% - ${insetEnd} - ${endStop}), transparent calc(100% - ${insetEnd}), #000 calc(100% - ${insetEnd}), #000 100%)`;
-  el.style.maskImage = mask;
-  // Safari still needs the prefixed property.
-  el.style.webkitMaskImage = mask;
+  // Keep one gradient pair installed: mask-image itself animates discretely,
+  // while registered length properties interpolate without flipping
+  // compositing. The fade layer is the INVERSE of the visible result (its
+  // alpha is what `exclude` subtracts from the opaque base): solid exactly
+  // where content should vanish, transparent where it stays.
+  const gutter = "var(--scroll-fade-gutter, 0px)";
+  const fade = `linear-gradient(${direction}, transparent 0, transparent ${inset}, #000 ${inset}, transparent calc(${inset} + ${startStop}), transparent calc(100% - ${insetEnd} - ${endStop}), #000 calc(100% - ${insetEnd}), transparent calc(100% - ${insetEnd}), transparent 100%)`;
+  const layers = `${fade}, linear-gradient(#000, #000)`;
+  const layerSizes = horizontal
+    ? `100% calc(100% - ${gutter}), 100% 100%`
+    : `calc(100% - ${gutter}) 100%, 100% 100%`;
+  // Longhand camelCase assignments: happy-dom drops setProperty for names
+  // it doesn't know, and Safari still needs the prefixed family (with the
+  // legacy `xor` keyword standing in for `exclude`; engines that alias the
+  // prefixed property to the standard one reject `xor` and keep `exclude`).
+  const styles = el.style as CSSStyleDeclaration & Record<string, string>;
+  styles.maskImage = layers;
+  styles.maskRepeat = "no-repeat";
+  styles.maskSize = layerSizes;
+  styles.maskComposite = "exclude";
+  styles.webkitMaskImage = layers;
+  styles.webkitMaskRepeat = "no-repeat";
+  styles.webkitMaskSize = layerSizes;
+  styles.webkitMaskComposite = "xor";
 
   const setStop = (
     property: string,
@@ -153,7 +181,13 @@ export function scrollFade(
     endAnimation?.cancel();
     el.style.removeProperty(START_STOP);
     el.style.removeProperty(END_STOP);
-    el.style.maskImage = "";
-    el.style.webkitMaskImage = "";
+    styles.maskImage = "";
+    styles.maskRepeat = "";
+    styles.maskSize = "";
+    styles.maskComposite = "";
+    styles.webkitMaskImage = "";
+    styles.webkitMaskRepeat = "";
+    styles.webkitMaskSize = "";
+    styles.webkitMaskComposite = "";
   };
 }

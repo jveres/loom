@@ -109,16 +109,19 @@ describe("scrollFade", () => {
 
     const dispose = scrollFade(el);
 
+    // The fade layer is the INVERSE of the visible result (exclude
+    // subtracts it from the opaque base): solid only inside the fade
+    // zones, transparent across the inset and the middle.
     expect(el.style.maskImage).toBe(
-      "linear-gradient(to bottom, #000 0, #000 var(--scroll-fade-inset, 0px), transparent var(--scroll-fade-inset, 0px), #000 calc(var(--scroll-fade-inset, 0px) + var(--loom-scroll-fade-start, 0px)), #000 calc(100% - var(--scroll-fade-inset-end, 0px) - var(--loom-scroll-fade-end, 0px)), transparent calc(100% - var(--scroll-fade-inset-end, 0px)), #000 calc(100% - var(--scroll-fade-inset-end, 0px)), #000 100%)",
+      "linear-gradient(to bottom, transparent 0, transparent var(--scroll-fade-inset, 0px), #000 var(--scroll-fade-inset, 0px), transparent calc(var(--scroll-fade-inset, 0px) + var(--loom-scroll-fade-start, 0px)), transparent calc(100% - var(--scroll-fade-inset-end, 0px) - var(--loom-scroll-fade-end, 0px)), #000 calc(100% - var(--scroll-fade-inset-end, 0px)), transparent calc(100% - var(--scroll-fade-inset-end, 0px)), transparent 100%), linear-gradient(#000, #000)",
     );
     dispose();
   });
 
   it("exempts an END inset from the fade (a pinned trailing region)", () => {
-    // A sticky bottom group must stay fully opaque: the fade zone
-    // ends where the pinned region begins, and the region itself is
-    // an unmasked #000 run to 100%.
+    // A sticky bottom group must stay fully opaque: the subtract layer's
+    // end-fade run stops where the pinned region begins, leaving the
+    // region a transparent (= unsubtracted, opaque) run to 100%.
     const el = scrollable({
       scrollHeight: 300,
       clientHeight: 100,
@@ -127,9 +130,43 @@ describe("scrollFade", () => {
     el.style.setProperty("--scroll-fade-inset-end", "64px");
     const dispose = scrollFade(el);
     expect(el.style.maskImage).toContain(
-      "transparent calc(100% - var(--scroll-fade-inset-end, 0px)), #000 calc(100% - var(--scroll-fade-inset-end, 0px)), #000 100%",
+      "#000 calc(100% - var(--scroll-fade-inset-end, 0px)), transparent calc(100% - var(--scroll-fade-inset-end, 0px)), transparent 100%",
     );
     dispose();
+  });
+
+  it("keeps the scrollbar gutter out of the fade layers", () => {
+    // The fades subtract from an always-opaque base (mask-composite:
+    // exclude); sized short of --scroll-fade-gutter on the cross axis,
+    // they never reach a classic scrollbar's gutter — no measurement.
+    const el = scrollable({
+      scrollHeight: 300,
+      clientHeight: 100,
+      scrollTop: 50,
+    });
+    const dispose = scrollFade(el);
+    expect(el.style.maskImage).toContain("linear-gradient(#000, #000)");
+    expect(el.style.maskSize).toBe(
+      "calc(100% - var(--scroll-fade-gutter, 0px)) 100%, 100% 100%",
+    );
+    expect(el.style.maskComposite).toBe("exclude");
+    expect(el.style.webkitMaskComposite).toBe("xor");
+    dispose();
+    expect(el.style.maskSize).toBe("");
+    expect(el.style.maskComposite).toBe("");
+
+    const row = document.createElement("div");
+    Object.defineProperties(row, {
+      scrollWidth: { get: () => 300 },
+      clientWidth: { get: () => 100 },
+      scrollLeft: { get: () => 0, set: () => {} },
+    });
+    document.body.append(row);
+    const disposeRow = scrollFade(row, { axis: "x" });
+    expect(row.style.maskSize).toBe(
+      "100% calc(100% - var(--scroll-fade-gutter, 0px)), 100% 100%",
+    );
+    disposeRow();
   });
 
   it("animates an edge when a transition duration is set", () => {
