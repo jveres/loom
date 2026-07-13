@@ -253,11 +253,14 @@ state. The source is evaluated twice at construction (the seed and the
 settlement's silent baseline). Type: `SettledState<T>`.
 
 ```ts
+import { state, update } from "loom";
 import { settled } from "loom/settle";
 
+const refreshRequest = state(0);
 const treeVersion = settled(refreshRequest, 120);
-// bind(list, () => rebuild(treeVersion())) — rebuilds settle off typing;
-// refreshRequest(n + 1); treeVersion.flush();  // structural ops apply NOW
+// bind(list, () => rebuild(treeVersion())) — rebuilds settle off typing.
+update(refreshRequest, (n) => n + 1);
+treeVersion.flush(); // structural ops apply NOW
 ```
 
 ### Object properties

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { scope, state, watch } from "./loom.js";
-import { settle, type Settlement, settled } from "./settle.js";
+import { type Settlement, settle, settled } from "./settle.js";
 
 afterEach(() => {
   vi.useRealTimers();

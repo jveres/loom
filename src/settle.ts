@@ -2,9 +2,9 @@ import {
   type NodeOptions,
   type Read,
   registerScopeResource,
-  state,
   type State,
   type Stop,
+  state,
   untrack,
   watch,
 } from "./loom.js";
@@ -221,7 +221,13 @@ export function settled<T>(
     // delivery of the same value dedupes at the cell.
     settlement.flush();
     const next = untrack(read);
-    if (!equals(next, untrack(() => cell()))) cell(next);
+    if (
+      !equals(
+        next,
+        untrack(() => cell()),
+      )
+    )
+      cell(next);
   };
   const stop = (): void => {
     terminal = true;
