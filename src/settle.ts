@@ -163,13 +163,16 @@ export interface SettledState<T> extends Settlement {
 /**
  * Derive a value that SETTLES: the returned read serves the initial
  * evaluation immediately, then follows the source only after `ms` without a
- * semantically distinct value. `flush()` serves the CURRENT source
- * evaluation now (the host's "apply immediately" override) — including a
- * source write whose settlement delivery is still deferred (a write made
- * inside a batch or another watcher), where the settlement itself has
- * nothing pending yet. `cancel()` discards a pending delivery; reads track
- * reactively like any state. The source is evaluated twice at construction
- * (the seed and the settlement's silent baseline).
+ * semantically distinct value. `flush()` SYNCHRONIZES the read with the
+ * current source evaluation now (the host's "apply immediately" override) —
+ * a stronger contract than Settlement.flush: it also serves a source write
+ * whose settlement delivery is still deferred (made inside a batch or
+ * another watcher, where nothing is pending yet). It honors everything else
+ * the settlement honors: a no-op after stop, while the owning scope is
+ * paused, and for a value the `equals` option judges unchanged. `cancel()`
+ * discards a pending delivery; reads track reactively like any state. The
+ * source is evaluated twice at construction (the seed and the settlement's
+ * silent baseline).
  */
 export function settled<T>(
   read: State<T>,
@@ -189,17 +192,41 @@ export function settled<T>(
   // Only equals is settlement-specific; the rest of the options are
   // NodeOptions the cell may carry too.
   const { equals: _equals, ...nodeOptions } = options ?? {};
+  const equals = options?.equals ?? strictEqual<T>;
   const cell = state<T>(untrack(read), nodeOptions);
   const settlement = settle(read, (value) => cell(value), ms, options);
+  // The wrapper mirrors the settlement's lifecycle so flush can honor
+  // it: the pull-through must not advance a stopped read, write into a
+  // paused scope, or bypass the semantic-equality gate.
+  let terminal = false;
+  let paused = false;
+  const unregister = registerScopeResource({
+    pause: () => {
+      paused = true;
+    },
+    resume: () => {
+      paused = false;
+    },
+    stop: () => {
+      terminal = true;
+    },
+  });
   const flush = (): void => {
+    if (terminal || paused) return;
     // Promote a pending delivery first (keeps the settlement's
-    // baseline honest), then pull the source through regardless: in a
-    // deferred-delivery context the settlement has not OBSERVED the
-    // triggering write yet, and a flush that no-ops there would lag
-    // exactly the "apply now" moments it exists for. The settlement's
-    // late delivery of the same value dedupes at the cell.
+    // baseline honest), then pull the source through: in a deferred-
+    // delivery context the settlement has not OBSERVED the triggering
+    // write yet, and a flush that no-ops there would lag exactly the
+    // "apply now" moments it exists for. The settlement's late
+    // delivery of the same value dedupes at the cell.
     settlement.flush();
-    cell(untrack(read));
+    const next = untrack(read);
+    if (!equals(next, untrack(() => cell()))) cell(next);
   };
-  return Object.assign(() => cell(), settlement, { flush });
+  const stop = (): void => {
+    terminal = true;
+    settlement.stop();
+    unregister();
+  };
+  return Object.assign(() => cell(), settlement, { flush, stop });
 }

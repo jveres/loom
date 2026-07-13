@@ -338,3 +338,49 @@ describe("loom settled flush in deferred-delivery contexts", () => {
     lagging.stop();
   });
 });
+
+describe("loom settled flush honors the settlement's lifecycle", () => {
+  it("does not advance a stopped read", () => {
+    vi.useFakeTimers();
+    const source = state("A");
+    const lagging = settled(source, 100);
+    source("B");
+    lagging.stop();
+    lagging.flush(); // must NOT pull 'B' through a terminal settlement
+    expect(lagging()).toBe("A");
+  });
+
+  it("is a no-op while the owning scope is paused", () => {
+    vi.useFakeTimers();
+    const source = state("A");
+    let lagging!: ReturnType<typeof settled<string>>;
+    const owner = scope(() => {
+      lagging = settled(source, 100);
+    });
+    source("B");
+    owner.pause();
+    lagging.flush(); // paused: the read must not move
+    expect(lagging()).toBe("A");
+    owner.resume();
+    vi.advanceTimersByTime(100);
+    expect(lagging()).toBe("B");
+    owner.stop();
+  });
+
+  it("keeps the semantic-equality gate on the flush path", () => {
+    vi.useFakeTimers();
+    const source = state(["a"], { label: "settled.flushEq" });
+    const lagging = settled(source, 100, {
+      equals: (next, previous) =>
+        next.length === previous.length &&
+        next.every((entry, index) => entry === previous[index]),
+    });
+    const first = lagging();
+    source(["a"]); // fresh identity, same meaning
+    lagging.flush();
+    // The read keeps the ORIGINAL instance — no downstream rebuild for
+    // a semantically unchanged value.
+    expect(lagging()).toBe(first);
+    lagging.stop();
+  });
+});

@@ -49,11 +49,29 @@ function a(t, a, o, s) {
 		flush: y
 	};
 }
-function o(n, r, i) {
-	let { equals: o, ...s } = i ?? {}, c = t(e(n), s), l = a(n, (e) => c(e), r, i);
-	return Object.assign(() => c(), l, { flush: () => {
-		l.flush(), c(e(n));
-	} });
+function o(r, o, s) {
+	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = t(e(r), l), f = a(r, (e) => d(e), o, s), p = !1, m = !1, h = n({
+		pause: () => {
+			m = !0;
+		},
+		resume: () => {
+			m = !1;
+		},
+		stop: () => {
+			p = !0;
+		}
+	});
+	return Object.assign(() => d(), f, {
+		flush: () => {
+			if (p || m) return;
+			f.flush();
+			let t = e(r);
+			u(t, e(() => d())) || d(t);
+		},
+		stop: () => {
+			p = !0, f.stop(), h();
+		}
+	});
 }
 //#endregion
 export { a as settle, o as settled };

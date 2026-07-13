@@ -27,13 +27,16 @@ export interface SettledState<T> extends Settlement {
 /**
  * Derive a value that SETTLES: the returned read serves the initial
  * evaluation immediately, then follows the source only after `ms` without a
- * semantically distinct value. `flush()` serves the CURRENT source
- * evaluation now (the host's "apply immediately" override) — including a
- * source write whose settlement delivery is still deferred (a write made
- * inside a batch or another watcher), where the settlement itself has
- * nothing pending yet. `cancel()` discards a pending delivery; reads track
- * reactively like any state. The source is evaluated twice at construction
- * (the seed and the settlement's silent baseline).
+ * semantically distinct value. `flush()` SYNCHRONIZES the read with the
+ * current source evaluation now (the host's "apply immediately" override) —
+ * a stronger contract than Settlement.flush: it also serves a source write
+ * whose settlement delivery is still deferred (made inside a batch or
+ * another watcher, where nothing is pending yet). It honors everything else
+ * the settlement honors: a no-op after stop, while the owning scope is
+ * paused, and for a value the `equals` option judges unchanged. `cancel()`
+ * discards a pending delivery; reads track reactively like any state. The
+ * source is evaluated twice at construction (the seed and the settlement's
+ * silent baseline).
  */
 export declare function settled<T>(read: State<T>, ms: number, options?: SettleOptions<T>): SettledState<T>;
 export declare function settled<T>(read: Read<T>, ms: number, options?: SettleOptions<T>): SettledState<T>;
