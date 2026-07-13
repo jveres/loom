@@ -19,3 +19,18 @@ export interface Settlement {
  */
 export declare function settle<T>(read: State<T>, onSettled: (value: T, previous: T) => void, ms: number, options?: SettleOptions<T>): Settlement;
 export declare function settle<T>(read: Read<T>, onSettled: (value: T, previous: T) => void, ms: number, options?: SettleOptions<T>): Settlement;
+/** A settled derived value: a reactive Read that lags its source by the
+ *  quiet period, plus the settlement's controls. */
+export interface SettledState<T> extends Settlement {
+    (): T;
+}
+/**
+ * Derive a value that SETTLES: the returned read serves the initial
+ * evaluation immediately, then follows the source only after `ms` without a
+ * semantically distinct value. `flush()` promotes a pending value NOW (the
+ * host's "apply immediately" override); `cancel()` discards it; reads track
+ * reactively like any state. The source is evaluated twice at construction
+ * (the seed and the settlement's silent baseline).
+ */
+export declare function settled<T>(read: State<T>, ms: number, options?: SettleOptions<T>): SettledState<T>;
+export declare function settled<T>(read: Read<T>, ms: number, options?: SettleOptions<T>): SettledState<T>;

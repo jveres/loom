@@ -2,6 +2,7 @@ import {
   type NodeOptions,
   type Read,
   registerScopeResource,
+  state,
   type State,
   type Stop,
   untrack,
@@ -151,4 +152,44 @@ export function settle<T>(
   };
 
   return { stop, cancel, flush };
+}
+
+/** A settled derived value: a reactive Read that lags its source by the
+ *  quiet period, plus the settlement's controls. */
+export interface SettledState<T> extends Settlement {
+  (): T;
+}
+
+/**
+ * Derive a value that SETTLES: the returned read serves the initial
+ * evaluation immediately, then follows the source only after `ms` without a
+ * semantically distinct value. `flush()` promotes a pending value NOW (the
+ * host's "apply immediately" override); `cancel()` discards it; reads track
+ * reactively like any state. The source is evaluated twice at construction
+ * (the seed and the settlement's silent baseline).
+ */
+export function settled<T>(
+  read: State<T>,
+  ms: number,
+  options?: SettleOptions<T>,
+): SettledState<T>;
+export function settled<T>(
+  read: Read<T>,
+  ms: number,
+  options?: SettleOptions<T>,
+): SettledState<T>;
+export function settled<T>(
+  read: Read<T>,
+  ms: number,
+  options?: SettleOptions<T>,
+): SettledState<T> {
+  const nodeOptions: NodeOptions = {
+    ...(options?.label !== undefined ? { label: options.label } : {}),
+    ...(options?.internal !== undefined ? { internal: options.internal } : {}),
+  };
+  // The equals option belongs to the SETTLEMENT (semantic burst
+  // detection); the cell keeps plain state semantics.
+  const cell = state<T>(untrack(read), nodeOptions);
+  const settlement = settle(read, (value) => cell(value), ms, options);
+  return Object.assign(() => cell(), settlement);
 }
