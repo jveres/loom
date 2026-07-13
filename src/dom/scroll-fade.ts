@@ -72,48 +72,10 @@ export function scrollFade(
 
   // Keep one gradient installed: mask-image itself animates discretely, while
   // registered length properties interpolate without flipping compositing.
-  const fade = `linear-gradient(${direction}, #000 0, #000 ${inset}, transparent ${inset}, #000 calc(${inset} + ${startStop}), #000 calc(100% - ${insetEnd} - ${endStop}), transparent calc(100% - ${insetEnd}), #000 calc(100% - ${insetEnd}), #000 100%)`;
-  // The mask covers the element's WHOLE paint — a classic scrollbar
-  // included, whose ends faded with the content. Mask layers composite
-  // ADDITIVELY by default, so a second solid layer sized to the
-  // measured scrollbar gutter keeps that strip fully opaque; the fade
-  // layer stops where the gutter begins. Gutter 0 (overlay scrollbars)
-  // degrades to the single full-bleed fade.
-  let gutter = -1;
-  // Camelcase property assignment throughout (not setProperty):
-  // engines expose the standard and -webkit- mask longhands there
-  // uniformly, and test DOMs drop setProperty for names outside
-  // their parser.
-  const styles = el.style as CSSStyleDeclaration & Record<string, string>;
-  const applyMask = (nextGutter: number): void => {
-    if (nextGutter === gutter) return;
-    gutter = nextGutter;
-    if (gutter <= 0) {
-      styles.maskImage = fade;
-      styles.webkitMaskImage = fade;
-      styles.maskSize = "";
-      styles.maskPosition = "";
-      styles.maskRepeat = "";
-      styles.webkitMaskSize = "";
-      styles.webkitMaskPosition = "";
-      styles.webkitMaskRepeat = "";
-      return;
-    }
-    const mask = `${fade}, linear-gradient(#000, #000)`;
-    const size = horizontal
-      ? `100% calc(100% - ${gutter}px), 100% ${gutter}px`
-      : `calc(100% - ${gutter}px) 100%, ${gutter}px 100%`;
-    const position = horizontal ? "0 0, 0 100%" : "0 0, 100% 0";
-    styles.maskImage = mask;
-    styles.webkitMaskImage = mask;
-    styles.maskSize = size;
-    styles.webkitMaskSize = size;
-    styles.maskPosition = position;
-    styles.webkitMaskPosition = position;
-    styles.maskRepeat = "no-repeat";
-    styles.webkitMaskRepeat = "no-repeat";
-  };
-  applyMask(0);
+  const mask = `linear-gradient(${direction}, #000 0, #000 ${inset}, transparent ${inset}, #000 calc(${inset} + ${startStop}), #000 calc(100% - ${insetEnd} - ${endStop}), transparent calc(100% - ${insetEnd}), #000 calc(100% - ${insetEnd}), #000 100%)`;
+  el.style.maskImage = mask;
+  // Safari still needs the prefixed property.
+  el.style.webkitMaskImage = mask;
 
   const setStop = (
     property: string,
@@ -145,14 +107,6 @@ export function scrollFade(
     const overflow = horizontal
       ? el.scrollWidth - el.clientWidth
       : el.scrollHeight - el.clientHeight;
-    // The cross-axis gutter (a classic scrollbar's track) stays
-    // unmasked; measured here so classic/overlay and width changes
-    // stay current.
-    applyMask(
-      horizontal
-        ? el.offsetHeight - el.clientHeight
-        : el.offsetWidth - el.clientWidth,
-    );
     // Sticky-header allowance, CSS-driven (--scroll-fade-inset on the
     // host): the first N px stay fully visible — a sticky bar must
     // not be shadowed by its own container's fade — and the start
@@ -201,11 +155,5 @@ export function scrollFade(
     el.style.removeProperty(END_STOP);
     el.style.maskImage = "";
     el.style.webkitMaskImage = "";
-    styles.maskSize = "";
-    styles.maskPosition = "";
-    styles.maskRepeat = "";
-    styles.webkitMaskSize = "";
-    styles.webkitMaskPosition = "";
-    styles.webkitMaskRepeat = "";
   };
 }
