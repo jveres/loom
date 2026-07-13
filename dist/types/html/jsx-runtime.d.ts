@@ -10,5 +10,5 @@ export declare function jsx<P extends object>(type: Component<P>, props: P | nul
 export declare const jsxs: typeof jsx;
 export declare function Fragment(props: {
     readonly children?: HtmlChild;
-} | null): Html;
+} | null): HtmlChild;
 export declare function jsxDEV(type: JsxType, props: JsxProps, _key?: string | number, _isStaticChildren?: boolean, _source?: unknown, _self?: unknown): Html;

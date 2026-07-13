@@ -73,10 +73,16 @@ export function jsx(
 
 export const jsxs: typeof jsx = jsx;
 
+// Children VERBATIM, exactly like the DOM runtime's Fragment: a
+// fragment is a grouping, not an element, and both runtimes must agree
+// at runtime. Eagerly serializing to one branded Html made a fragment
+// ROOT indistinguishable from a single element — a consumer enforcing
+// a one-root contract (block stamping) then silently mis-stamped
+// static output while the DOM runtime threw (parity break).
 export function Fragment(
   props: { readonly children?: HtmlChild } | null,
-): Html {
-  return unsafeHtml(renderToString(props?.children));
+): HtmlChild {
+  return props?.children ?? [];
 }
 
 export function jsxDEV(

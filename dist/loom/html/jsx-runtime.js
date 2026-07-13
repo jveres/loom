@@ -30,7 +30,7 @@ function f(e, t, n) {
 }
 var p = f;
 function m(e) {
-	return i(r(e?.children));
+	return e?.children ?? [];
 }
 function h(e, t, n, r, i, a) {
 	return g(e, t, !0);
