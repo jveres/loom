@@ -110,7 +110,24 @@ describe("scrollFade", () => {
     const dispose = scrollFade(el);
 
     expect(el.style.maskImage).toBe(
-      "linear-gradient(to bottom, #000 0, #000 var(--scroll-fade-inset, 0px), transparent var(--scroll-fade-inset, 0px), #000 calc(var(--scroll-fade-inset, 0px) + var(--loom-scroll-fade-start, 0px)), #000 calc(100% - var(--loom-scroll-fade-end, 0px)), transparent 100%)",
+      "linear-gradient(to bottom, #000 0, #000 var(--scroll-fade-inset, 0px), transparent var(--scroll-fade-inset, 0px), #000 calc(var(--scroll-fade-inset, 0px) + var(--loom-scroll-fade-start, 0px)), #000 calc(100% - var(--scroll-fade-inset-end, 0px) - var(--loom-scroll-fade-end, 0px)), transparent calc(100% - var(--scroll-fade-inset-end, 0px)), #000 calc(100% - var(--scroll-fade-inset-end, 0px)), #000 100%)",
+    );
+    dispose();
+  });
+
+  it("exempts an END inset from the fade (a pinned trailing region)", () => {
+    // A sticky bottom group must stay fully opaque: the fade zone
+    // ends where the pinned region begins, and the region itself is
+    // an unmasked #000 run to 100%.
+    const el = scrollable({
+      scrollHeight: 300,
+      clientHeight: 100,
+      scrollTop: 0,
+    });
+    el.style.setProperty("--scroll-fade-inset-end", "64px");
+    const dispose = scrollFade(el);
+    expect(el.style.maskImage).toContain(
+      "transparent calc(100% - var(--scroll-fade-inset-end, 0px)), #000 calc(100% - var(--scroll-fade-inset-end, 0px)), #000 100%",
     );
     dispose();
   });

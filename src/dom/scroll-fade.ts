@@ -48,6 +48,10 @@ export function scrollFade(
   const horizontal = options.axis === "x";
   const direction = horizontal ? "to right" : "to bottom";
   const inset = "var(--scroll-fade-inset, 0px)";
+  // The END twin: a host pinning content at the trailing edge (a
+  // sticky bottom group) exempts it from the mask — the fade zone
+  // ends where the pinned region begins, which stays fully opaque.
+  const insetEnd = "var(--scroll-fade-inset-end, 0px)";
   const startStop = `var(${START_STOP}, 0px)`;
   const endStop = `var(${END_STOP}, 0px)`;
   const requestedDuration = options.transition ?? 0;
@@ -68,7 +72,7 @@ export function scrollFade(
 
   // Keep one gradient installed: mask-image itself animates discretely, while
   // registered length properties interpolate without flipping compositing.
-  const mask = `linear-gradient(${direction}, #000 0, #000 ${inset}, transparent ${inset}, #000 calc(${inset} + ${startStop}), #000 calc(100% - ${endStop}), transparent 100%)`;
+  const mask = `linear-gradient(${direction}, #000 0, #000 ${inset}, transparent ${inset}, #000 calc(${inset} + ${startStop}), #000 calc(100% - ${insetEnd} - ${endStop}), transparent calc(100% - ${insetEnd}), #000 calc(100% - ${insetEnd}), #000 100%)`;
   el.style.maskImage = mask;
   // Safari still needs the prefixed property.
   el.style.webkitMaskImage = mask;
