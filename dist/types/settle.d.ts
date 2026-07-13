@@ -27,8 +27,11 @@ export interface SettledState<T> extends Settlement {
 /**
  * Derive a value that SETTLES: the returned read serves the initial
  * evaluation immediately, then follows the source only after `ms` without a
- * semantically distinct value. `flush()` promotes a pending value NOW (the
- * host's "apply immediately" override); `cancel()` discards it; reads track
+ * semantically distinct value. `flush()` serves the CURRENT source
+ * evaluation now (the host's "apply immediately" override) — including a
+ * source write whose settlement delivery is still deferred (a write made
+ * inside a batch or another watcher), where the settlement itself has
+ * nothing pending yet. `cancel()` discards a pending delivery; reads track
  * reactively like any state. The source is evaluated twice at construction
  * (the seed and the settlement's silent baseline).
  */

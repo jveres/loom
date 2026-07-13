@@ -292,3 +292,49 @@ describe("loom settled", () => {
     expect(lagging()).toBe("A");
   });
 });
+
+describe("loom settled flush in deferred-delivery contexts", () => {
+  it("serves a write made inside a watcher immediately on flush", () => {
+    // A watcher's own writes are delivered after it returns, so the
+    // settlement has nothing pending when flush() runs inside one —
+    // the flush must pull the source through anyway (the host's
+    // "structural ops apply NOW" contract).
+    vi.useFakeTimers();
+    const source = state(0);
+    const lagging = settled(source, 100);
+    const drive = state(0);
+    const seen: number[] = [];
+    const stopWatch = watch(
+      () => drive(),
+      () => {
+        source(source() + 1);
+        lagging.flush();
+        seen.push(lagging());
+      },
+    );
+
+    drive(1);
+    expect(seen).toEqual([1]); // served inside the watcher, no 100ms lag
+    expect(lagging()).toBe(1);
+
+    // The settlement's late delivery of the same value stays silent.
+    vi.advanceTimersByTime(100);
+    expect(lagging()).toBe(1);
+    stopWatch();
+    lagging.stop();
+  });
+
+  it("serves a write made inside a batch immediately on flush", async () => {
+    vi.useFakeTimers();
+    const { batch } = await import("./loom.js");
+    const source = state("a");
+    const lagging = settled(source, 100);
+    batch(() => {
+      source("b");
+      lagging.flush();
+      expect(lagging()).toBe("b");
+    });
+    expect(lagging()).toBe("b");
+    lagging.stop();
+  });
+});

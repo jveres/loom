@@ -50,11 +50,10 @@ function a(t, a, o, s) {
 	};
 }
 function o(n, r, i) {
-	let o = {
-		...i?.label === void 0 ? {} : { label: i.label },
-		...i?.internal === void 0 ? {} : { internal: i.internal }
-	}, s = t(e(n), o), c = a(n, (e) => s(e), r, i);
-	return Object.assign(() => s(), c);
+	let { equals: o, ...s } = i ?? {}, c = t(e(n), s), l = a(n, (e) => c(e), r, i);
+	return Object.assign(() => c(), l, { flush: () => {
+		l.flush(), c(e(n));
+	} });
 }
 //#endregion
 export { a as settle, o as settled };

@@ -163,8 +163,11 @@ export interface SettledState<T> extends Settlement {
 /**
  * Derive a value that SETTLES: the returned read serves the initial
  * evaluation immediately, then follows the source only after `ms` without a
- * semantically distinct value. `flush()` promotes a pending value NOW (the
- * host's "apply immediately" override); `cancel()` discards it; reads track
+ * semantically distinct value. `flush()` serves the CURRENT source
+ * evaluation now (the host's "apply immediately" override) — including a
+ * source write whose settlement delivery is still deferred (a write made
+ * inside a batch or another watcher), where the settlement itself has
+ * nothing pending yet. `cancel()` discards a pending delivery; reads track
  * reactively like any state. The source is evaluated twice at construction
  * (the seed and the settlement's silent baseline).
  */
@@ -183,13 +186,20 @@ export function settled<T>(
   ms: number,
   options?: SettleOptions<T>,
 ): SettledState<T> {
-  const nodeOptions: NodeOptions = {
-    ...(options?.label !== undefined ? { label: options.label } : {}),
-    ...(options?.internal !== undefined ? { internal: options.internal } : {}),
-  };
-  // The equals option belongs to the SETTLEMENT (semantic burst
-  // detection); the cell keeps plain state semantics.
+  // Only equals is settlement-specific; the rest of the options are
+  // NodeOptions the cell may carry too.
+  const { equals: _equals, ...nodeOptions } = options ?? {};
   const cell = state<T>(untrack(read), nodeOptions);
   const settlement = settle(read, (value) => cell(value), ms, options);
-  return Object.assign(() => cell(), settlement);
+  const flush = (): void => {
+    // Promote a pending delivery first (keeps the settlement's
+    // baseline honest), then pull the source through regardless: in a
+    // deferred-delivery context the settlement has not OBSERVED the
+    // triggering write yet, and a flush that no-ops there would lag
+    // exactly the "apply now" moments it exists for. The settlement's
+    // late delivery of the same value dedupes at the cell.
+    settlement.flush();
+    cell(untrack(read));
+  };
+  return Object.assign(() => cell(), settlement, { flush });
 }
