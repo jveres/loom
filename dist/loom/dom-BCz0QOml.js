@@ -367,9 +367,9 @@ function Ne(e) {
 		if (e) for (let n of e) n(t);
 	}
 }
-function Pe(e, t) {
-	let n = j.get(e);
-	return n || (n = /* @__PURE__ */ new Set(), j.set(e, n), M ??= new ResizeObserver(Ne), M.observe(e)), n.add(t), p(e, k(() => {
+function Pe(e, t, n) {
+	let r = j.get(e);
+	return r ? n && (M?.unobserve(e), M?.observe(e, n)) : (r = /* @__PURE__ */ new Set(), j.set(e, r), M ??= new ResizeObserver(Ne), M.observe(e, n)), r.add(t), p(e, k(() => {
 		let n = j.get(e);
 		n && (n.delete(t), n.size === 0 && (j.delete(e), M?.unobserve(e), j.size === 0 && (M?.disconnect(), M = null)));
 	}));

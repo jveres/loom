@@ -681,9 +681,12 @@ observers where a callback reacts:
   out-of-range stored value instead of leaking it into the app. Absent or
   throwing storage degrades to an unpersisted signal. The inspector's panel
   chrome sits on it.
-- `observeSize(el, cb)` — `cb(entry)` on ResizeObserver's clock (including
-  the initial delivery on attach), detached on node teardown. One shared
-  observer serves the whole app. Returns a stop.
+- `observeSize(el, cb, options?)` — `cb(entry)` on ResizeObserver's clock
+  (including the initial delivery on attach), detached on node teardown. One
+  shared observer serves the whole app; it holds one observation per element,
+  and an explicit `options` re-observes (last explicit box wins). The default
+  content-box never fires on padding-only changes — a consumer measuring
+  border boxes must pass `{ box: "border-box" }`. Returns a stop.
 - `observeIntersection(el, cb, options?)` — `cb(entry)` on
   IntersectionObserver's clock, detached on node teardown. Observers with
   equivalent `root`, `rootMargin`, and `threshold` options are shared. Custom

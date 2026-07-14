@@ -1,4 +1,4 @@
-// observeSize(el, cb) — sized observation with the same lifetime treatment events get: the
+// observeSize(el, cb, options?) — sized observation with the same lifetime treatment events get: the
 // callback runs on the element's ResizeObserver clock (including the spec's initial delivery on
 // attach, so consumers get their first measurement without a manual call) and is torn down with
 // the node — `remove()`/`dispose()`/a keyed row leaving detach it automatically, the forgotten
@@ -23,13 +23,26 @@ function deliver(entries: ResizeObserverEntry[]): void {
   }
 }
 
-export function observeSize(el: Element, cb: SizeCallback): Stop {
+export function observeSize(
+  el: Element,
+  cb: SizeCallback,
+  options?: ResizeObserverOptions,
+): Stop {
   let callbacks = watched.get(el);
   if (!callbacks) {
     callbacks = new Set();
     watched.set(el, callbacks);
     observer ??= new ResizeObserver(deliver);
-    observer.observe(el);
+    observer.observe(el, options);
+  } else if (options) {
+    // The shared observer holds ONE observation per element, so an
+    // explicit box wins over whatever the element was observed with:
+    // re-observing replaces the options (and re-fires the spec's
+    // initial delivery — size reads are idempotent). Padding-only
+    // changes are invisible on the default content-box; a consumer
+    // measuring border boxes must observe { box: "border-box" }.
+    observer?.unobserve(el);
+    observer?.observe(el, options);
   }
   callbacks.add(cb);
   const stop = once(() => {
