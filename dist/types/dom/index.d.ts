@@ -133,3 +133,4 @@ export { onMount } from "./on-mount.js";
 export { dispose, onUnmount, pause, remove, resume } from "./ownership.js";
 export { type PersistedOptions, persisted } from "./persisted.js";
 export { type PointerSessionEndReason, type PointerSessionOptions, startPointerSession, } from "./pointer-session.js";
+export { pressed } from "./pressed.js";

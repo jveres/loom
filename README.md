@@ -681,6 +681,23 @@ observers where a callback reacts:
   out-of-range stored value instead of leaking it into the app. Absent or
   throwing storage degrades to an unpersisted signal. The inspector's panel
   chrome sits on it.
+- `pressed(el)` returns a `Read<boolean>`, true from a primary-button
+  `pointerdown` on the element until that pointer is released, cancelled,
+  or leaves it — the deterministic twin of CSS `:active` for touch, where
+  WebKit's tap heuristics defer `:active`/`:hover` unpredictably. Style
+  with both selectors and bind the class:
+
+```ts
+import { classed, pressed } from "loom/dom";
+
+const el = document.querySelector("button");
+if (el) classed(el, "is-pressed", pressed(el));
+// css: button:active, button.is-pressed { ... }
+```
+
+  No pointer capture — a press that slides off and releases elsewhere
+  stays a cancel, like a native button. Listeners are subscriber-counted
+  (none while unobserved; the global pair only during a press).
 - `observeSize(el, cb, options?)` — `cb(entry)` on ResizeObserver's clock
   (including the initial delivery on attach), detached on node teardown. One
   shared observer serves the whole app; it holds one observation per element,
@@ -733,7 +750,7 @@ scrollers use a 120 ms transition.
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
-| `connected`, `persisted`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
+| `connected`, `persisted`, `pressed`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
@@ -757,7 +774,7 @@ Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX acc
   lifetime: `observeSize`, `observeIntersection`, `observeMutation`.
   Function-only; the callback detaches on node teardown.
 - **Unprefixed** — signals, the reactive grain: `connected`,
-  `persisted`, and the signal forms of `attr`/`classed`/`style` (direction by
+  `persisted`, `pressed`, and the signal forms of `attr`/`classed`/`style` (direction by
   first argument and arity, as with a signal: read without a value,
   write with one).
 - **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,

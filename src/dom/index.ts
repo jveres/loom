@@ -1213,3 +1213,4 @@ export {
   type PointerSessionOptions,
   startPointerSession,
 } from "./pointer-session.js";
+export { pressed } from "./pressed.js";

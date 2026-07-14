@@ -1,5 +1,5 @@
 import { n as e } from "./jsx-props-sAPN8GVq.js";
-import { a as t } from "./dom-BCz0QOml.js";
+import { a as t } from "./dom-B1owzLO4.js";
 //#region src/dom/jsx-runtime.ts
 function n(e, t, n) {
 	return o(e, t);
