@@ -286,7 +286,13 @@ body {
   background: var(--pg-panel);
 }
 
+/* The virtualizer's contract: rows MUST be absolutely positioned — it only
+   sets each row's transform, so a static-flow row stacks below the sizer,
+   millions of pixels off-screen. */
 .pg-stage .vrow {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 24px;
   padding: 0 10px;
   width: 100%;
