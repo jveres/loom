@@ -1519,6 +1519,7 @@ pnpm run bench   # CLI benchmarks (chaos, micro, hot-path)
 pnpm size        # per-entry bundle budgets (gzip)
 pnpm samples     # every README code sample typechecks against src
 pnpm run dev     # dev server
+pnpm run playground  # sample playground (editor + live view)
 pnpm run build   # dist/loom (ES bundles) + dist/types (.d.ts)
 ```
 
@@ -1529,7 +1530,14 @@ it whenever you change `src`. While developing Loom itself, its own `loom` /
 plus `tsconfig` `paths`), so `check` / `test` / `dev` never need a build.
 
 With the dev server running, open `/demo/` for the realtime UI demo or `/bench/`
-for the browser benchmark. The demo is a realtime stress UI written in Loom JSX:
+for the browser benchmark. `pnpm run playground` serves a third app: an
+editor-plus-live-view over a catalog of small samples covering the whole
+surface, from `state()` to SVG, async resources, the virtualizer, and the
+observability layer. Each sample is a real `.tsx` module typechecked by
+`pnpm run check` (so the catalog cannot drift from the API) whose source
+feeds the in-browser editor — edits recompile via sucrase and remount after a
+quiet moment, with each run owned by a `scope()` so timers and observers die
+on re-run. Every sample also compiles and mounts in the vitest suite. The demo is a realtime stress UI written in Loom JSX:
 it exercises signals, object props, computed values, effects, keyed list
 reconciliation, direct JSX text/attribute/class bindings, cleanup through DOM
 disposal, and the browser JSX runtime.

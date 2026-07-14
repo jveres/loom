@@ -5,7 +5,11 @@ export default defineConfig({
   resolve: { alias: loomAliases },
   test: {
     clearMocks: true,
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "playground/**/*.test.ts",
+    ],
     mockReset: true,
     restoreMocks: true,
   },

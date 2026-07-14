@@ -30,6 +30,7 @@
     "format": "biome format --write .",
     "bench": "vitest bench --run",
     "dev": "vite --host 127.0.0.1",
+    "playground": "vite --config vite.playground.config.ts --host 127.0.0.1",
     "build": "vite build --config vite.loom.config.ts && rm -rf dist/types && tsc -p tsconfig.build.json",
     "build:demo": "vite build",
     "size": "pnpm run build && node scripts/size.mjs",
@@ -98,6 +99,7 @@
     "@types/node": "^26.1.1",
     "alien-signals": "3.2.1",
     "idiomorph": "^0.7.4",
+    "sucrase": "^3.35.1",
     "typescript": "7.0.2",
     "vite": "8.1.3",
     "vitest": "^4.1.10"
