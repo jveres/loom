@@ -3,6 +3,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { scrollFade } from "./scroll-fade.js";
 
+// The reduce-motion pool entry is created on the FIRST animated fade
+// (mediaRead pools per query for the module's lifetime; the pooled
+// connect captures the list the stub returns) — the beforeEach stub
+// covers whichever test creates it, so the flip test can drive it.
+const reduceList = {
+  matches: false,
+  listeners: new Set<() => void>(),
+  addEventListener(_type: string, cb: () => void): void {
+    this.listeners.add(cb);
+  },
+  removeEventListener(_type: string, cb: () => void): void {
+    this.listeners.delete(cb);
+  },
+  flip(next: boolean): void {
+    this.matches = next;
+    for (const cb of [...this.listeners]) cb();
+  },
+};
+const realMatchMedia = globalThis.matchMedia?.bind(globalThis);
+
 // happy-dom has no layout: drive the scroll metrics by hand.
 function scrollable(metrics: {
   scrollHeight: number;
@@ -26,6 +46,12 @@ function scrollable(metrics: {
 }
 
 beforeEach(() => {
+  // afterEach unstubs ALL globals — re-arm the media stub per test.
+  vi.stubGlobal("matchMedia", (query: string) =>
+    query === "(prefers-reduced-motion: reduce)"
+      ? reduceList
+      : realMatchMedia(query),
+  );
   // happy-dom lacks ResizeObserver; the helper only needs construct/observe.
   vi.stubGlobal(
     "ResizeObserver",
@@ -197,6 +223,41 @@ describe("scrollFade", () => {
     );
     dispose();
     expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("stops animating when reduced-motion flips ON mid-session", () => {
+    // The one-shot read went stale here: a fade built before the OS
+    // setting flipped kept animating forever. The gate is LIVE now
+    // (loom's own mediaRead, held observed for the fade's lifetime).
+    vi.stubGlobal("CSS", {
+      ...globalThis.CSS,
+      registerProperty: vi.fn(),
+    });
+    const el = scrollable({
+      scrollHeight: 300,
+      clientHeight: 100,
+      scrollTop: 0,
+    });
+    const cancel = vi.fn();
+    const animate = vi.fn(() => ({ cancel }));
+    Object.defineProperty(el, "animate", {
+      configurable: true,
+      value: animate,
+    });
+    const dispose = scrollFade(el, { transition: 120 });
+
+    el.scrollTop = 50;
+    el.dispatchEvent(new Event("scroll"));
+    expect(animate).toHaveBeenCalledTimes(1);
+
+    reduceList.flip(true);
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event("scroll"));
+    // The next stop update fell to the no-animation path.
+    expect(animate).toHaveBeenCalledTimes(1);
+
+    dispose();
+    reduceList.flip(false);
   });
 
   it('fades horizontally with axis: "x"', () => {

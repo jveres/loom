@@ -674,6 +674,18 @@ observers where a callback reacts:
   comparative bench): ~3.5% on `create-10k`, ~0.3 ms per 1k-node `clear`,
   nothing on update/swap; unused, zero. Moves confined to shadow roots are
   invisible to it.
+- `mediaRead(query)` returns a `Read<boolean>` of a media query, pooled
+  per query string: one `MediaQueryList` and one change listener per
+  distinct query, subscriber-counted (zero cost unobserved) and resynced
+  on reconnect — the OS can flip a preference while nothing observes, and
+  a stale cache would swallow the next notification.
+
+```ts
+import { classed, mediaRead } from "loom/dom";
+
+classed(document.body, "is-dark", mediaRead("(prefers-color-scheme: dark)"));
+```
+
 - `persisted(key, initial, options?)` — a `State<T>` backed by
   `localStorage`: read-validate once at creation, write-through on set. A
   plain signal (`update`/`watch`/bindings compose); `options` add
@@ -750,7 +762,7 @@ scrollers use a 120 ms transition.
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
-| `connected`, `persisted`, `pressed`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
+| `connected`, `mediaRead`, `persisted`, `pressed`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
@@ -774,7 +786,8 @@ Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX acc
   lifetime: `observeSize`, `observeIntersection`, `observeMutation`.
   Function-only; the callback detaches on node teardown.
 - **Unprefixed** — signals, the reactive grain: `connected`,
-  `persisted`, `pressed`, and the signal forms of `attr`/`classed`/`style` (direction by
+  `persisted`, `pressed`, `mediaRead` (suffixed after the element-read
+  family it pools like), and the signal forms of `attr`/`classed`/`style` (direction by
   first argument and arity, as with a signal: read without a value,
   write with one).
 - **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,

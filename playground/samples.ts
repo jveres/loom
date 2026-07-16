@@ -15,6 +15,7 @@ import imperativeDom from "./samples/imperative-dom.tsx?raw";
 import inputs from "./samples/inputs.tsx?raw";
 import inspector from "./samples/inspector.tsx?raw";
 import keyedList from "./samples/keyed-list.tsx?raw";
+import mediaReadSample from "./samples/media-read.tsx?raw";
 import morphSample from "./samples/morph.tsx?raw";
 import observers from "./samples/observers.tsx?raw";
 import patternDirtySave from "./samples/pattern-dirty-save.tsx?raw";
@@ -85,6 +86,7 @@ export const categories: readonly Category[] = [
       sample("virtual-list", "Virtual list · 100k rows", virtualListSample),
       sample("scroll-fade", "Scroll fade", scrollFadeSample),
       sample("observers", "Size, intersection, connected", observers),
+      sample("media-read", "mediaRead · live media queries", mediaReadSample),
       sample("pointer-drag", "Pointer session drag", pointerDrag),
       sample("morph", "Morph static trees", morphSample),
       sample("persisted", "Persisted state", persistedSample),

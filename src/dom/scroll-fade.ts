@@ -14,6 +14,9 @@
 // direction: a carve narrower than the real scrollbar fades a sliver of
 // it, a wider one merely leaves a sliver of content unfaded.
 
+import { effect } from "../loom.js";
+import { mediaRead } from "./media-read.js";
+
 export interface ScrollFadeOptions {
   /** Fade length in px (default 14). */
   readonly size?: number;
@@ -24,6 +27,10 @@ export interface ScrollFadeOptions {
 }
 
 const EPSILON = 4;
+// prefers-reduced-motion is a USER preference — one value across
+// every window, so the global pooled read serves iframe-mounted
+// elements too (unlike geometry queries, which are per-window).
+const REDUCE_MOTION = "(prefers-reduced-motion: reduce)";
 const START_STOP = "--loom-scroll-fade-start";
 const END_STOP = "--loom-scroll-fade-end";
 const registeredCSS = new WeakSet<object>();
@@ -73,8 +80,18 @@ export function scrollFade(
     duration > 0 &&
     view !== null &&
     typeof el.animate === "function" &&
-    !view.matchMedia("(prefers-reduced-motion: reduce)").matches &&
     registerAnimatedStops();
+  // LIVE for the fade's lifetime (the one-shot read went stale when
+  // the OS setting flipped mid-session): the effect exists ONLY to
+  // hold the pooled mediaRead observed (connected, resynced); every
+  // stop update reads the source directly, so a flip gates the very
+  // next update — no effect-schedule lag.
+  const reduceMotion = animateStops ? mediaRead(REDUCE_MOTION) : null;
+  const stopReduceMotion = reduceMotion
+    ? effect(() => {
+        reduceMotion();
+      })
+    : null;
   let start = -1;
   let end = -1;
   let startAnimation: Animation | undefined;
@@ -112,7 +129,7 @@ export function scrollFade(
     animation: Animation | undefined,
   ): Animation | undefined => {
     const nextValue = `${next}px`;
-    if (!animateStops || view === null || previous < 0) {
+    if (!animateStops || reduceMotion?.() || view === null || previous < 0) {
       animation?.cancel();
       el.style.setProperty(property, nextValue);
       return undefined;
@@ -174,6 +191,7 @@ export function scrollFade(
   sync();
 
   return () => {
+    stopReduceMotion?.();
     el.removeEventListener("scroll", sync);
     observer.disconnect();
     mutations.disconnect();
