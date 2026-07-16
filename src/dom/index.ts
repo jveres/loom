@@ -1194,6 +1194,7 @@ function isBinding<TKind extends "attr" | "class" | "style">(
 }
 
 export { connected } from "./connected.js";
+export { mediaRead } from "./media-read.js";
 export { type MorphOptions, morph } from "./morph.js";
 export {
   type IntersectionCallback,

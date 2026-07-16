@@ -125,6 +125,7 @@ export declare function onTap(node: Element, handler: (event: PointerEvent) => v
 export declare function bind(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
 export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
 export { connected } from "./connected.js";
+export { mediaRead } from "./media-read.js";
 export { type MorphOptions, morph } from "./morph.js";
 export { type IntersectionCallback, type IntersectionOptions, observeIntersection, } from "./observe-intersection.js";
 export { type MutationsCallback, observeMutation, } from "./observe-mutation.js";

@@ -1,7 +1,7 @@
 import { S as e, b as t, i as n, m as r, v as i, y as a } from "./loom-Doq0e1ZU.js";
 import { i as o, n as s, r as c } from "./meter-6h-O7R_x.js";
 import { n as l, t as u } from "./observe-ePwGsY8l.js";
-import { c as d, f as ee, g as f, h as te, n as ne, p as re, t as ie } from "./dom-B1owzLO4.js";
+import { c as d, f as ee, g as f, h as te, n as ne, p as re, t as ie } from "./dom-D9bXYKGB.js";
 import { a as p } from "./ownership-base-DfUs28hK.js";
 import { virtualList as ae } from "./dom/virtual-list.js";
 import "./defer.js";
