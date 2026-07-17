@@ -1193,7 +1193,12 @@ function isBinding<TKind extends "attr" | "class" | "style">(
   );
 }
 
+export { bindValue } from "./bind-value.js";
 export { connected } from "./connected.js";
+export {
+  type FoldHeightOptions,
+  foldHeight,
+} from "./fold-height.js";
 export { mediaRead } from "./media-read.js";
 export { type MorphOptions, morph } from "./morph.js";
 export {
@@ -1215,3 +1220,4 @@ export {
   startPointerSession,
 } from "./pointer-session.js";
 export { pressed } from "./pressed.js";
+export { settleTransition } from "./settle-transition.js";

@@ -307,6 +307,20 @@ export function state<T>(initial: T, options?: NodeOptions): State<T> {
 }
 
 /**
+ * A derived writable: reads through `read` (tracked — bindings and computeds subscribe through
+ * whatever it reads), writes through `write`. The two-way UI-vocabulary adapter (a picker showing
+ * a label over a domain signal) as a first-class helper. Arity decides direction — rest-args, so
+ * writing `undefined` through a `State<T | undefined>` is a WRITE, exactly like `state()` itself.
+ */
+export function writable<T>(read: () => T, write: (next: T) => void): State<T> {
+  return ((...args: [] | [T]) => {
+    if (args.length === 0) return read();
+    write(args[0] as T);
+    return undefined;
+  }) as State<T>;
+}
+
+/**
  * A lazy reactive source backed by an external producer. `connect(set)` is invoked the first
  * time the source is read inside a live effect/computed (its first subscriber); it wires up the
  * producer — a timer, event listener, `PerformanceObserver`, socket — and returns a teardown

@@ -31,6 +31,7 @@ import {
   untrack,
   update,
   watch,
+  writable,
 } from "./loom.js";
 
 // Inspection is opt-in (off by default). Most tests assert on inspect()/channel internal
@@ -2404,4 +2405,39 @@ describe("loom scope bookkeeping", () => {
       s.stop();
     },
   );
+});
+
+describe("writable (derived writable)", () => {
+  it("reads through read (tracked) and writes through write — rest-args arity", () => {
+    const domain = state<string | null>(null, {
+      label: "test.writable.domain",
+    });
+    const label = writable(
+      () => domain() ?? "All",
+      (next) => domain(next === "All" ? null : next),
+    );
+    expect(label()).toBe("All");
+    label("Cards");
+    expect(domain()).toBe("Cards");
+    // Bindings subscribe THROUGH the signals it reads.
+    const seen: string[] = [];
+    const stop = effect(() => {
+      seen.push(label());
+    });
+    domain(null);
+    expect(seen).toEqual(["Cards", "All"]);
+    stop();
+  });
+
+  it("writing undefined IS a write (state()'s own contract)", () => {
+    const cell = state<string | undefined>("set", {
+      label: "test.writable.undef",
+    });
+    const lensed = writable<string | undefined>(
+      () => cell(),
+      (next) => cell(next),
+    );
+    lensed(undefined);
+    expect(cell()).toBeUndefined();
+  });
 });

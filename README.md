@@ -214,6 +214,7 @@ deferred-lane scheduler ([Deferred effects](#deferred-effects)).
 | `update`, `watch` | [Deriving and reacting](#deriving-and-reacting) |
 | `settle` (`loom/settle`) | [Settled changes](#settled-changes) |
 | `mutate`, `trigger` | [In-place mutation](#in-place-mutation) |
+| `writable` | [Derived writable (recipe)](#derived-writable-recipe) |
 | `props` | [Object properties](#object-properties) |
 | `poll`, `source` | [External data](#external-data) |
 | `scope` | [Scopes](#scopes) |
@@ -749,6 +750,32 @@ gradient rather than none — clearing it would flip the element off the masked
 raster path and the next fade-in flashes for a frame. The dev inspector's own
 scrollers use a 120 ms transition.
 
+#### Transitions and folds
+
+- `settleTransition(el, property, onSettle)` — wait for a css transition on
+  ONE property to finish, robustly: `transitionend` is the happy path, and
+  the cases it alone cannot cover are built in — a transition that cannot
+  run (`transition: none` under reduced motion, a `display: none` ancestor)
+  settles on a microtask; a stalled one settles on a computed
+  duration+delay fallback timer; an interrupted one settles via
+  `transitioncancel`; `onSettle` runs exactly once. Returns a Stop that
+  abandons the wait; a dead node never settles.
+- `foldHeight(el, open, options?)` — animate an element's height between 0
+  and auto on its own css transition (`transition: height ...` and the clip
+  discipline stay the caller's), with the fold laws built in: measure at
+  AUTO (an inline 0px from the last collapse must not poison the target),
+  the open height caches at collapse so an expand does no full-layout
+  measure, an INTERRUPTED animation drops the cache (its height is a
+  partial, never a real open height), `[hidden]` lands only after the
+  collapse settles, and a settled open fold returns to `height: auto` so
+  content growth is never clipped. `onStart`/`onSettle` bracket the
+  animation for hosts that mute observers while it runs.
+- `bindValue(el, cell)` — focus-guarded two-way value binding for form
+  controls: writes the cell on input, follows the cell into `el.value`, and
+  NEVER overwrites the focused element (`morph`'s law, for bindings — a
+  reactive echo mid-typing destroys the edit and the caret); the latest
+  suppressed value applies when focus leaves. Node-owned.
+
 #### API index — `loom/dom`
 
 | Export | Documented in |
@@ -764,6 +791,7 @@ scrollers use a 120 ms transition.
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
 | `connected`, `mediaRead`, `persisted`, `pressed`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
+| `settleTransition`, `foldHeight`, `bindValue` | [Transitions and folds](#transitions-and-folds) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
 
@@ -992,7 +1020,19 @@ const typeLabel = (next?: string): string =>
 ```
 
 The wrapper is just a function — it subscribes through the signals it reads, so
-bindings, `computed`, and `watch` all compose with it unchanged.
+bindings, `computed`, and `watch` all compose with it unchanged. `writable`
+is that recipe as a first-class helper, with `state()`'s own rest-args
+arity (writing `undefined` through a `State<T | undefined>` is a WRITE):
+
+```ts
+import { state, writable } from "loom";
+
+const type = state<string | null>(null);
+const typeLabel = writable(
+  () => type() ?? "All",
+  (next) => type(next === "All" ? null : next),
+);
+```
 
 #### Keyed rows with per-row state
 

@@ -124,7 +124,9 @@ export declare function onTap(node: Element, handler: (event: PointerEvent) => v
  */
 export declare function bind(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
 export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
+export { bindValue } from "./bind-value.js";
 export { connected } from "./connected.js";
+export { type FoldHeightOptions, foldHeight, } from "./fold-height.js";
 export { mediaRead } from "./media-read.js";
 export { type MorphOptions, morph } from "./morph.js";
 export { type IntersectionCallback, type IntersectionOptions, observeIntersection, } from "./observe-intersection.js";
@@ -135,3 +137,4 @@ export { dispose, onUnmount, pause, remove, resume } from "./ownership.js";
 export { type PersistedOptions, persisted } from "./persisted.js";
 export { type PointerSessionEndReason, type PointerSessionOptions, startPointerSession, } from "./pointer-session.js";
 export { pressed } from "./pressed.js";
+export { settleTransition } from "./settle-transition.js";

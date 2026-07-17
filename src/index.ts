@@ -45,4 +45,5 @@ export {
   untrack,
   update,
   watch,
+  writable,
 } from "./loom.js";

@@ -10,6 +10,7 @@ import deferred from "./samples/deferred.tsx?raw";
 import derivedWatch from "./samples/derived-watch.tsx?raw";
 import errorBoundary from "./samples/error-boundary.tsx?raw";
 import externalData from "./samples/external-data.tsx?raw";
+import foldBind from "./samples/fold-bind.tsx?raw";
 import helloState from "./samples/hello-state.tsx?raw";
 import imperativeDom from "./samples/imperative-dom.tsx?raw";
 import inputs from "./samples/inputs.tsx?raw";
@@ -87,6 +88,7 @@ export const categories: readonly Category[] = [
       sample("scroll-fade", "Scroll fade", scrollFadeSample),
       sample("observers", "Size, intersection, connected", observers),
       sample("media-read", "mediaRead · live media queries", mediaReadSample),
+      sample("fold-bind", "foldHeight & bindValue", foldBind),
       sample("pointer-drag", "Pointer session drag", pointerDrag),
       sample("morph", "Morph static trees", morphSample),
       sample("persisted", "Persisted state", persistedSample),

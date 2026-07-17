@@ -130,6 +130,13 @@ export declare function ambientOptions(): NodeOptions | undefined;
 export declare function liveScopeCount(): number;
 export declare function state<T>(initial: T, options?: NodeOptions): State<T>;
 /**
+ * A derived writable: reads through `read` (tracked — bindings and computeds subscribe through
+ * whatever it reads), writes through `write`. The two-way UI-vocabulary adapter (a picker showing
+ * a label over a domain signal) as a first-class helper. Arity decides direction — rest-args, so
+ * writing `undefined` through a `State<T | undefined>` is a WRITE, exactly like `state()` itself.
+ */
+export declare function writable<T>(read: () => T, write: (next: T) => void): State<T>;
+/**
  * A lazy reactive source backed by an external producer. `connect(set)` is invoked the first
  * time the source is read inside a live effect/computed (its first subscriber); it wires up the
  * producer — a timer, event listener, `PerformanceObserver`, socket — and returns a teardown
