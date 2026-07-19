@@ -39,23 +39,23 @@ describe("loom DOM pointer sessions", () => {
     expect(order).toEqual(["release", "end"]);
   });
 
-  it.each([
-    "pointercancel",
-    "lostpointercapture",
-  ] as const)("finishes on %s", (kind) => {
-    const handle = document.createElement("div");
-    const end = vi.fn();
-    startPointerSession(handle, pointer("pointerdown", 4), {
-      move: () => {},
-      end,
-    });
+  it.each(["pointercancel", "lostpointercapture"] as const)(
+    "finishes on %s",
+    (kind) => {
+      const handle = document.createElement("div");
+      const end = vi.fn();
+      startPointerSession(handle, pointer("pointerdown", 4), {
+        move: () => {},
+        end,
+      });
 
-    handle.dispatchEvent(pointer(kind, 4));
-    handle.dispatchEvent(pointer("pointerup", 4));
+      handle.dispatchEvent(pointer(kind, 4));
+      handle.dispatchEvent(pointer("pointerup", 4));
 
-    expect(end).toHaveBeenCalledTimes(1);
-    expect(end).toHaveBeenCalledWith(kind, expect.any(PointerEvent));
-  });
+      expect(end).toHaveBeenCalledTimes(1);
+      expect(end).toHaveBeenCalledWith(kind, expect.any(PointerEvent));
+    },
+  );
 
   it("stops manually or with Loom-managed unmount", () => {
     const manualHandle = document.createElement("div");

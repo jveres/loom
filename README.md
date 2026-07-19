@@ -29,17 +29,17 @@
   [`alien-signals`](https://github.com/stackblitz/alien-signals)' 224-line
   propagation core (`src/core/graph.ts`, MIT) — no runtime dependencies, and the
   full pipeline measures statistically at parity with the raw primitives on the
-  chaos benchmark. The always-on channel instrumentation costs ~3% in a controlled
-  experiment; inspection (the heavier per-node metadata) is off by default.
+  chaos benchmark. Instrumentation hooks and per-node inspection metadata stay
+  dormant until an observability surface is loaded or enabled.
 - **Small and tree-shakable.** A minimal `state`/`computed`/`effect` app bundles
-  to ~3.5 kB gzip; the meter/inspect machinery loads only with `loom/observe`,
+  to ~2.8 kB gzip; the meter/inspect machinery loads only with `loom/observe`,
   and per-entry budgets are enforced in CI (`pnpm size`).
 - **Callable signals.** `count()` reads, `count(1)` writes — the whole state model
   in one shape, no setters or hooks.
-- **Generic channel/meter primitives.** A gated ring-buffer `channel` and a pull-based
-  `meter` for any event or sample stream — zero allocation until metered. Loom uses them
-  to instrument itself; that self-watching surface is the opt-in `loom/observe`.
-- **Lean core, opt-in surfaces.** `loom` (reactivity, lifecycle, channel/meter) ·
+- **Generic channel/meter primitives.** The opt-in `loom/observe` entrypoint
+  provides a gated ring-buffer `channel` and a pull-based `meter` for event or
+  sample streams. Loom uses them to instrument itself.
+- **Lean core, opt-in surfaces.** `loom` (reactivity and lifecycle) ·
   `loom/defer` (deferred-effect lane) · `loom/settle` (quiet-period changes) ·
   `loom/observe` (watch loom's internals) · `loom/async` (async resources) · `loom/dom` · `loom/html`
   (SSR/SSG) · `loom/devtools` (dev panel).
@@ -78,7 +78,7 @@ pnpm add github:jveres/loom
 Pin to a tag or commit for reproducible builds:
 
 ```sh
-pnpm add github:jveres/loom#v0.4.0
+pnpm add github:jveres/loom#v0.5.0
 ```
 
 It then imports as `loom` (and `loom/observe`, `loom/dom`, …).
@@ -86,6 +86,33 @@ It then imports as `loom` (and `loom/observe`, `loom/dom`, …).
 To use browser JSX, point TypeScript (and your bundler) at Loom's automatic
 runtime — see [JSX](#jsx). For local development of Loom itself, see
 [Develop](#develop).
+
+### Upgrade from v0.4.0
+
+Version 0.5.0 is a deliberate clean break for the lean v3 kernel. Existing
+applications need two import and lifecycle adjustments:
+
+- Import `channel`, `meter`, and their public types from `loom/observe`, not
+  from `loom`. Loading that entrypoint installs Loom's runtime instrumentation
+  hooks; applications that use only the default entrypoint don't carry the
+  channel implementation or per-channel meter checks.
+- Treat `bind(node, fn)` as node-owned for its complete lifetime. It now returns
+  `void`, avoiding a manual-stop wrapper for the common case. Replace code that
+  stores or calls its return value with `bindManual(node, fn)`.
+
+The package entrypoints otherwise remain unchanged. `trigger()` is now typed for
+`State` accessors, matching its in-place mutation use case. The DOM surface adds
+`` template("tag")`...` `` for pre-parsed clone factories,
+`resourceGroup()` for flat view teardown, and `pressClass()` for the common
+pressed-class behavior without a signal or effect. The repository's standalone
+playground and its development dependency were removed; the demo and benchmark
+apps remain available.
+
+The release reduces the minimal core bundle from 3,488 to 2,837 bytes gzip and
+the full core bundle from 5,972 to 4,363 bytes gzip. In production Node/V8 heap
+measurements, live state and computed primitives retain about 26–29% less memory,
+and effects retain about 37% less. These figures are regression baselines, not
+cross-runtime guarantees.
 
 ### App-shell checklist
 
@@ -218,7 +245,6 @@ deferred-lane scheduler ([Deferred effects](#deferred-effects)).
 | `props` | [Object properties](#object-properties) |
 | `poll`, `source` | [External data](#external-data) |
 | `scope` | [Scopes](#scopes) |
-| `channel`, `meter` | [Observability](#observability) |
 | `configure` | [Runtime configuration](#runtime-configuration) |
 | `import "loom/defer"` | [Deferred effects](#deferred-effects) |
 
@@ -226,8 +252,7 @@ Types: `State<T>` (callable read/write signal), `Read<T>`, `Stop`, `Scope`,
 `Polled<T>` (`poll`'s `Read<T> & { stop }`), `SourceConnect<T>`, `EffectFn`,
 `CleanupEffectFn` (effect body returning a cleanup), `ErrorHandler`,
 `Props<T>` (string keys to `State<T[K]>`), `NodeInfo` (`id`/`kind`/`label`,
-what an `onError` boundary receives), `NodeKind`, `Channel`, `Meter`,
-`Frame`, `MeterAggregation`, `ChannelOptions`, `NodeOptions`
+what an `onError` boundary receives), `NodeKind`, `NodeOptions`
 (`{ internal, label }`), `EffectOptions` (adds `{ target, defer, maxStale }`),
 `DeferScheduler`.
 
@@ -720,6 +745,10 @@ if (el) classed(el, "is-pressed", pressed(el));
   No pointer capture — a press that slides off and releases elsewhere
   stays a cancel, like a native button. Listeners are subscriber-counted
   (none while unobserved; the global pair only during a press).
+- `pressClass(el, name?)` applies the dominant `pressed()` use case directly:
+  it adds `name` (`"is-pressed"` by default) for one primary-pointer press and
+  removes it on release, cancellation, pointer leave, or Loom-managed teardown.
+  Use it when no other code needs a reactive pressed-state signal.
 - `observeSize(el, cb, options?)` — `cb(entry)` on ResizeObserver's clock
   (including the initial delivery on attach), detached on node teardown. One
   shared observer serves the whole app; it holds one observation per element,
@@ -798,7 +827,7 @@ scrollers use a 120 ms transition.
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
-| `connected`, `mediaRead`, `persisted`, `pressed`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
+| `connected`, `mediaRead`, `persisted`, `pressed`, `pressClass`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
 | `settleTransition`, `foldHeight`, `bindValue` | [Transitions and folds](#transitions-and-folds) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
@@ -1549,8 +1578,8 @@ pnpm run bench
 Use the local results as a regression signal rather than a cross-machine score.
 Current runs keep Loom in the same performance range as native
 `alien-signals`, with workload and runtime variance determining the exact gap.
-The per-operation read/write/effect hot paths carry branch-predicted channel
-guards — see [Design notes](#design-notes) for the attribution. Enabling
+The default entrypoint leaves channel implementation and sampling work in
+`loom/observe`; see [Design notes](#design-notes) for the split. Enabling
 inspection (`configure({ inspect: true })`) adds one metadata object plus a
 `WeakRef` per node created, which primarily affects create-heavy work.
 
@@ -1574,13 +1603,13 @@ ones the gates rejected) — is recorded in the commit history; every
 performance-relevant decision carries its measurements in the commit that
 made it.
 
-The built-in event channels are gated by a per-channel meter count, so
-reads, writes, computed updates, and effect runs stay allocation-free and pay
-only a predicted-not-taken branch when nothing is metering them; records are
-written into a pre-allocated ring. Inspection is opt-in
-(`configure({ inspect: true })`): while it is off, nodes carry no metadata at
-all; while it is on, each node carries a lightweight metadata record so
-`inspect()` works without any further setup.
+The default `loom` entrypoint contains production reactivity and lifecycle.
+Importing `loom/observe` installs runtime hooks that feed the built-in event
+channels; applications that don't import it exclude the channel and meter
+implementation. Inspection is separately opt-in (`configure({ inspect: true })`):
+while it is off, production accessors carry no reverse node handle and nodes
+carry no metadata; while it is on, each inspected node receives the metadata
+and reverse handle required by `inspect()` and the editor.
 
 ### Teardown
 
@@ -1603,14 +1632,13 @@ underlying `alien-signals` primitives. The callable signal shape (`signal(...val
 read/write dispatch) is the same one `alien-signals` uses, so Loom adds no
 allocation of its own there.
 
-The whole measured gap over native `alien-signals` is the channel
-instrumentation — the `someCh.meters !== 0 && …` guard inlined at each
-read/write/compute/effect/create/dispose site. A controlled experiment (stripping
-just the state-path guards and re-running the chaos bench) attributes ~3% to it on
-the manual-signals path: the cost of keeping observability always available with
-zero allocation when idle. With the guards in place Loom lands at parity with
-native (within run-to-run noise), and what margin remains *is* the channel
-layer, not overhead to optimize away.
+The v3 kernel removes channel logic from each operation and routes optional
+instrumentation through one runtime-hook seam. It also omits node fields and
+accessor reverse handles that production doesn't need. Compared
+with v0.4.0, retained heap falls from about 168 to 120 bytes per state, 184 to
+136 bytes per computed, and 216 to 136 bytes per effect in the production
+Node/V8 benchmark. The default and full core bundles fall by 18.7% and 26.9%
+gzip, respectively.
 
 Two things are intentionally left as-is: the read/write rest parameter (shared
 with `alien-signals`, so removing it would diverge from the reference for no real

@@ -1,4 +1,4 @@
-import { d as e, f as t, p as n, t as r, u as i, v as a } from "./loom-C9iSz-x3.js";
+import { d as e, f as t, p as n, t as r, u as i, v as a } from "./loom-CopJ8Xrb.js";
 //#region src/core/channels.ts
 var o = /* @__PURE__ */ new Map(), s = { record(e, t, n, r, i, a) {
 	e.seq++;

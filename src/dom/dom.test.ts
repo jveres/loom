@@ -381,18 +381,16 @@ describe("loom DOM templates", () => {
     );
   });
 
-  it.each([
-    "",
-    "plain text",
-    "<i></i><b></b>",
-    "<i></i>tail",
-  ])("template() rejects an invalid root fragment: %s", (markup) => {
-    const strings = Object.assign([markup], { raw: [markup] });
+  it.each(["", "plain text", "<i></i><b></b>", "<i></i>tail"])(
+    "template() rejects an invalid root fragment: %s",
+    (markup) => {
+      const strings = Object.assign([markup], { raw: [markup] });
 
-    expect(() => template("i")(strings)).toThrow(
-      "template() requires exactly one root element.",
-    );
-  });
+      expect(() => template("i")(strings)).toThrow(
+        "template() requires exactly one root element.",
+      );
+    },
+  );
 
   it("template() rejects a root that disagrees with its declared tag", () => {
     expect(() => template("button")`<div></div>`).toThrow(

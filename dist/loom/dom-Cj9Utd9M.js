@@ -1,4 +1,4 @@
-import { C as e, D as t, S as n, T as r, c as i, h as a, o, r as s, s as c, x as l, y as u } from "./loom-C9iSz-x3.js";
+import { C as e, D as t, S as n, T as r, c as i, h as a, o, r as s, s as c, x as l, y as u } from "./loom-CopJ8Xrb.js";
 import { t as d } from "./jsx-props-sAPN8GVq.js";
 import { a as f, i as p, l as m, n as ee, o as te, r as h, s as g, t as _ } from "./ownership-base-v6hz88HI.js";
 //#region src/dom/element-reads.ts
