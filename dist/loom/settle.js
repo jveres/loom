@@ -1,4 +1,4 @@
-import { S as e, b as t, g as n, w as r } from "./loom-btAeTSbc.js";
+import { D as e, S as t, T as n, v as r } from "./loom-C9iSz-x3.js";
 //#region src/settle.ts
 var i = (e, t) => e === t;
 function a(t, a, o, s) {
@@ -10,13 +10,13 @@ function a(t, a, o, s) {
 	}, y = () => {
 		if (h || m || !p) return;
 		_(), p = !1;
-		let t = f, n = d;
-		d = t, e(() => a(t, n));
+		let e = f, t = d;
+		d = e, n(() => a(e, t));
 	}, b = () => {
 		_(), g = setTimeout(() => {
 			g = void 0, y();
 		}, o);
-	}, x = r(() => {
+	}, x = e(() => {
 		let e = t();
 		return l && (l = !1, u = e, d = e), e;
 	}, (e) => {
@@ -32,7 +32,7 @@ function a(t, a, o, s) {
 		f = e, p = !0, m || b();
 	}, s), S = () => {
 		h || (h = !0, p = !1, _(), x());
-	}, C = n({
+	}, C = r({
 		pause: () => {
 			m = !0, _();
 		},
@@ -49,8 +49,8 @@ function a(t, a, o, s) {
 		flush: y
 	};
 }
-function o(r, o, s) {
-	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = t(e(r), l), f = a(r, (e) => d(e), o, s), p = !1, m = !1, h = n({
+function o(e, o, s) {
+	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = t(n(e), l), f = a(e, (e) => d(e), o, s), p = !1, m = !1, h = r({
 		pause: () => {
 			m = !0;
 		},
@@ -65,8 +65,8 @@ function o(r, o, s) {
 		flush: () => {
 			if (p || m) return;
 			f.flush();
-			let t = e(r);
-			u(t, e(() => d())) || d(t);
+			let t = n(e);
+			u(t, n(() => d())) || d(t);
 		},
 		stop: () => {
 			p = !0, f.stop(), h();

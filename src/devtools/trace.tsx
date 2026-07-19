@@ -7,13 +7,14 @@
 // deferred lane), it drains the selected ring(s) into a capped, newest-first log rendered via the vlist.
 // Seams: the panel calls buildTracePane / showTrace / setTraceActive / setTraceLiveDot /
 // setTraceLocate / setTraceWindow / teardownTrace; the stats heartbeat calls renderTrace.
-import { type Meter, meter } from "loom";
 import { onTap } from "loom/dom";
 import { scrollFade } from "loom/dom/scroll-fade";
 import { type VirtualList, virtualList } from "loom/dom/virtual-list";
 import {
   events,
   inspect,
+  type Meter,
+  meter,
   type ReadSample,
   sampleOf,
   type WriteSample,

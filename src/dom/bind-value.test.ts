@@ -41,7 +41,7 @@ describe("bindValue", () => {
     expect(el.value).toBe("echo"); // the suppressed value applies
   });
 
-  it("the follow effect dies with the element", () => {
+  it("the follow effect and input listeners die with the element", () => {
     const cell = state("a", { label: "test.bindValue.life" });
     const el = document.createElement("input");
     document.body.append(el);
@@ -49,5 +49,9 @@ describe("bindValue", () => {
     remove(el);
     cell("b");
     expect(el.value).toBe("a"); // no zombie follow
+
+    el.value = "detached edit";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(cell()).toBe("b");
   });
 });

@@ -2,7 +2,11 @@
 // pull-based readers), the runtime's built-in `events` registry, and the typed sample contracts.
 // Split from ./channels.ts so none of this bundles into apps that never meter anything.
 
-import { registerScopeResource } from "../loom.js";
+import {
+  installRuntimeHooks,
+  type RuntimeHooks,
+  registerScopeResource,
+} from "../loom.js";
 import {
   type ChannelNode,
   channelRegistry,
@@ -91,6 +95,71 @@ function recordChannel(
 }
 // Loading this module upgrades the core's count-only fallback to the real ring writer.
 sampler.record = recordChannel;
+
+const now: () => number =
+  typeof performance === "undefined" ? Date.now : () => performance.now();
+
+const runtimeHooks: RuntimeHooks = {
+  create(meta) {
+    if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
+  },
+  read(node, sub) {
+    const meta = node.meta;
+    if (readCh.meters === 0 || meta?.internal === true) return;
+    if (meta !== undefined && readCh.samples !== 0) {
+      sampler.record(
+        readCh,
+        meta.id,
+        sub.meta?.id,
+        Date.now(),
+        undefined,
+        undefined,
+      );
+    } else {
+      readCh.seq++;
+    }
+  },
+  write(node, previous, next, writer) {
+    const meta = node.meta;
+    if (writeCh.meters === 0 || meta?.internal === true) return;
+    if (meta !== undefined && writeCh.samples !== 0) {
+      sampler.record(
+        writeCh,
+        meta.id,
+        previous,
+        next,
+        writer?.meta?.id,
+        Date.now(),
+      );
+    } else {
+      writeCh.seq++;
+    }
+  },
+  compute(node) {
+    if (computeCh.meters !== 0 && node.meta?.internal !== true) computeCh.seq++;
+  },
+  effect(node) {
+    if (effectCh.meters !== 0 && node.meta?.internal !== true) effectCh.seq++;
+  },
+  beginFlush() {
+    return flushCh.meters !== 0 ? now() : undefined;
+  },
+  endFlush(appBatchSize, startedAt) {
+    sampler.record(
+      flushCh,
+      appBatchSize,
+      now() - startedAt,
+      undefined,
+      undefined,
+      undefined,
+    );
+  },
+  dispose(node) {
+    if (disposeCh.meters !== 0 && node.meta?.internal !== true) disposeCh.seq++;
+  },
+};
+
+installRuntimeHooks(runtimeHooks);
 
 export interface ChannelOptions {
   /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */

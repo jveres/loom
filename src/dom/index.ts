@@ -1,19 +1,22 @@
 import { cssPropName } from "../jsx-props.js";
 import {
   type CleanupEffectFn,
+  domBindingEffect,
   domEffect,
   type EffectFn,
+  type EffectNode,
   type EffectOptions,
   effect,
   type Read,
   type State,
   type Stop,
+  stopEffectNode,
   untrack,
 } from "../loom.js";
 import { attrRead, classRead, styleRead } from "./element-reads.js";
 import { onMount } from "./on-mount.js";
 import { dispose, onUnmount, remove } from "./ownership.js";
-import { own } from "./ownership-base.js";
+import { own, ownResource } from "./ownership-base.js";
 import { positionOrdered } from "./place.js";
 
 export type Child =
@@ -46,7 +49,7 @@ interface PropBinding {
 }
 interface SlotDescriptor {
   readonly __loomDynamic: true;
-  readonly mount: (anchor: Comment) => Stop;
+  readonly mount: (anchor: Comment) => EffectNode;
 }
 
 // The one trust boundary between a descriptor's real shape and its opaque public handle. Phantom
@@ -144,6 +147,59 @@ const SVG_TAG_LIST = [
 ] as const;
 const SVG_TAGS = new Set<string>(SVG_TAG_LIST);
 export type SvgTagName = (typeof SVG_TAG_LIST)[number];
+
+/**
+ * Parse a static, single-root HTML fragment once and return a cheap deep-clone
+ * factory. A standard HTML tag gives the clone its precise element type;
+ * custom-element and other tag names safely fall back to Element. Dynamic
+ * values deliberately are not accepted: clone the skeleton, then bind or
+ * assign its dynamic fields. This keeps repeated views on the browser's
+ * optimized native clone path and makes the trust boundary explicit.
+ */
+export function template<K extends keyof HTMLElementTagNameMap>(
+  rootTag: K,
+): (
+  strings: TemplateStringsArray,
+  ...values: readonly unknown[]
+) => () => HTMLElementTagNameMap[K];
+export function template(
+  rootTag: string,
+): (
+  strings: TemplateStringsArray,
+  ...values: readonly unknown[]
+) => () => Element;
+export function template(
+  rootTag: string,
+): (
+  strings: TemplateStringsArray,
+  ...values: readonly unknown[]
+) => () => Element {
+  return (strings, ...values) => {
+    if (values.length !== 0 || strings.length !== 1) {
+      throw new TypeError(
+        "template() accepts static markup only; bind dynamic values after cloning.",
+      );
+    }
+    const holder = document.createElement("template");
+    holder.innerHTML = strings[0] ?? "";
+    const root = holder.content.firstElementChild;
+    const hasExtraContent = [...holder.content.childNodes].some(
+      (node) =>
+        (node.nodeType === Node.ELEMENT_NODE && node !== root) ||
+        (node.nodeType === Node.TEXT_NODE &&
+          (node.textContent ?? "").trim() !== ""),
+    );
+    if (root === null || hasExtraContent) {
+      throw new TypeError("template() requires exactly one root element.");
+    }
+    if (root.localName !== rootTag) {
+      throw new TypeError(
+        `template(${JSON.stringify(rootTag)}) requires a <${rootTag}> root.`,
+      );
+    }
+    return () => root.cloneNode(true) as Element;
+  };
+}
 
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -341,9 +397,9 @@ export function svgElement(
 export function text(read: Read<unknown>, options?: EffectOptions): Text {
   const node = document.createTextNode("");
   let previous = "";
-  own(
+  ownResource(
     node,
-    domEffect(
+    (options === undefined ? domBindingEffect : domEffect)(
       () => {
         const next = stringValue(read());
         if (next === previous) return;
@@ -578,20 +634,19 @@ function dynamic(
     mount(anchor) {
       let mounted: Node[] = [];
       let currentKey: string | undefined;
-      return untrack(() =>
-        effect(
-          () => {
-            const k = key();
-            if (k === currentKey) return;
-            currentKey = k;
-            for (const node of mounted) remove(node);
-            const frag = document.createDocumentFragment();
-            untrack(() => appendChild(frag, pick(k)));
-            mounted = [...frag.childNodes];
-            anchor.parentNode?.insertBefore(frag, anchor);
-          },
-          slotOpts(anchor, "dom.dynamic"),
-        ),
+      return domEffect(
+        () => {
+          const k = key();
+          if (k === currentKey) return;
+          currentKey = k;
+          for (const node of mounted) remove(node);
+          const frag = document.createDocumentFragment();
+          untrack(() => appendChild(frag, pick(k)));
+          mounted = [...frag.childNodes];
+          anchor.parentNode?.insertBefore(frag, anchor);
+        },
+        "dom.dynamic",
+        slotTarget(anchor),
       );
     },
   } satisfies SlotDescriptor);
@@ -655,15 +710,14 @@ export function each<T>(
     __loomDynamic: true,
     mount(anchor) {
       const nodes = new Map<LoomKey, Element>();
-      return untrack(() =>
-        effect(
-          () => {
-            const ordered = reconcileKeyed(items(), nodes, key, render);
-            const parent = anchor.parentNode;
-            if (parent) positionOrdered(parent, ordered, anchor);
-          },
-          slotOpts(anchor, "dom.each"),
-        ),
+      return domEffect(
+        () => {
+          const ordered = reconcileKeyed(items(), nodes, key, render);
+          const parent = anchor.parentNode;
+          if (parent) positionOrdered(parent, ordered, anchor);
+        },
+        "dom.each",
+        slotTarget(anchor),
       );
     },
   } satisfies SlotDescriptor);
@@ -711,28 +765,46 @@ export function onTap(
 }
 
 /**
- * Attach a disposer to a node's Loom lifecycle: it runs when the node is torn down the Loom way —
- * `remove()`, `dispose()`, or an ancestor slot/list swapping it out. The `onunmount` JSX prop is
- * this function as a prop — one concept, two syntaxes — for kit components that create their own
- * effects/listeners for an element they build. (This is ownership; `effect`'s `target` option is
- * inspector attribution only.)
- */
-/**
  * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
  * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
- * leaving). The one-call form of `onUnmount(el, effect(fn, { target: el }))` — the dominant idiom
- * of kit code. Returns the stop for rare early manual disposal; options merge over the target
- * default, so `{ target: other }` can re-attribute.
+ * leaving). This is the allocation-light default and intentionally returns no manual stop; use
+ * {@link bindManual} when the binding must end before the node's lifetime. Options merge over the
+ * target default, so `{ target: other }` can re-attribute.
  */
 export function bind(
   node: Node,
   fn: CleanupEffectFn,
   options?: EffectOptions,
+): void;
+export function bind(node: Node, fn: EffectFn, options?: EffectOptions): void;
+export function bind(node: Node, fn: EffectFn, options?: EffectOptions): void {
+  // A view binding has one lifetime: its node. Keep it on the allocation-light
+  // ownership path instead of manufacturing a manual stop handle and a
+  // RegisteredStop wrapper that almost every caller discards.
+  ownResource(node, domEffect(fn, "dom.bind", node, options));
+}
+
+/**
+ * A node-owned binding with an explicit early-stop handle. Most views want
+ * {@link bind}; use this only when the binding must end before its node dies.
+ */
+export function bindManual(
+  node: Node,
+  fn: CleanupEffectFn,
+  options?: EffectOptions,
 ): Stop;
-export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
-export function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop {
-  const stop = effect(fn, { target: node, ...options });
-  return onUnmount(node, stop);
+export function bindManual(
+  node: Node,
+  fn: EffectFn,
+  options?: EffectOptions,
+): Stop;
+export function bindManual(
+  node: Node,
+  fn: EffectFn,
+  options?: EffectOptions,
+): Stop {
+  const handle = domEffect(fn, "dom.bind", node, options);
+  return onUnmount(node, () => stopEffectNode(handle));
 }
 
 function applyProps(
@@ -884,14 +956,13 @@ function isDynamic(child: Child): child is DynamicChild {
 function mountSlot(parent: Node, desc: DynamicChild): void {
   const anchor = document.createComment("loom-slot");
   parent.appendChild(anchor);
-  own(anchor, brand<SlotDescriptor>(desc).mount(anchor));
+  ownResource(anchor, brand<SlotDescriptor>(desc).mount(anchor));
 }
 
-// Effect options for a slot: label it, and target its parent element (when there is one) so the
-// inspector can attribute the work — mirrors what list() passes for its container.
-function slotOpts(anchor: Comment, label: string): EffectOptions {
+// Attribute slot work to its parent element when possible, falling back to the anchor itself.
+function slotTarget(anchor: Comment): Node {
   const parent = anchor.parentNode;
-  return parent instanceof Element ? { label, target: parent } : { label };
+  return parent instanceof Element ? parent : anchor;
 }
 
 function applyClassProp(node: Element, value: ClassProp): void {
@@ -976,9 +1047,9 @@ function bindClass(
 ): void {
   let previous =
     initial === undefined ? hasClassName(node, binding.name) : initial;
-  own(
+  ownResource(
     node,
-    domEffect(
+    (options === undefined ? domBindingEffect : domEffect)(
       () => {
         const next = Boolean(binding.read());
         if (next === previous) return;
@@ -1114,7 +1185,7 @@ function bindReactiveValue<T>(
   options?: EffectOptions,
 ): void {
   let previous = initial;
-  own(
+  ownResource(
     node,
     domEffect(
       () => {
@@ -1212,12 +1283,21 @@ export {
 } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
 export { onMount } from "./on-mount.js";
-export { dispose, onUnmount, pause, remove, resume } from "./ownership.js";
+export {
+  dispose,
+  onUnmount,
+  pause,
+  type ResourceGroup,
+  remove,
+  resourceGroup,
+  resume,
+} from "./ownership.js";
 export { type PersistedOptions, persisted } from "./persisted.js";
 export {
   type PointerSessionEndReason,
   type PointerSessionOptions,
   startPointerSession,
 } from "./pointer-session.js";
+export { pressClass } from "./press-class.js";
 export { pressed } from "./pressed.js";
 export { settleTransition } from "./settle-transition.js";

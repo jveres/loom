@@ -30,6 +30,16 @@ export interface ListOptions<T> {
 }
 declare const SVG_TAG_LIST: readonly ["svg", "g", "defs", "symbol", "use", "switch", "foreignObject", "image", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "textPath", "linearGradient", "radialGradient", "stop", "clipPath", "mask", "pattern", "marker", "filter", "feGaussianBlur", "feOffset", "feBlend", "feColorMatrix", "feComposite", "feFlood", "feMerge", "feMergeNode", "feMorphology", "feDropShadow", "feImage", "feTile", "feTurbulence", "feDisplacementMap"];
 export type SvgTagName = (typeof SVG_TAG_LIST)[number];
+/**
+ * Parse a static, single-root HTML fragment once and return a cheap deep-clone
+ * factory. A standard HTML tag gives the clone its precise element type;
+ * custom-element and other tag names safely fall back to Element. Dynamic
+ * values deliberately are not accepted: clone the skeleton, then bind or
+ * assign its dynamic fields. This keeps repeated views on the browser's
+ * optimized native clone path and makes the trust boundary explicit.
+ */
+export declare function template<K extends keyof HTMLElementTagNameMap>(rootTag: K): (strings: TemplateStringsArray, ...values: readonly unknown[]) => () => HTMLElementTagNameMap[K];
+export declare function template(rootTag: string): (strings: TemplateStringsArray, ...values: readonly unknown[]) => () => Element;
 export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): HTMLElementTagNameMap[K];
 export declare function h<K extends keyof SVGElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): SVGElementTagNameMap[K];
 export declare function h(tag: string, props?: ElementProps | null, children?: Child): Element;
@@ -109,21 +119,20 @@ export declare function each<T>(items: State<readonly T[]> | Read<readonly T[]>,
  */
 export declare function onTap(node: Element, handler: (event: PointerEvent) => void): void;
 /**
- * Attach a disposer to a node's Loom lifecycle: it runs when the node is torn down the Loom way —
- * `remove()`, `dispose()`, or an ancestor slot/list swapping it out. The `onunmount` JSX prop is
- * this function as a prop — one concept, two syntaxes — for kit components that create their own
- * effects/listeners for an element they build. (This is ownership; `effect`'s `target` option is
- * inspector attribution only.)
- */
-/**
  * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
  * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
- * leaving). The one-call form of `onUnmount(el, effect(fn, { target: el }))` — the dominant idiom
- * of kit code. Returns the stop for rare early manual disposal; options merge over the target
- * default, so `{ target: other }` can re-attribute.
+ * leaving). This is the allocation-light default and intentionally returns no manual stop; use
+ * {@link bindManual} when the binding must end before the node's lifetime. Options merge over the
+ * target default, so `{ target: other }` can re-attribute.
  */
-export declare function bind(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
-export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
+export declare function bind(node: Node, fn: CleanupEffectFn, options?: EffectOptions): void;
+export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions): void;
+/**
+ * A node-owned binding with an explicit early-stop handle. Most views want
+ * {@link bind}; use this only when the binding must end before its node dies.
+ */
+export declare function bindManual(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
+export declare function bindManual(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
 export { bindValue } from "./bind-value.js";
 export { connected } from "./connected.js";
 export { type FoldHeightOptions, foldHeight, } from "./fold-height.js";
@@ -133,8 +142,9 @@ export { type IntersectionCallback, type IntersectionOptions, observeIntersectio
 export { type MutationsCallback, observeMutation, } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
 export { onMount } from "./on-mount.js";
-export { dispose, onUnmount, pause, remove, resume } from "./ownership.js";
+export { dispose, onUnmount, pause, type ResourceGroup, remove, resourceGroup, resume, } from "./ownership.js";
 export { type PersistedOptions, persisted } from "./persisted.js";
 export { type PointerSessionEndReason, type PointerSessionOptions, startPointerSession, } from "./pointer-session.js";
+export { pressClass } from "./press-class.js";
 export { pressed } from "./pressed.js";
 export { settleTransition } from "./settle-transition.js";

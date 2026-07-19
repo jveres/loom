@@ -1,5 +1,11 @@
 import { batch, type State, state } from "loom";
-import { classed, dispose, h, remove, text } from "loom/dom";
+import {
+  type ResourceGroup,
+  remove,
+  resourceGroup,
+  template,
+  text,
+} from "loom/dom";
 
 const adjectives = [
   "pretty",
@@ -58,6 +64,10 @@ const nouns = [
   "keyboard",
 ] as const;
 
+const cloneRow = template(
+  "tr",
+)`<tr><td class="col-md-1"></td><td class="col-md-4"><a></a></td><td class="col-md-1"><a class="remove">x</a></td><td class="col-md-6"></td></tr>`;
+
 interface DataRow {
   id: number;
   label: string;
@@ -66,7 +76,6 @@ interface DataRow {
 interface LoomRow {
   readonly id: number;
   readonly label: State<string>;
-  readonly selected: State<boolean>;
   element?: HTMLTableRowElement;
 }
 
@@ -164,6 +173,7 @@ const operations: readonly Operation[] = [
 
 let loomRows: LoomRow[] = [];
 let loomSelected: LoomRow | undefined;
+let loomGroups: Array<ResourceGroup<void>> = [];
 
 const loomImplementation: BenchImplementation = {
   name: "Loom",
@@ -293,7 +303,6 @@ function makeLoomRow(row: DataRow): LoomRow {
   return {
     id: row.id,
     label: state(row.label),
-    selected: state(false),
   };
 }
 
@@ -302,23 +311,14 @@ function makeVanillaRow(row: DataRow): VanillaRow {
 }
 
 function renderLoomRow(row: LoomRow): HTMLTableRowElement {
-  const tableRow = h("tr", {
-    class: classed("danger", row.selected),
-  });
+  const tableRow = cloneRow();
   tableRow.setAttribute("data-loom-key", String(row.id));
   row.element = tableRow;
-  const idCell = h("td", { class: "col-md-1" }, String(row.id));
-  const labelCell = h("td", { class: "col-md-4" });
-  const labelLink = h("a");
+  const idCell = tableRow.cells[0] as HTMLTableCellElement;
+  const labelLink = tableRow.cells[1]?.firstElementChild as HTMLAnchorElement;
+  const removeLink = tableRow.cells[2]?.firstElementChild as HTMLAnchorElement;
+  idCell.textContent = String(row.id);
   labelLink.append(text(row.label));
-  labelCell.append(labelLink);
-
-  const removeCell = h("td", { class: "col-md-1" });
-  const removeLink = h("a", { class: "remove" }, "x");
-  removeCell.append(removeLink);
-  const padCell = h("td", { class: "col-md-6" });
-
-  tableRow.append(idCell, labelCell, removeCell, padCell);
   labelLink.addEventListener("click", () => selectLoomRow(row));
   removeLink.addEventListener("click", () =>
     loomImplementation.removeNth(loomRows.indexOf(row)),
@@ -327,32 +327,16 @@ function renderLoomRow(row: LoomRow): HTMLTableRowElement {
 }
 
 function renderVanillaRow(row: VanillaRow): HTMLTableRowElement {
-  const tableRow = document.createElement("tr");
-  tableRow.setAttribute("data-id", String(row.id));
+  const tableRow = cloneRow();
+  tableRow.setAttribute("data-loom-key", String(row.id));
   row.element = tableRow;
 
-  const idCell = document.createElement("td");
-  idCell.className = "col-md-1";
+  const idCell = tableRow.cells[0] as HTMLTableCellElement;
+  const labelLink = tableRow.cells[1]?.firstElementChild as HTMLAnchorElement;
+  const removeLink = tableRow.cells[2]?.firstElementChild as HTMLAnchorElement;
   idCell.textContent = String(row.id);
-
-  const labelCell = document.createElement("td");
-  labelCell.className = "col-md-4";
-  const labelLink = document.createElement("a");
   labelLink.textContent = row.label;
   row.anchor = labelLink;
-  labelCell.append(labelLink);
-
-  const removeCell = document.createElement("td");
-  removeCell.className = "col-md-1";
-  const removeLink = document.createElement("a");
-  removeLink.className = "remove";
-  removeLink.textContent = "x";
-  removeCell.append(removeLink);
-
-  const padCell = document.createElement("td");
-  padCell.className = "col-md-6";
-
-  tableRow.append(idCell, labelCell, removeCell, padCell);
   labelLink.addEventListener("click", () => selectVanillaRow(row));
   removeLink.addEventListener("click", () =>
     vanillaImplementation.removeNth(vanillaRows.indexOf(row)),
@@ -362,10 +346,8 @@ function renderVanillaRow(row: VanillaRow): HTMLTableRowElement {
 
 function selectLoomRow(row: LoomRow): void {
   if (loomSelected === row) return;
-  batch(() => {
-    loomSelected?.selected(false);
-    row.selected(true);
-  });
+  loomSelected?.element?.classList.remove("danger");
+  row.element?.classList.add("danger");
   loomSelected = row;
 }
 
@@ -388,13 +370,18 @@ function mountLoomRows(rows: readonly LoomRow[]): void {
 }
 
 function appendLoomRows(rows: readonly LoomRow[]): void {
-  const fragment = document.createDocumentFragment();
-  for (const row of rows) fragment.append(renderLoomRow(row));
-  tbody.append(fragment);
+  loomGroups.push(
+    resourceGroup(() => {
+      const fragment = document.createDocumentFragment();
+      for (const row of rows) fragment.append(renderLoomRow(row));
+      tbody.append(fragment);
+    }),
+  );
 }
 
 function clearLoomRows(): void {
-  dispose(tbody);
+  for (const group of loomGroups) group.dispose();
+  loomGroups = [];
   tbody.textContent = "";
   loomRows = [];
   loomSelected = undefined;
@@ -619,7 +606,8 @@ function renderResults(
   )}<tr><td><b>geo-mean ratio</b></td><td></td><td></td>${meanCell}</tr>`;
   referenceBody.innerHTML = "";
   noteNode.innerHTML =
-    "Loom vs a hand-written vanilla keyed baseline on this machine. The comparison " +
+    "Loom vs a hand-written vanilla keyed baseline using the same cloned row skeleton. " +
+    "The comparison " +
     "times synchronous action code only; use Profile patch/layout for rendered totals." +
     (excluded > 0
       ? ` ${excluded} operation${excluded === 1 ? "" : "s"} had a median below 1ms ` +

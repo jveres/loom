@@ -72,11 +72,11 @@ export interface ComputedNode<T> extends NodeBase {
 interface EffectNode extends NodeBase {
     fn: InternalEffectFn;
     cleanup: Stop | undefined;
-    scope: ScopeNode | undefined;
-    scopeIndex: number;
-    pausedCount: number;
-    directPausedCount: number;
-    deferred: boolean;
+    scope?: ScopeNode | undefined;
+    scopeIndex?: number | undefined;
+    pausedCount?: number | undefined;
+    directPausedCount?: number | undefined;
+    deferred?: boolean | undefined;
     deferredQueued?: boolean;
     maxStale?: number;
     deferDeadline?: number;
@@ -125,6 +125,18 @@ export interface InspectHooks {
     /** Dev diagnostics: a tracked run wrote `node` — warn if the writer also subscribes to it. */
     trackedWrite?(node: NodeBase, writer: NodeBase): void;
 }
+/** @internal Optional observability hooks installed by loom/observe. */
+export interface RuntimeHooks {
+    create(meta: InspectMeta | undefined): void;
+    read(node: NodeBase, sub: NodeBase): void;
+    write(node: StateNode<unknown>, previous: unknown, next: unknown, writer: NodeBase | undefined): void;
+    compute(node: ComputedNode<unknown>): void;
+    effect(node: EffectNode): void;
+    beginFlush(): number | undefined;
+    endFlush(appBatchSize: number, startedAt: number): void;
+    dispose(node: EffectNode): void;
+}
+export declare function installRuntimeHooks(hooks: RuntimeHooks): void;
 export declare function installInspectHooks(hooks: InspectHooks): void;
 export declare function ambientOptions(): NodeOptions | undefined;
 export declare function liveScopeCount(): number;
@@ -147,7 +159,11 @@ export declare function source<T>(connect: SourceConnect<T>, initial: T, options
 export declare function computed<T>(getter: (previousValue?: T) => T, options?: NodeOptions): Read<T>;
 export declare function effect<Result>(fn: () => SyncResult<Result>, options?: EffectOptions): Stop;
 /** @internal Create a node-owned DOM effect without linking it to the currently running effect. */
-export declare function domEffect(fn: InternalEffectFn, label: string, target: Node, options?: EffectOptions): Stop;
+export declare function domEffect(fn: InternalEffectFn, label: string, target: Node, options?: EffectOptions): EffectNode;
+/** @internal Start a plain node-owned DOM sink on the minimal production path. */
+export declare function domBindingEffect(fn: EffectFn, label: string, target: Node): EffectNode;
+/** @internal Stop a raw owner-bound DOM effect. */
+export declare function stopEffectNode(node: EffectNode): void;
 export declare function batch<T>(fn: () => T): T;
 /**
  * Group the effects created inside `fn` so they can be torn down or suspended together: `stop()`
@@ -163,8 +179,10 @@ export declare function installDeferredLane(enqueue: (node: EffectNode) => void)
     clearWatching: (node: EffectNode) => void;
 };
 export type { EffectNode };
-export declare function pauseEffectStop(stop: Stop): boolean;
-export declare function resumeEffectStop(stop: Stop): boolean;
+/** @internal Suspend one raw owner-bound effect. */
+export declare function pauseEffectNode(node: EffectNode): boolean;
+/** @internal Resume one raw owner-bound effect. */
+export declare function resumeEffectNode(node: EffectNode): boolean;
 export declare function registerScopeResource(resource: ScopeResource): Stop;
 export type Polled<T> = Read<T> & {
     readonly stop: Stop;
@@ -178,7 +196,7 @@ export type Polled<T> = Read<T> & {
  * Push-style producers want {@link source}; async request/response wants `resource` (loom/async).
  */
 export declare function poll<T>(sample: () => T, ms: number, options?: NodeOptions): Polled<T>;
-export declare function trigger(source: Read<unknown>): void;
+export declare function trigger<T>(source: State<T>): void;
 export declare function untrack<T>(fn: () => T): T;
 /**
  * Functional read-modify-write: `update(count, n => n + 1)`. The read is **untracked** — inside an

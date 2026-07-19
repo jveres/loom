@@ -1,26 +1,26 @@
-import { S as e, b as t, n, s as r, x as i } from "./loom-btAeTSbc.js";
+import { S as e, T as t, c as n, n as r, w as i } from "./loom-C9iSz-x3.js";
 //#region src/async/index.ts
 function a(a, o) {
-	let s = t(void 0, o), c = t(!0, o), l = t(void 0, o), u = t(0, o), d = r(() => {
+	let s = e(void 0, o), c = e(!0, o), l = e(void 0, o), u = e(0, o), d = n(() => {
 		u();
-		let t = !0, r = new AbortController();
+		let e = !0, n = new AbortController();
 		c(!0);
-		let i = e(() => s()), o;
+		let i = t(() => s()), o;
 		try {
-			o = a(i, r.signal);
+			o = a(i, n.signal);
 		} catch (e) {
 			o = Promise.reject(e);
 		}
-		return o.then((e) => {
-			t && n(() => {
-				s(e), l(void 0), c(!1);
+		return o.then((t) => {
+			e && r(() => {
+				s(t), l(void 0), c(!1);
 			});
-		}, (e) => {
-			t && n(() => {
-				l(e), c(!1);
+		}, (t) => {
+			e && r(() => {
+				l(t), c(!1);
 			});
 		}), () => {
-			t = !1, r.abort();
+			e = !1, n.abort();
 		};
 	}, o);
 	return Object.assign(() => s(), {

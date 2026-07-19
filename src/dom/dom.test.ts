@@ -4,6 +4,7 @@ import { state } from "../loom.js";
 import {
   attr,
   bind,
+  bindManual,
   classed,
   dispose,
   each,
@@ -14,7 +15,9 @@ import {
   onUnmount,
   remove,
   replaceChildren,
+  resourceGroup,
   style,
+  template,
   text,
   when,
 } from "./index.js";
@@ -38,7 +41,122 @@ function renderRow(row: Row): Element {
   return node;
 }
 
+const verifyResourceGroupCallbackType = (): void => {
+  // Compile-time API regression only: ownership capture cannot cross an await.
+  // @ts-expect-error resourceGroup callbacks are synchronous
+  resourceGroup(async () => {});
+};
+void verifyResourceGroupCallbackType;
+
 describe("loom DOM ownership", () => {
+  it("resourceGroup() stops bindings without requiring a subtree walk", () => {
+    const value = state("first");
+    const group = resourceGroup(() => h("div", null, text(value)));
+
+    value("second");
+    expect(group.value.textContent).toBe("second");
+
+    group.dispose();
+    value("third");
+    expect(group.value.textContent).toBe("second");
+
+    group.dispose();
+    dispose(group.value);
+    expect(group.value.textContent).toBe("second");
+  });
+
+  it("resourceGroup() runs lifecycle cleanup exactly once", () => {
+    const cleanup = vi.fn();
+    const group = resourceGroup(() => h("div", { onunmount: cleanup }));
+
+    group.dispose();
+    remove(group.value);
+    group.dispose();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("resourceGroup() cleans up resources when construction throws", () => {
+    const value = state("initial");
+    const failure = new Error("construction failed");
+    let node: HTMLElement | undefined;
+
+    expect(() =>
+      resourceGroup(() => {
+        node = h("div", null, text(value));
+        throw failure;
+      }),
+    ).toThrow(failure);
+    value("after");
+
+    expect(node?.textContent).toBe("initial");
+  });
+
+  it("resourceGroup() rejects an async function before construction begins", () => {
+    let invoked = false;
+    const unsafeCall = resourceGroup as (fn: () => Promise<void>) => unknown;
+
+    expect(() =>
+      unsafeCall(async () => {
+        invoked = true;
+        await Promise.resolve();
+      }),
+    ).toThrow("resourceGroup() callbacks must be synchronous.");
+    expect(invoked).toBe(false);
+  });
+
+  it("resourceGroup() rejects async construction and cleans up work before the await", () => {
+    const value = state("initial");
+    let node: HTMLElement | undefined;
+    const unsafeCall = resourceGroup as (fn: () => Promise<void>) => unknown;
+
+    expect(() =>
+      unsafeCall(() => {
+        node = h("div", null, text(value));
+        return Promise.resolve();
+      }),
+    ).toThrow("resourceGroup() callbacks must be synchronous.");
+    value("after");
+
+    expect(node?.textContent).toBe("initial");
+  });
+
+  it("resourceGroup() rejects nested ownership arenas", () => {
+    expect(() => resourceGroup(() => resourceGroup(() => h("span")))).toThrow(
+      "resourceGroup() cannot be nested",
+    );
+  });
+
+  it("resourceGroup() preserves descendant-first lifecycle order", () => {
+    const order: string[] = [];
+    const group = resourceGroup(() => {
+      const parent = h("div", { onunmount: () => order.push("parent") });
+      const child = h("span", { onunmount: () => order.push("child") });
+      parent.append(child);
+      return parent;
+    });
+
+    group.dispose();
+
+    expect(order).toEqual(["child", "parent"]);
+  });
+
+  it("resourceGroup() preserves descendant-first binding cleanup order", () => {
+    const order: string[] = [];
+    const group = resourceGroup(() => {
+      const parent = h("div");
+      const child = h("span");
+      bind(parent, () => () => order.push("parent"));
+      bind(child, () => () => order.push("child"));
+      parent.append(child);
+      return parent;
+    });
+
+    group.dispose();
+
+    expect(order).toEqual(["child", "parent"]);
+  });
+
   it("onUnmount() disposers run when the node or an ancestor is removed", () => {
     const parent = h("div");
     const child = h("span");
@@ -81,7 +199,7 @@ describe("loom DOM ownership", () => {
   it("unregisters a manually stopped binding from its owner", () => {
     const node = h("div");
     const cleanup = vi.fn();
-    const stop = bind(node, () => cleanup);
+    const stop = bindManual(node, () => cleanup);
 
     stop();
     expect(cleanup).toHaveBeenCalledTimes(1);
@@ -239,6 +357,53 @@ describe("loom DOM ownership", () => {
 
     expect(parent.childNodes).toHaveLength(0);
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+});
+
+describe("loom DOM templates", () => {
+  it("template() returns independent deep clones of one static root", () => {
+    const clone = template("div")`<div class="row"><span>Ready</span></div>`;
+
+    const first = clone();
+    const second = clone();
+    first.querySelector("span")?.replaceChildren("Changed");
+
+    expect(first.outerHTML).toBe('<div class="row"><span>Changed</span></div>');
+    expect(second.outerHTML).toBe('<div class="row"><span>Ready</span></div>');
+    expect(first).not.toBe(second);
+  });
+
+  it("template() rejects dynamic interpolation", () => {
+    const value = "dynamic";
+
+    expect(() => template("div")`<div>${value}</div>`).toThrow(
+      "template() accepts static markup only; bind dynamic values after cloning.",
+    );
+  });
+
+  it.each([
+    "",
+    "plain text",
+    "<i></i><b></b>",
+    "<i></i>tail",
+  ])("template() rejects an invalid root fragment: %s", (markup) => {
+    const strings = Object.assign([markup], { raw: [markup] });
+
+    expect(() => template("i")(strings)).toThrow(
+      "template() requires exactly one root element.",
+    );
+  });
+
+  it("template() rejects a root that disagrees with its declared tag", () => {
+    expect(() => template("button")`<div></div>`).toThrow(
+      'template("button") requires a <button> root.',
+    );
+  });
+
+  it("template() accepts custom-element tag names with a safe Element type", () => {
+    const clone = template("loom-card")`<loom-card></loom-card>`;
+
+    expect(clone().localName).toBe("loom-card");
   });
 });
 

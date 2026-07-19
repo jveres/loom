@@ -18,11 +18,9 @@ import {
   effect,
   mutate,
   type Polled,
-  pauseEffectStop,
   poll,
   props,
   registerScopeResource,
-  resumeEffectStop,
   type Scope,
   scope,
   source,
@@ -1818,28 +1816,6 @@ describe("loom scope edge cases", () => {
     s.stop(); // second stop is a no-op
     a(2);
     expect(runs).toBe(2);
-  });
-
-  it("combines direct and scope pause depths without resuming early", () => {
-    const value = state(0);
-    let runs = 0;
-    let stop!: () => void;
-    const owner = scope(() => {
-      stop = effect(() => {
-        value();
-        runs++;
-      });
-    });
-
-    expect(pauseEffectStop(stop)).toBe(true);
-    owner.pause();
-    value(1);
-    expect(resumeEffectStop(stop)).toBe(true);
-    expect(runs).toBe(1);
-    owner.resume();
-
-    expect(runs).toBe(2);
-    owner.stop();
   });
 
   it("does not connect a source that nothing observes when resumed", () => {

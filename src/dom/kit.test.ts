@@ -2,7 +2,17 @@
 // Kit helpers: bind / observeSize / observeIntersection / observeMutation / onMount / persisted.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { batch, scope, state } from "../loom.js";
-import { bind, h, onMount, onUnmount, pause, remove, resume } from "./index.js";
+import {
+  bind,
+  bindManual,
+  h,
+  onMount,
+  onUnmount,
+  pause,
+  remove,
+  resume,
+  when,
+} from "./index.js";
 import { observeIntersection } from "./observe-intersection.js";
 import { observeMutation } from "./observe-mutation.js";
 import { observeSize } from "./observe-size.js";
@@ -24,11 +34,11 @@ describe("bind", () => {
     expect(el.textContent).toBe("b");
   });
 
-  it("returns the stop for early manual disposal", () => {
+  it("offers an explicit manual binding for early disposal", () => {
     const value = state(0);
     const el = h("div");
     let runs = 0;
-    const stop = bind(el, () => {
+    const stop = bindManual(el, () => {
       value();
       runs++;
     });
@@ -419,6 +429,23 @@ describe("pause/resume (subtree)", () => {
     expect(child.textContent).toBe("");
     label("e");
     expect(runs).toBe(3);
+    remove(root);
+  });
+
+  it("suspends dynamic slot effects without inspection metadata", () => {
+    const visible = state(true);
+    const root = h(
+      "section",
+      null,
+      when(visible, () => "shown"),
+    );
+
+    pause(root);
+    visible(false);
+    expect(root.textContent).toBe("shown");
+
+    resume(root);
+    expect(root.textContent).toBe("");
     remove(root);
   });
 

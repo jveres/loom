@@ -4,9 +4,9 @@
 // now for bindings — a reactive echo mid-typing destroys the edit
 // and the caret). The latest suppressed value applies when focus
 // leaves, even when the cell does not change again. Node-owned: the
-// follow effect dies with the element.
-import { effect, type State } from "../loom.js";
-import { onUnmount } from "./ownership-base.js";
+// effect and listeners die with the element.
+import { domEffect, type State } from "../loom.js";
+import { own, ownResource } from "./ownership-base.js";
 
 export function bindValue(
   el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
@@ -16,20 +16,26 @@ export function bindValue(
   const sync = (): void => {
     if (el.value !== latest) el.value = latest;
   };
-  el.addEventListener("blur", sync);
-  el.addEventListener("input", () => {
+  const write = (): void => {
     latest = el.value;
     cell(el.value);
+  };
+  el.addEventListener("blur", sync);
+  el.addEventListener("input", write);
+  own(el, () => {
+    el.removeEventListener("blur", sync);
+    el.removeEventListener("input", write);
   });
   // bind()'s own recipe, spelled here to keep the barrel acyclic.
-  onUnmount(
+  ownResource(
     el,
-    effect(
+    domEffect(
       () => {
         latest = cell();
         if (document.activeElement !== el) sync();
       },
-      { target: el },
+      "dom.bindValue",
+      el,
     ),
   );
 }

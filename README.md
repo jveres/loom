@@ -583,6 +583,10 @@ document.body.append(
 The construction and binding core:
 
 - `h(tag, props, children)` creates an element (JSX compiles to it).
+- `` template("tag")`...` `` parses a static, single-root HTML skeleton once
+  and returns a correctly typed deep-clone factory. The declared tag is checked
+  against the parsed root. Use it for repeated views, then assign or bind
+  dynamic fields after cloning. Interpolation is rejected.
 - `svgElement(tag, props, children)` explicitly creates an SVG-namespaced
   element. Use it for names shared with HTML, such as `title`, `a`, `style`,
   and `script`, because an already-created JSX child doesn't carry its future
@@ -602,6 +606,11 @@ The construction and binding core:
   disposes and detaches; `replaceChildren(parent, ...children)` preserves
   incoming nodes and disposes every outgoing subtree —
   [Ownership & disposal](#ownership--disposal).
+- `resourceGroup(fn)` captures the node-owned resources created by `fn` in a
+  flat arena. Dispose the group before replacing a whole view to avoid a DOM
+  subtree walk. The callback is synchronous, groups cannot nest, and observable
+  cleanup retains normal descendant-first DOM order. Node ownership remains
+  available for granular removal.
 - `startPointerSession(handle, start, options)` captures and routes one
   pointer ID until release, cancellation, capture loss, manual stop, or
   Loom-managed unmount — [Pointer sessions](#pointer-sessions).
@@ -649,8 +658,8 @@ watch(
 - `onUnmount(el, stop)` attaches a disposer to the node's Loom lifecycle —
   the contract is in [Ownership & disposal](#ownership--disposal).
 - `bind(el, fn, options?)` — reactive DOM state that dies with this node:
-  `effect(fn)` target-attributed to `el` and disposed with it. The one-call
-  form of `onUnmount(el, effect(fn, { target: el }))`. Returns the stop.
+  `effect(fn)` target-attributed to `el` and disposed with it. Use
+  `bindManual(el, fn, options?)` when you also need an early-stop handle.
 - `pause(root)` / `resume(root)` suspend and wake every node-owned reactive
   binding in a DOM subtree: paused bindings stay subscribed but do not run;
   resume delivers one coalesced catch-up to anything that changed. Pause
@@ -780,11 +789,11 @@ scrollers use a 120 ms transition.
 
 | Export | Documented in |
 | --- | --- |
-| `h`, `svgElement`, `text` | [DOM and events](#dom-and-events) |
+| `h`, `svgElement`, `template`, `text` | [DOM and events](#dom-and-events) |
 | `attr`, `classed`, `style` | [Element state as signals](#element-state-as-signals) |
 | `list` | [DOM and events](#dom-and-events) |
 | `each`, `when`, `match` | [Conditional rendering](#conditional-rendering) |
-| `dispose`, `remove`, `replaceChildren`, `onUnmount`, `bind` | [Ownership & disposal](#ownership--disposal) |
+| `dispose`, `remove`, `replaceChildren`, `resourceGroup`, `onUnmount`, `bind`, `bindManual` | [Ownership & disposal](#ownership--disposal) |
 | `pause`, `resume` | [Lifecycle](#lifecycle) |
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
@@ -796,6 +805,7 @@ scrollers use a 120 ms transition.
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
 
 Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX accept),
+`ResourceGroup`,
 `PersistedOptions` (adds `storage` to override the backing `Storage`),
 `ListOptions`, `SvgTagName`, the binding handles
 `AttrBinding`/`ClassBinding`/`StyleBinding`/`DynamicChild`, `MorphOptions`,
@@ -980,10 +990,44 @@ The contract, precisely:
 function widget(): HTMLElement {
   const el = <div class="widget" /> as HTMLElement;
   bind(el, () => syncSomething(el)); // effect, dies with el, shows on hover
-  // — the one-call form of: onUnmount(el, effect(() => …, { target: el }))
   return el;
 }
 ```
+
+For a repeated view, parse its static structure once and capture each mount's
+resources in a flat group. This keeps creation on the browser's native clone
+path and makes wholesale teardown proportional to the number of resources,
+not the number of DOM descendants:
+
+```ts
+import { state } from "loom";
+import { resourceGroup, template, text } from "loom/dom";
+
+const cloneCard = template("article")`
+  <article class="card"><h2></h2><button>Remove</button></article>
+`;
+
+const title = state("Quarterly report");
+const mounted = resourceGroup(() => {
+  const card = cloneCard();
+  card.querySelector("h2")?.append(text(title));
+  return card;
+});
+
+document.body.append(mounted.value);
+
+// Tear down bindings and lifecycle hooks, then let the browser detach nodes.
+mounted.dispose();
+mounted.value.remove();
+```
+
+`resourceGroup()` supplements node ownership; it doesn't replace it. You can
+still call Loom's `remove(node)` for a granular removal inside the group.
+Disposing the group later is idempotent for resources that already stopped.
+Use one group per independently replaced region so the arena doesn't retain
+removed nodes longer than that region's lifetime. Construction must finish in
+the callback: an async callback is rejected, and nesting one resource group in
+another is an error.
 
 One more ownership rule, easy to hit without noticing: an effect created
 **while another effect is running** links to it as a child and is disposed on
@@ -1347,7 +1391,7 @@ Use these entrypoints for static HTML JSX:
 
 ### Observability
 
-**`channel` and `meter` are generic core primitives.** A channel is a gated,
+**`channel` and `meter` are generic observability primitives.** A channel is a gated,
 overwriting ring buffer that a consumer **drains on its own clock**: it records
 nothing (and allocates nothing) until a meter attaches, and under load keeps only
 its most recent samples, so it stays bounded and the producer runs at full speed
@@ -1361,8 +1405,7 @@ allocation) or `"samples"` (the channel's retained ring records, for event strea
 and value histograms):
 
 ```ts
-import { channel, meter } from "loom"; // generic primitives
-import { events } from "loom/observe"; // loom's own built-in streams
+import { channel, events, meter } from "loom/observe";
 
 // Rates — the "count" view (default), allocation-free:
 const rates = meter([events.write, events.effect]);
@@ -1513,8 +1556,9 @@ inspection (`configure({ inspect: true })`) adds one metadata object plus a
 
 Two browser benchmarks run from the dev server. `/bench/` compares Loom DOM
 bindings against a hand-written vanilla baseline on a js-framework-benchmark
-style table workload. `/bench/morph/` compares `morph()` against Idiomorph on a
-streaming-markdown workload in full-document and per-block-skip modes.
+style table workload; both sides clone the same pre-parsed row skeleton.
+`/bench/morph/` compares `morph()` against Idiomorph on a streaming-markdown
+workload in full-document and per-block-skip modes.
 
 ## Design notes
 
@@ -1524,7 +1568,7 @@ runtime dependencies. The public API stays small: callable signals,
 computed reads, effects, batching, manual triggers, object field signals, and an
 observability surface.
 
-The v2 architecture — the vendoring, the tree-shakable core split, the
+The architecture — the vendoring, the tree-shakable core split, the
 comparative benchmark harness, and the bench-gated experiments (including the
 ones the gates rejected) — is recorded in the commit history; every
 performance-relevant decision carries its measurements in the commit that
@@ -1589,7 +1633,6 @@ pnpm run bench   # CLI benchmarks (chaos, micro, hot-path)
 pnpm size        # per-entry bundle budgets (gzip)
 pnpm samples     # every README code sample typechecks against src
 pnpm run dev     # dev server
-pnpm run playground  # sample playground (editor + live view)
 pnpm run build   # dist/loom (ES bundles) + dist/types (.d.ts)
 ```
 
@@ -1600,14 +1643,7 @@ it whenever you change `src`. While developing Loom itself, its own `loom` /
 plus `tsconfig` `paths`), so `check` / `test` / `dev` never need a build.
 
 With the dev server running, open `/demo/` for the realtime UI demo or `/bench/`
-for the browser benchmark. `pnpm run playground` serves a third app: an
-editor-plus-live-view over a catalog of small samples covering the whole
-surface, from `state()` to SVG, async resources, the virtualizer, and the
-observability layer. Each sample is a real `.tsx` module typechecked by
-`pnpm run check` (so the catalog cannot drift from the API) whose source
-feeds the in-browser editor — edits recompile via sucrase and remount after a
-quiet moment, with each run owned by a `scope()` so timers and observers die
-on re-run. Every sample also compiles and mounts in the vitest suite. The demo is a realtime stress UI written in Loom JSX:
+for the browser benchmark. The demo is a realtime stress UI written in Loom JSX:
 it exercises signals, object props, computed values, effects, keyed list
 reconciliation, direct JSX text/attribute/class bindings, cleanup through DOM
 disposal, and the browser JSX runtime.
@@ -1615,15 +1651,15 @@ disposal, and the browser JSX runtime.
 The browser benchmark (`/bench/`) is a
 [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark)-style
 keyed-table suite that times Loom against a hand-written vanilla-DOM baseline
-on the same operations — create 1k/10k rows, append 1k, update every 10th,
-swap, select, remove, and clear. **Run** reports each operation's median time
-and the Loom/vanilla ratio (plus a geo-mean) against indicative published
-slowdowns for other frameworks; **Profile** re-runs Loom in a split mode that
-separates synchronous reconciliation work from forced browser layout, so you can
-see which of the two dominates a given operation. Compare ratios, not absolute
-milliseconds — they are machine-specific. This is the in-browser counterpart to
-the CLI `pnpm run bench` (the `bench/*.bench.ts` chaos, micro, and hot-path
-suites).
+on the same operations and the same pre-parsed row skeleton — create 1k/10k
+rows, append 1k, update every 10th, swap, select, remove, and clear. **Run**
+reports each operation's median time and the Loom/vanilla ratio (plus a
+geo-mean) against indicative published slowdowns for other frameworks;
+**Profile** re-runs Loom in a split mode that separates synchronous
+reconciliation work from forced browser layout, so you can see which of the two
+dominates a given operation. Compare ratios, not absolute milliseconds — they
+are machine-specific. This is the in-browser counterpart to the CLI
+`pnpm run bench` (the `bench/*.bench.ts` chaos, micro, and hot-path suites).
 
 ## License
 

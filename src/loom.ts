@@ -1,17 +1,8 @@
-import * as channels from "./core/channels.js";
 import {
   createReactiveSystem,
   type Link,
   type ReactiveNode,
 } from "./core/graph.js";
-
-// Snapshot the channel nodes + the sampler holder into module-local consts. Under transforms
-// that implement ESM live bindings as per-access getters (vitest/vite SSR, some interop shims), a
-// direct imported-binding read on the write path costs a getter call per write — measured 10x on
-// write throughput. One read at init, plain locals forever after.
-const { readCh, writeCh, computeCh, effectCh, flushCh, createCh, disposeCh } =
-  channels;
-const sampler = channels.sampler;
 
 const Mutable = 1;
 const Watching = 2;
@@ -133,13 +124,13 @@ interface EffectNode extends NodeBase {
   cleanup: Stop | undefined;
   // The scope that owns this effect (for collective stop/pause/resume), if any, and this effect's
   // slot in scope.effects — so a manual stop can swap-remove in O(1) instead of leaking the dead node.
-  scope: ScopeNode | undefined;
-  scopeIndex: number;
+  scope?: ScopeNode | undefined;
+  scopeIndex?: number | undefined;
   // Combined direct + owning-scope pause depth. Keeping the effective value on the effect makes
   // notify/run a single field check; scope pause/resume pays the rare traversal instead.
-  pausedCount: number;
-  directPausedCount: number;
-  deferred: boolean; // route re-runs to the deferred lane instead of the synchronous flush
+  pausedCount?: number | undefined;
+  directPausedCount?: number | undefined;
+  deferred?: boolean | undefined; // route re-runs to the deferred lane instead of the synchronous flush
   deferredQueued?: boolean; // currently in deferredQueue (O(1) dedup, replaces an includes() scan)
   maxStale?: number; // deferred lane: guaranteed-refresh floor in ms
   // Deferred lane: absolute fire-by time (now()+maxStale) stamped at enqueue. A leftover from a
@@ -235,6 +226,28 @@ export interface InspectHooks {
   trackedWrite?(node: NodeBase, writer: NodeBase): void;
 }
 let inspectHooks: InspectHooks | undefined;
+
+/** @internal Optional observability hooks installed by loom/observe. */
+export interface RuntimeHooks {
+  create(meta: InspectMeta | undefined): void;
+  read(node: NodeBase, sub: NodeBase): void;
+  write(
+    node: StateNode<unknown>,
+    previous: unknown,
+    next: unknown,
+    writer: NodeBase | undefined,
+  ): void;
+  compute(node: ComputedNode<unknown>): void;
+  effect(node: EffectNode): void;
+  beginFlush(): number | undefined;
+  endFlush(appBatchSize: number, startedAt: number): void;
+  dispose(node: EffectNode): void;
+}
+let runtimeHooks: RuntimeHooks | undefined;
+
+export function installRuntimeHooks(hooks: RuntimeHooks): void {
+  runtimeHooks = hooks;
+}
 let inspectRequested = false;
 export function installInspectHooks(hooks: InspectHooks): void {
   inspectHooks = hooks;
@@ -248,9 +261,8 @@ export function liveScopeCount(): number {
   return liveScopes;
 }
 
-// Each public accessor (a state source, computed read, or effect stop) carries a hidden handle to
-// its node via this private symbol — so trigger() resolves a node in O(1) without the
-// per-create WeakMap registration create-heavy workloads would otherwise pay even with inspection off.
+// Inspection-enabled public accessors carry a hidden reverse handle to their node. Production
+// accessors avoid this extra property; trigger() discovers dependencies through a temporary watcher.
 const NODE = Symbol("loom.node");
 type NodeHandle = { [NODE]?: NodeBase | undefined };
 function tagNode(accessor: object, node: NodeBase): void {
@@ -275,7 +287,7 @@ const { link, unlink, propagate, checkDirty, shallowPropagate } =
     notify(node) {
       const effectNode = node as EffectNode;
       // Paused effects stay dirty and catch up on resume.
-      if (effectNode.pausedCount !== 0) return;
+      if (effectNode.pausedCount) return;
       enqueueEffect(effectNode);
     },
     unwatched(node) {
@@ -301,8 +313,11 @@ export function state<T>(initial: T, options?: NodeOptions): State<T> {
   // Only inspected states need the reverse accessor used by the editor. Keep ordinary state nodes
   // on the smaller hot shape.
   if (meta !== undefined) node.source = source as State<unknown>;
-  tagNode(source, node);
-  if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
+  // The production accessor carries no reverse node handle. Inspection needs
+  // one for props grouping/editor writes; ordinary trigger() pays its rare
+  // discovery cost instead of taxing every state creation.
+  if (meta !== undefined) tagNode(source, node);
+  runtimeHooks?.create(meta);
   return source;
 }
 
@@ -335,7 +350,7 @@ export function source<T>(
   const node = createSourceNode(connect, initial);
   const read = sourceOper.bind(node) as Read<T>;
   const meta = inspectHooks?.register(node, "state", options);
-  tagNode(read, node);
+  if (meta !== undefined) tagNode(read, node);
   // When created inside a scope, pausing the scope disconnects the producer even though paused
   // subscribers stay linked; resuming reconnects it if anything is still observing.
   const erased = node as SourceNode<unknown>;
@@ -346,7 +361,7 @@ export function source<T>(
       stop: () => disconnectSource(erased),
     });
   }
-  if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
+  runtimeHooks?.create(meta);
   return read;
 }
 
@@ -383,8 +398,8 @@ export function computed<T>(
   const node = createComputedNode(getter);
   const read = computedOper.bind(node) as Read<T>;
   const meta = inspectHooks?.register(node, "computed", options);
-  tagNode(read, node);
-  if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
+  if (meta !== undefined) tagNode(read, node);
+  runtimeHooks?.create(meta);
   return read;
 }
 
@@ -393,7 +408,23 @@ export function effect<Result>(
   options?: EffectOptions,
 ): Stop;
 export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
-  const node = createEffectNode(fn);
+  const node = startEffect(fn, options);
+  const stop = stopEffect.bind(node);
+  if (node.meta !== undefined) tagNode(stop, node);
+  return stop;
+}
+
+function startEffect(
+  fn: InternalEffectFn,
+  options: EffectOptions | undefined,
+): EffectNode {
+  return startEffectNode(createEffectNode(fn), options);
+}
+
+function startEffectNode(
+  node: EffectNode,
+  options: EffectOptions | undefined,
+): EffectNode {
   if (activeScope !== undefined) {
     node.scope = activeScope;
     node.scopeIndex = activeScope.effects.length;
@@ -412,7 +443,7 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     node.deferDeadline = 0;
   }
   const meta = inspectHooks?.register(node, "effect", options);
-  if (createCh.meters !== 0 && meta?.internal !== true) createCh.seq++;
+  runtimeHooks?.create(meta);
   const previous = setActiveSub(node);
   if (previous !== undefined) {
     link(node, previous, 0);
@@ -450,10 +481,8 @@ export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
     node.cleanup = typeof result === "function" ? (result as Stop) : undefined;
   }
   if (meta) meta.runs++;
-  if (effectCh.meters !== 0 && meta?.internal !== true) effectCh.seq++;
-  const stop = stopEffect.bind(node);
-  tagNode(stop, node);
-  return stop;
+  runtimeHooks?.effect(node);
+  return node;
 }
 
 /** @internal Create a node-owned DOM effect without linking it to the currently running effect. */
@@ -462,7 +491,7 @@ export function domEffect(
   label: string,
   target: Node,
   options?: EffectOptions,
-): Stop {
+): EffectNode {
   // The default DOM binding path needs options only when inspection is installed. Avoid allocating
   // one options object per binding in ordinary applications while retaining labels/targets whenever
   // the inspector can consume them. Explicit options always win over the DOM defaults.
@@ -474,10 +503,46 @@ export function domEffect(
         : undefined;
   const previous = setActiveSub(undefined);
   try {
-    return effect(fn, resolved);
+    return startEffect(fn, resolved);
   } finally {
     restoreActiveSub(previous);
   }
+}
+
+/** @internal Start a plain node-owned DOM sink on the minimal production path. */
+export function domBindingEffect(
+  fn: EffectFn,
+  label: string,
+  target: Node,
+): EffectNode {
+  if (
+    activeScope !== undefined ||
+    inspectHooks !== undefined ||
+    runtimeHooks !== undefined ||
+    onError !== undefined
+  ) {
+    return domEffect(fn, label, target, undefined);
+  }
+
+  const node = createEffectNode(fn);
+  const previous = setActiveSub(node);
+  try {
+    runDepth++;
+    node.fn();
+  } catch (error) {
+    stopEffect.call(node);
+    throw error;
+  } finally {
+    runDepth--;
+    restoreActiveSub(previous);
+    node.flags &= ~RecursedCheck;
+  }
+  return node;
+}
+
+/** @internal Stop a raw owner-bound DOM effect. */
+export function stopEffectNode(node: EffectNode): void {
+  stopEffect.call(node);
 }
 
 export function batch<T>(fn: () => T): T {
@@ -557,35 +622,32 @@ export function installDeferredLane(enqueue: (node: EffectNode) => void): {
 }
 export type { EffectNode };
 
-// Non-barrel seams for loom/dom's subtree pause: suspend/resume ONE effect through its stop
-// handle (the stop is tagged with its node at creation). Non-effect disposers return false and are
-// left alone. Resume mirrors scope resume: a run missed while paused is delivered now.
-export function pauseEffectStop(stop: Stop): boolean {
-  const node = nodeOf(stop) as EffectNode | undefined;
-  if (node === undefined || node.fn === undefined || node.flags === 0)
-    return false;
-  node.directPausedCount++;
-  node.pausedCount++;
+/** @internal Suspend one raw owner-bound effect. */
+export function pauseEffectNode(node: EffectNode): boolean {
+  if (node.flags === 0) return false;
+  node.directPausedCount = (node.directPausedCount ?? 0) + 1;
+  node.pausedCount = (node.pausedCount ?? 0) + 1;
   return true;
 }
-export function resumeEffectStop(stop: Stop): boolean {
-  const node = nodeOf(stop) as EffectNode | undefined;
-  if (node === undefined || node.fn === undefined || node.flags === 0)
-    return false;
-  if (node.directPausedCount > 0) {
-    node.directPausedCount--;
-    node.pausedCount--;
+
+/** @internal Resume one raw owner-bound effect. */
+export function resumeEffectNode(node: EffectNode): boolean {
+  if (node.flags === 0) return false;
+  const directPausedCount = node.directPausedCount ?? 0;
+  if (directPausedCount > 0) {
+    node.directPausedCount = directPausedCount - 1;
+    node.pausedCount = (node.pausedCount ?? 0) - 1;
   }
-  if (node.pausedCount === 0 && (node.flags & (Dirty | Pending)) !== 0) {
+  if (!node.pausedCount && (node.flags & (Dirty | Pending)) !== 0) {
     enqueueEffect(node);
-    // Ride an in-progress flush (resume from inside an effect run) instead of re-entering.
     if (
       batchDepth === 0 &&
       runDepth === 0 &&
       !flushing &&
       notifyIndex < queuedLength
-    )
+    ) {
       flush();
+    }
   }
   return true;
 }
@@ -608,7 +670,9 @@ export function registerScopeResource(resource: ScopeResource): Stop {
 // or loses this scope as a paused ancestor). Walks all children, including independently-paused ones.
 function bumpPausedCount(node: ScopeNode, delta: number): void {
   node.pausedCount += delta;
-  for (const effectNode of node.effects) effectNode.pausedCount += delta;
+  for (const effectNode of node.effects) {
+    effectNode.pausedCount = (effectNode.pausedCount ?? 0) + delta;
+  }
   for (const child of node.children) bumpPausedCount(child, delta);
 }
 
@@ -762,7 +826,7 @@ function flushScope(node: ScopeNode): void {
   // a stable snapshot so that mutation cannot skip the sibling moved into its slot.
   for (const effectNode of node.effects.slice()) {
     if (effectNode.flags === 0) continue;
-    if (effectNode.pausedCount !== 0) continue;
+    if (effectNode.pausedCount) continue;
     if ((effectNode.flags & (Dirty | Pending)) !== 0) enqueueEffect(effectNode);
   }
   for (const child of node.children) flushScope(child);
@@ -819,19 +883,10 @@ export function poll<T>(
   return Object.assign((): T => signal(), { stop });
 }
 
-export function trigger(source: Read<unknown>): void {
-  // Fast path: a known loom accessor reads exactly its own node, so propagate that node's subs
-  // directly — no temporary watcher to allocate, link, and unlink (the common mutate() case).
-  const known = nodeOf(source as object);
-  if (known !== undefined) {
-    const subs = known.subs;
-    if (subs !== undefined) {
-      propagate(subs, runDepth > 0);
-      shallowPropagate(subs);
-    }
-    if (batchDepth === 0 && !flushing && notifyIndex < queuedLength) flush();
-    return;
-  }
+export function trigger<T>(source: State<T>): void {
+  // Discover every dependency read by the public accessor. This intentionally uses the same path
+  // with and without inspection, and also supports derived writable/read adapters that touch more
+  // than one underlying signal.
   const sub = createWatcherNode();
   const previous = setActiveSub(sub);
   try {
@@ -939,51 +994,9 @@ export function props<T extends object>(
   return out;
 }
 
-// Record a read on the read channel — the signal, the reader (the running effect/computed) that
-// consumed it, and when. Callers gate on `readCh.samples !== 0`; `meta === undefined`
-// (inspection off for this signal) just counts.
-function recordRead(node: NodeBase, sub: NodeBase): void {
-  const meta = node.meta;
-  if (meta !== undefined)
-    sampler.record(
-      readCh,
-      meta.id,
-      sub.meta?.id,
-      Date.now(),
-      undefined,
-      undefined,
-    );
-  else readCh.seq++;
-}
-
 function trackRead(node: NodeBase, sub: NodeBase): void {
   link(node, sub, cycle);
-  if (readCh.meters !== 0 && node.meta?.internal !== true) {
-    if (readCh.samples !== 0) recordRead(node, sub);
-    else readCh.seq++;
-  }
-}
-
-// Cold instrumentation for state writes. Keeping it out of stateOper lets V8 optimize the normal
-// uninspected/unmetered accessor as a small graph operation.
-function recordStateWrite<T>(node: StateNode<T>, previous: T, next: T): void {
-  const meta = node.meta;
-  const writer = activeSub;
-  if (meta !== undefined && writer !== undefined)
-    inspectHooks?.trackedWrite?.(node, writer);
-  if (writeCh.meters === 0 || meta?.internal === true) return;
-  if (meta !== undefined && writeCh.samples !== 0) {
-    sampler.record(
-      writeCh,
-      meta.id,
-      previous,
-      next,
-      writer?.meta?.id,
-      Date.now(),
-    );
-  } else {
-    writeCh.seq++;
-  }
+  runtimeHooks?.read(node, sub);
 }
 
 /**
@@ -1047,15 +1060,9 @@ function propOptions(
     : out;
 }
 
-// Resolved once at module load — this sits on the deferred-lane scheduling paths, so no per-call
-// typeof-global check. Never called during module init, so the const's position is safe.
-const now: () => number =
-  typeof performance === "undefined" ? Date.now : () => performance.now();
-
 function createStateNode<T>(initial: T): StateNode<T> {
   return nodeShape<StateNode<T>>({
     currentValue: initial,
-    meta: undefined,
     pendingValue: initial,
     subs: undefined,
     subsTail: undefined,
@@ -1073,7 +1080,6 @@ function createSourceNode<T>(
     connect,
     disconnect: undefined,
     active: false,
-    meta: undefined,
     subs: undefined,
     subsTail: undefined,
     flags: Mutable,
@@ -1085,7 +1091,6 @@ function createComputedNode<T>(
 ): ComputedNode<T> {
   return nodeShape<ComputedNode<T>>({
     value: undefined,
-    meta: undefined,
     subs: undefined,
     subsTail: undefined,
     deps: undefined,
@@ -1099,11 +1104,6 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
   return nodeShape<EffectNode>({
     fn,
     cleanup: undefined,
-    scope: undefined,
-    scopeIndex: -1,
-    pausedCount: 0,
-    directPausedCount: 0,
-    deferred: false,
     subs: undefined,
     subsTail: undefined,
     deps: undefined,
@@ -1116,7 +1116,6 @@ function createWatcherNode(): NodeBase {
   return nodeShape<NodeBase>({
     deps: undefined,
     depsTail: undefined,
-    meta: undefined,
     flags: Watching,
   });
 }
@@ -1145,11 +1144,11 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
     const previous = this.pendingValue;
     if (previous !== next) {
       this.pendingValue = next;
-      if (
-        writeCh.meters !== 0 ||
-        (this.meta !== undefined && activeSub !== undefined)
-      )
-        recordStateWrite(this, previous, next);
+      const writer = activeSub;
+      if (this.meta !== undefined && writer !== undefined) {
+        inspectHooks?.trackedWrite?.(this, writer);
+      }
+      runtimeHooks?.write(this as StateNode<unknown>, previous, next, writer);
       // The first pending write already dirtied the complete downstream graph. Until a read
       // commits this state, later writes only replace its pending value and need no second walk.
       if (this.flags & Dirty) return undefined;
@@ -1235,8 +1234,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
     const previous = setActiveSub(this);
     try {
       this.value = this.getter();
-      if (computeCh.meters !== 0 && this.meta?.internal !== true)
-        computeCh.seq++;
+      runtimeHooks?.compute(this as ComputedNode<unknown>);
     } finally {
       restoreActiveSub(previous);
       this.flags &= ~RecursedCheck;
@@ -1259,9 +1257,7 @@ function updateComputed<T>(node: ComputedNode<T>): boolean {
     const newValue = node.getter(oldValue);
     node.value = newValue;
     const changed = oldValue !== newValue;
-    if (changed && computeCh.meters !== 0 && node.meta?.internal !== true) {
-      computeCh.seq++;
-    }
+    if (changed) runtimeHooks?.compute(node as ComputedNode<unknown>);
     return changed;
   } finally {
     restoreActiveSub(previous);
@@ -1298,7 +1294,7 @@ function queueEffect(effect: EffectNode): void {
 
 function runEffect(node: EffectNode): boolean {
   // Paused after this effect was already queued: leave it dirty for resume.
-  if (node.pausedCount !== 0) return false;
+  if (node.pausedCount) return false;
   const flags = node.flags;
   if (
     flags & Dirty ||
@@ -1361,7 +1357,7 @@ function runEffect(node: EffectNode): boolean {
     }
     const meta = node.meta;
     if (meta) meta.runs++;
-    if (effectCh.meters !== 0 && meta?.internal !== true) effectCh.seq++;
+    runtimeHooks?.effect(node);
     return meta === undefined || meta.internal !== true;
   } else if (node.deps !== undefined) {
     node.flags = Watching | (flags & HasChildEffect);
@@ -1374,8 +1370,9 @@ function flush(): void {
   // entering flush here turns a long but valid cascade into call-stack depth.
   if (flushing) return;
   flushing = true;
-  const metered = flushCh.meters !== 0;
-  const start = metered ? now() : 0;
+  const hooks = runtimeHooks;
+  const start = hooks?.beginFlush();
+  const metered = start !== undefined;
   let appBatchSize = 0;
   try {
     if (metered) {
@@ -1402,15 +1399,8 @@ function flush(): void {
     // Keep the backing store for ordinary batches; release only unusually large burst capacity.
     if (queued.length > 4096) queued.length = 0;
     flushing = false;
-    if (appBatchSize > 0) {
-      sampler.record(
-        flushCh,
-        appBatchSize,
-        start ? now() - start : 0,
-        undefined,
-        undefined,
-        undefined,
-      );
+    if (appBatchSize > 0 && start !== undefined) {
+      hooks?.endFlush(appBatchSize, start);
     }
   }
 }
@@ -1425,7 +1415,7 @@ function stopEffect(this: EffectNode): void {
   if (owner !== undefined && !owner.stopped) {
     // Swap-remove from scope.effects so a long-lived scope doesn't retain dead effects. Skipped while
     // the scope itself is stopping (stopScope iterates effects then clears the array wholesale).
-    swapRemove(owner.effects, this.scopeIndex, (moved, i) => {
+    swapRemove(owner.effects, this.scopeIndex ?? -1, (moved, i) => {
       moved.scopeIndex = i;
     });
     this.scope = undefined;
@@ -1448,7 +1438,7 @@ function stopEffect(this: EffectNode): void {
     meta.disposed = true;
     inspectHooks?.unregister(meta.id);
   }
-  if (disposeCh.meters !== 0 && meta?.internal !== true) disposeCh.seq++;
+  runtimeHooks?.dispose(this);
   if (failed) reportEffectError(cleanupError, this);
 }
 

@@ -3,8 +3,6 @@
 // and the gauge / histogram widgets. Owns its module state and its own (pausable) scope; the panel
 // drives it through wireStats / pauseStats / resumeStats / stopStats.
 import {
-  type Meter,
-  meter,
   type Polled,
   poll,
   type Read,
@@ -19,6 +17,8 @@ import {
   events,
   type FlushSample,
   inspectResources,
+  type Meter,
+  meter,
   sampleOf,
 } from "loom/observe";
 import { PANEL_OPTS } from "./bindings.js";

@@ -1,4 +1,4 @@
-import { a as e, t } from "../ownership-base-DfUs28hK.js";
+import { s as e, t } from "../ownership-base-v6hz88HI.js";
 //#region src/dom/virtual-list.ts
 function n(n) {
 	let r = n.rowHeight, i = n.overscan ?? 6, a = document.createElement("div");

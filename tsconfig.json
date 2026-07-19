@@ -46,8 +46,6 @@
     "src/**/*.tsx",
     "bench/**/*.ts",
     "demo/**/*.ts",
-    "demo/**/*.tsx",
-    "playground/**/*.ts",
-    "playground/**/*.tsx"
+    "demo/**/*.tsx"
   ]
 }
