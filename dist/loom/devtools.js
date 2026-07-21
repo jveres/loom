@@ -1,6 +1,6 @@
 import { S as e, T as t, b as n, g as r, i, x as a } from "./loom-CopJ8Xrb.js";
 import { a as o, i as s, n as c, o as l, r as u } from "./observe-Cc5Htxdq.js";
-import { h as ee, l as d, m as te, n as ne, t as re, v as ie, y as f } from "./dom-Cj9Utd9M.js";
+import { h as ee, l as d, m as te, n as ne, t as re, v as ie, y as f } from "./dom-BcA2TivN.js";
 import { s as p } from "./ownership-base-v6hz88HI.js";
 import { virtualList as m } from "./dom/virtual-list.js";
 import "./defer.js";

@@ -202,4 +202,29 @@ describe("morph", () => {
     expect(host.querySelector("span")?.textContent).toBe("UI");
     expect(host.querySelector("p")?.textContent).toBe("text more");
   });
+
+  it("skip: a MID-LIST injected node never blocks its later siblings", () => {
+    // The injected node exists only in the live tree — as a positional
+    // candidate it failed every match against the new tree's siblings, so
+    // everything AFTER it was torn down and rebuilt per morph (identity
+    // lost; live: a diagram enhancement made every following block repaint
+    // on each keystroke). Skipped nodes are transparent to the cursor.
+    const host = el(
+      `<div><pre>code</pre><aside data-chrome>svg</aside><p>tail</p><ul><li>x</li></ul></div>`,
+    );
+    const tail = host.querySelector("p");
+    const list = host.querySelector("ul");
+    morph(
+      host,
+      el(`<div><pre>code</pre><p>tail 2</p><ul><li>x</li></ul></div>`),
+      { skip: "[data-chrome]" },
+    );
+    // Identity preserved across the injected node; text patched in place.
+    expect(host.querySelector("p")).toBe(tail);
+    expect(host.querySelector("ul")).toBe(list);
+    expect(tail?.textContent).toBe("tail 2");
+    // The injected node itself stays, in place.
+    expect(host.querySelector("aside")?.textContent).toBe("svg");
+    expect(host.children[1]).toBe(host.querySelector("aside"));
+  });
 });

@@ -10,7 +10,9 @@ export interface MorphOptions {
      * nodes (streaming cursors, copy buttons, post-render highlighting). A
      * matched element returning true is left exactly as-is (no attribute,
      * text, or children sync); an unmatched one is kept instead of removed,
-     * with managed siblings ordered around it. A string is shorthand for a
+     * with managed siblings ordered around it — and it is TRANSPARENT to
+     * positional matching, so the siblings after it still pair up with their
+     * counterparts. A string is shorthand for a
      * selector match: `skip: "[data-chrome]"` ≡ `el => el.matches("[data-chrome]")`.
      */
     skip?: ((el: Element) => boolean) | string;

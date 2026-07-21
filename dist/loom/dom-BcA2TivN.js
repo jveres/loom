@@ -316,29 +316,31 @@ function De(e, t, n) {
 			o.set(t, e), s.add(e);
 		}
 	}
-	let c = /* @__PURE__ */ new Set(), l = n.key ? /* @__PURE__ */ new Set() : null, u = [], d = 0;
+	let c = null;
+	if (n.skip !== void 0) for (let e of a) e.nodeType === 1 && N(e, n) && (c ??= /* @__PURE__ */ new Set(), c.add(e));
+	let l = /* @__PURE__ */ new Set(), u = n.key ? /* @__PURE__ */ new Set() : null, d = [], f = 0;
 	for (let e = i; e !== null; e = e.nextSibling) {
 		let t, r = F(e, n);
 		if (r !== null) {
-			if (l !== null) {
-				if (l.has(r)) throw Error(`Duplicate morph key "${r}".`);
-				l.add(r);
+			if (u !== null) {
+				if (u.has(r)) throw Error(`Duplicate morph key "${r}".`);
+				u.add(r);
 			}
 			let n = o.get(r);
-			n && !c.has(n) && n.tagName === e.tagName && (t = n);
+			n && !l.has(n) && n.tagName === e.tagName && (t = n);
 		} else {
-			for (; d < a.length;) {
-				let e = a[d];
-				if (!c.has(e) && !s.has(e)) break;
-				d++;
+			for (; f < a.length;) {
+				let e = a[f];
+				if (!l.has(e) && !s.has(e) && !c?.has(e)) break;
+				f++;
 			}
-			let n = a[d];
-			n && n.nodeType === e.nodeType && (n.nodeType !== 1 || n.tagName === e.tagName) && (t = n, d++);
+			let n = a[f];
+			n && n.nodeType === e.nodeType && (n.nodeType !== 1 || n.tagName === e.tagName) && (t = n, f++);
 		}
-		t ? (c.add(t), t.nodeType === 1 ? P(t, e, n) : t.nodeValue !== e.nodeValue && (t.nodeValue = e.nodeValue), u.push(t)) : u.push(e);
+		t ? (l.add(t), t.nodeType === 1 ? P(t, e, n) : t.nodeValue !== e.nodeValue && (t.nodeValue = e.nodeValue), d.push(t)) : d.push(e);
 	}
-	for (let t of a) c.has(t) || t.parentNode !== e || t.nodeType === 1 && n.skip !== void 0 && N(t, n) || e.removeChild(t);
-	D(e, u, null);
+	for (let t of a) l.has(t) || t.parentNode !== e || c?.has(t) || e.removeChild(t);
+	D(e, d, null);
 }
 //#endregion
 //#region src/dom/once.ts

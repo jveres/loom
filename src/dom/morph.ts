@@ -30,7 +30,9 @@ export interface MorphOptions {
    * nodes (streaming cursors, copy buttons, post-render highlighting). A
    * matched element returning true is left exactly as-is (no attribute,
    * text, or children sync); an unmatched one is kept instead of removed,
-   * with managed siblings ordered around it. A string is shorthand for a
+   * with managed siblings ordered around it — and it is TRANSPARENT to
+   * positional matching, so the siblings after it still pair up with their
+   * counterparts. A string is shorthand for a
    * selector match: `skip: "[data-chrome]"` ≡ `el => el.matches("[data-chrome]")`.
    */
   skip?: ((el: Element) => boolean) | string;
@@ -169,6 +171,23 @@ function morphChildren(
     }
   }
 
+  // Skipped old elements are TRANSPARENT to the positional cursor: as a
+  // candidate, an injected node (which the new tree never contains) blocked
+  // the walk — every managed sibling after it failed its match and was torn
+  // down and rebuilt on every morph. Computed once per element; the removal
+  // loop reads the same set. Stays null when nothing matches (the common
+  // case) so the hot cursor loop short-circuits, and builds in one pass —
+  // no intermediate array (this runs per element-with-children per morph).
+  let skippedNodes: Set<Node> | null = null;
+  if (options.skip !== undefined) {
+    for (const node of oldNodes) {
+      if (node.nodeType === 1 && shouldSkip(node as Element, options)) {
+        skippedNodes ??= new Set();
+        skippedNodes.add(node);
+      }
+    }
+  }
+
   const used = new Set<Node>();
   const seenNewKeys = options.key ? new Set<string>() : null;
   const result: Node[] = [];
@@ -193,11 +212,16 @@ function morphChildren(
       }
       // A keyed new node never matches positionally, so no cursor work here.
     } else {
-      // Skip used nodes AND keyed old nodes: a keyed node never matches positionally, and one
+      // Skip used, keyed AND skipped old nodes: none of them may match positionally, and any
       // absent from the new tree would otherwise block every unkeyed sibling behind it.
       while (cursor < oldNodes.length) {
         const blocked = oldNodes[cursor] as Node;
-        if (!used.has(blocked) && !keyedNodes.has(blocked)) break;
+        if (
+          !used.has(blocked) &&
+          !keyedNodes.has(blocked) &&
+          !skippedNodes?.has(blocked)
+        )
+          break;
         cursor++;
       }
       const candidate = oldNodes[cursor];
@@ -227,12 +251,7 @@ function morphChildren(
 
   for (const old of oldNodes) {
     if (used.has(old) || old.parentNode !== from) continue;
-    if (
-      old.nodeType === 1 &&
-      options.skip !== undefined &&
-      shouldSkip(old as Element, options)
-    )
-      continue;
+    if (skippedNodes?.has(old)) continue;
     from.removeChild(old);
   }
 
