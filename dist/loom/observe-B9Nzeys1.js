@@ -1,4 +1,4 @@
-import { d as e, f as t, p as n, t as r, u as i, v as a } from "./loom-CopJ8Xrb.js";
+import { d as e, f as t, p as n, t as r, u as i, v as a } from "./loom-cYHyKCVV.js";
 //#region src/core/channels.ts
 var o = /* @__PURE__ */ new Map(), s = { record(e, t, n, r, i, a) {
 	e.seq++;
@@ -185,11 +185,11 @@ e({
 	},
 	read(e, t) {
 		let n = e.meta;
-		u.meters === 0 || n?.internal === !0 || (n !== void 0 && u.samples !== 0 ? s.record(u, n.id, t.meta?.id, Date.now(), void 0, void 0) : u.seq++);
+		u.meters !== 0 && n?.internal !== !0 && (n !== void 0 && u.samples !== 0 ? s.record(u, n.id, t.meta?.id, Date.now(), void 0, void 0) : u.seq++);
 	},
 	write(e, t, n, r) {
 		let i = e.meta;
-		d.meters === 0 || i?.internal === !0 || (i !== void 0 && d.samples !== 0 ? s.record(d, i.id, t, n, r?.meta?.id, Date.now()) : d.seq++);
+		d.meters !== 0 && i?.internal !== !0 && (i !== void 0 && d.samples !== 0 ? s.record(d, i.id, t, n, r?.meta?.id, Date.now()) : d.seq++);
 	},
 	compute(e) {
 		f.meters !== 0 && e.meta?.internal !== !0 && f.seq++;

@@ -1,5 +1,5 @@
-import { c as e } from "../loom-CopJ8Xrb.js";
-import { t } from "../media-read-BZtS38Cs.js";
+import { c as e } from "../loom-cYHyKCVV.js";
+import { t } from "../media-read-IRL93iu1.js";
 //#region src/dom/scroll-fade.ts
 var n = 4, r = "(prefers-reduced-motion: reduce)", i = "--loom-scroll-fade-start", a = "--loom-scroll-fade-end", o = /* @__PURE__ */ new WeakSet();
 function s() {
@@ -35,7 +35,7 @@ function c(o, c = {}) {
 		});
 	}, j = () => {
 		let e = u ? o.scrollLeft : o.scrollTop, t = u ? o.scrollWidth - o.clientWidth : o.scrollHeight - o.clientHeight, r = e > n ? l : 0, s = t - e > n ? l : 0;
-		r === S && s === C || (r !== S && (w = A(i, r, S, w)), s !== C && (T = A(a, s, C, T)), S = r, C = s);
+		(r !== S || s !== C) && (r !== S && (w = A(i, r, S, w)), s !== C && (T = A(a, s, C, T)), S = r, C = s);
 	};
 	o.addEventListener("scroll", j, { passive: !0 });
 	let M = new ResizeObserver(j);

@@ -303,7 +303,7 @@ function ve(e) {
 	};
 }
 function ye(e) {
-	return e.flags === 0 ? !1 : (e.directPausedCount = (e.directPausedCount ?? 0) + 1, e.pausedCount = (e.pausedCount ?? 0) + 1, !0);
+	return e.flags !== 0 && (e.directPausedCount = (e.directPausedCount ?? 0) + 1, e.pausedCount = (e.pausedCount ?? 0) + 1, !0);
 }
 function be(e) {
 	if (e.flags === 0) return !1;
@@ -605,7 +605,7 @@ function Ie(e, t) {
 	n !== void 0 && (y(n, r > 0), i === 0 && !s && a < o && K());
 }
 function Le() {
-	let e = this.flags, t = (e & 16) != 0;
+	let e = this.flags, t = !!(e & 16);
 	if (!t && e & 32 && (t = se(this.deps, this), t || (this.flags = e & -33)), t) {
 		if (U(this)) {
 			let e = this.subs;
@@ -684,8 +684,8 @@ function G(e) {
 		}
 		let s = e.meta;
 		return s && s.runs++, m?.effect(e), s === void 0 || s.internal !== !0;
-	} else e.deps !== void 0 && (e.flags = 2 | t & 64);
-	return !1;
+	}
+	return e.deps !== void 0 && (e.flags = 2 | t & 64), !1;
 }
 function K() {
 	if (s) return;
