@@ -6,3 +6,6 @@ packages:
 # '!esbuild'`) keeps fresh installs (CI) from hard-erroring with ERR_PNPM_IGNORED_BUILDS.
 allowBuilds:
   esbuild: false
+
+minimumReleaseAgeExclude:
+  - vite@8.2.1
