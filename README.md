@@ -368,7 +368,7 @@ arrives**:
 | --- | --- | --- |
 | a value you can read at any time | `poll(sample, ms)` | pull — loom samples it on an interval |
 | a producer that pushes values | `source(connect, initial)` | push — connects while observed |
-| an async request/response | `resource(fetcher)` ([loom/async](#async-resources)) | request — loading/error as reads |
+| an async request/response | `resource(fetcher)` ([loom/async](#async-resources)) | request — loading/ready/error as reads |
 | discrete events to count or sample | `channel` + `meter` | events — gated ring, pull-drained |
 
 The pull bridge, `poll`, suits values that always exist and merely change —
@@ -411,7 +411,7 @@ bridge (async fetches with loading/error state) see
 ### Async resources
 
 `loom/async` is a small opt-in entrypoint (~0.3 kB gzip; costs nothing unless
-imported) for async data with fine-grained loading and error state:
+imported) for async data with fine-grained loading, readiness, and error state:
 
 - `resource(fetcher, options?)` (returns a `Resource<T>` handle) is an async computed: it runs
   `fetcher(previous, signal)` immediately and again whenever the fetcher's
@@ -422,11 +422,27 @@ imported) for async data with fine-grained loading and error state:
   obsolete request is cancelled on the wire, not just ignored, and its abort
   rejection never surfaces through `error()`. The returned handle is itself
   callable — with `const r = resource(...)`: `r()` reads the latest value
-  (`undefined` until the first settle), `r.loading()` and `r.error()` are
-  fine-grained reads, `r.refresh()` forces a refetch, and `r.stop()` disposes
-  (a resource created inside a scope stops with the scope). While a fetch is in
-  flight the previous value stays readable (stale-while-revalidate), and a
-  response that lands after a newer fetch started is dropped.
+  (`undefined` until the first settle), `r.loading()`, `r.ready()`, and
+  `r.error()` are fine-grained reads, `r.refresh()` forces a refetch, and
+  `r.stop()` disposes (a resource created inside a scope stops with the scope).
+  While a fetch is in flight the previous value stays readable
+  (stale-while-revalidate), and a response that lands after a newer fetch
+  started is dropped.
+- `loading` and `ready` answer different questions. `loading()` is true while
+  any fetch is in flight — initially and on every refetch. `ready()` is false
+  until the first fetch **succeeds**, then permanently true — so `!r.ready()`
+  selects the skeleton shown only before the first data, while later refetches
+  hold the stale value instead of flashing the fallback. A first-fetch
+  rejection leaves `ready()` false (there is still nothing to show); the next
+  success flips it. Pausing an owning scope suspends refetches but doesn't
+  abort an in-flight fetch (unlike a `source()`'s producer, which disconnects
+  on pause): the fetch settles and can flip `ready()` while paused — a hidden
+  panel's skeleton resolves to content, and consumers catch up on resume.
+- `pending(...resources)` returns a `Read<boolean>` that is true while any of
+  the given resources has a fetch in flight — the aggregate `loading` for
+  dimming a stale pane or disabling a submit that spans several requests. It's
+  a plain derived read (like `writable`), not a node; wrap it in `computed` if
+  a large fan-out wants value-deduped re-runs.
 
 ```ts
 import { effect, state } from "loom";
@@ -440,8 +456,8 @@ const users = resource((_previous, signal) =>
 );
 
 effect(() => {
-  if (users.loading()) return renderSpinner();
-  renderList(users() ?? []);
+  if (!users.ready()) return renderSkeleton(); // only before the first data
+  renderList(users() ?? [], { dimmed: users.loading() }); // refetch: hold the list, dim it
 });
 
 page(2); // tracked read changed -> refetch; the page-1 request aborts, stale list stays visible

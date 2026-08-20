@@ -99,7 +99,8 @@ declare global {
   const render: (value: unknown) => void;
   const apply: (value: unknown) => void;
   const renderSpinner: () => void;
-  const renderList: (items: unknown) => void;
+  const renderSkeleton: () => void;
+  const renderList: (items: unknown, options?: { dimmed?: boolean }) => void;
   const clampIntoView: () => void;
   const savePosition: () => void;
   const measureAndClassify: (el: Node) => void;

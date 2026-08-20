@@ -20,6 +20,13 @@ export interface Resource<T> {
   (): T | undefined;
   /** True from fetch start to settle — initially and on every refetch. */
   readonly loading: Read<boolean>;
+  /**
+   * False until the first fetch **succeeds**, then permanently true. The initial-readiness
+   * question, distinct from `loading` (which is true again on every refetch): `!ready()` selects
+   * the skeleton shown only before the first data, while later refetches hold the stale value.
+   * A first-fetch rejection leaves it false — the next success flips it.
+   */
+  readonly ready: Read<boolean>;
   /** The last rejection; cleared by the next successful settle. */
   readonly error: Read<unknown>;
   /** Start a new fetch now (one also starts whenever the fetcher's tracked reads change). */
@@ -36,7 +43,9 @@ export interface Resource<T> {
  * forward it to `fetch()` and the obsolete request is cancelled, not just ignored. While a fetch
  * is in flight the previous value and error stay readable (stale-while-revalidate); a late
  * response from an aborted or superseded fetch never clobbers newer state, and its abort rejection
- * never surfaces through `error()`.
+ * never surfaces through `error()`. Pausing an owning scope suspends refetches but does NOT abort
+ * the in-flight fetch (unlike a `source()`'s producer, which disconnects on pause): it settles,
+ * writes, and can flip `ready()` while paused — consumers catch up on resume.
  */
 export function resource<T>(
   fetcher: (previous: T | undefined, signal: AbortSignal) => Promise<T>,
@@ -44,6 +53,7 @@ export function resource<T>(
 ): Resource<T> {
   const value: State<T | undefined> = state<T | undefined>(undefined, options);
   const loading = state(true, options);
+  const ready = state(false, options); // first-success latch; never resets (see Resource.ready)
   const error = state<unknown>(undefined, options);
   const pulse = state(0, options); // refresh()'s handle: a tracked dep the effect re-runs on
 
@@ -70,6 +80,7 @@ export function resource<T>(
           value(next);
           error(undefined);
           loading(false);
+          ready(true);
         });
       },
       (rejection) => {
@@ -90,10 +101,23 @@ export function resource<T>(
 
   return Object.assign(() => value(), {
     loading: () => loading(),
+    ready: () => ready(),
     error: () => error(),
     refresh: () => {
       trigger(pulse);
     },
     stop,
   });
+}
+
+/**
+ * True while any of the given resources has a fetch in flight — the aggregate `loading` for
+ * dimming a stale pane or disabling a submit that spans several requests. A plain derived read
+ * (like `writable`), not a node: use it directly in an effect or binding; wrap it in `computed`
+ * if a large fan-out wants value-deduped re-runs.
+ */
+export function pending(
+  ...resources: ReadonlyArray<Pick<Resource<unknown>, "loading">>
+): Read<boolean> {
+  return () => resources.some((r) => r.loading());
 }
