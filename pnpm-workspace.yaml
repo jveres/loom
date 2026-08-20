@@ -8,4 +8,4 @@ allowBuilds:
   esbuild: false
 
 minimumReleaseAgeExclude:
-  - vite@8.2.1
+  - vite@8.2.1 || 8.2.2

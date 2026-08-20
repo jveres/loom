@@ -94,12 +94,12 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.7",
-    "@types/node": "^26.1.2",
+    "@biomejs/biome": "2.5.9",
+    "@types/node": "^26.2.0",
     "alien-signals": "3.2.1",
     "idiomorph": "^0.7.4",
     "typescript": "7.0.2",
-    "vite": "8.2.1",
-    "vitest": "^4.1.10"
+    "vite": "8.2.2",
+    "vitest": "^4.1.11"
   }
 }

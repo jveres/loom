@@ -1,7 +1,7 @@
 import { S as e, T as t, b as n, g as r, i, x as a } from "./loom-cYHyKCVV.js";
 import { a as o, i as s, n as c, o as l, r as u } from "./observe-B9Nzeys1.js";
-import { h as ee, l as d, m as te, n as ne, t as re, v as ie, y as f } from "./dom-DomlHJtJ.js";
-import { s as p } from "./ownership-base-v6hz88HI.js";
+import { h as ee, l as d, m as te, n as ne, t as re, v as ie, y as f } from "./dom-Ced7YgNl.js";
+import { s as p } from "./ownership-base-D5Jdu92o.js";
 import { virtualList as m } from "./dom/virtual-list.js";
 import "./defer.js";
 import { scrollFade as ae } from "./dom/scroll-fade.js";
@@ -95,10 +95,12 @@ function w(e) {
 		if (e === void 0 || n.has(e)) continue;
 		n.add(e);
 		let r = x.get(e);
-		if (r) if (r.kind === "effect") {
-			let e = r.target;
-			(e instanceof Element || e instanceof CharacterData) && t.push(e);
-		} else for (let e of r.subs) i.push(e);
+		if (r) {
+			if (r.kind === "effect") {
+				let e = r.target;
+				(e instanceof Element || e instanceof CharacterData) && t.push(e);
+			} else for (let e of r.subs) i.push(e);
+		}
 	}
 	return t;
 }
@@ -250,10 +252,12 @@ function at() {
 	let e = o({ active: !0 }).nodes;
 	x = new Map(e.map((e) => [e.id, e])), ke = performance.now();
 	let t = /* @__PURE__ */ new Map(), n = [];
-	for (let r of e) if (!(r.internal || r.kind === "effect")) if (r.group !== void 0) {
-		let e = t.get(r.group);
-		e ? e.push(r) : t.set(r.group, [r]);
-	} else n.push(r);
+	for (let r of e) if (!(r.internal || r.kind === "effect")) {
+		if (r.group !== void 0) {
+			let e = t.get(r.group);
+			e ? e.push(r) : t.set(r.group, [r]);
+		} else n.push(r);
+	}
 	Ae = [];
 	for (let [e, n] of t) n.sort((e, t) => (e.key ?? e.label).localeCompare(t.key ?? t.label)), Ae.push({
 		gid: e,

@@ -13,19 +13,21 @@ function a(e, t, n) {
 	let a;
 	for (let e = r.length - 1; e >= 0; e--) {
 		let o = r[e], c = o[i];
-		if (c) if (n && (o[i] = void 0), Array.isArray(c)) {
-			for (let e of c) if (!(s(e) && !e.active)) try {
-				t(e);
-			} catch (e) {
-				a === void 0 ? a = [e] : a.push(e);
-			}
-		} else {
-			let e = c;
-			if (s(e) && !e.active) continue;
-			try {
-				t(e);
-			} catch (e) {
-				a === void 0 ? a = [e] : a.push(e);
+		if (c) {
+			if (n && (o[i] = void 0), Array.isArray(c)) {
+				for (let e of c) if (!(s(e) && !e.active)) try {
+					t(e);
+				} catch (e) {
+					a === void 0 ? a = [e] : a.push(e);
+				}
+			} else {
+				let e = c;
+				if (s(e) && !e.active) continue;
+				try {
+					t(e);
+				} catch (e) {
+					a === void 0 ? a = [e] : a.push(e);
+				}
 			}
 		}
 	}
