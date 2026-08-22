@@ -249,15 +249,19 @@ var Te = /* @__PURE__ */ new WeakMap();
 function Ee(e, t, n = {}) {
 	let r = Te.get(e);
 	r || (r = {
-		openHeight: 0,
 		settling: !1,
 		stop: null
 	}, Te.set(e, r));
 	let i = r.settling;
-	if (r.stop?.(), r.settling = !0, n.onStart?.(t), t) e.hidden = !1, r.openHeight <= 0 && (e.style.height = "", r.openHeight = e.offsetHeight), e.style.height = "0px", e.offsetHeight, e.style.height = `${r.openHeight}px`;
-	else {
+	if (r.stop?.(), r.settling = !0, n.onStart?.(t), t) {
+		e.hidden = !1;
+		let t = i ? e.offsetHeight : 0;
+		e.style.height = "";
+		let n = e.offsetHeight;
+		e.style.height = `${t}px`, e.offsetHeight, e.style.height = `${n}px`;
+	} else {
 		let t = e.offsetHeight;
-		r.openHeight = i ? 0 : t, e.style.height = `${t}px`, e.offsetHeight, e.style.height = "0px";
+		e.style.height = `${t}px`, e.offsetHeight, e.style.height = "0px";
 	}
 	r.stop = k(e, "height", () => {
 		r.settling = !1, r.stop = null, t ? e.style.height = "" : e.hidden = !0, n.onSettle?.(t);

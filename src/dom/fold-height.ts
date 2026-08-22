@@ -28,7 +28,6 @@ export interface FoldHeightOptions {
 }
 
 interface FoldState {
-  openHeight: number;
   settling: boolean;
   stop: (() => void) | null;
 }
@@ -42,7 +41,7 @@ export function foldHeight(
 ): void {
   let fold = folds.get(el);
   if (!fold) {
-    fold = { openHeight: 0, settling: false, stop: null };
+    fold = { settling: false, stop: null };
     folds.set(el, fold);
   }
   const interrupted = fold.settling;
@@ -52,17 +51,20 @@ export function foldHeight(
 
   if (open) {
     el.hidden = false;
-    if (fold.openHeight <= 0) {
-      el.style.height = "";
-      fold.openHeight = el.offsetHeight;
-    }
-    el.style.height = "0px";
+    // ALWAYS measure the open height at auto: the content may have
+    // changed while folded (a panel collapsed over one pane and
+    // re-opened over another animated to a STALE cached height,
+    // then snapped to auto on settle — the cache is gone). An
+    // interrupted fold resumes from where it stands; a fresh open
+    // starts at 0.
+    const from = interrupted ? el.offsetHeight : 0;
+    el.style.height = "";
+    const to = el.offsetHeight;
+    el.style.height = `${from}px`;
     void el.offsetHeight;
-    el.style.height = `${fold.openHeight}px`;
+    el.style.height = `${to}px`;
   } else {
     const from = el.offsetHeight;
-    // An interrupt's height is a partial — poison, not a cache.
-    fold.openHeight = interrupted ? 0 : from;
     el.style.height = `${from}px`;
     void el.offsetHeight;
     el.style.height = "0px";

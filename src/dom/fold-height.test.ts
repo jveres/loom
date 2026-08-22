@@ -39,25 +39,20 @@ describe("foldHeight", () => {
     expect(el.hidden).toBe(true);
   });
 
-  it("the SECOND expand rides the height cached at collapse — no measure-at-auto", async () => {
-    let reads = 0;
-    const el = box(() => {
-      reads++;
-      return 120;
-    });
+  it("EVERY expand measures at auto — content that changed while folded animates to its NEW height (no cache to go stale)", async () => {
+    let height = 120;
+    const el = box(() => height);
     foldHeight(el, true);
     await microtask();
-    foldHeight(el, false); // caches 120
+    foldHeight(el, false); // folded over 120px of content
     await microtask();
-    const before = reads;
+    height = 300; // the content changed while folded
     foldHeight(el, true);
-    expect(el.style.height).toBe("120px");
-    // ONE read only — the 0px reflow kick; the expensive
-    // measure-at-AUTO (full layout at natural height) is skipped.
-    expect(reads).toBe(before + 1);
+    // A cached 120 would animate short and snap to auto on settle.
+    expect(el.style.height).toBe("300px");
   });
 
-  it("an INTERRUPTED collapse drops the cache — the next expand re-measures at auto", async () => {
+  it("an INTERRUPTED collapse never poisons the next expand — it measures at auto", async () => {
     let height = 120;
     const el = box(() => height);
     // happy-dom computes longhands only.
@@ -72,7 +67,7 @@ describe("foldHeight", () => {
 
     height = 120; // the real open height again
     foldHeight(el, true);
-    // A poisoned cache would animate to 47; the re-measure finds 120.
+    // A partial would animate to 47; the measure finds 120.
     expect(el.style.height).toBe("120px");
     vi.useRealTimers();
   });
