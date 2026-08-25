@@ -10,6 +10,5 @@ export declare function unsafeHtml(value: string): Html;
 export declare function html(strings: TemplateStringsArray, ...values: readonly HtmlChild[]): Html;
 export declare function renderToString(value: HtmlChild): string;
 export declare function isHtml(value: unknown): value is Html;
-export declare function escapeText(value: string): string;
-export declare function escapeAttribute(value: string): string;
-export {};
+export { type SerializeAttributesOptions, serializeAttributes, } from "./attributes.js";
+export { escapeAttribute, escapeText } from "./escape.js";

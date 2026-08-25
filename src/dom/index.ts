@@ -1305,9 +1305,18 @@ export {
 export { type PressClassOptions, pressClass } from "./press-class.js";
 export { pressed } from "./pressed.js";
 export {
+  nearestScroller,
+  type RevealOptions,
+  reveal,
+  scrollCentered,
+  scrollNearest,
+  scrollParent,
+} from "./reveal.js";
+export {
   type ScrollEdges,
   type ScrollEdgesOptions,
   scrollEdges,
 } from "./scroll-edges.js";
+export { type ScrollMemory, scrollMemory } from "./scroll-memory.js";
 export { settleAnimation } from "./settle-animation.js";
 export { settleTransition } from "./settle-transition.js";

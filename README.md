@@ -939,6 +939,54 @@ gradient rather than none — clearing it would flip the element off the masked
 raster path and the next fade-in flashes for a frame. The dev inspector's own
 scrollers use a 120 ms transition.
 
+#### Scroll reveal and memory
+
+The REVEAL law: scroll the BOX only. `scrollIntoView` scrolls every
+scrollable ancestor, and any ancestor with slack yanks the page — with the
+browser zoomed the window itself gains scroll range, and selecting a row
+scrolls the whole app away. These touch one scroller's `scrollTop` and
+nothing else:
+
+- `scrollParent(el)` — the nearest `overflow: auto|scroll` ancestor, never
+  the body or the document. `nearestScroller(el)` — the nearest one WITH
+  slack (the box a reveal can meaningfully move); `null` when nothing above
+  scrolls, and then not scrolling is the law.
+- `scrollNearest(box, el)` — `scrollIntoView`'s "nearest": the minimal
+  scroll that shows `el` (taller-than-box aligns its nearer edge).
+  `scrollCentered(box, el)` lands the eye on it.
+- `reveal(el, options?)` — the composed verb. `scroller` is an element, a
+  `closest()` selector, or (default) the nearest with slack; `align` is
+  `"nearest"` (default) or `"center"`; `ifHidden` moves only when NO sliver
+  of `el` shows in the scrollport — a visible element must never move (a
+  taller-than-viewport one would otherwise snap on every reveal). Returns
+  whether a scroller was found; a caller that must degrade to the window
+  does so knowingly on `false`.
+- `scrollMemory(host, cellFor)` — keyed scroll-position memory over ONE
+  scroll host whose content is swapped per key (a pane body): the host's
+  scroll listener persists into `cellFor(key)`, `restore(key)` stamps the
+  new key and puts its position back after your synchronous swap. The
+  restore-window guard is built in: the swap's clamp-to-0 scroll event can
+  land BEFORE the restore microtask (WebKit), so persistence is suspended
+  from the stamp to one frame after the restore write. Dies with the host.
+
+```ts
+import { keyedStates } from "loom";
+import { reveal, scrollMemory } from "loom/dom";
+
+const pane = document.querySelector<HTMLElement>(".pane");
+const view = keyedStates({ label: "view" });
+if (pane) {
+  const memory = scrollMemory(pane, (key) => view.cell(`scroll:${key}`, 0));
+  const show = (key: string, content: Node): void => {
+    pane.replaceChildren(content);
+    memory.restore(key);
+  };
+  show("home", document.createTextNode("…"));
+  const selected = pane.querySelector(".is-selected");
+  if (selected) reveal(selected, { scroller: pane, ifHidden: true });
+}
+```
+
 #### Transitions and folds
 
 - `settleTransition(el, property, onSettle)` — wait for a css transition on
@@ -1039,6 +1087,7 @@ relayout(500); // same key: nothing rebuilt
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
 | `connected`, `mediaRead`, `persisted`, `codecs`, `pressed`, `pressClass`, `hovered`, `focusWithin`, `listen`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
+| `reveal`, `scrollParent`, `nearestScroller`, `scrollNearest`, `scrollCentered`, `scrollMemory` | [Scroll reveal and memory](#scroll-reveal-and-memory) |
 | `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
@@ -1047,6 +1096,7 @@ Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX acc
 `ResourceGroup`,
 `PersistedOptions` (adds `storage` to override the backing `Storage`),
 `PressClassOptions`, `BindValueOptions`, `ScrollEdges`/`ScrollEdgesOptions`,
+`RevealOptions`, `ScrollMemory`,
 `ListOptions`, `SvgTagName`, the binding handles
 `AttrBinding`/`ClassBinding`/`StyleBinding`/`DynamicChild`, `MorphOptions`,
 `ScrollFadeOptions`, `SizeCallback`,
@@ -1069,7 +1119,7 @@ Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX acc
   first argument and arity, as with a signal: read without a value,
   write with one).
 - **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,
-  `morph`, `virtualList`. Verb- or noun-accurate names, camelCase when
+  `morph`, `virtualList`, `scrollMemory`; one-shot verbs stay verbs (`reveal`). Verb- or noun-accurate names, camelCase when
   multiword. Widgets and standalone behaviors are subpath entrypoints
   (`loom/dom/virtual-list`, `loom/dom/scroll-fade`); the `loom/dom` barrel
   holds rendering, binding, lifecycle, and browser state.
@@ -1635,6 +1685,21 @@ The `loom/html` entrypoint exports:
 - `isHtml(value)` is the type guard for an `Html` node.
 - `escapeText(value)` / `escapeAttribute(value)` are the underlying escapers, for
   hand-built markup.
+- `serializeAttributes(attrs, options?)` serializes an attribute bag with the
+  JSX runtime's own rule — valid names only, nullish/`false` drop (aria-*
+  keeps `"false"`), `true` renders bare, `on*` handlers and `key` drop,
+  unsafe URL schemes are refused, `class` arrays/maps and `style` objects
+  normalize — joined with a LEADING space so it drops straight after a tag
+  name (`""` when nothing renders). `{ dev: true, tag }` warns on the two
+  drops that usually mean a bug. For hand-built markup (a highlighter's
+  token spans) that must not carry a second copy of the name rule.
+
+```ts
+import { serializeAttributes } from "loom/html";
+
+const span = `<span${serializeAttributes({ class: ["tok", "kw"], "data-line": 3 })}>let</span>`;
+// <span class="tok kw" data-line="3">let</span>
+```
 - `Html` and `HtmlChild` are the node types.
 
 Use these entrypoints for static HTML JSX:

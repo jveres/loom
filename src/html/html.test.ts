@@ -5,6 +5,7 @@ import {
   html,
   isHtml,
   renderToString,
+  serializeAttributes,
   unsafeHtml,
 } from "./index.js";
 
@@ -56,5 +57,28 @@ describe("loom html", () => {
     expect(escapeText(`&<>"'`)).toBe("&amp;&lt;&gt;&quot;&#39;");
     expect(escapeAttribute(`&<>"'`)).toBe("&amp;&lt;&gt;&quot;&#39;");
     expect(escapeText("plain text")).toBe("plain text");
+  });
+});
+
+describe("serializeAttributes", () => {
+  it("renders with the JSX rule: leading-space join, bare booleans, drops, escaping", () => {
+    expect(
+      serializeAttributes({
+        class: ["a", { b: true, c: false }],
+        "data-x": 'q"uote',
+        hidden: true,
+        checked: false,
+        "aria-pressed": false,
+        title: null,
+        onclick: () => {},
+        key: "k",
+        "bad name": 1,
+        href: "javascript:alert(1)",
+        style: { color: "red", "--gap": 4 },
+      }),
+    ).toBe(
+      ' class="a b" data-x="q&quot;uote" hidden aria-pressed="false" style="color:red;--gap:4"',
+    );
+    expect(serializeAttributes({ x: null })).toBe("");
   });
 });
