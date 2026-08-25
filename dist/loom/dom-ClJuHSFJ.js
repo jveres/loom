@@ -752,7 +752,7 @@ function at(e, t, n) {
 	}, m = (t) => {
 		t.target === e && (n === void 0 || t.animationName === n) && p();
 	};
-	return d = h(e, f), o ? (e.addEventListener("animationend", m), e.addEventListener("animationcancel", m), c > 0 && (u = setTimeout(p, c + 50)), f) : (queueMicrotask(p), f);
+	return d = h(e, f), e.addEventListener("animationend", m), e.addEventListener("animationcancel", m), o ? (c > 0 && (u = setTimeout(p, c + 50)), f) : (queueMicrotask(p), f);
 }
 //#endregion
 //#region src/dom/index.ts

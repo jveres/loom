@@ -68,14 +68,17 @@ export function settleAnimation(
   };
 
   stopUnmount = onUnmount(el, cleanup);
+  // The events are ALWAYS heard — an end that lands before the
+  // no-animation microtask (a computed read that lags the class
+  // write, a synthetic event) settles the wait honestly.
+  el.addEventListener("animationend", onEvent);
+  el.addEventListener("animationcancel", onEvent);
   if (!running) {
     // Nothing will animate — settle on a microtask (never
     // synchronously: callers finish their own writes first).
     queueMicrotask(settle);
     return cleanup;
   }
-  el.addEventListener("animationend", onEvent);
-  el.addEventListener("animationcancel", onEvent);
   // An infinite animation settles only through its events (or a stop).
   if (wait > 0) timer = setTimeout(settle, wait + 50);
   return cleanup;

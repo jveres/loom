@@ -24,6 +24,13 @@ describe("settleAnimation", () => {
     expect(settled).not.toHaveBeenCalled(); // never synchronous
     await microtask();
     expect(settled).toHaveBeenCalledOnce();
+    // An end arriving BEFORE the microtask settles once, honestly.
+    const early = vi.fn();
+    settleAnimation(el, early);
+    el.dispatchEvent(animationEvent("animationend", "any"));
+    expect(early).toHaveBeenCalledOnce();
+    await microtask();
+    expect(early).toHaveBeenCalledOnce();
   });
 
   it("settles on animationend for THE named animation, exactly once", () => {
