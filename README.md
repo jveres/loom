@@ -239,9 +239,10 @@ deferred-lane scheduler ([Deferred effects](#deferred-effects)).
 | --- | --- |
 | `state`, `computed`, `effect`, `batch`, `untrack` | [Core primitives](#core-primitives) |
 | `update`, `watch` | [Deriving and reacting](#deriving-and-reacting) |
-| `settle` (`loom/settle`) | [Settled changes](#settled-changes) |
+| `settle`, `settled`, `quietTask` (`loom/settle`) | [Settled changes](#settled-changes) |
 | `mutate`, `trigger` | [In-place mutation](#in-place-mutation) |
-| `writable` | [Derived writable (recipe)](#derived-writable-recipe) |
+| `writable`, `lens` | [Derived writable (recipe)](#derived-writable-recipe) |
+| `keyedStates`, `revisions`, `runtimeSlot` | [Keyed state](#keyed-state) |
 | `props` | [Object properties](#object-properties) |
 | `poll`, `source` | [External data](#external-data) |
 | `scope` | [Scopes](#scopes) |
@@ -254,7 +255,8 @@ Types: `State<T>` (callable read/write signal), `Read<T>`, `Stop`, `Scope`,
 `Props<T>` (string keys to `State<T[K]>`), `NodeInfo` (`id`/`kind`/`label`,
 what an `onError` boundary receives), `NodeKind`, `NodeOptions`
 (`{ internal, label }`), `EffectOptions` (adds `{ target, defer, maxStale }`),
-`DeferScheduler`.
+`DeferScheduler`, `KeyedStates`, `Revisions`/`RevisionsOptions` (adds
+`separator`).
 
 Pass `{ label }` to `state`, `computed`, `effect`, or `props` when you want
 meaningful names in tooling. Pass `{ internal: true }` for Loom-owned tooling
@@ -312,6 +314,66 @@ const treeVersion = settled(refreshRequest, 120);
 // bind(list, () => rebuild(treeVersion())) — rebuilds settle off typing.
 update(refreshRequest, (n) => n + 1);
 treeVersion.flush(); // structural ops apply NOW
+```
+
+When the settled thing is a **task** — run once after a quiet period,
+whatever kicked it — `quietTask(run, ms, options?)` owns the
+revision-counter-feeding-settle ceremony: `kick()` marks work pending and
+restarts the window, `cancel()` discards pending work (later kicks schedule
+again), `flush()` runs it now, `stop()` is terminal. A dirty compare, a
+history refresh, a save-after-typing each own only their `run`. Type:
+`QuietTask` (a `Settlement` with `kick`).
+
+```ts
+import { quietTask } from "loom/settle";
+
+const save = quietTask(() => console.log("saved"), 400);
+save.kick();
+save.kick(); // one save, 400 ms after the last kick
+```
+
+### Keyed state
+
+Three helpers for state that is addressed by NAME rather than held in a
+closure:
+
+- `keyedStates(options?)` — identity-keyed state that survives rebuilds:
+  a pane torn down and rebuilt around the same entity asks
+  `cell("fold:" + id, false)` and gets the cell it had. Cells are created
+  on first touch, seeded with the authored default; a factory initial
+  (`cell(key, () => persisted(...))`) supplies any State-shaped cell, so a
+  persisted one composes. `prune(match)` drops a dying identity's cells (a
+  string matches keys containing it, a predicate decides per key) and
+  returns the count; `has(key)` asks without creating.
+- `revisions(options?)` — a keyed revision bus with ancestor-path
+  semantics: `read(path)` is a tracked read of the path's revision,
+  `invalidate(...paths)` bumps each path and its dotted ancestors up to the
+  root `""`, batched and de-duplicated so every dependent runs once. A
+  reader of `"a.b"` re-runs for writes at `"a.b"` or `"a.b.c"`, never for
+  `"a.x"`; a root reader re-runs for everything. The one-key "document
+  version" is `read("")` / `invalidate("")`. `separator` changes the path
+  grammar.
+- `runtimeSlot(name, init)` — one value per runtime for a name, whatever
+  module instance asks: keyed by `Symbol.for` on `globalThis`, so a module
+  duplicated by HMR or a dual-bundle page still shares the registry (an
+  active-drag set, an owner map). `init` runs once.
+
+```ts
+import { effect, keyedStates, revisions, runtimeSlot } from "loom";
+
+const view = keyedStates({ label: "view" });
+const fold = view.cell("fold:intro", false);
+fold(true);
+view.cell("fold:intro", false)() === true; // the rebuilt pane's ask
+
+const doc = revisions({ label: "doc" });
+effect(() => {
+  doc.read("pages.home"); // re-runs for pages.home.* writes only
+});
+doc.invalidate("pages.home.title");
+
+const drags = runtimeSlot("app.activeDrags", () => new Set<number>());
+drags.add(1);
 ```
 
 ### Object properties
@@ -1254,6 +1316,19 @@ const typeLabel = writable(
   () => type() ?? "All",
   (next) => type(next === "All" ? null : next),
 );
+```
+
+`lens(source, key)` is the recipe over ONE MEMBER of a record or tuple
+signal: it reads `source()[key]` (tracked) and writes a copy of the source
+with the member replaced — the source's identity moves, so dependents of
+the whole record re-run; an equal member is a no-op write.
+
+```ts
+import { lens, state } from "loom";
+
+const settings = state({ theme: "light", width: 280 });
+const theme = lens(settings, "theme");
+theme("dark"); // settings() is now a new { theme: "dark", width: 280 }
 ```
 
 #### Keyed rows with per-row state

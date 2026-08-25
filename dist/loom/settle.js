@@ -1,9 +1,9 @@
-import { D as e, S as t, T as n, v as r } from "./loom-cYHyKCVV.js";
+import { D as e, E as t, S as n, T as r, v as i } from "./loom-cYHyKCVV.js";
 //#region src/settle.ts
-var i = (e, t) => e === t;
-function a(t, a, o, s) {
+var a = (e, t) => e === t;
+function o(t, n, o, s) {
 	if (!Number.isFinite(o) || o < 0) throw RangeError("settle() delay must be a finite, non-negative number.");
-	let c = s?.equals ?? i, l = !0, u, d, f, p = !1, m = !1, h = !1, g, _ = () => {
+	let c = s?.equals ?? a, l = !0, u, d, f, p = !1, m = !1, h = !1, g, _ = () => {
 		g !== void 0 && (clearTimeout(g), g = void 0);
 	}, v = () => {
 		h || (p = !1, _());
@@ -11,7 +11,7 @@ function a(t, a, o, s) {
 		if (h || m || !p) return;
 		_(), p = !1;
 		let e = f, t = d;
-		d = e, n(() => a(e, t));
+		d = e, r(() => n(e, t));
 	}, b = () => {
 		_(), g = setTimeout(() => {
 			g = void 0, y();
@@ -32,7 +32,7 @@ function a(t, a, o, s) {
 		f = e, p = !0, m || b();
 	}, s), S = () => {
 		h || (h = !0, p = !1, _(), x());
-	}, C = r({
+	}, C = i({
 		pause: () => {
 			m = !0, _();
 		},
@@ -49,8 +49,8 @@ function a(t, a, o, s) {
 		flush: y
 	};
 }
-function o(e, o, s) {
-	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = t(n(e), l), f = a(e, (e) => d(e), o, s), p = !1, m = !1, h = r({
+function s(e, t, s) {
+	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? a, d = n(r(e), l), f = o(e, (e) => d(e), t, s), p = !1, m = !1, h = i({
 		pause: () => {
 			m = !0;
 		},
@@ -65,13 +65,25 @@ function o(e, o, s) {
 		flush: () => {
 			if (p || m) return;
 			f.flush();
-			let t = n(e);
-			u(t, n(() => d())) || d(t);
+			let t = r(e);
+			u(t, r(() => d())) || d(t);
 		},
 		stop: () => {
 			p = !0, f.stop(), h();
 		}
 	});
 }
+function c(e, r, i) {
+	let a = n(0, i), s = o(a, () => e(), r, {
+		...i?.label ? { label: `${i.label}.settle` } : {},
+		...i?.internal ? { internal: !0 } : {}
+	});
+	return {
+		kick: () => t(a, (e) => e + 1),
+		cancel: s.cancel,
+		flush: s.flush,
+		stop: s.stop
+	};
+}
 //#endregion
-export { a as settle, o as settled };
+export { c as quietTask, o as settle, s as settled };

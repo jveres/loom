@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { scope, state, watch } from "./loom.js";
-import { type Settlement, settle, settled } from "./settle.js";
+import { quietTask, type Settlement, settle, settled } from "./settle.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -382,5 +382,34 @@ describe("loom settled flush honors the settlement's lifecycle", () => {
     // a semantically unchanged value.
     expect(lagging()).toBe(first);
     lagging.stop();
+  });
+});
+
+describe("quietTask", () => {
+  it("runs once after ms of quiet since the last kick; cancel discards, flush runs now", () => {
+    vi.useFakeTimers();
+    const run = vi.fn();
+    const task = quietTask(run, 100, { label: "test.quiet" });
+    task.kick();
+    vi.advanceTimersByTime(80);
+    task.kick(); // restarts the window
+    vi.advanceTimersByTime(80);
+    expect(run).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(20);
+    expect(run).toHaveBeenCalledOnce();
+
+    task.kick();
+    task.cancel();
+    vi.advanceTimersByTime(200);
+    expect(run).toHaveBeenCalledOnce();
+
+    task.kick();
+    task.flush();
+    expect(run).toHaveBeenCalledTimes(2);
+
+    task.stop();
+    task.kick();
+    vi.advanceTimersByTime(200);
+    expect(run).toHaveBeenCalledTimes(2);
   });
 });

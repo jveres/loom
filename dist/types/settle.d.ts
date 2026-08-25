@@ -40,3 +40,14 @@ export interface SettledState<T> extends Settlement {
  */
 export declare function settled<T>(read: State<T>, ms: number, options?: SettleOptions<T>): SettledState<T>;
 export declare function settled<T>(read: Read<T>, ms: number, options?: SettleOptions<T>): SettledState<T>;
+/** A quiet-period TASK: `run` once after `ms` without another `kick`.
+ *  The revision-counter-feeding-settle ceremony as one object — a
+ *  dirty compare, a history cache refresh, a save-after-typing all
+ *  own only their run. `cancel()` discards pending work (later kicks
+ *  schedule again), `flush()` runs pending work now, `stop()` is
+ *  terminal. */
+export interface QuietTask extends Settlement {
+    /** Mark work pending and (re)start the quiet window. */
+    kick(): void;
+}
+export declare function quietTask(run: () => void, ms: number, options?: NodeOptions): QuietTask;
