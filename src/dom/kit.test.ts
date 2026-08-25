@@ -16,7 +16,7 @@ import {
 import { observeIntersection } from "./observe-intersection.js";
 import { observeMutation } from "./observe-mutation.js";
 import { observeSize } from "./observe-size.js";
-import { persisted } from "./persisted.js";
+import { codecs, persisted } from "./persisted.js";
 
 describe("bind", () => {
   it("is effect + node lifetime + attribution in one call", () => {
@@ -218,6 +218,49 @@ describe("onMount", () => {
     await vi.waitFor(() => expect(mounted).toHaveBeenCalledWith(el));
     remove(el);
     iframe.remove();
+  });
+});
+
+describe("persisted codecs", () => {
+  it("boolean speaks the 1/0 dialect and refuses non-booleans", () => {
+    const pin = persisted("c1", false, codecs.boolean);
+    pin(true);
+    expect(localStorage.getItem("c1")).toBe("1");
+    expect(persisted("c1", false, codecs.boolean)()).toBe(true);
+    localStorage.setItem("c1", "yes");
+    expect(persisted("c1", false, codecs.boolean)()).toBe(false);
+  });
+
+  it("number keeps finite in-range values, else the initial", () => {
+    const width = persisted("c2", 280, codecs.number({ min: 100, max: 500 }));
+    width(320);
+    expect(localStorage.getItem("c2")).toBe("320");
+    expect(persisted("c2", 280, codecs.number({ min: 100, max: 500 }))()).toBe(
+      320,
+    );
+    localStorage.setItem("c2", "9000");
+    expect(persisted("c2", 280, codecs.number({ min: 100, max: 500 }))()).toBe(
+      280,
+    );
+    localStorage.setItem("c2", "abc");
+    expect(persisted("c2", 280, codecs.number())()).toBe(280);
+  });
+
+  it("string draws from the allowed set; unconstrained accepts any", () => {
+    const tabs = ["props", "style"] as const;
+    const tab = persisted("c3", "props", codecs.string(tabs));
+    tab("style");
+    expect(localStorage.getItem("c3")).toBe("style");
+    expect(persisted("c3", "props", codecs.string(tabs))()).toBe("style");
+    localStorage.setItem("c3", "nope");
+    expect(persisted("c3", "props", codecs.string(tabs))()).toBe("props");
+    expect(persisted("c3", "props", codecs.string())()).toBe("nope");
+  });
+
+  it("spreads under a caller's own options", () => {
+    const pin = persisted("c4", true, { ...codecs.boolean, label: "test.pin" });
+    pin(false);
+    expect(localStorage.getItem("c4")).toBe("0");
   });
 });
 

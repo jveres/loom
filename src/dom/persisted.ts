@@ -20,6 +20,35 @@ export interface PersistedOptions<T> extends NodeOptions {
   readonly storage?: Storage;
 }
 
+/** The standard CODECS — pass one as `options` (or spread it under
+ *  your own `label`/`validate`): the "1"/"0" boolean dialect, a finite
+ *  number with an optional range, a string drawn from an allowed set. A
+ *  hand-written serialize/parse/validate triple per call site drifts
+ *  the stored format; these keep one dialect per kind. */
+export const codecs = {
+  boolean: {
+    serialize: (v: boolean): string => (v ? "1" : "0"),
+    parse: (raw: string): boolean => raw === "1",
+    validate: (v: boolean): boolean => typeof v === "boolean",
+  } satisfies PersistedOptions<boolean>,
+  number: (range: { min?: number; max?: number } = {}) =>
+    ({
+      serialize: String,
+      parse: Number,
+      validate: (v: number): boolean =>
+        Number.isFinite(v) &&
+        (range.min === undefined || v >= range.min) &&
+        (range.max === undefined || v <= range.max),
+    }) satisfies PersistedOptions<number>,
+  string: <T extends string>(allowed?: readonly T[]) =>
+    ({
+      serialize: (v: T): string => v,
+      parse: (raw: string): T => raw as T,
+      validate: (v: T): boolean =>
+        allowed === undefined || (allowed as readonly string[]).includes(v),
+    }) satisfies PersistedOptions<T>,
+} as const;
+
 function defaultStorage(): Storage | undefined {
   try {
     return globalThis.localStorage;

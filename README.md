@@ -743,7 +743,20 @@ classed(document.body, "is-dark", mediaRead("(prefers-color-scheme: dark)"));
   `serialize`/`parse` (default JSON) and `validate`, which drops a corrupt or
   out-of-range stored value instead of leaking it into the app. Absent or
   throwing storage degrades to an unpersisted signal. The inspector's panel
-  chrome sits on it.
+  chrome sits on it. `codecs` carries the standard triples so call sites
+  share one stored dialect per kind: `codecs.boolean` (`"1"`/`"0"`),
+  `codecs.number({ min?, max? })` (finite, in range), `codecs.string(allowed?)`
+  (drawn from a set) — pass one as `options`, or spread it under your own
+  `label`/`storage`.
+
+```ts
+import { codecs, persisted } from "loom/dom";
+
+const pinned = persisted("sidebar.pinned", false, codecs.boolean);
+const width = persisted("sidebar.width", 280, codecs.number({ min: 160, max: 640 }));
+const tab = persisted("inspector.tab", "props", codecs.string(["props", "style"] as const));
+pinned(true); // stored as "1"; a stored "abc" width falls back to 280
+```
 - `pressed(el)` returns a `Read<boolean>`, true from a primary-button
   `pointerdown` on the element until that pointer is released, cancelled,
   or leaves it — the deterministic twin of CSS `:active` for touch, where
@@ -764,7 +777,67 @@ if (el) classed(el, "is-pressed", pressed(el));
 - `pressClass(el, name?)` applies the dominant `pressed()` use case directly:
   it adds `name` (`"is-pressed"` by default) for one primary-pointer press and
   removes it on release, cancellation, pointer leave, or Loom-managed teardown.
-  Use it when no other code needs a reactive pressed-state signal.
+  Use it when no other code needs a reactive pressed-state signal. The
+  `when` option is a gate read at contact — return false and the press is
+  ignored (Chrome 119+ dispatches pointer events to disabled controls, so
+  `{ when: () => !el.disabled }` keeps the voice honest without a signal).
+- `hovered(el)` returns a `Read<boolean>`, true from `pointerenter` to
+  `pointerleave`/`pointercancel` for pointers that HOVER — mouse and pen;
+  touch never sets it (a finger's contact is `pressed()`'s voice, and a tap
+  wearing a hover costume reads as a flash). Where CSS `:hover` is gated to
+  `@media (hover: hover)`, this is the class-driven twin that also serves
+  the pointers that gate cannot see — a stylus, or a trackpad on a
+  touch-primary device. Pooled per element, subscriber-counted.
+- `focusWithin(el)` returns a `Read<boolean>` mirroring `:focus-within`:
+  true while `el` or a descendant holds focus, read from `focusin`/`focusout`
+  (a focus move inside `el` settles true without a false flash). Pooled per
+  element, subscriber-counted.
+
+```ts
+import { classed, focusWithin, hovered } from "loom/dom";
+
+const field = document.querySelector("label");
+if (field) {
+  classed(field, "is-hover", hovered(field));
+  classed(field, "is-editing", focusWithin(field));
+}
+// css: label:hover, label.is-hover { ... }  label:focus-within, label.is-editing { ... }
+```
+
+- `listen(owner, target, type, handler, options?)` — an event listener on a
+  FOREIGN target (`document`, `window`, a host element) with the owner
+  node's lifetime: removed when `owner` is torn down the Loom way, or
+  earlier through the returned Stop. Listener options pass through
+  (`capture`, `passive`, `once`). Popovers, drag sessions, and keyboard
+  chords all want a document-level listener that dies with the widget that
+  armed it.
+
+```ts
+import { listen } from "loom/dom";
+
+const popover = document.createElement("div");
+listen(popover, document, "keydown", (event) => {
+  if (event.key === "Escape") popover.hidden = true;
+});
+```
+
+- `scrollEdges(el, options?)` returns a `Read<{ start, end }>` — is there
+  content scrolled past the start edge, is there more past the end? The
+  verdict `scrollFade` computes internally, exposed for hosts that paint
+  their own edge chrome (overlay fades, chevrons). `axis` (`"y"` default,
+  `"x"`) and `epsilon` (slack in px, default 4) are options. The scroll
+  listener and the size/content observers exist only while observed.
+
+```ts
+import { classed, scrollEdges } from "loom/dom";
+
+const pane = document.querySelector(".pane");
+if (pane) {
+  const edges = scrollEdges(pane);
+  classed(pane, "has-above", () => edges().start);
+  classed(pane, "has-below", () => edges().end);
+}
+```
 - `observeSize(el, cb, options?)` — `cb(entry)` on ResizeObserver's clock
   (including the initial delivery on attach), detached on node teardown. One
   shared observer serves the whole app; it holds one observation per element,
@@ -824,11 +897,70 @@ scrollers use a 120 ms transition.
   collapse settles, and a settled open fold returns to `height: auto` so
   content growth is never clipped. `onStart`/`onSettle` bracket the
   animation for hosts that mute observers while it runs.
-- `bindValue(el, cell)` — focus-guarded two-way value binding for form
-  controls: writes the cell on input, follows the cell into `el.value`, and
-  NEVER overwrites the focused element (`morph`'s law, for bindings — a
+- `settleAnimation(el, onSettle, name?)` — `settleTransition`'s twin for
+  css ANIMATIONS: wait for an animation on `el` (the one named `name`, else
+  the first declared) to finish, robustly. `animationend` is the happy
+  path; an animation that cannot run (`animation: none` under reduced
+  motion, a `display: none` ancestor) settles on a microtask; a stalled one
+  settles on the computed duration+delay fallback timer (an infinite one
+  settles only through its events); an interrupted one settles via
+  `animationcancel`; `onSettle` runs exactly once. Returns a Stop that
+  abandons the wait; a dead node never settles.
+- `nextFrame(fn, owner?)` — run `fn` before the next paint, cancellable
+  through the returned Stop and abandoned with `owner` when one is given
+  (`requestAnimationFrame` where the platform has one, a microtask where it
+  doesn't, so callers never branch on the shim). `afterFrames(n, fn, owner?)`
+  chains `n` frames with one Stop for the chain — the "let the layout
+  settle, then measure" idiom (two frames survive a same-frame style write
+  plus its layout).
+
+```ts
+import { afterFrames, settleAnimation } from "loom/dom";
+
+const toast = document.createElement("div");
+toast.className = "toast-enter";
+document.body.append(toast);
+settleAnimation(toast, () => toast.classList.remove("toast-enter"), "toast-enter");
+afterFrames(2, () => console.log(toast.getBoundingClientRect().height), toast);
+```
+
+- `bindValue(el, cell, options?)` — focus-guarded two-way value binding for
+  form controls: writes the cell on input, follows the cell into `el.value`,
+  and NEVER overwrites the focused element (`morph`'s law, for bindings — a
   reactive echo mid-typing destroys the edit and the caret); the latest
-  suppressed value applies when focus leaves. Node-owned.
+  suppressed value applies when focus leaves. Node-owned. `{ property:
+  "checked" }` is the checkbox/radio twin: a `State<boolean>` over `change`,
+  with the same focus guard.
+
+```ts
+import { state } from "loom";
+import { bindValue } from "loom/dom";
+
+const agreed = state(false);
+const box = document.createElement("input");
+box.type = "checkbox";
+bindValue(box, agreed, { property: "checked" });
+```
+
+- `keyedChild(host)` — the imperative sibling of `match`/`when` for hosts
+  driven by LAYOUT PASSES instead of signals: the returned `(key, build)`
+  rebuilds the host's single child only when the key moves, so a relayout
+  that runs per resize delivery or per document edit never
+  `replaceChildren`s (a repaint) unchanged content. The previous child is
+  torn down the Loom way; the host's teardown releases the current one.
+
+```ts
+import { keyedChild } from "loom/dom";
+
+const stage = document.createElement("section");
+const place = keyedChild(stage);
+const relayout = (width: number): void => {
+  const key = width < 600 ? "stack" : "row";
+  place(key, () => Object.assign(document.createElement("div"), { className: key }));
+};
+relayout(480);
+relayout(500); // same key: nothing rebuilt
+```
 
 #### API index — `loom/dom`
 
@@ -843,15 +975,16 @@ scrollers use a 120 ms transition.
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
-| `connected`, `mediaRead`, `persisted`, `pressed`, `pressClass`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
+| `connected`, `mediaRead`, `persisted`, `codecs`, `pressed`, `pressClass`, `hovered`, `focusWithin`, `listen`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
-| `settleTransition`, `foldHeight`, `bindValue` | [Transitions and folds](#transitions-and-folds) |
+| `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
 
 Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX accept),
 `ResourceGroup`,
 `PersistedOptions` (adds `storage` to override the backing `Storage`),
+`PressClassOptions`, `BindValueOptions`, `ScrollEdges`/`ScrollEdgesOptions`,
 `ListOptions`, `SvgTagName`, the binding handles
 `AttrBinding`/`ClassBinding`/`StyleBinding`/`DynamicChild`, `MorphOptions`,
 `ScrollFadeOptions`, `SizeCallback`,
@@ -869,7 +1002,7 @@ Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX acc
   lifetime: `observeSize`, `observeIntersection`, `observeMutation`.
   Function-only; the callback detaches on node teardown.
 - **Unprefixed** — signals, the reactive grain: `connected`,
-  `persisted`, `pressed`, `mediaRead` (suffixed after the element-read
+  `persisted`, `pressed`, `hovered`, `focusWithin`, `scrollEdges`, `mediaRead` (suffixed after the element-read
   family it pools like), and the signal forms of `attr`/`classed`/`style` (direction by
   first argument and arity, as with a signal: read without a value,
   write with one).

@@ -133,18 +133,24 @@ export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions):
  */
 export declare function bindManual(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
 export declare function bindManual(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
-export { bindValue } from "./bind-value.js";
+export { type BindValueOptions, bindValue } from "./bind-value.js";
 export { connected } from "./connected.js";
 export { type FoldHeightOptions, foldHeight, } from "./fold-height.js";
+export { focusWithin, hovered } from "./hovered.js";
+export { keyedChild } from "./keyed-child.js";
+export { listen } from "./listen.js";
 export { mediaRead } from "./media-read.js";
 export { type MorphOptions, morph } from "./morph.js";
+export { afterFrames, nextFrame } from "./next-frame.js";
 export { type IntersectionCallback, type IntersectionOptions, observeIntersection, } from "./observe-intersection.js";
 export { type MutationsCallback, observeMutation, } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
 export { onMount } from "./on-mount.js";
 export { dispose, onUnmount, pause, type ResourceGroup, remove, resourceGroup, resume, } from "./ownership.js";
-export { type PersistedOptions, persisted } from "./persisted.js";
+export { codecs, type PersistedOptions, persisted } from "./persisted.js";
 export { type PointerSessionEndReason, type PointerSessionOptions, startPointerSession, } from "./pointer-session.js";
-export { pressClass } from "./press-class.js";
+export { type PressClassOptions, pressClass } from "./press-class.js";
 export { pressed } from "./pressed.js";
+export { type ScrollEdges, type ScrollEdgesOptions, scrollEdges, } from "./scroll-edges.js";
+export { settleAnimation } from "./settle-animation.js";
 export { settleTransition } from "./settle-transition.js";

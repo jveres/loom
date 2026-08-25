@@ -55,3 +55,40 @@ describe("bindValue", () => {
     expect(cell()).toBe("b");
   });
 });
+
+describe("bindValue { property: 'checked' }", () => {
+  it("writes the boolean cell on change and follows it while unfocused", () => {
+    const cell = state(false, { label: "test.bindValue.checked" });
+    const el = document.createElement("input");
+    el.type = "checkbox";
+    document.body.append(el);
+    bindValue(el, cell, { property: "checked" });
+    expect(el.checked).toBe(false);
+
+    el.checked = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(cell()).toBe(true);
+
+    cell(false);
+    expect(el.checked).toBe(false);
+  });
+
+  it("never overwrites the focused control; the suppressed value lands on blur", () => {
+    const cell = state(false, { label: "test.bindValue.checked.focus" });
+    const el = document.createElement("input");
+    el.type = "checkbox";
+    document.body.append(el);
+    bindValue(el, cell, { property: "checked" });
+    el.focus();
+    el.checked = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    cell(false); // an echo mid-interaction
+    expect(el.checked).toBe(true);
+    el.blur();
+    el.dispatchEvent(new Event("blur"));
+    expect(el.checked).toBe(false);
+    remove(el);
+    cell(true);
+    expect(el.checked).toBe(false); // dead binding
+  });
+});

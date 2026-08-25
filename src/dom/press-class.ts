@@ -3,7 +3,18 @@
 // action creates no signal, source node, dependency links, or DOM effect.
 import { own } from "./ownership-base.js";
 
-export function pressClass(el: Element, name = "is-pressed"): void {
+export interface PressClassOptions {
+  /** A gate read at contact: return false and the press is ignored
+   *  (Chrome 119+ dispatches pointer events to disabled controls —
+   *  `() => !el.disabled` keeps the voice honest without a signal). */
+  readonly when?: () => boolean;
+}
+
+export function pressClass(
+  el: Element,
+  name = "is-pressed",
+  gate: PressClassOptions = {},
+): void {
   let active = -1;
   let route: AbortController | undefined;
 
@@ -18,6 +29,7 @@ export function pressClass(el: Element, name = "is-pressed"): void {
   const down = (event: Event): void => {
     const pointer = event as PointerEvent;
     if (pointer.button !== 0 || active !== -1) return;
+    if (gate.when && !gate.when()) return;
     active = pointer.pointerId;
     route = new AbortController();
     const options = { signal: route.signal };

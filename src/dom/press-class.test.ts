@@ -37,3 +37,22 @@ describe("pressClass", () => {
     el.remove();
   });
 });
+
+describe("pressClass gate", () => {
+  it("`when` read at contact refuses the press without a signal", () => {
+    const el = document.createElement("button");
+    document.body.append(el);
+    let enabled = false;
+    pressClass(el, "is-pressed", { when: () => enabled });
+
+    el.dispatchEvent(pointer("pointerdown", 3));
+    expect(el.className).toBe("");
+
+    enabled = true;
+    el.dispatchEvent(pointer("pointerdown", 4));
+    expect(el.className).toBe("is-pressed");
+    window.dispatchEvent(pointer("pointerup", 4));
+    expect(el.className).toBe("");
+    remove(el);
+  });
+});

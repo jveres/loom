@@ -1264,14 +1264,18 @@ function isBinding<TKind extends "attr" | "class" | "style">(
   );
 }
 
-export { bindValue } from "./bind-value.js";
+export { type BindValueOptions, bindValue } from "./bind-value.js";
 export { connected } from "./connected.js";
 export {
   type FoldHeightOptions,
   foldHeight,
 } from "./fold-height.js";
+export { focusWithin, hovered } from "./hovered.js";
+export { keyedChild } from "./keyed-child.js";
+export { listen } from "./listen.js";
 export { mediaRead } from "./media-read.js";
 export { type MorphOptions, morph } from "./morph.js";
+export { afterFrames, nextFrame } from "./next-frame.js";
 export {
   type IntersectionCallback,
   type IntersectionOptions,
@@ -1292,12 +1296,18 @@ export {
   resourceGroup,
   resume,
 } from "./ownership.js";
-export { type PersistedOptions, persisted } from "./persisted.js";
+export { codecs, type PersistedOptions, persisted } from "./persisted.js";
 export {
   type PointerSessionEndReason,
   type PointerSessionOptions,
   startPointerSession,
 } from "./pointer-session.js";
-export { pressClass } from "./press-class.js";
+export { type PressClassOptions, pressClass } from "./press-class.js";
 export { pressed } from "./pressed.js";
+export {
+  type ScrollEdges,
+  type ScrollEdgesOptions,
+  scrollEdges,
+} from "./scroll-edges.js";
+export { settleAnimation } from "./settle-animation.js";
 export { settleTransition } from "./settle-transition.js";
