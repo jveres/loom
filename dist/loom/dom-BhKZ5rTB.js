@@ -306,11 +306,12 @@ function Ne(e) {
 		let n = () => {
 			let n = e.ownerDocument.activeElement;
 			t(n !== null && e.contains(n));
-		}, r = () => {
-			queueMicrotask(n);
+		}, r = () => t(!0), i = (r) => {
+			let i = r.relatedTarget;
+			i instanceof Node ? t(e.contains(i)) : n();
 		};
-		return e.addEventListener("focusin", n), e.addEventListener("focusout", r), n(), () => {
-			e.removeEventListener("focusin", n), e.removeEventListener("focusout", r), t(!1);
+		return e.addEventListener("focusin", r), e.addEventListener("focusout", i), n(), () => {
+			e.removeEventListener("focusin", r), e.removeEventListener("focusout", i), t(!1);
 		};
 	}, !1);
 	return D.set(e, n), n;

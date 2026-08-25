@@ -79,3 +79,26 @@ describe("focusWithin", () => {
     stop();
   });
 });
+
+describe("focusWithin (synthetic events)", () => {
+  it("a focusin IS the verdict; a focusout naming an outside target settles false at once", () => {
+    const host = document.createElement("div");
+    const input = document.createElement("input");
+    host.append(input);
+    document.body.append(host);
+    const read = focusWithin(host);
+    const stop = effect(() => {
+      read();
+    });
+    input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(read()).toBe(true);
+    input.dispatchEvent(
+      new FocusEvent("focusout", {
+        bubbles: true,
+        relatedTarget: document.body,
+      }),
+    );
+    expect(read()).toBe(false);
+    stop();
+  });
+});

@@ -53,16 +53,22 @@ export function focusWithin(el: Element): Read<boolean> {
       const active = el.ownerDocument.activeElement;
       set(active !== null && el.contains(active));
     };
-    // focusout fires BEFORE the next element takes focus — read the
-    // settled state on a microtask so an inside move stays true.
-    const out = (): void => {
-      queueMicrotask(sync);
+    // A focusin inside el IS the verdict (even a synthetic one). A
+    // focusout names where focus goes (relatedTarget) — an inside
+    // move stays true without a flash; when it names nothing (focus
+    // left the document, a synthetic event), the document's own
+    // focus state is the verdict.
+    const inside = (): void => set(true);
+    const out = (event: Event): void => {
+      const next = (event as FocusEvent).relatedTarget;
+      if (next instanceof Node) set(el.contains(next));
+      else sync();
     };
-    el.addEventListener("focusin", sync);
+    el.addEventListener("focusin", inside);
     el.addEventListener("focusout", out);
     sync();
     return () => {
-      el.removeEventListener("focusin", sync);
+      el.removeEventListener("focusin", inside);
       el.removeEventListener("focusout", out);
       set(false);
     };
