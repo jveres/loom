@@ -130,7 +130,7 @@ export function withRootAttributes(
     const joiner = options.merge?.[name];
     if (joiner !== undefined && raw != null && raw !== false) {
       const existing = new RegExp(
-        `\\s${name.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}="([^"]*)"`,
+        `\\s${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}="([^"]*)"`,
       ).exec(openTag);
       if (existing) {
         openTag = openTag.replace(

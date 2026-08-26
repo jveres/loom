@@ -33,3 +33,14 @@ describe("withRootAttributes", () => {
     expect(() => withRootAttributes(unsafeHtml("plain"), { a: "1" })).toThrow();
   });
 });
+
+describe("withRootAttributes — the merge key is escaped as a literal", () => {
+  it("a merge name with a regex metacharacter merges its own attribute, never a lookalike", () => {
+    const out = withRootAttributes(
+      unsafeHtml('<i data-x.y="1" data-xzy="2">t</i>'),
+      { "data-x.y": "3" },
+      { merge: { "data-x.y": " " } },
+    );
+    expect(out.value).toBe('<i data-x.y="1 3" data-xzy="2">t</i>');
+  });
+});

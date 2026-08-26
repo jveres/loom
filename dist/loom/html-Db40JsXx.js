@@ -112,7 +112,7 @@ function C(e, t, n = {}) {
 	for (let [e, i] of Object.entries(t)) {
 		let t = n.merge?.[e];
 		if (t !== void 0 && i != null && i !== !1) {
-			let n = RegExp(`\\s${e.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}="([^"]*)"`).exec(o);
+			let n = RegExp(`\\s${e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}="([^"]*)"`).exec(o);
 			if (n) {
 				o = o.replace(n[0], ` ${e}="${n[1]}${t}${r(String(i === !0 ? "" : i))}"`);
 				continue;
