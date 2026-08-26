@@ -306,11 +306,13 @@ function Ne(e, t = {}) {
 		i = t;
 	}, o = (e) => {
 		let n = e;
-		if (n.pointerType === "touch") {
-			i.length > 0 && a(null);
-			return;
+		if (!(t.when && !t.when(n))) {
+			if (n.pointerType === "touch") {
+				i.length > 0 && a(null);
+				return;
+			}
+			a(t.target ? t.target(n) : n.target);
 		}
-		t.when && !t.when(n) || a(t.target ? t.target(n) : n.target);
 	}, s = (n) => {
 		if (n.target !== e) return;
 		let r = n;

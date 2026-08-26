@@ -9,9 +9,10 @@
 // a touch sighting CLEARS a stale costume instead. Clearing rides the
 // host's own pointerleave, never per-element pointerout: a pen tap
 // fires out-to-null BEFORE the browser synthesizes the click, and
-// clearing there hides hover-revealed controls mid-tap. `when` gates a
-// pointer the channel should leave to CSS (a mouse where the media
-// gate matches). `set` lets a host drive the costume itself (a
+// clearing there hides hover-revealed controls mid-tap. `when` gates
+// EVERY sighting the channel would act on — a pointer to leave to CSS
+// (a mouse where the media gate matches), a touch clear a host refuses
+// while an engagement holds. `set` lets a host drive the costume itself (a
 // forwarding strip); `current` reads what wears it.
 import { own } from "./ownership-base.js";
 
@@ -54,11 +55,13 @@ export function hoverClass(
   };
   const over = (event: Event): void => {
     const pointer = event as PointerEvent;
+    // The gate answers for EVERY sighting, a touch's included — a
+    // host may refuse a touch's clear (a sticky engagement).
+    if (options.when && !options.when(pointer)) return;
     if (pointer.pointerType === "touch") {
       if (dressed.length > 0) set(null);
       return;
     }
-    if (options.when && !options.when(pointer)) return;
     set(
       options.target
         ? options.target(pointer)

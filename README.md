@@ -824,8 +824,9 @@ below.
   `"is-hover"`) while a HOVERING pointer is over them, resolved per
   pointerover by `target` (the row under the pointer, an ancestor chain).
   Touch never dresses anything and a touch sighting clears a stale costume;
-  clearing rides the host's own pointerleave. `when` gates a pointer the
-  channel should leave to CSS; `set` lets a host drive the costume itself.
+  clearing rides the host's own pointerleave. `when` gates every sighting
+  the channel would act on (a pointer left to CSS, a touch clear a host
+  refuses); `set` lets a host drive the costume itself.
   No signal, no effect — the costume is the DOM's.
 
 ```ts
