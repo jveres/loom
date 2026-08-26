@@ -47,3 +47,4 @@ export {
   revisions,
 } from "./revisions.js";
 export { runtimeSlot } from "./runtime-slot.js";
+export { weakMemo } from "./weak-memo.js";

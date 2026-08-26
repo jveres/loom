@@ -738,13 +738,26 @@ const TAP_SLOP = 10;
  * {@link TAP_SLOP} px of it (so a drag or scroll does not trigger it). Use the `ontap` JSX prop,
  * which routes here; this export is for imperative call sites (e.g. the inspector).
  */
+/** The tap's HANDLE: whether a tap was just handled — the window in
+ *  which the browser's own synthesized click is the tap's ghost, so a
+ *  click handler kept for keyboard activation can step aside. */
+export interface TapVoice {
+  /** True within `ms` (default {@link GHOST_CLICK_MS}) of the last handled tap. */
+  recent(ms?: number): boolean;
+}
+
+/** How long after a handled tap the platform's synthesized click still arrives (iOS Safari
+ * delivers it well after pointerup). */
+export const GHOST_CLICK_MS = 600;
+
 export function onTap(
   node: Element,
   handler: (event: PointerEvent) => void,
-): void {
+): TapVoice {
   let id = -1;
   let x = 0;
   let y = 0;
+  let tappedAt = Number.NEGATIVE_INFINITY;
   node.addEventListener("pointerdown", (event) => {
     const pointer = event as PointerEvent;
     id = pointer.pointerId;
@@ -757,10 +770,40 @@ export function onTap(
     id = -1;
     const dx = pointer.clientX - x;
     const dy = pointer.clientY - y;
-    if (dx * dx + dy * dy <= TAP_SLOP * TAP_SLOP) handler(pointer);
+    if (dx * dx + dy * dy <= TAP_SLOP * TAP_SLOP) {
+      tappedAt = performance.now();
+      handler(pointer);
+    }
   });
   node.addEventListener("pointercancel", () => {
     id = -1;
+  });
+  return {
+    recent: (ms = GHOST_CLICK_MS) => performance.now() - tappedAt < ms,
+  };
+}
+
+/**
+ * A pointer-grammar DOUBLE press: two taps (per {@link onTap} — same pointer, within the slop, no
+ * drag) within `within` ms (default 350) on the same node. The dblclick substitute for touch —
+ * iOS never synthesizes dblclick from taps (it zooms instead). The pair resets after firing, so a
+ * third tap starts fresh; a drag or a cancel between two taps is not a tap and breaks the pair.
+ */
+export function onDoublePress(
+  node: Element,
+  handler: (event: PointerEvent) => void,
+  options: { readonly within?: number } = {},
+): void {
+  const within = options.within ?? 350;
+  let last = Number.NEGATIVE_INFINITY;
+  onTap(node, (event) => {
+    const now = performance.now();
+    if (now - last < within) {
+      last = Number.NEGATIVE_INFINITY;
+      handler(event);
+    } else {
+      last = now;
+    }
   });
 }
 
@@ -1265,11 +1308,17 @@ function isBinding<TKind extends "attr" | "class" | "style">(
 }
 
 export { type BindValueOptions, bindValue } from "./bind-value.js";
+export { coalesced } from "./coalesced.js";
 export { connected } from "./connected.js";
 export {
   type FoldHeightOptions,
   foldHeight,
 } from "./fold-height.js";
+export {
+  type HoverClass,
+  type HoverClassOptions,
+  hoverClass,
+} from "./hover-class.js";
 export { focusWithin, hovered } from "./hovered.js";
 export { keyedChild } from "./keyed-child.js";
 export { listen } from "./listen.js";
@@ -1296,7 +1345,14 @@ export {
   resourceGroup,
   resume,
 } from "./ownership.js";
-export { codecs, type PersistedOptions, persisted } from "./persisted.js";
+export {
+  codecs,
+  type PersistedOptions,
+  persisted,
+  type StorageSlot,
+  type StorageSlotOptions,
+  storageSlot,
+} from "./persisted.js";
 export {
   type PointerSessionEndReason,
   type PointerSessionOptions,
@@ -1306,8 +1362,10 @@ export { type PressClassOptions, pressClass } from "./press-class.js";
 export { pressed } from "./pressed.js";
 export {
   nearestScroller,
+  type RevealAxis,
   type RevealOptions,
   reveal,
+  type ScrollOptions,
   scrollCentered,
   scrollNearest,
   scrollParent,

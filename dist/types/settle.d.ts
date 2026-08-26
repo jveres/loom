@@ -43,11 +43,27 @@ export declare function settled<T>(read: Read<T>, ms: number, options?: SettleOp
 /** A quiet-period TASK: `run` once after `ms` without another `kick`.
  *  The revision-counter-feeding-settle ceremony as one object — a
  *  dirty compare, a history cache refresh, a save-after-typing all
- *  own only their run. `cancel()` discards pending work (later kicks
- *  schedule again), `flush()` runs pending work now, `stop()` is
- *  terminal. */
+ *  own only their run. `kick(ms?)` restarts the window (a per-kick
+ *  delay serves callers with different durations on one task),
+ *  `cancel()` discards pending work (later kicks schedule again),
+ *  `flush()` runs pending work now, `stop()` is terminal. A scope
+ *  resource: pausing the owning scope holds the window, resuming
+ *  reschedules it. */
 export interface QuietTask extends Settlement {
-    /** Mark work pending and (re)start the quiet window. */
-    kick(): void;
+    /** Mark work pending and (re)start the quiet window — `ms` overrides the delay for this window. */
+    kick(ms?: number): void;
 }
-export declare function quietTask(run: () => void, ms: number, options?: NodeOptions): QuietTask;
+export declare function quietTask(run: () => void, ms: number, _options?: NodeOptions): QuietTask;
+/** A quiet WINDOW with a synchronous answer: is the burst for `key`
+ *  still open? `touch(key)` opens (or extends) it; `open(key)` reads
+ *  it — true while the last touch of the SAME key is younger than
+ *  `ms`; `close()` ends it. The question settle/quietTask cannot
+ *  answer at call time (they deliver after the quiet, never say
+ *  whether it holds now): a typing burst joining one undo step, a
+ *  tap's ghost click, a fresh row ignoring a double-click. */
+export interface QuietWindow {
+    touch(key?: string): void;
+    open(key?: string): boolean;
+    close(): void;
+}
+export declare function quietWindow(ms: number): QuietWindow;

@@ -8,7 +8,32 @@ export interface PersistedOptions<T> extends NodeOptions {
     readonly validate?: (value: T) => boolean;
     /** Storage to use. Default localStorage (guarded — absent storage means no persistence). */
     readonly storage?: Storage;
+    /** Write-through after this many ms of quiet instead of on every
+     *  set — a dragged value otherwise serializes to storage per
+     *  pointer sample. The signal itself stays live; only the store
+     *  lags. Omit for immediate write-through. */
+    readonly settleMs?: number;
 }
+/** The storage HALF of persisted() without the signal: guarded load
+ *  (parse + validate, undefined on a miss or a bad value), store
+ *  (false when storage refused), clear. For values a program saves
+ *  EXPLICITLY — a document behind a Save verb — where write-through
+ *  would be wrong. */
+export interface StorageSlotOptions<T> {
+    readonly serialize?: (value: T) => string;
+    readonly parse?: (raw: string) => T;
+    readonly validate?: (value: T) => boolean;
+    readonly storage?: Storage;
+}
+export interface StorageSlot<T> {
+    /** The stored value, or undefined: nothing stored, unparsable, or rejected by validate. */
+    load(): T | undefined;
+    /** Store the value; false when storage is absent or refused (quota, permission). */
+    store(value: T): boolean;
+    /** Remove the entry (guarded). */
+    clear(): void;
+}
+export declare function storageSlot<T>(key: string, options?: StorageSlotOptions<T>): StorageSlot<T>;
 /** The standard CODECS — pass one as `options` (or spread it under
  *  your own `label`/`validate`): the "1"/"0" boolean dialect, a finite
  *  number with an optional range, a string drawn from an allowed set. A

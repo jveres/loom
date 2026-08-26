@@ -4,3 +4,4 @@ export type { CleanupEffectFn, ConfigureOptions, DeferScheduler, EffectFn, Effec
 export { batch, computed, configure, effect, mutate, poll, props, scope, source, state, trigger, untrack, update, watch, writable, } from "./loom.js";
 export { type Revisions, type RevisionsOptions, revisions, } from "./revisions.js";
 export { runtimeSlot } from "./runtime-slot.js";
+export { weakMemo } from "./weak-memo.js";

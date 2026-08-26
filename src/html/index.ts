@@ -64,6 +64,40 @@ export function isHtml(value: unknown): value is Html {
   );
 }
 
+/** Read one attribute off a rendered value's ROOT opening tag — the
+ *  reader twin of serializeAttributes for a static tree a parent
+ *  composes without parsing it: a builder stamp on a child root. Only
+ *  the root's own tag is read (it closes before any child opens); a
+ *  bare attribute reads ""; a missing one, or a value with no leading
+ *  element tag, reads undefined. Quoted values are unescaped. A `>`
+ *  inside a quoted attribute value of the root tag is not supported. */
+export function attributeOf(
+  value: Html | string,
+  name: string,
+): string | undefined {
+  const html = typeof value === "string" ? value : value.value;
+  if (!/^\s*<[a-zA-Z]/.test(html)) return undefined;
+  const end = html.indexOf(">");
+  if (end === -1) return undefined;
+  const tag = html.slice(0, end);
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const valued = new RegExp(
+    `\\s${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`,
+    "i",
+  ).exec(tag);
+  if (valued)
+    return unescapeAttribute(valued[1] ?? valued[2] ?? valued[3] ?? "");
+  return new RegExp(`\\s${escaped}(?=\\s|$)`, "i").test(tag) ? "" : undefined;
+}
+
+const unescapeAttribute = (value: string): string =>
+  value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+
 export {
   type SerializeAttributesOptions,
   serializeAttributes,

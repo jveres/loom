@@ -91,3 +91,62 @@ describe("reveal", () => {
     expect(reveal(loose)).toBe(false);
   });
 });
+
+describe("reveal on the x axis (Aug 26 — a tab strip)", () => {
+  const rectX = (el: Element, left: number, right: number): void => {
+    Object.defineProperty(el, "getBoundingClientRect", {
+      value: () => ({
+        top: 0,
+        bottom: 10,
+        left,
+        right,
+        width: right - left,
+        height: 10,
+      }),
+      configurable: true,
+    });
+  };
+  it("scrollParent/nearestScroller read overflow-x and horizontal slack; scrollNearest keeps `margin` px of clearance and scrolls the box only", () => {
+    const strip = document.createElement("div");
+    const tab = document.createElement("button");
+    strip.append(tab);
+    document.body.append(strip);
+    strip.style.overflowX = "auto";
+    Object.defineProperty(strip, "scrollWidth", {
+      value: 1000,
+      configurable: true,
+    });
+    Object.defineProperty(strip, "clientWidth", {
+      value: 100,
+      configurable: true,
+    });
+    expect(scrollParent(tab)).toBeNull(); // y: not a scroller
+    expect(scrollParent(tab, "x")).toBe(strip);
+    expect(nearestScroller(tab, "x")).toBe(strip);
+    rectX(strip, 0, 100);
+    rectX(tab, 90, 130); // clipped on the right by 30
+    strip.scrollLeft = 0;
+    expect(reveal(tab, { axis: "x", margin: 8 })).toBe(true);
+    expect(strip.scrollLeft).toBe(38); // 30 + 8 of clearance
+    rectX(tab, -20, 20); // clipped on the left
+    strip.scrollLeft = 50;
+    reveal(tab, { axis: "x", margin: 8 });
+    expect(strip.scrollLeft).toBe(22); // 50 - 28
+  });
+  it("`behavior` rides scrollTo when the box has one", () => {
+    const strip = document.createElement("div");
+    const tab = document.createElement("button");
+    strip.append(tab);
+    document.body.append(strip);
+    rectX(strip, 0, 100);
+    rectX(tab, 150, 200);
+    const calls: ScrollToOptions[] = [];
+    Object.defineProperty(strip, "scrollTo", {
+      value: (o: ScrollToOptions) => calls.push(o),
+      configurable: true,
+    });
+    strip.scrollLeft = 0;
+    reveal(tab, { axis: "x", scroller: strip, behavior: "smooth" });
+    expect(calls).toEqual([{ left: 100, behavior: "smooth" }]);
+  });
+});

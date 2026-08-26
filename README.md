@@ -239,10 +239,10 @@ deferred-lane scheduler ([Deferred effects](#deferred-effects)).
 | --- | --- |
 | `state`, `computed`, `effect`, `batch`, `untrack` | [Core primitives](#core-primitives) |
 | `update`, `watch` | [Deriving and reacting](#deriving-and-reacting) |
-| `settle`, `settled`, `quietTask` (`loom/settle`) | [Settled changes](#settled-changes) |
+| `settle`, `settled`, `quietTask`, `quietWindow` (`loom/settle`) | [Settled changes](#settled-changes) |
 | `mutate`, `trigger` | [In-place mutation](#in-place-mutation) |
 | `writable`, `lens` | [Derived writable (recipe)](#derived-writable-recipe) |
-| `keyedStates`, `revisions`, `runtimeSlot` | [Keyed state](#keyed-state) |
+| `keyedStates`, `revisions`, `runtimeSlot`, `weakMemo` | [Keyed state](#keyed-state) |
 | `props` | [Object properties](#object-properties) |
 | `poll`, `source` | [External data](#external-data) |
 | `scope` | [Scopes](#scopes) |
@@ -332,7 +332,50 @@ save.kick();
 save.kick(); // one save, 400 ms after the last kick
 ```
 
+`kick(ms?)` restarts the window with a per-kick delay when given — one
+task can serve callers with different durations. Inside a scope, pause
+holds a pending run and resume reschedules it.
+
+When the question is synchronous — *is this burst still open?* — a
+quiet-period sink cannot answer it at call time. `quietWindow(ms)` can:
+`touch(key)` opens or extends the window for a key, `open(key)` reads it
+(true while the last touch of the same key is younger than `ms`),
+`close()` ends it. A typing burst joining one undo step, a tap's ghost
+click, a fresh row ignoring a double-click.
+
+```ts
+import { quietWindow } from "loom/settle";
+
+const burst = quietWindow(400);
+function record(key: string): void {
+  if (burst.open(key)) {
+    burst.touch(key); // the same edit continues: no new undo step
+    return;
+  }
+  burst.touch(key);
+  console.log("new step", key);
+}
+```
+
+
 ### Keyed state
+
+`weakMemo(compute, version?)` is the per-OBJECT memo: one value per key
+object, held weakly, recomputed when `version` (any `Read`) moves. Where
+`computed` memoizes one value and `keyedStates` keys by string, this is the
+shape for "the measured outset of THIS element, until the document
+changes". The version is read untracked at each call — a lookup, never a
+subscription.
+
+```ts
+import { state, weakMemo } from "loom";
+
+const docVersion = state(0);
+const outsetOf = weakMemo(
+  (el: HTMLElement) => getComputedStyle(el).borderTopWidth,
+  docVersion,
+);
+```
 
 Three helpers for state that is addressed by NAME rather than held in a
 closure:
@@ -776,6 +819,44 @@ below.
 
 #### Browser state and observers
 
+- `hoverClass(host, options?)` — the delegated, class-writing hover twin of
+  `pressClass`: elements under `host` wear a class (`name`, default
+  `"is-hover"`) while a HOVERING pointer is over them, resolved per
+  pointerover by `target` (the row under the pointer, an ancestor chain).
+  Touch never dresses anything and a touch sighting clears a stale costume;
+  clearing rides the host's own pointerleave. `when` gates a pointer the
+  channel should leave to CSS; `set` lets a host drive the costume itself.
+  No signal, no effect — the costume is the DOM's.
+
+```ts
+import { hoverClass } from "loom/dom";
+
+const list = document.querySelector("ul");
+if (list) {
+  hoverClass(list, {
+    target: (event) => (event.target as Element).closest("li"),
+  });
+}
+```
+
+- `persisted(key, initial, { settleMs })` writes through after `settleMs`
+  of quiet instead of on every set — a dragged value otherwise serializes
+  to storage per pointer sample; the signal itself stays live.
+- `storageSlot(key, options?)` is the storage half of `persisted` without
+  the signal: guarded `load()` (parse + validate; `undefined` on a miss or
+  a bad value), `store(value)` (`false` when storage refused), `clear()`.
+  For values a program saves explicitly — a document behind a Save verb.
+
+```ts
+import { storageSlot } from "loom/dom";
+
+const doc = storageSlot<{ title: string }>("app:doc", {
+  validate: (d) => typeof d.title === "string",
+});
+const saved = doc.load() ?? { title: "Untitled" };
+if (!doc.store(saved)) console.warn("storage refused");
+```
+
 External browser state with loom lifetime — signals where state is read,
 observers where a callback reacts:
 
@@ -941,6 +1022,19 @@ scrollers use a 120 ms transition.
 
 #### Scroll reveal and memory
 
+`reveal`, `scrollNearest` and `scrollCentered` take `axis` (`"y"` default,
+`"x"` for a strip), `margin` (px of clearance kept from the edge — a fade
+mask, a sticky header) and `behavior` (`"smooth"` rides the box's own
+`scrollTo`). `scrollParent(el, axis?)` and `nearestScroller(el, axis?)`
+read the matching overflow and slack.
+
+```ts
+import { reveal } from "loom/dom";
+
+const tab = document.querySelector("button");
+if (tab) reveal(tab, { axis: "x", margin: 14, behavior: "smooth" });
+```
+
 The REVEAL law: scroll the BOX only. `scrollIntoView` scrolls every
 scrollable ancestor, and any ancestor with slack yanks the page — with the
 browser zoomed the window itself gains scroll range, and selecting a row
@@ -988,6 +1082,20 @@ if (pane) {
 ```
 
 #### Transitions and folds
+
+- `coalesced(fn, owner?)` — a microtask-latched one-shot: however many
+  times the returned request is called in one task, `fn` runs once, on the
+  microtask. The observer fan-out shape (one width change resizes every
+  observed box in one delivery). Not `nextFrame` (a frame) and not a quiet
+  task (a timer). With an `owner`, requests after its disposal are dropped.
+
+```ts
+import { coalesced, observeSize } from "loom/dom";
+
+const host = document.createElement("div");
+const relayout = coalesced(() => console.log("one pass"), host);
+observeSize(host, relayout);
+```
 
 - `settleTransition(el, property, onSettle)` — wait for a css transition on
   ONE property to finish, robustly: `transitionend` is the happy path, and
@@ -1083,18 +1191,19 @@ relayout(500); // same key: nothing rebuilt
 | `dispose`, `remove`, `replaceChildren`, `resourceGroup`, `onUnmount`, `bind`, `bindManual` | [Ownership & disposal](#ownership--disposal) |
 | `pause`, `resume` | [Lifecycle](#lifecycle) |
 | `onMount` | [Lifecycle](#lifecycle) |
-| `onTap` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
+| `onTap`, `onDoublePress` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
-| `connected`, `mediaRead`, `persisted`, `codecs`, `pressed`, `pressClass`, `hovered`, `focusWithin`, `listen`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
+| `connected`, `mediaRead`, `persisted`, `codecs`, `storageSlot`, `pressed`, `pressClass`, `hovered`, `hoverClass`, `focusWithin`, `listen`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
 | `reveal`, `scrollParent`, `nearestScroller`, `scrollNearest`, `scrollCentered`, `scrollMemory` | [Scroll reveal and memory](#scroll-reveal-and-memory) |
-| `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |
+| `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `coalesced`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
 
 Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX accept),
 `ResourceGroup`,
-`PersistedOptions` (adds `storage` to override the backing `Storage`),
+`PersistedOptions` (adds `storage` to override the backing `Storage`, `settleMs`),
+`StorageSlot`/`StorageSlotOptions`, `HoverClass`/`HoverClassOptions`, `TapVoice`, `RevealAxis`/`ScrollOptions`,
 `PressClassOptions`, `BindValueOptions`, `ScrollEdges`/`ScrollEdgesOptions`,
 `RevealOptions`, `ScrollMemory`,
 `ListOptions`, `SvgTagName`, the binding handles
@@ -1175,6 +1284,25 @@ whether to prevent default, suppress selection, set cursors, clamp geometry,
 or persist the result.
 
 #### The `onTap` synthetic event
+
+`onTap` returns a `TapVoice`: `recent(ms?)` is true within the ghost-click
+window (`GHOST_CLICK_MS`, 600) after a handled tap — a click handler kept
+for keyboard activation steps aside for the tap's own synthesized click.
+`onDoublePress(el, handler, { within? })` is the pointer-grammar double
+tap (two taps within 350 ms, no drag): the `dblclick` substitute for touch,
+which never synthesizes one.
+
+```ts
+import { onDoublePress, onTap } from "loom/dom";
+
+const row = document.createElement("li");
+const tap = onTap(row, () => console.log("activate"));
+row.addEventListener("click", () => {
+  if (tap.recent()) return; // the tap's ghost
+  console.log("activate (keyboard)");
+});
+onDoublePress(row, () => console.log("reset"));
+```
 
 iOS Safari **drops the synthesized
 `click`** when the DOM mutates between `touchstart` and `touchend`. An app that
@@ -1647,6 +1775,19 @@ produces a new key and rebuilds the row.
 (that is what wires the slot); they are not standalone mount points.
 
 ### SSR and SSG
+
+`attributeOf(value, name)` reads one attribute off a rendered value's root
+opening tag — the reader twin of `serializeAttributes` for a parent that
+composes a child's static tree without parsing it (a builder stamp on a
+child root). A bare attribute reads `""`; a missing one, or a value with
+no leading element tag, reads `undefined`.
+
+```ts
+import { attributeOf, html } from "loom/html";
+
+const card = html`<section data-tracks="auto 1fr">…</section>`;
+const tracks = attributeOf(card, "data-tracks"); // "auto 1fr"
+```
 
 Use `loom/html` when you want static HTML for server-side rendering or
 static-site generation. This runtime escapes interpolated text, supports

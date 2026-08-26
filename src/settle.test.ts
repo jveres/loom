@@ -413,3 +413,62 @@ describe("quietTask", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("quietTask — per-kick delay, scope pause (Aug 26)", () => {
+  it("kick(ms) re-times the window for that kick and later ones; pause holds a pending run, resume reschedules it", async () => {
+    const { scope } = await import("./loom.js");
+    const { quietTask } = await import("./settle.js");
+    vi.useFakeTimers();
+    let runs = 0;
+    let task!: ReturnType<typeof quietTask>;
+    const owner = scope(() => {
+      task = quietTask(() => {
+        runs += 1;
+      }, 100);
+    });
+    task.kick(300);
+    vi.advanceTimersByTime(299);
+    expect(runs).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(runs).toBe(1);
+    task.kick();
+    vi.advanceTimersByTime(299);
+    expect(runs).toBe(1); // the 300 stuck
+    vi.advanceTimersByTime(1);
+    expect(runs).toBe(2);
+    task.kick(50);
+    owner.pause();
+    vi.advanceTimersByTime(500);
+    expect(runs).toBe(2);
+    owner.resume();
+    vi.advanceTimersByTime(50);
+    expect(runs).toBe(3);
+    task.kick();
+    owner.stop();
+    vi.advanceTimersByTime(500);
+    expect(runs).toBe(3);
+    expect(() => task.kick(-1)).toThrow(RangeError);
+    vi.useRealTimers();
+  });
+});
+
+describe("quietWindow (Aug 26)", () => {
+  it("open(key) is true while the last touch of the SAME key is younger than ms; close() ends it", async () => {
+    const { quietWindow } = await import("./settle.js");
+    vi.useFakeTimers({ toFake: ["performance", "setTimeout", "Date"] });
+    const w = quietWindow(200);
+    expect(w.open("a")).toBe(false);
+    w.touch("a");
+    expect(w.open("a")).toBe(true);
+    expect(w.open("b")).toBe(false);
+    vi.advanceTimersByTime(199);
+    expect(w.open("a")).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(w.open("a")).toBe(false);
+    w.touch();
+    expect(w.open()).toBe(true);
+    w.close();
+    expect(w.open()).toBe(false);
+    vi.useRealTimers();
+  });
+});

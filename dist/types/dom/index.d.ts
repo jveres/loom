@@ -117,7 +117,26 @@ export declare function each<T>(items: State<readonly T[]> | Read<readonly T[]>,
  * {@link TAP_SLOP} px of it (so a drag or scroll does not trigger it). Use the `ontap` JSX prop,
  * which routes here; this export is for imperative call sites (e.g. the inspector).
  */
-export declare function onTap(node: Element, handler: (event: PointerEvent) => void): void;
+/** The tap's HANDLE: whether a tap was just handled — the window in
+ *  which the browser's own synthesized click is the tap's ghost, so a
+ *  click handler kept for keyboard activation can step aside. */
+export interface TapVoice {
+    /** True within `ms` (default {@link GHOST_CLICK_MS}) of the last handled tap. */
+    recent(ms?: number): boolean;
+}
+/** How long after a handled tap the platform's synthesized click still arrives (iOS Safari
+ * delivers it well after pointerup). */
+export declare const GHOST_CLICK_MS = 600;
+export declare function onTap(node: Element, handler: (event: PointerEvent) => void): TapVoice;
+/**
+ * A pointer-grammar DOUBLE press: two taps (per {@link onTap} — same pointer, within the slop, no
+ * drag) within `within` ms (default 350) on the same node. The dblclick substitute for touch —
+ * iOS never synthesizes dblclick from taps (it zooms instead). The pair resets after firing, so a
+ * third tap starts fresh; a drag or a cancel between two taps is not a tap and breaks the pair.
+ */
+export declare function onDoublePress(node: Element, handler: (event: PointerEvent) => void, options?: {
+    readonly within?: number;
+}): void;
 /**
  * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
  * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
@@ -134,8 +153,10 @@ export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions):
 export declare function bindManual(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
 export declare function bindManual(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
 export { type BindValueOptions, bindValue } from "./bind-value.js";
+export { coalesced } from "./coalesced.js";
 export { connected } from "./connected.js";
 export { type FoldHeightOptions, foldHeight, } from "./fold-height.js";
+export { type HoverClass, type HoverClassOptions, hoverClass, } from "./hover-class.js";
 export { focusWithin, hovered } from "./hovered.js";
 export { keyedChild } from "./keyed-child.js";
 export { listen } from "./listen.js";
@@ -147,11 +168,11 @@ export { type MutationsCallback, observeMutation, } from "./observe-mutation.js"
 export { observeSize, type SizeCallback } from "./observe-size.js";
 export { onMount } from "./on-mount.js";
 export { dispose, onUnmount, pause, type ResourceGroup, remove, resourceGroup, resume, } from "./ownership.js";
-export { codecs, type PersistedOptions, persisted } from "./persisted.js";
+export { codecs, type PersistedOptions, persisted, type StorageSlot, type StorageSlotOptions, storageSlot, } from "./persisted.js";
 export { type PointerSessionEndReason, type PointerSessionOptions, startPointerSession, } from "./pointer-session.js";
 export { type PressClassOptions, pressClass } from "./press-class.js";
 export { pressed } from "./pressed.js";
-export { nearestScroller, type RevealOptions, reveal, scrollCentered, scrollNearest, scrollParent, } from "./reveal.js";
+export { nearestScroller, type RevealAxis, type RevealOptions, reveal, type ScrollOptions, scrollCentered, scrollNearest, scrollParent, } from "./reveal.js";
 export { type ScrollEdges, type ScrollEdgesOptions, scrollEdges, } from "./scroll-edges.js";
 export { type ScrollMemory, scrollMemory } from "./scroll-memory.js";
 export { settleAnimation } from "./settle-animation.js";

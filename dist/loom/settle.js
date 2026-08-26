@@ -1,9 +1,9 @@
-import { D as e, E as t, S as n, T as r, v as i } from "./loom-cYHyKCVV.js";
+import { D as e, S as t, T as n, v as r } from "./loom-cYHyKCVV.js";
 //#region src/settle.ts
-var a = (e, t) => e === t;
-function o(t, n, o, s) {
+var i = (e, t) => e === t;
+function a(t, a, o, s) {
 	if (!Number.isFinite(o) || o < 0) throw RangeError("settle() delay must be a finite, non-negative number.");
-	let c = s?.equals ?? a, l = !0, u, d, f, p = !1, m = !1, h = !1, g, _ = () => {
+	let c = s?.equals ?? i, l = !0, u, d, f, p = !1, m = !1, h = !1, g, _ = () => {
 		g !== void 0 && (clearTimeout(g), g = void 0);
 	}, v = () => {
 		h || (p = !1, _());
@@ -11,7 +11,7 @@ function o(t, n, o, s) {
 		if (h || m || !p) return;
 		_(), p = !1;
 		let e = f, t = d;
-		d = e, r(() => n(e, t));
+		d = e, n(() => a(e, t));
 	}, b = () => {
 		_(), g = setTimeout(() => {
 			g = void 0, y();
@@ -32,7 +32,7 @@ function o(t, n, o, s) {
 		f = e, p = !0, m || b();
 	}, s), S = () => {
 		h || (h = !0, p = !1, _(), x());
-	}, C = i({
+	}, C = r({
 		pause: () => {
 			m = !0, _();
 		},
@@ -49,8 +49,8 @@ function o(t, n, o, s) {
 		flush: y
 	};
 }
-function s(e, t, s) {
-	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? a, d = n(r(e), l), f = o(e, (e) => d(e), t, s), p = !1, m = !1, h = i({
+function o(e, o, s) {
+	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = t(n(e), l), f = a(e, (e) => d(e), o, s), p = !1, m = !1, h = r({
 		pause: () => {
 			m = !0;
 		},
@@ -65,25 +65,65 @@ function s(e, t, s) {
 		flush: () => {
 			if (p || m) return;
 			f.flush();
-			let t = r(e);
-			u(t, r(() => d())) || d(t);
+			let t = n(e);
+			u(t, n(() => d())) || d(t);
 		},
 		stop: () => {
 			p = !0, f.stop(), h();
 		}
 	});
 }
-function c(e, r, i) {
-	let a = n(0, i), s = o(a, () => e(), r, {
-		...i?.label ? { label: `${i.label}.settle` } : {},
-		...i?.internal ? { internal: !0 } : {}
+var s = (e) => {
+	if (!Number.isFinite(e) || e < 0) throw RangeError("quiet delay must be a finite, non-negative number.");
+};
+function c(e, t, i) {
+	s(t);
+	let a = t, o = !1, c = !1, l = !1, u, d = () => {
+		u !== void 0 && (clearTimeout(u), u = void 0);
+	}, f = () => {
+		l || c || !o || (d(), o = !1, n(e));
+	}, p = () => {
+		d(), u = setTimeout(() => {
+			u = void 0, f();
+		}, a);
+	}, m = () => {
+		l || (o = !1, d());
+	}, h = (e) => {
+		e !== void 0 && s(e), !l && (e !== void 0 && (a = e), o = !0, c || p());
+	}, g = () => {
+		l = !0, o = !1, d();
+	}, _ = r({
+		pause: () => {
+			c = !0, d();
+		},
+		resume: () => {
+			c = !1, o && p();
+		},
+		stop: g
 	});
 	return {
-		kick: () => t(a, (e) => e + 1),
-		cancel: s.cancel,
-		flush: s.flush,
-		stop: s.stop
+		kick: h,
+		cancel: m,
+		flush: f,
+		stop: () => {
+			l || (g(), _());
+		}
+	};
+}
+function l(e) {
+	s(e);
+	let t = -Infinity, n = "";
+	return {
+		touch(e = "") {
+			n = e, t = performance.now();
+		},
+		open(r = "") {
+			return r === n && performance.now() - t < e;
+		},
+		close() {
+			t = -Infinity;
+		}
 	};
 }
 //#endregion
-export { c as quietTask, o as settle, s as settled };
+export { c as quietTask, l as quietWindow, a as settle, o as settled };

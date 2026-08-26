@@ -6,7 +6,6 @@ import {
   type Stop,
   state,
   untrack,
-  update,
   watch,
 } from "./loom.js";
 
@@ -241,28 +240,115 @@ export function settled<T>(
 /** A quiet-period TASK: `run` once after `ms` without another `kick`.
  *  The revision-counter-feeding-settle ceremony as one object — a
  *  dirty compare, a history cache refresh, a save-after-typing all
- *  own only their run. `cancel()` discards pending work (later kicks
- *  schedule again), `flush()` runs pending work now, `stop()` is
- *  terminal. */
+ *  own only their run. `kick(ms?)` restarts the window (a per-kick
+ *  delay serves callers with different durations on one task),
+ *  `cancel()` discards pending work (later kicks schedule again),
+ *  `flush()` runs pending work now, `stop()` is terminal. A scope
+ *  resource: pausing the owning scope holds the window, resuming
+ *  reschedules it. */
 export interface QuietTask extends Settlement {
-  /** Mark work pending and (re)start the quiet window. */
-  kick(): void;
+  /** Mark work pending and (re)start the quiet window — `ms` overrides the delay for this window. */
+  kick(ms?: number): void;
 }
+
+const assertDelay = (ms: number): void => {
+  if (!Number.isFinite(ms) || ms < 0) {
+    throw new RangeError("quiet delay must be a finite, non-negative number.");
+  }
+};
 
 export function quietTask(
   run: () => void,
   ms: number,
-  options?: NodeOptions,
+  _options?: NodeOptions,
 ): QuietTask {
-  const revision = state(0, options);
-  const settlement = settle(revision, () => run(), ms, {
-    ...(options?.label ? { label: `${options.label}.settle` } : {}),
-    ...(options?.internal ? { internal: true } : {}),
+  assertDelay(ms);
+  let delay = ms;
+  let pending = false;
+  let paused = false;
+  let terminal = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const clearTimer = (): void => {
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    timer = undefined;
+  };
+  const flush = (): void => {
+    if (terminal || paused || !pending) return;
+    clearTimer();
+    pending = false;
+    untrack(run);
+  };
+  const schedule = (): void => {
+    clearTimer();
+    timer = setTimeout(() => {
+      timer = undefined;
+      flush();
+    }, delay);
+  };
+  const cancel = (): void => {
+    if (terminal) return;
+    pending = false;
+    clearTimer();
+  };
+  const kick = (next?: number): void => {
+    if (next !== undefined) assertDelay(next); // a bad delay is a bug, terminal or not
+    if (terminal) return;
+    if (next !== undefined) delay = next;
+    pending = true;
+    if (!paused) schedule();
+  };
+  const terminate = (): void => {
+    terminal = true;
+    pending = false;
+    clearTimer();
+  };
+  const unregister = registerScopeResource({
+    pause: () => {
+      paused = true;
+      clearTimer();
+    },
+    resume: () => {
+      paused = false;
+      if (pending) schedule();
+    },
+    stop: terminate,
   });
+  const stop = (): void => {
+    if (terminal) return;
+    terminate();
+    unregister();
+  };
+  return { kick, cancel, flush, stop };
+}
+
+/** A quiet WINDOW with a synchronous answer: is the burst for `key`
+ *  still open? `touch(key)` opens (or extends) it; `open(key)` reads
+ *  it — true while the last touch of the SAME key is younger than
+ *  `ms`; `close()` ends it. The question settle/quietTask cannot
+ *  answer at call time (they deliver after the quiet, never say
+ *  whether it holds now): a typing burst joining one undo step, a
+ *  tap's ghost click, a fresh row ignoring a double-click. */
+export interface QuietWindow {
+  touch(key?: string): void;
+  open(key?: string): boolean;
+  close(): void;
+}
+
+export function quietWindow(ms: number): QuietWindow {
+  assertDelay(ms);
+  let last = Number.NEGATIVE_INFINITY;
+  let lastKey = "";
   return {
-    kick: () => update(revision, (n) => n + 1),
-    cancel: settlement.cancel,
-    flush: settlement.flush,
-    stop: settlement.stop,
+    touch(key = "") {
+      lastKey = key;
+      last = performance.now();
+    },
+    open(key = "") {
+      return key === lastKey && performance.now() - last < ms;
+    },
+    close() {
+      last = Number.NEGATIVE_INFINITY;
+    },
   };
 }

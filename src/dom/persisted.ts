@@ -8,6 +8,7 @@
 // Storage access is fully guarded: no localStorage (SSR, sandboxed frames, disabled cookies) or a
 // throwing quota simply degrades to an unpersisted signal.
 import { type NodeOptions, type State, state, watch } from "../loom.js";
+import { settle } from "../settle.js";
 
 export interface PersistedOptions<T> extends NodeOptions {
   /** Value → stored string. Default JSON.stringify. */
@@ -18,6 +19,70 @@ export interface PersistedOptions<T> extends NodeOptions {
   readonly validate?: (value: T) => boolean;
   /** Storage to use. Default localStorage (guarded — absent storage means no persistence). */
   readonly storage?: Storage;
+  /** Write-through after this many ms of quiet instead of on every
+   *  set — a dragged value otherwise serializes to storage per
+   *  pointer sample. The signal itself stays live; only the store
+   *  lags. Omit for immediate write-through. */
+  readonly settleMs?: number;
+}
+
+/** The storage HALF of persisted() without the signal: guarded load
+ *  (parse + validate, undefined on a miss or a bad value), store
+ *  (false when storage refused), clear. For values a program saves
+ *  EXPLICITLY — a document behind a Save verb — where write-through
+ *  would be wrong. */
+export interface StorageSlotOptions<T> {
+  readonly serialize?: (value: T) => string;
+  readonly parse?: (raw: string) => T;
+  readonly validate?: (value: T) => boolean;
+  readonly storage?: Storage;
+}
+
+export interface StorageSlot<T> {
+  /** The stored value, or undefined: nothing stored, unparsable, or rejected by validate. */
+  load(): T | undefined;
+  /** Store the value; false when storage is absent or refused (quota, permission). */
+  store(value: T): boolean;
+  /** Remove the entry (guarded). */
+  clear(): void;
+}
+
+export function storageSlot<T>(
+  key: string,
+  options: StorageSlotOptions<T> = {},
+): StorageSlot<T> {
+  const storage = options.storage ?? defaultStorage();
+  const serialize = options.serialize ?? JSON.stringify;
+  const parse = options.parse ?? (JSON.parse as (raw: string) => T);
+  return {
+    load() {
+      if (!storage) return undefined;
+      try {
+        const raw = storage.getItem(key);
+        if (raw === null) return undefined;
+        const loaded = parse(raw);
+        return options.validate?.(loaded) === false ? undefined : loaded;
+      } catch {
+        return undefined;
+      }
+    },
+    store(value) {
+      if (!storage) return false;
+      try {
+        storage.setItem(key, serialize(value));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    clear() {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        /* absent or refusing storage: nothing to clear */
+      }
+    },
+  };
 }
 
 /** The standard CODECS — pass one as `options` (or spread it under
@@ -87,13 +152,15 @@ export function persisted<T>(
       : { label, internal: options.internal },
   );
   if (storage) {
-    watch(signal, (next) => {
+    const write = (next: T): void => {
       try {
         storage.setItem(key, serialize(next));
       } catch {
         /* quota/permission: the signal still works, it just stops persisting */
       }
-    });
+    };
+    if (options.settleMs === undefined) watch(signal, write);
+    else settle(signal, write, options.settleMs, { label: `${label}.settle` });
   }
   return signal;
 }

@@ -68,4 +68,18 @@ function c(e, t) {
 	return r[n] = a, a;
 }
 //#endregion
-export { a as i, s as n, o as r, c as t };
+//#region src/weak-memo.ts
+function l(e, t) {
+	let n = /* @__PURE__ */ new WeakMap(), i, a = !1;
+	return (o) => {
+		if (t) {
+			let e = r(t);
+			(!a || e !== i) && (a = !0, i = e, n = /* @__PURE__ */ new WeakMap());
+		}
+		if (n.has(o)) return n.get(o);
+		let s = e(o);
+		return n.set(o, s), s;
+	};
+}
+//#endregion
+export { a, o as i, c as n, s as r, l as t };

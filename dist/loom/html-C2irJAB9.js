@@ -96,5 +96,14 @@ function y(e) {
 function b(e) {
 	return typeof e == "object" && !!e && Object.hasOwn(e, g) && e[g] === !0 && typeof e.value == "string" && typeof e.toString == "function";
 }
+function x(e, t) {
+	let n = typeof e == "string" ? e : e.value;
+	if (!/^\s*<[a-zA-Z]/.test(n)) return;
+	let r = n.indexOf(">");
+	if (r === -1) return;
+	let i = n.slice(0, r), a = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), o = RegExp(`\\s${a}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i").exec(i);
+	return o ? S(o[1] ?? o[2] ?? o[3] ?? "") : RegExp(`\\s${a}(?=\\s|$)`, "i").test(i) ? "" : void 0;
+}
+var S = (e) => e.replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 //#endregion
-export { u as a, n as c, _ as i, b as n, h as o, y as r, r as s, v as t };
+export { _ as a, r as c, y as i, n as l, v as n, u as o, b as r, h as s, x as t };
