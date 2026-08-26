@@ -105,5 +105,22 @@ function x(e, t) {
 	return o ? S(o[1] ?? o[2] ?? o[3] ?? "") : RegExp(`\\s${a}(?=\\s|$)`, "i").test(i) ? "" : void 0;
 }
 var S = (e) => e.replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+function C(e, t, n = {}) {
+	let i = e.value, a = i.indexOf(">");
+	if (a === -1 || !/^\s*<[a-zA-Z]/.test(i)) throw Error("withRootAttributes: the value has no root element tag.");
+	let o = i.slice(0, a), s = i.slice(a), c = {};
+	for (let [e, i] of Object.entries(t)) {
+		let t = n.merge?.[e];
+		if (t !== void 0 && i != null && i !== !1) {
+			let n = RegExp(`\\s${e.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}="([^"]*)"`).exec(o);
+			if (n) {
+				o = o.replace(n[0], ` ${e}="${n[1]}${t}${r(String(i === !0 ? "" : i))}"`);
+				continue;
+			}
+		}
+		c[e] = i;
+	}
+	return _(`${o}${h(c, n.tag ? { tag: n.tag } : {})}${s}`);
+}
 //#endregion
-export { _ as a, r as c, y as i, n as l, v as n, u as o, b as r, h as s, x as t };
+export { _ as a, h as c, y as i, r as l, v as n, C as o, b as r, u as s, x as t, n as u };

@@ -166,6 +166,7 @@ export { afterFrames, nextFrame } from "./next-frame.js";
 export { type IntersectionCallback, type IntersectionOptions, observeIntersection, } from "./observe-intersection.js";
 export { type MutationsCallback, observeMutation, } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
+export { type OffsetRect, offsetIn } from "./offset-in.js";
 export { onMount } from "./on-mount.js";
 export { dispose, onUnmount, pause, type ResourceGroup, remove, resourceGroup, resume, } from "./ownership.js";
 export { codecs, type PersistedOptions, persisted, type StorageSlot, type StorageSlotOptions, storageSlot, } from "./persisted.js";

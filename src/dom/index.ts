@@ -1335,6 +1335,7 @@ export {
   observeMutation,
 } from "./observe-mutation.js";
 export { observeSize, type SizeCallback } from "./observe-size.js";
+export { type OffsetRect, offsetIn } from "./offset-in.js";
 export { onMount } from "./on-mount.js";
 export {
   dispose,

@@ -1023,6 +1023,12 @@ scrollers use a 120 ms transition.
 
 #### Scroll reveal and memory
 
+`offsetIn(el, box)` answers where `el` sits inside `box`'s padding box —
+`{left, top, width, height}` you can write straight into the
+`style.left/top` of absolute chrome parented at `box`, corrected for the
+box's border and scroll. The box must be the containing block; the
+caller owns that, as with any absolute child.
+
 `reveal`, `scrollNearest` and `scrollCentered` take `axis` (`"y"` default,
 `"x"` for a strip), `margin` (px of clearance kept from the edge — a fade
 mask, a sticky header) and `behavior` (`"smooth"` rides the box's own
@@ -1196,7 +1202,7 @@ relayout(500); // same key: nothing rebuilt
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
 | `connected`, `mediaRead`, `persisted`, `codecs`, `storageSlot`, `pressed`, `pressClass`, `hovered`, `hoverClass`, `focusWithin`, `listen`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
-| `reveal`, `scrollParent`, `nearestScroller`, `scrollNearest`, `scrollCentered`, `scrollMemory` | [Scroll reveal and memory](#scroll-reveal-and-memory) |
+| `reveal`, `scrollParent`, `nearestScroller`, `scrollNearest`, `scrollCentered`, `scrollMemory`, `offsetIn` | [Scroll reveal and memory](#scroll-reveal-and-memory) |
 | `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `coalesced`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
@@ -1777,6 +1783,11 @@ produces a new key and rebuilds the row.
 
 ### SSR and SSG
 
+`withRootAttributes(value, attrs, { merge? })` splices serialized
+attributes into a rendered value's root opening tag — the writer twin of
+`attributeOf` (a parent stamps a child's static tree without parsing
+it); `merge` joins into an existing attribute (`{ style: "; " }`) so the
+new value wins the per-property cascade.
 `attributeOf(value, name)` reads one attribute off a rendered value's root
 opening tag — the reader twin of `serializeAttributes` for a parent that
 composes a child's static tree without parsing it (a builder stamp on a

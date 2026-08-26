@@ -1,4 +1,5 @@
-import { escapeText } from "./escape.js";
+import { serializeAttributes as serializeRootAttrs } from "./attributes.js";
+import { escapeAttribute, escapeText } from "./escape.js";
 
 const htmlMarker = Symbol.for("loom.html");
 declare const htmlTypeBrand: unique symbol;
@@ -97,6 +98,54 @@ const unescapeAttribute = (value: string): string =>
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
+
+/** SPLICE attributes into a rendered value's ROOT opening tag — the
+ *  writer twin of attributeOf, for a parent stamping a child's static
+ *  tree without parsing it. Values serialize by serializeAttributes'
+ *  rules (nullish drops, "" renders =""). `merge` names attributes
+ *  whose existing root value is JOINED instead of doubled (style with
+ *  "; ", class with " ") — the new value lands after the old, so it
+ *  wins the per-property cascade. Only the root's own tag is touched;
+ *  the same contract as attributeOf: a rootless value throws, a `>`
+ *  inside a quoted root attribute is unsupported, and a single-quoted
+ *  existing attribute is not merged (its double-quoted spelling is
+ *  the serializer's own). */
+export function withRootAttributes(
+  value: Html,
+  attrs: Record<string, string | number | boolean | null | undefined>,
+  options: {
+    readonly tag?: string;
+    readonly merge?: Record<string, string>;
+  } = {},
+): Html {
+  const html = value.value;
+  const end = html.indexOf(">");
+  if (end === -1 || !/^\s*<[a-zA-Z]/.test(html)) {
+    throw new Error("withRootAttributes: the value has no root element tag.");
+  }
+  let openTag = html.slice(0, end);
+  const rest = html.slice(end);
+  const out: Record<string, unknown> = {};
+  for (const [name, raw] of Object.entries(attrs)) {
+    const joiner = options.merge?.[name];
+    if (joiner !== undefined && raw != null && raw !== false) {
+      const existing = new RegExp(
+        `\\s${name.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}="([^"]*)"`,
+      ).exec(openTag);
+      if (existing) {
+        openTag = openTag.replace(
+          existing[0],
+          ` ${name}="${existing[1]}${joiner}${escapeAttribute(String(raw === true ? "" : raw))}"`,
+        );
+        continue;
+      }
+    }
+    out[name] = raw;
+  }
+  return unsafeHtml(
+    `${openTag}${serializeRootAttrs(out, options.tag ? { tag: options.tag } : {})}${rest}`,
+  );
+}
 
 export {
   type SerializeAttributesOptions,
