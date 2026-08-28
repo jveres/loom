@@ -965,6 +965,24 @@ listen(popover, document, "keydown", (event) => {
 });
 ```
 
+- `deadline(owner, target, type, ms, run, options?)` — run ONCE on the
+  first of an event or a timeout, owner-scoped like `listen`. The race
+  every "wait for X, but X might never come" site hand-rolls: reveal
+  chrome when the pending click lands (or after a beat, if the press
+  was aborted mid-air), treat a missing `transitionend` as ended. On
+  the event `run` receives it; on the deadline `run(undefined)`.
+  Whichever side fires tears both down first, so `run` may re-arm;
+  the Stop cancels without running.
+
+```ts
+import { deadline } from "loom/dom";
+
+const frame = document.createElement("div");
+deadline(frame, window, "click", 500, () => {
+  frame.classList.remove("is-hidden");
+});
+```
+
 - `scrollEdges(el, options?)` returns a `Read<{ start, end }>` — is there
   content scrolled past the start edge, is there more past the end? The
   verdict `scrollFade` computes internally, exposed for hosts that paint
@@ -1200,7 +1218,7 @@ relayout(500); // same key: nothing rebuilt
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap`, `onDoublePress` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
-| `connected`, `mediaRead`, `persisted`, `codecs`, `storageSlot`, `pressed`, `pressClass`, `hovered`, `hoverClass`, `focusWithin`, `listen`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
+| `connected`, `mediaRead`, `persisted`, `codecs`, `storageSlot`, `pressed`, `pressClass`, `hovered`, `hoverClass`, `focusWithin`, `listen`, `deadline`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
 | `reveal`, `scrollParent`, `nearestScroller`, `scrollNearest`, `scrollCentered`, `scrollMemory`, `offsetIn` | [Scroll reveal and memory](#scroll-reveal-and-memory) |
 | `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `coalesced`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |

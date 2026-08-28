@@ -155,6 +155,7 @@ export declare function bindManual(node: Node, fn: EffectFn, options?: EffectOpt
 export { type BindValueOptions, bindValue } from "./bind-value.js";
 export { coalesced } from "./coalesced.js";
 export { connected } from "./connected.js";
+export { deadline } from "./deadline.js";
 export { type FoldHeightOptions, foldHeight, } from "./fold-height.js";
 export { type HoverClass, type HoverClassOptions, hoverClass, } from "./hover-class.js";
 export { focusWithin, hovered } from "./hovered.js";
