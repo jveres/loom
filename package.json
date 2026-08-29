@@ -68,6 +68,10 @@
       "types": "./dist/types/dom/scroll-fade.d.ts",
       "default": "./dist/loom/dom/scroll-fade.js"
     },
+    "./dom/reveal": {
+      "types": "./dist/types/dom/reveal.d.ts",
+      "default": "./dist/loom/dom/reveal.js"
+    },
     "./devtools": {
       "types": "./dist/types/devtools/index.d.ts",
       "default": "./dist/loom/devtools.js"

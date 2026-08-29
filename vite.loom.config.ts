@@ -19,6 +19,10 @@ export default defineConfig({
         "dom/virtual-list": resolve(root, "src/dom/virtual-list.ts"),
         defer: resolve(root, "src/core/defer.ts"),
         "dom/scroll-fade": resolve(root, "src/dom/scroll-fade.ts"),
+        // Zero-import module — the granular door for consumers that
+        // must stay barrel-free (an island bundle wanting only the
+        // scroller walk).
+        "dom/reveal": resolve(root, "src/dom/reveal.ts"),
         devtools: resolve(root, "src/devtools/index.ts"),
         "jsx-runtime": resolve(root, "src/dom/jsx-runtime.ts"),
         html: resolve(root, "src/html/index.ts"),

@@ -1315,6 +1315,7 @@ export {
   type FoldHeightOptions,
   foldHeight,
 } from "./fold-height.js";
+export { type FrameRequest, frameCoalesced } from "./frame-coalesced.js";
 export {
   type HoverClass,
   type HoverClassOptions,
@@ -1355,7 +1356,7 @@ export {
   type StorageSlotOptions,
   storageSlot,
 } from "./persisted.js";
-export { placeAfter } from "./place.js";
+export { placeAfter, positionOrdered } from "./place.js";
 export {
   type PointerSessionEndReason,
   type PointerSessionOptions,

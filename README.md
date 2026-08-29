@@ -1054,6 +1054,16 @@ running CSS animations, re-rasterizing backdrop filters and dropping
 focus in the moved subtree), and a real move rides `moveBefore` where
 the platform has it. The chrome-positioning companion to `offsetIn`.
 
+`positionOrdered(parent, ordered, end)` is the imperative keyed-reconcile
+seat: it positions `ordered` in sequence before `end` (null = the end of
+`parent`) moving as few nodes as possible — members on the longest
+increasing subsequence of current positions stay put, only the rest
+move, every move state-preserving, and nodes that are not children yet
+are inserted. `each()` runs its lists through this same pass; callers
+reconciling by hand (an editor's canvas bands, an outline's rows) get
+the identical minimal-moves law instead of a naive cursor walk that
+degenerates on a single far swap.
+
 `reveal`, `scrollNearest` and `scrollCentered` take `axis` (`"y"` default,
 `"x"` for a strip), `margin` (px of clearance kept from the edge — a fade
 mask, a sticky header) and `behavior` (`"smooth"` rides the box's own
@@ -1120,6 +1130,14 @@ if (pane) {
   microtask. The observer fan-out shape (one width change resizes every
   observed box in one delivery). Not `nextFrame` (a frame) and not a quiet
   task (a timer). With an `owner`, requests after its disposal are dropped.
+- `frameCoalesced(fn, { window?, owner? })` — `coalesced`'s frame-latched
+  sibling: however many times the request is called before the next paint,
+  `fn` runs once, right before it — scroll/resize/observer fan-out that
+  must collapse to one pass per painted frame (an overlay re-pin, a scrub
+  drive). `window` pins the latch to a specific realm's paint clock (a
+  popup or iframe paints on its own schedule; the ambient
+  `requestAnimationFrame` never fires for it); the returned request also
+  carries `.stop()` for callers whose realm dies without an owner node.
 
 ```ts
 import { coalesced, observeSize } from "loom/dom";
@@ -1227,8 +1245,8 @@ relayout(500); // same key: nothing rebuilt
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
 | `connected`, `mediaRead`, `persisted`, `codecs`, `storageSlot`, `pressed`, `pressClass`, `hovered`, `hoverClass`, `focusWithin`, `listen`, `deadline`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
-| `reveal`, `scrollParent`, `nearestScroller`, `scrollNearest`, `scrollCentered`, `scrollMemory`, `offsetIn`, `placeAfter` | [Scroll reveal and memory](#scroll-reveal-and-memory) |
-| `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `coalesced`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |
+| `reveal`, `scrollParent`, `nearestScroller`, `scrollNearest`, `scrollCentered`, `scrollMemory`, `offsetIn`, `placeAfter`, `positionOrdered` | [Scroll reveal and memory](#scroll-reveal-and-memory) |
+| `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `coalesced`, `frameCoalesced`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |
 | `morph` | [Morphing static trees](#morphing-static-trees) |
 | `virtualList` (`loom/dom/virtual-list`) | [Virtualized lists](#virtualized-lists) |
 
@@ -1262,7 +1280,10 @@ Types: `Child`, `ElementProps` (the props bag `h()`, `svgElement()`, and JSX acc
 - **Behaviors** — apply an enhancement, return a disposer: `scrollFade`,
   `morph`, `virtualList`, `scrollMemory`; one-shot verbs stay verbs (`reveal`). Verb- or noun-accurate names, camelCase when
   multiword. Widgets and standalone behaviors are subpath entrypoints
-  (`loom/dom/virtual-list`, `loom/dom/scroll-fade`); the `loom/dom` barrel
+  (`loom/dom/virtual-list`, `loom/dom/scroll-fade`, `loom/dom/reveal` —
+  the last a zero-import module for consumers that must stay
+  barrel-free, an island bundle wanting only the scroller walk); the
+  `loom/dom` barrel
   holds rendering, binding, lifecycle, and browser state.
 - Core reactivity uses `watch` (tracked read, untracked callback, no DOM);
   `observe…` is DOM observation with node lifetime. The prefixes mark the

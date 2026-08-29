@@ -16,11 +16,16 @@ function placeBefore(parent: Node, node: Node, ref: Node | null): void {
   }
 }
 
-// Position `ordered` in sequence ending before `end` (null = the end of `parent`), moving as few
-// nodes as possible: members on the longest increasing subsequence of current DOM positions stay
-// put; only the rest move. The naive cursor walk this replaces degenerated on a single far swap —
-// moving ~N nodes where two suffice (measured 4.6 ms vs ~1 ms on the 1k-row swap bench). New nodes
-// (not yet children) are inserted; every move is state-preserving via placeBefore.
+/** Position `ordered` in sequence ending before `end` (null = the end
+ *  of `parent`), moving as FEW nodes as possible: members on the
+ *  longest increasing subsequence of current DOM positions stay put;
+ *  only the rest move (the naive cursor walk this replaces degenerated
+ *  on a single far swap — ~N moves where two suffice; 4.6 ms vs ~1 ms
+ *  on the 1k-row swap bench). New nodes (not yet children) are
+ *  inserted; every move is state-preserving (moveBefore where the
+ *  platform ships it). The imperative keyed-reconcile seat — each()'s
+ *  own ordering pass, exported for callers reconciling by hand
+ *  (proposed from seam's canvas bands + outline rows, Aug 29). */
 export function positionOrdered(
   parent: Node,
   ordered: readonly Node[],

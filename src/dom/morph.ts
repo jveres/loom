@@ -86,27 +86,32 @@ function syncAttributes(from: Element, to: Element): void {
 // multi-select and cannot pick options that only exist in the new tree.
 function syncFormState(from: Element, to: Element): void {
   // Almost every element is none of these — one string compare bails before the
-  // activeElement read and the instanceof chain.
+  // activeElement read. REALM-BLIND by design: `instanceof HTMLInputElement`
+  // binds to ONE realm's constructors, and a morph may patch a document from
+  // another realm (an editor shell morphing its canvas iframe) — the nodeName
+  // pair already proves the shape, so the narrowing is a cast, never a brand
+  // check (proposed from seam's preview, Aug 29).
   const name = from.nodeName;
   if (name !== "INPUT" && name !== "TEXTAREA" && name !== "OPTION") return;
+  if (to.nodeName !== name) return;
   if (from.ownerDocument.activeElement === from) return;
-  if (from instanceof HTMLInputElement && to instanceof HTMLInputElement) {
-    if (from.value !== to.value) from.value = to.value;
-    if (from.checked !== to.checked && !radioGroupFocused(from)) {
-      from.checked = to.checked;
+  if (name === "INPUT") {
+    const live = from as HTMLInputElement;
+    const next = to as HTMLInputElement;
+    if (live.value !== next.value) live.value = next.value;
+    if (live.checked !== next.checked && !radioGroupFocused(live)) {
+      live.checked = next.checked;
     }
-  } else if (
-    from instanceof HTMLTextAreaElement &&
-    to instanceof HTMLTextAreaElement
-  ) {
-    if (from.value !== to.value) from.value = to.value;
-  } else if (
-    from instanceof HTMLOptionElement &&
-    to instanceof HTMLOptionElement
-  ) {
-    const select = from.closest("select");
+  } else if (name === "TEXTAREA") {
+    const live = from as HTMLTextAreaElement;
+    const next = to as HTMLTextAreaElement;
+    if (live.value !== next.value) live.value = next.value;
+  } else {
+    const live = from as HTMLOptionElement;
+    const next = to as HTMLOptionElement;
+    const select = live.closest("select");
     if (select === null || select.ownerDocument.activeElement !== select) {
-      if (from.selected !== to.selected) from.selected = to.selected;
+      if (live.selected !== next.selected) live.selected = next.selected;
     }
   }
 }
@@ -115,12 +120,13 @@ function syncFormState(from: Element, to: Element): void {
 function radioGroupFocused(input: HTMLInputElement): boolean {
   if (input.type !== "radio" || input.name === "") return false;
   const active = input.ownerDocument.activeElement;
+  if (active === null || active === input || active.nodeName !== "INPUT")
+    return false;
+  const other = active as HTMLInputElement;
   return (
-    active instanceof HTMLInputElement &&
-    active !== input &&
-    active.type === "radio" &&
-    active.name === input.name &&
-    active.form === input.form
+    other.type === "radio" &&
+    other.name === input.name &&
+    other.form === input.form
   );
 }
 

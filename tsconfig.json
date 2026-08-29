@@ -17,6 +17,7 @@
       "loom/dom": ["./src/dom/index.ts"],
       "loom/defer": ["./src/core/defer.ts"],
       "loom/dom/virtual-list": ["./src/dom/virtual-list.ts"],
+      "loom/dom/reveal": ["./src/dom/reveal.ts"],
       "loom/dom/scroll-fade": ["./src/dom/scroll-fade.ts"],
       "loom/devtools": ["./src/devtools/index.ts"],
       "loom/html": ["./src/html/index.ts"],
