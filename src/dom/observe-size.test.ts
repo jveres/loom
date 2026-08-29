@@ -64,4 +64,33 @@ describe("observeSize", () => {
     stopSecond();
     stopBorder();
   });
+
+  it("the observer is the element's OWN realm's (popup/iframe elements)", () => {
+    // A module-global observer constructed in the importing realm
+    // forced cross-realm delivery for elements of another window —
+    // the frameCoalesced {window} hazard, solved here by deriving
+    // the realm from the element itself.
+    const foreignObserved: Element[] = [];
+    class ForeignRO {
+      observe(el: Element): void {
+        foreignObserved.push(el);
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    const foreignWin = {
+      ResizeObserver: ForeignRO,
+    } as unknown as Window & typeof globalThis;
+    const foreignDoc = document.implementation.createHTMLDocument();
+    Object.defineProperty(foreignDoc, "defaultView", {
+      value: foreignWin,
+    });
+    const el = foreignDoc.createElement("div");
+    foreignDoc.body.append(el);
+    const stop = observeSize(el, () => {});
+    expect(foreignObserved).toEqual([el]);
+    // …and the ambient realm's observer never saw it.
+    expect(observed).toEqual([]);
+    stop();
+  });
 });

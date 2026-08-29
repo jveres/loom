@@ -1002,10 +1002,16 @@ if (pane) {
 ```
 - `observeSize(el, cb, options?)` — `cb(entry)` on ResizeObserver's clock
   (including the initial delivery on attach), detached on node teardown. One
-  shared observer serves the whole app; it holds one observation per element,
-  and an explicit `options` re-observes (last explicit box wins). The default
-  content-box never fires on padding-only changes — a consumer measuring
-  border boxes must pass `{ box: "border-box" }`. Returns a stop.
+  shared observer serves each REALM, constructed with the element's own
+  window (a popup or iframe element gets its realm's observer); it holds one
+  observation per element, and an explicit `options` re-observes (last
+  explicit box wins). The default content-box never fires on padding-only
+  changes — a consumer measuring border boxes must pass
+  `{ box: "border-box" }`. Returns a stop.
+- `caretAtPoint(doc, x, y)` — the caret position under a viewport point
+  (`{ node, offset }` or `undefined`), covering both engine channels: Gecko
+  ships only `caretPositionFromPoint`, WebKit only `caretRangeFromPoint`.
+  One spelling instead of the silent per-engine fallback bug.
 - `observeIntersection(el, cb, options?)` — `cb(entry)` on
   IntersectionObserver's clock, detached on node teardown. Observers with
   equivalent `root`, `rootMargin`, and `threshold` options are shared. Custom
@@ -1243,7 +1249,7 @@ relayout(500); // same key: nothing rebuilt
 | `onMount` | [Lifecycle](#lifecycle) |
 | `onTap`, `onDoublePress` | [The `onTap` synthetic event](#the-ontap-synthetic-event) |
 | `startPointerSession` | [Pointer sessions](#pointer-sessions) |
-| `connected`, `mediaRead`, `persisted`, `codecs`, `storageSlot`, `pressed`, `pressClass`, `hovered`, `hoverClass`, `focusWithin`, `listen`, `deadline`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation` | [Browser state and observers](#browser-state-and-observers) |
+| `connected`, `mediaRead`, `persisted`, `codecs`, `storageSlot`, `pressed`, `pressClass`, `hovered`, `hoverClass`, `focusWithin`, `listen`, `deadline`, `scrollEdges`, `observeSize`, `observeIntersection`, `observeMutation`, `caretAtPoint` | [Browser state and observers](#browser-state-and-observers) |
 | `scrollFade` (`loom/dom/scroll-fade`) | [Scroll fade](#scroll-fade) |
 | `reveal`, `scrollParent`, `nearestScroller`, `scrollNearest`, `scrollCentered`, `scrollMemory`, `offsetIn`, `placeAfter`, `positionOrdered` | [Scroll reveal and memory](#scroll-reveal-and-memory) |
 | `settleTransition`, `settleAnimation`, `nextFrame`, `afterFrames`, `coalesced`, `frameCoalesced`, `foldHeight`, `bindValue`, `keyedChild` | [Transitions and folds](#transitions-and-folds) |

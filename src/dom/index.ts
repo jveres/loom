@@ -1308,6 +1308,7 @@ function isBinding<TKind extends "attr" | "class" | "style">(
 }
 
 export { type BindValueOptions, bindValue } from "./bind-value.js";
+export { type CaretPoint, caretAtPoint } from "./caret-at-point.js";
 export { coalesced } from "./coalesced.js";
 export { connected } from "./connected.js";
 export { deadline } from "./deadline.js";

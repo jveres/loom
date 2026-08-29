@@ -153,6 +153,7 @@ export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions):
 export declare function bindManual(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
 export declare function bindManual(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
 export { type BindValueOptions, bindValue } from "./bind-value.js";
+export { type CaretPoint, caretAtPoint } from "./caret-at-point.js";
 export { coalesced } from "./coalesced.js";
 export { connected } from "./connected.js";
 export { deadline } from "./deadline.js";
