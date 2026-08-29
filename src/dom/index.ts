@@ -1355,6 +1355,7 @@ export {
   type StorageSlotOptions,
   storageSlot,
 } from "./persisted.js";
+export { placeAfter } from "./place.js";
 export {
   type PointerSessionEndReason,
   type PointerSessionOptions,

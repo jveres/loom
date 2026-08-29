@@ -171,6 +171,7 @@ export { type OffsetRect, offsetIn } from "./offset-in.js";
 export { onMount } from "./on-mount.js";
 export { dispose, onUnmount, pause, type ResourceGroup, remove, resourceGroup, resume, } from "./ownership.js";
 export { codecs, type PersistedOptions, persisted, type StorageSlot, type StorageSlotOptions, storageSlot, } from "./persisted.js";
+export { placeAfter } from "./place.js";
 export { type PointerSessionEndReason, type PointerSessionOptions, startPointerSession, } from "./pointer-session.js";
 export { type PressClassOptions, pressClass } from "./press-class.js";
 export { pressed } from "./pressed.js";
