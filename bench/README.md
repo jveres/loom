@@ -77,6 +77,30 @@ All 529 tests, type checking, lint, build, and eight bundle budgets pass.
 Minimal core grows from 2,906 to 2,929 B gzip; minimal DOM from 5,680 to
 5,854 B; standalone virtual list from 1,391 to 1,445 B.
 
+## Earlier measurements
+
+Historical runtime comments recorded a roughly 4.6 ms to 1 ms improvement for
+an older 1,000-row swap comparison and a tenfold write difference under a
+live-binding module transform. Their complete environments and raw results
+were not retained. These explain earlier implementation choices; they are
+not additional measurements from the stage 5 comparison.
+
+## Stage 6 structural check
+
+The same harness compared the module extraction against `77dcdfd` on September
+5, 2026: Chromium 152, 11 samples of 400 iterations. The workloads remain close
+to the stage 5 implementation; this refactor claims no performance improvement.
+Unchanged pairs measured 0.0945 to 0.09275 ms, append 0.11225 to 0.111 ms,
+and swap 0.23875 to 0.24950 ms. The swap difference is +4.5%; these short
+measurements do not establish a precise regression bound.
+
+The existing depth-50 scope pause/resume benchmark measured 671.04 ops/s before
+and 662.63 ops/s after extraction (about -1.3%). Both forced-GC checks still
+retain zero removed nodes, and all seven browser behavior checks pass.
+[Stage 6 summaries](results/dom-stage6.json) preserve the complete comparison.
+Run the scope case with `pnpm exec vitest bench --run bench/hotpaths.bench.ts
+-t 'deep scope pause/resume'` in each checkout.
+
 ## Reproduce
 
 Start Vite from the repository:

@@ -1,3 +1,5 @@
+import { throwCollected } from "../core/errors.js";
+
 export type OwnershipStop = () => void;
 export type OwnedResource = object;
 
@@ -97,10 +99,7 @@ function runOwned(
     }
   }
 
-  if (errors?.length === 1) throw errors[0];
-  if (errors && errors.length > 1) {
-    throw new AggregateError(errors, "Multiple Loom DOM disposers failed.");
-  }
+  throwCollected(errors, "Multiple Loom DOM disposers failed.");
 }
 
 function addOwned(node: Node, entry: OwnedEntry): void {
@@ -219,10 +218,7 @@ export function removeNodes(
       errors.push(error);
     }
   }
-  if (errors.length === 1) throw errors[0];
-  if (errors.length > 1) {
-    throw new AggregateError(errors, "Multiple Loom DOM operations failed.");
-  }
+  throwCollected(errors, "Multiple Loom DOM operations failed.");
 }
 
 export interface ResourceGroup<T> {
@@ -338,10 +334,7 @@ function stopResourceGroup(resources: GroupEntry[]): void {
     stop(entry.resource);
   }
   resources.length = 0;
-  if (errors?.length === 1) throw errors[0];
-  if (errors && errors.length > 1) {
-    throw new AggregateError(errors, "Multiple Loom DOM resources failed.");
-  }
+  throwCollected(errors, "Multiple Loom DOM resources failed.");
 }
 
 /**

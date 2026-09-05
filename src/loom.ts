@@ -3,6 +3,15 @@ import {
   type Link,
   type ReactiveNode,
 } from "./core/graph.js";
+import {
+  bumpPausedCount,
+  type OwnedScopeResource,
+  type ScopeNode,
+  type ScopeResource,
+  stopScopeResource,
+  swapRemove,
+  walkResources,
+} from "./core/scope-ownership.js";
 
 const Mutable = 1;
 const Watching = 2;
@@ -145,41 +154,6 @@ interface EffectNode extends NodeBase {
   // budget-exhausted drain reschedules with the time REMAINING to this, not a fresh maxStale — so
   // sustained load can't stretch staleness past the documented floor.
   deferDeadline?: number;
-}
-
-// A non-effect resource owned by a scope (a poll timer, a lazy source's connection): suspended
-// and resumed with the scope's effects, and torn down when it stops.
-interface ScopeResource {
-  pause(): void;
-  resume(): void;
-  stop(): void;
-}
-
-interface OwnedScopeResource extends ScopeResource {
-  owner: ScopeNode | undefined;
-  ownerIndex: number;
-  stopped: boolean;
-}
-
-// An ownership group for effects, resources, and nested scopes. Effects/resources created while a
-// scope is active register here; the scope can stop them, or pause/resume them collectively. An
-// effect runs (and a resource stays live) only while no scope in its parent chain is paused.
-interface ScopeNode {
-  readonly effects: EffectNode[];
-  readonly resources: OwnedScopeResource[];
-  readonly children: ScopeNode[];
-  readonly parent: ScopeNode | undefined;
-  // This scope's slot in parent.children — so stopping a child swap-removes in O(1) instead of an
-  // indexOf scan + splice (O(siblings) per stop, quadratic across a churned sibling set).
-  childIndex: number;
-  // Default node options (internal/label) applied to everything created in the scope,
-  // already merged with any ancestor scope's defaults.
-  readonly options: NodeOptions | undefined;
-  paused: boolean;
-  // Number of paused scopes in this node's ancestor chain (including itself), maintained on
-  // pause/resume so readers never walk to the root.
-  pausedCount: number;
-  stopped: boolean;
 }
 
 export interface InspectMeta {
@@ -664,7 +638,7 @@ export function scope<Result>(
 
 // Non-barrel seam for the deferred lane (./core/defer.ts): hands the lane plain function
 // references ONCE at install. Under live-binding transforms an imported binding is a getter per
-// access (the measured 10x write lesson); returning the internals lets the lane capture them into
+// access; returning the internals lets the lane capture them into
 // module-local consts and pay a plain call forever after.
 export function installDeferredLane(enqueue: (node: EffectNode) => void): {
   runEffect: (node: EffectNode) => void;
@@ -724,16 +698,6 @@ export function registerScopeResource(resource: ScopeResource): Stop {
   return () => stopScopeResource(owned);
 }
 
-// Add `delta` to the paused-ancestor count of `node` and its whole subtree (every descendant gains
-// or loses this scope as a paused ancestor). Walks all children, including independently-paused ones.
-function bumpPausedCount(node: ScopeNode, delta: number): void {
-  node.pausedCount += delta;
-  for (const effectNode of node.effects) {
-    effectNode.pausedCount = (effectNode.pausedCount ?? 0) + delta;
-  }
-  for (const child of node.children) bumpPausedCount(child, delta);
-}
-
 function stopScope(node: ScopeNode): void {
   if (node.stopped) return;
   node.stopped = true;
@@ -776,35 +740,6 @@ function stopScope(node: ScopeNode): void {
   if (caught !== undefined) throw caught[0];
 }
 
-function stopScopeResource(resource: OwnedScopeResource): void {
-  if (resource.stopped) return;
-  resource.stopped = true;
-  const owner = resource.owner;
-  if (owner !== undefined && !owner.stopped) {
-    swapRemove(owner.resources, resource.ownerIndex, (moved, index) => {
-      moved.ownerIndex = index;
-    });
-  }
-  resource.owner = undefined;
-  resource.ownerIndex = -1;
-  resource.stop();
-}
-
-// O(1) list removal: move the last element into slot `i` (telling it its new index via `reindex`)
-// and pop. Used by the scope-detach paths so a churned scope/effect set never pays an indexOf scan.
-function swapRemove<T>(
-  list: T[],
-  i: number,
-  reindex: (moved: T, index: number) => void,
-): void {
-  const last = list.length - 1;
-  if (i < 0 || i > last) return;
-  const moved = list[last] as T;
-  list[i] = moved;
-  reindex(moved, i);
-  list.pop();
-}
-
 function pauseScope(node: ScopeNode): void {
   if (node.paused || node.stopped) return;
   // Suspend resources only when this newly pauses the chain (an ancestor pause already did so).
@@ -842,38 +777,6 @@ function resumeScope(node: ScopeNode): void {
     caught ??= [error];
   }
   if (caught !== undefined) throw caught[0];
-}
-
-// Snapshot every resource before invoking user hooks: a hook may stop itself, a sibling resource,
-// or a child scope, all of which swap-remove live ownership arrays. Complete every still-live hook
-// in the snapshot before surfacing the first failure.
-function walkResources(
-  node: ScopeNode,
-  act: (resource: OwnedScopeResource) => void,
-): void {
-  const resources: OwnedScopeResource[] = [];
-  collectResources(node, resources);
-  let caught: [unknown] | undefined;
-  for (const resource of resources) {
-    if (resource.stopped) continue;
-    try {
-      act(resource);
-    } catch (error) {
-      caught ??= [error];
-    }
-  }
-  if (caught !== undefined) throw caught[0];
-}
-
-// Independently-paused child subtrees are already in the matching resource state.
-function collectResources(
-  node: ScopeNode,
-  resources: OwnedScopeResource[],
-): void {
-  for (const resource of node.resources) resources.push(resource);
-  for (const child of node.children) {
-    if (!child.paused) collectResources(child, resources);
-  }
 }
 
 // Queue every dirty effect in the subtree whose chain is now unpaused; independently-paused

@@ -1,4 +1,6 @@
 import { type CleanupEffectFn, type EffectFn, type EffectOptions, type Read, type State, type Stop } from "../loom.js";
+import { type EachOptions, type ListOptions } from "./keyed-reconcile.js";
+export type { EachOptions, ListOptions, ListUpdate, } from "./keyed-reconcile.js";
 export type Child = Node | Read<unknown> | DynamicChild | string | number | boolean | null | undefined | readonly Child[];
 declare const BINDING: unique symbol;
 export type AttrBinding = {
@@ -23,16 +25,6 @@ export type ElementProps = Record<string, unknown> & {
     key?: string | number;
     style?: StyleProp;
 };
-/** Called untracked for a reused key whose item changed by reference/value (===). */
-export type ListUpdate<T> = (node: Element, item: T, previous: T) => void;
-export interface EachOptions<T> {
-    readonly update?: ListUpdate<T>;
-}
-export interface ListOptions<T> extends EachOptions<T> {
-    readonly key: (item: T) => string | number;
-    readonly render: (item: T, key: string) => Element;
-    readonly reorder?: Read<boolean>;
-}
 declare const SVG_TAG_LIST: readonly ["svg", "g", "defs", "symbol", "use", "switch", "foreignObject", "image", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "textPath", "linearGradient", "radialGradient", "stop", "clipPath", "mask", "pattern", "marker", "filter", "feGaussianBlur", "feOffset", "feBlend", "feColorMatrix", "feComposite", "feFlood", "feMerge", "feMergeNode", "feMorphology", "feDropShadow", "feImage", "feTile", "feTurbulence", "feDisplacementMap"];
 export type SvgTagName = (typeof SVG_TAG_LIST)[number];
 /**

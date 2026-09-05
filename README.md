@@ -21,6 +21,9 @@
 > Loom is under active development. The API is intentionally small and can still
 > change while the core and inspector surface are refined.
 
+For internal module boundaries and lifecycle contracts, see
+[Runtime architecture](ARCHITECTURE.md).
+
 ## Why Loom
 
 - **Runtime, not compiled.** Plain functions and live DOM nodes — no build-step

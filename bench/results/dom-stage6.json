@@ -1,0 +1,218 @@
+{
+  "date": "2026-09-05",
+  "baselineCommit": "77dcdfd",
+  "baseline": {
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+    "iterations": 400,
+    "results": [
+      {
+        "maxMs": 0.11100000008940696,
+        "medianMs": 0.09450000002980231,
+        "minMs": 0.09200000002980233,
+        "name": "keyed/unchanged"
+      },
+      {
+        "maxMs": 0.11825000002980232,
+        "medianMs": 0.11224999994039536,
+        "minMs": 0.10649999991059304,
+        "name": "keyed/append"
+      },
+      {
+        "maxMs": 0.1125,
+        "medianMs": 0.10825000002980233,
+        "minMs": 0.105,
+        "name": "keyed/prepend"
+      },
+      {
+        "maxMs": 0.16075000002980233,
+        "medianMs": 0.15450000002980233,
+        "minMs": 0.15175000011920928,
+        "name": "keyed/remove"
+      },
+      {
+        "maxMs": 0.24900000005960465,
+        "medianMs": 0.23875,
+        "minMs": 0.2332500000298023,
+        "name": "keyed/swap"
+      },
+      {
+        "maxMs": 0.8025,
+        "medianMs": 0.795,
+        "minMs": 0.7582499998807907,
+        "name": "keyed/reverse"
+      },
+      {
+        "maxMs": 0.014000000059604644,
+        "medianMs": 0.009500000029802322,
+        "minMs": 0.00925000011920929,
+        "name": "regions/1"
+      },
+      {
+        "maxMs": 0.009749999940395356,
+        "medianMs": 0.009500000029802322,
+        "minMs": 0.009249999970197676,
+        "name": "regions/20"
+      },
+      {
+        "maxMs": 0.0125,
+        "medianMs": 0.009500000029802322,
+        "minMs": 0.009249999970197676,
+        "name": "regions/100"
+      },
+      {
+        "maxMs": 0.0020000000298023225,
+        "medianMs": 0.0017499999701976775,
+        "minMs": 0.0014999999105930327,
+        "name": "virtual/stationary"
+      },
+      {
+        "maxMs": 0.0027499999105930328,
+        "medianMs": 0.0025,
+        "minMs": 0.0022499999403953553,
+        "name": "virtual/within"
+      },
+      {
+        "maxMs": 0.03050000011920929,
+        "medianMs": 0.02924999997019768,
+        "minMs": 0.02824999988079071,
+        "name": "virtual/boundary"
+      },
+      {
+        "maxMs": 0.51,
+        "medianMs": 0.428999999910593,
+        "minMs": 0.41375,
+        "name": "group/remove-900-of-1000"
+      },
+      {
+        "maxMs": 0.12875,
+        "medianMs": 0.12375,
+        "minMs": 0.12349999994039536,
+        "name": "revisions/churn-1000"
+      }
+    ],
+    "samples": 11
+  },
+  "candidate": {
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+    "iterations": 400,
+    "results": [
+      {
+        "maxMs": 0.1025,
+        "medianMs": 0.09274999991059305,
+        "minMs": 0.09049999997019768,
+        "name": "keyed/unchanged"
+      },
+      {
+        "maxMs": 0.1175,
+        "medianMs": 0.11099999994039536,
+        "minMs": 0.10625,
+        "name": "keyed/append"
+      },
+      {
+        "maxMs": 0.11400000005960464,
+        "medianMs": 0.1092500001192093,
+        "minMs": 0.10650000005960464,
+        "name": "keyed/prepend"
+      },
+      {
+        "maxMs": 0.15974999994039535,
+        "medianMs": 0.15550000011920928,
+        "minMs": 0.15099999994039537,
+        "name": "keyed/remove"
+      },
+      {
+        "maxMs": 0.253999999910593,
+        "medianMs": 0.24950000002980233,
+        "minMs": 0.24099999994039537,
+        "name": "keyed/swap"
+      },
+      {
+        "maxMs": 0.78875,
+        "medianMs": 0.7639999999105931,
+        "minMs": 0.759750000089407,
+        "name": "keyed/reverse"
+      },
+      {
+        "maxMs": 0.012000000029802322,
+        "medianMs": 0.009000000059604645,
+        "minMs": 0.00875,
+        "name": "regions/1"
+      },
+      {
+        "maxMs": 0.009249999970197676,
+        "medianMs": 0.008999999910593033,
+        "minMs": 0.00875,
+        "name": "regions/20"
+      },
+      {
+        "maxMs": 0.011749999970197678,
+        "medianMs": 0.009249999970197676,
+        "minMs": 0.00875,
+        "name": "regions/100"
+      },
+      {
+        "maxMs": 0.0020000000298023225,
+        "medianMs": 0.0017499999701976775,
+        "minMs": 0.0014999999105930327,
+        "name": "virtual/stationary"
+      },
+      {
+        "maxMs": 0.002750000059604645,
+        "medianMs": 0.0025,
+        "minMs": 0.0022499999403953553,
+        "name": "virtual/within"
+      },
+      {
+        "maxMs": 0.030999999940395356,
+        "medianMs": 0.027000000029802323,
+        "minMs": 0.02625,
+        "name": "virtual/boundary"
+      },
+      {
+        "maxMs": 0.5217499999701977,
+        "medianMs": 0.42150000005960464,
+        "minMs": 0.41899999991059306,
+        "name": "group/remove-900-of-1000"
+      },
+      {
+        "maxMs": 0.12900000005960466,
+        "medianMs": 0.12450000002980233,
+        "minMs": 0.12349999994039536,
+        "name": "revisions/churn-1000"
+      }
+    ],
+    "samples": 11
+  },
+  "retention": {
+    "removed": {
+      "removed": 1000,
+      "retainedWhileGroupLive": 0
+    },
+    "scopeStopped": {
+      "removed": 1000,
+      "retainedWhileGroupLive": 0
+    }
+  },
+  "browserChecks": [
+    "list: insertion preserves focus and identity",
+    "list: reorder preserves focus and identity",
+    "each: insertion preserves focus and identity",
+    "each: reorder preserves focus and identity",
+    "virtual: real scroll within window skips source reads",
+    "virtual: real scroll across boundary reads new window",
+    "virtual: explicit refresh detects changed lazy source"
+  ],
+  "scopeBenchmark": {
+    "workload": "depth 50: dirty-while-paused + resume x300",
+    "baseline": {
+      "opsPerSecond": 671.04,
+      "meanMs": 1.4902,
+      "samples": 336
+    },
+    "candidate": {
+      "opsPerSecond": 662.63,
+      "meanMs": 1.5091,
+      "samples": 332
+    }
+  }
+}

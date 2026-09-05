@@ -14,6 +14,12 @@ import {
   untrack,
 } from "../loom.js";
 import { attrRead, classRead, styleRead } from "./element-reads.js";
+import {
+  type EachOptions,
+  type ListOptions,
+  type LoomKey,
+  reconcileKeyed,
+} from "./keyed-reconcile.js";
 import { onMount } from "./on-mount.js";
 import { dispose, onUnmount } from "./ownership.js";
 import {
@@ -22,7 +28,12 @@ import {
   removeNodes,
   withConstructionRollback,
 } from "./ownership-base.js";
-import { positionOrdered } from "./place.js";
+
+export type {
+  EachOptions,
+  ListOptions,
+  ListUpdate,
+} from "./keyed-reconcile.js";
 
 export type Child =
   | Node
@@ -93,26 +104,6 @@ export type ElementProps = Record<string, unknown> & {
   key?: string | number;
   style?: StyleProp;
 };
-
-/** Called untracked for a reused key whose item changed by reference/value (===). */
-export type ListUpdate<T> = (node: Element, item: T, previous: T) => void;
-
-export interface EachOptions<T> {
-  readonly update?: ListUpdate<T>;
-}
-
-export interface ListOptions<T> extends EachOptions<T> {
-  readonly key: (item: T) => string | number;
-  readonly render: (item: T, key: string) => Element;
-  readonly reorder?: Read<boolean>;
-}
-
-type LoomKey = string | number;
-
-interface RowUpdates<T> {
-  readonly update: ListUpdate<T>;
-  readonly items: Map<LoomKey, T>;
-}
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 // SVG-only tag names — elements that must be created in the SVG namespace. Tags shared with
@@ -529,84 +520,6 @@ export function style(
   if (read === undefined) return styleRead(a, prop);
   bindStyle(a, { kind: "style", name: prop, read }, options);
   return undefined;
-}
-
-// Validate identities before rendering, stage new resources, then commit placement
-// before retiring old rows. Both keyed APIs share these failure guarantees.
-function reconcileKeyed<T>(
-  parent: Node,
-  before: Node | null,
-  items: readonly T[],
-  nodes: Map<LoomKey, Element>,
-  key: (item: T) => LoomKey,
-  render: (item: T, key: string) => Element,
-  reorder = true,
-  updates?: RowUpdates<T>,
-): void {
-  const seen = new Set<LoomKey>();
-  const keys = new Array<LoomKey>(items.length);
-  for (let index = 0; index < items.length; index++) {
-    const k = key(items[index] as T);
-    if (seen.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
-    seen.add(k);
-    keys[index] = k;
-  }
-
-  const created = new Map<LoomKey, Element>();
-  const ordered = new Array<Element>(items.length);
-  withConstructionRollback(() => {
-    try {
-      for (let index = 0; index < items.length; index++) {
-        const k = keys[index] as LoomKey;
-        let node = nodes.get(k);
-        if (node === undefined) {
-          const keyText = String(k);
-          node = render(items[index] as T, keyText);
-          created.set(k, node);
-          node.setAttribute("data-loom-key", keyText);
-        } else if (updates && items[index] !== updates.items.get(k)) {
-          const current = items[index] as T;
-          const previous = updates.items.get(k) as T;
-          const existing = node;
-          untrack(() => updates.update(existing, current, previous));
-        }
-        ordered[index] = node;
-      }
-      if (nodes.size === 0 && ordered.length !== 0) {
-        const fragment = (
-          parent.ownerDocument ?? document
-        ).createDocumentFragment();
-        for (const node of ordered) fragment.appendChild(node);
-        parent.insertBefore(fragment, before);
-      } else if (reorder) {
-        positionOrdered(parent, ordered, before);
-      } else {
-        for (const node of ordered) {
-          if (!node.parentNode) parent.appendChild(node);
-        }
-      }
-    } catch (error) {
-      // Existing rows remain owned and live; only staged additions are retired.
-      removeNodes(created.values(), [error]);
-    }
-  });
-
-  for (const [k, node] of created) nodes.set(k, node);
-  if (updates) {
-    for (let index = 0; index < items.length; index++) {
-      updates.items.set(keys[index] as LoomKey, items[index] as T);
-    }
-  }
-  if (seen.size !== nodes.size) {
-    const outgoing: Element[] = [];
-    for (const [k, node] of nodes) {
-      if (seen.has(k)) continue;
-      nodes.delete(k);
-      updates?.items.delete(k);
-      outgoing.push(node);
-    }
-    removeNodes(outgoing);
-  }
 }
 
 export function list<T>(

@@ -1,10 +1,6 @@
-// caretAtPoint(doc, x, y) — the caret position under a viewport point,
-// covering BOTH engine channels: Gecko ships only
-// `caretPositionFromPoint`, WebKit only `caretRangeFromPoint`, and
-// Chromium ships both. An editor that tries one spelling silently
-// falls to its fallback caret in the other engine's browsers
-// (proposed from seam's rich-edit entry, Aug 29 — exactly that bug).
-// Returns undefined when neither channel exists or the point misses.
+// Resolve a caret from viewport coordinates using the document's available
+// caretPositionFromPoint or caretRangeFromPoint API. Returns undefined when
+// neither API exists or the point misses.
 
 export interface CaretPoint {
   node: Node;

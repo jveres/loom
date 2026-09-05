@@ -4,12 +4,9 @@
 // the node — `remove()`/`dispose()`/a keyed row leaving detach it automatically, the forgotten
 // `ro.disconnect()` class of leak gone by construction. Returns a Stop for early manual detach.
 //
-// ONE ResizeObserver serves every observeSize in a REALM, derived from the element's own window
-// (proposed from seam's detached-popup preview, Aug 29: a module-global observer constructed in
-// the importing realm forced cross-realm delivery for popup/iframe elements — the same hazard
-// frameCoalesced's `window` option exists for, solved here without an option because the element
-// carries its realm). With nothing observed a realm's observer is disconnected and its seat
-// dropped, so a closed popup's window is released with its last observed element.
+// One ResizeObserver serves each element's own window, avoiding cross-realm delivery for
+// popup and iframe elements. With nothing observed, the realm's observer is disconnected
+// and removed from the registry so it no longer retains that window.
 import type { Stop } from "../loom.js";
 import { once } from "./once.js";
 import { onUnmount } from "./ownership-base.js";

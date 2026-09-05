@@ -5,11 +5,7 @@
 // scroll/resize/observer fan-out that must collapse to ONE pass per
 // painted frame (an overlay re-pin, a scrub drive). `window` pins the
 // latch to a specific realm's paint clock — a popup or an iframe's
-// window paints on its own schedule, and the ambient
-// requestAnimationFrame never fires for it (proposed from seam's
-// preview: the detached editor popup re-pinned overlay chrome, and from
-// its animation binder's scrub pass — the two in-repo copies of this
-// exact latch). Falls back to a microtask where the chosen realm has no
+// window has its own frame scheduler. Falls back to a microtask when the chosen realm has no
 // requestAnimationFrame (workers, tests, SSR). With an `owner`, requests
 // after its disposal are dropped; `.stop()` cancels a pending run and
 // retires the request for callers without an owner node (a dying popup).

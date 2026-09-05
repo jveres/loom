@@ -10,6 +10,7 @@
 // module sets to `position: relative`); this module only sets their `transform`. Rows participate in
 // Loom's node ownership: replacement, eviction, and destroy dispose their subtree before removal.
 
+import { throwCollected } from "../core/errors.js";
 import { dispose, remove } from "./ownership-base.js";
 
 // The backing data: the windower needs only the total count (for scroll height) and random access
@@ -69,16 +70,6 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
   let windowStart = -1;
   let windowEnd = -1;
   let windowRevision = -1;
-
-  const throwDisposalErrors = (errors: unknown[]): void => {
-    if (errors.length === 1) throw errors[0];
-    if (errors.length > 1) {
-      throw new AggregateError(
-        errors,
-        "Multiple virtual-list rows failed to dispose.",
-      );
-    }
-  };
 
   const reconcile = (force = true): void => {
     const sp = scroller;
@@ -148,7 +139,10 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
           disposalErrors.push(error);
         }
       }
-    throwDisposalErrors(disposalErrors);
+    throwCollected(
+      disposalErrors,
+      "Multiple virtual-list rows failed to dispose.",
+    );
     windowStart = start;
     windowEnd = end;
     windowRevision = revision;

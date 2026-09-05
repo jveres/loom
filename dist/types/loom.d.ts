@@ -1,4 +1,5 @@
 import { type Link, type ReactiveNode } from "./core/graph.js";
+import { type ScopeNode, type ScopeResource } from "./core/scope-ownership.js";
 export interface State<T> {
     (): T;
     (next: T): void;
@@ -85,27 +86,6 @@ interface EffectNode extends NodeBase {
     deferredQueued?: boolean;
     maxStale?: number;
     deferDeadline?: number;
-}
-interface ScopeResource {
-    pause(): void;
-    resume(): void;
-    stop(): void;
-}
-interface OwnedScopeResource extends ScopeResource {
-    owner: ScopeNode | undefined;
-    ownerIndex: number;
-    stopped: boolean;
-}
-interface ScopeNode {
-    readonly effects: EffectNode[];
-    readonly resources: OwnedScopeResource[];
-    readonly children: ScopeNode[];
-    readonly parent: ScopeNode | undefined;
-    childIndex: number;
-    readonly options: NodeOptions | undefined;
-    paused: boolean;
-    pausedCount: number;
-    stopped: boolean;
 }
 export interface InspectMeta {
     readonly id: number;

@@ -90,7 +90,7 @@ function syncFormState(from: Element, to: Element): void {
   // binds to ONE realm's constructors, and a morph may patch a document from
   // another realm (an editor shell morphing its canvas iframe) — the nodeName
   // pair already proves the shape, so the narrowing is a cast, never a brand
-  // check (proposed from seam's preview, Aug 29).
+  // check.
   const name = from.nodeName;
   if (name !== "INPUT" && name !== "TEXTAREA" && name !== "OPTION") return;
   if (to.nodeName !== name) return;

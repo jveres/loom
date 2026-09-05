@@ -90,13 +90,14 @@ regressing DOM identity, cleanup ordering, or representative benchmarks.
 
 ## 6. Structural cleanup
 
-Status: pending. Refactor around verified lifecycle invariants.
+Status: complete. Internal modules now separate ownership traversal and keyed
+reconciliation, with the existing lifecycle and scheduler behavior preserved.
 
-- [ ] Extract cohesive scope-ownership and keyed-reconciliation internals.
-- [ ] Consolidate narrow lifecycle and error-handling helpers.
-- [ ] Correct stale comments and move benchmark history out of runtime code.
-- [ ] Document ownership, tracking, equality, and disposal consistently.
-- [ ] Verify type checking, lint, tests, library build, bundle sizes, relevant
+- [x] Extract cohesive scope-ownership and keyed-reconciliation internals.
+- [x] Consolidate narrow lifecycle and error-handling helpers.
+- [x] Correct stale comments and move benchmark history out of runtime code.
+- [x] Document ownership, tracking, equality, and disposal consistently.
+- [x] Verify type checking, lint, tests, library build, bundle sizes, relevant
       benchmarks, and real-browser behavior for browser-sensitive changes.
 
 Acceptance: preserve the vendored graph algorithm and optional-addon boundaries;
@@ -238,8 +239,38 @@ Record completed work, commands, results, and outstanding limitations here.
   reorder in both keyed APIs, real scroll events within/across virtual windows,
   and explicit lazy-source refresh. Other browser engines were not run.
 
-## Next steps
+- Stage 5 committed and pushed as `77dcdfd` on September 5, 2026.
+- Stage 6 completed on September 5, 2026. `core/scope-ownership.ts` owns scope
+  types, indexed removal, pause-count traversal, resource stop, and snapshot
+  traversal. Its reactive imports are type-only. Scope orchestration remains
+  beside the scheduler in `loom.ts`, avoiding a runtime cycle or scheduler
+  injection layer.
+- `dom/keyed-reconcile.ts` owns keyed types and the shared construction/update/
+  placement/cleanup pass; the DOM entrypoint reexports the existing public types.
+  `core/errors.ts` consolidates DOM disposal aggregation without changing thrown
+  values or error messages. Scope first-error handling stays distinct.
+- Added [ARCHITECTURE.md](ARCHITECTURE.md) for module boundaries and lifetime,
+  tracking, equality, and disposal contracts. Removed dated origin notes and
+  engine-specific claims from helper comments. Earlier timing anecdotes are
+  preserved with their limitations in the benchmark documentation.
+- Stage 6 verification: `pnpm test` passes 57 files and 529 tests; project type
+  checking, lint, library build, and `git diff --check` pass. No runtime changes
+  were made after that test run. The vendored graph has no diff. All eight size
+  budgets pass: minimal core 2,929 B gzip, full core 5,281 B, minimal DOM 5,860 B,
+  standalone virtual list 1,439 B. Distribution files regenerated.
+- A separate `77dcdfd` checkout and candidate ran the browser harness sequentially
+  with 11 samples of 400 iterations. Timings remain close to stage 5: unchanged
+  pairs 0.09450 to 0.09275 ms, append 0.11225 to 0.11100 ms, swap 0.23875 to
+  0.24950 ms (+4.5%). The scope depth-50 pause/resume benchmark measured 671.04
+  versus 662.63 ops/s (-1.3%). These short comparisons claim no speedup or precise
+  regression bound; [raw summaries](bench/results/dom-stage6.json) preserve results.
+- All seven Chromium 152 behavior checks pass. Both live-group retention checks
+  still retain zero removed nodes, including scope-stopped bindings. Other
+  browser engines were not run. Existing regression tests cover the extracted
+  paths; no tests were added that merely repeat the helper implementation.
 
-Stages 1–5 are complete. Continue with stage 6: extract cohesive ownership and
-reconciliation internals around the tested lifecycle invariants, consolidate
-error-handling helpers, and clean up stale runtime comments and documentation.
+## Completion
+
+All six stages are complete. Future optimization work can extend the benchmark
+matrix to other browser engines and larger workloads; this plan has no remaining
+implementation items.
