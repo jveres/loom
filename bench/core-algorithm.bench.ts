@@ -5,14 +5,13 @@ import {
   endBatch,
   startBatch,
 } from "alien-signals";
+import { batch, computed, effect, scope, state } from "loom";
 import { bench, describe } from "vitest";
-import { batch, computed, effect, scope, state } from "../src/loom.js";
 
 let sink = 0;
 const consume = (value: number): void => {
   sink = (sink + value) | 0;
 };
-
 const loomDirect = directGraph(state, effect);
 const alienDirect = directGraph(alienSignal, alienEffect);
 const loomFanout = fanoutGraph(state, effect);
@@ -32,7 +31,6 @@ const alienRepeatedWrites = repeatedWriteGraph(
 const loomCascade = cascadeGraph(state, effect);
 const alienCascade = cascadeGraph(alienSignal, alienEffect);
 const loomScoped = scopedGraph();
-
 describe("core algorithm: loom vs alien-signals", () => {
   bench("loom: direct write -> effect", loomDirect);
   bench("alien: direct write -> effect", alienDirect);
@@ -50,12 +48,10 @@ describe("core algorithm: loom vs alien-signals", () => {
   bench("alien: effect cascade depth 100", alienCascade);
   bench("loom: scoped write -> effect", loomScoped);
 });
-
 interface Signal<T> {
   (): T;
   (value: T): void;
 }
-
 function directGraph(
   makeSignal: (initial: number) => Signal<number>,
   makeEffect: (fn: () => void) => () => void,
@@ -65,7 +61,6 @@ function directGraph(
   let value = 0;
   return () => source(++value);
 }
-
 function fanoutGraph(
   makeSignal: (initial: number) => Signal<number>,
   makeEffect: (fn: () => void) => () => void,
@@ -77,7 +72,6 @@ function fanoutGraph(
   let value = 0;
   return () => source(++value);
 }
-
 function loomComputedChain(): () => void {
   const source = state(0);
   let tail: () => number = source;
@@ -89,7 +83,6 @@ function loomComputedChain(): () => void {
   let value = 0;
   return () => source(++value);
 }
-
 function alienComputedChain(): () => void {
   const source = alienSignal(0);
   let tail: () => number = source;
@@ -101,7 +94,6 @@ function alienComputedChain(): () => void {
   let value = 0;
   return () => source(++value);
 }
-
 function dynamicGraph(
   makeSignal: (initial: number) => Signal<number>,
   makeEffect: (fn: () => void) => () => void,
@@ -119,7 +111,6 @@ function dynamicGraph(
   let value = 0;
   return () => mode(++value);
 }
-
 function loomBatchGraph(): () => void {
   const values = Array.from({ length: 100 }, () => state(0));
   effect(() => {
@@ -135,7 +126,6 @@ function loomBatchGraph(): () => void {
     });
   };
 }
-
 function alienBatchGraph(): () => void {
   const values = Array.from({ length: 100 }, () => alienSignal(0));
   alienEffect(() => {
@@ -151,7 +141,6 @@ function alienBatchGraph(): () => void {
     endBatch();
   };
 }
-
 function alienBatch<T>(fn: () => T): T {
   startBatch();
   try {
@@ -160,7 +149,6 @@ function alienBatch<T>(fn: () => T): T {
     endBatch();
   }
 }
-
 function repeatedWriteGraph(
   makeSignal: (initial: number) => Signal<number>,
   makeEffect: (fn: () => void) => () => void,
@@ -177,7 +165,6 @@ function repeatedWriteGraph(
     });
   };
 }
-
 function cascadeGraph(
   makeSignal: (initial: number) => Signal<number>,
   makeEffect: (fn: () => void) => () => void,
@@ -192,7 +179,6 @@ function cascadeGraph(
   let value = 0;
   return () => (values[0] as Signal<number>)(++value);
 }
-
 function scopedGraph(): () => void {
   const source = state(0);
   scope(() => {

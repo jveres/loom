@@ -1,17 +1,22 @@
 // @vitest-environment happy-dom
+
+import { remove } from "loom/dom";
+import { hoverClass } from "loom/events";
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { hoverClass, remove } from "./index.js";
 
 const over = (target: Element, pointerType = "mouse"): void => {
   target.dispatchEvent(
-    new PointerEvent("pointerover", { bubbles: true, pointerType }),
+    new PointerEvent("pointerover", {
+      isPrimary: true,
+      bubbles: true,
+      pointerType,
+    }),
   );
 };
-
 afterEach(() => {
   document.body.replaceChildren();
 });
-
 describe("hoverClass", () => {
   it("dresses the resolved target on pointerover, undresses on the host's own pointerleave; touch never dresses and clears a stale costume", () => {
     const host = document.createElement("ul");
@@ -35,11 +40,13 @@ describe("hoverClass", () => {
     expect(a.classList.contains("is-hover")).toBe(false);
     over(a);
     host.dispatchEvent(
-      new PointerEvent("pointerleave", { pointerType: "mouse" }),
+      new PointerEvent("pointerleave", {
+        isPrimary: true,
+        pointerType: "mouse",
+      }),
     );
     expect(a.classList.contains("is-hover")).toBe(false);
   });
-
   it("dresses a LIST of elements (an ancestor chain), honors `when`, and undresses on disposal", () => {
     const host = document.createElement("div");
     const mid = document.createElement("div");
@@ -72,7 +79,6 @@ describe("hoverClass", () => {
     expect(leaf.classList.contains("is-hot")).toBe(false);
     expect(mid.classList.contains("is-hot")).toBe(false);
   });
-
   it("set() drives the costume from a host's own forwarding", () => {
     const host = document.createElement("div");
     const row = document.createElement("p");

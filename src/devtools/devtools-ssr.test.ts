@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
 import {
   inspectorMounted,
   mountInspector,
   toggleInspector,
   unmountInspector,
-} from "./index.js";
+} from "loom/devtools";
+import { describe, expect, it } from "vitest";
 
 describe("loom/devtools outside a DOM", () => {
   it("keeps every lifecycle entrypoint a no-op", () => {

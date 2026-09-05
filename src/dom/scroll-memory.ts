@@ -1,68 +1,63 @@
-// scrollMemory(host, cellFor) — keyed scroll-position memory over ONE
-// scroll host whose content is swapped per key (a pane body showing
-// different panes): the host's scroll listener persists the position
-// into the key's cell, `restore(key)` stamps the new key and puts its
-// position back after the caller's synchronous content swap.
-//
-// The RESTORE-WINDOW guard: the swap clamps scrollTop to 0 and fires a
-// scroll event — WebKit can deliver it BEFORE the restore microtask, so
-// a naive listener persisted the clamp's 0 and the restore then
-// faithfully restored 0. Persistence is SUSPENDED from the stamp to one
-// frame after the restore write; a real user scroll inside that window
-// re-persists on its next event. Listener and pending restore die with
-// the host.
-import { type State, untrack } from "../loom.js";
-import { listen } from "./listen.js";
-import { nextFrame } from "./next-frame.js";
-import { onUnmount } from "./ownership-base.js";
+import { untrack } from "../core/tracking.js";
+import type { State, Stop } from "../loom.js";
+import { afterFrames } from "../schedule.js";
+import { nodeLifetime } from "./lifetime.js";
 
 export interface ScrollMemory {
-  /** Stamp `key` and queue its position restore (after the caller's
-   *  synchronous content swap). */
-  restore(key: string): void;
-  /** Detach early (the host's teardown does the same). */
-  stop(): void;
+  readonly restore: (key: string) => void;
+  readonly stop: Stop;
 }
-
+export interface ScrollMemoryOptions {
+  readonly axis?: "x" | "y";
+  readonly signal?: AbortSignal;
+}
+/** Remember positions for one host; the latest restore wins across pending frames. */
 export function scrollMemory(
   host: HTMLElement,
   cellFor: (key: string) => State<number>,
+  options: ScrollMemoryOptions = {},
 ): ScrollMemory {
-  let key = "";
+  const life = nodeLifetime(host, options.signal);
+  let key: string | undefined;
   let restoring = false;
-  let live = true;
-  const stopListen = listen(
-    host,
-    host,
-    "scroll",
-    () => {
-      if (restoring || !key) return;
-      cellFor(key)(host.scrollTop);
-    },
-    { passive: true },
-  );
-  const stopUnmount = onUnmount(host, () => {
-    live = false;
-  });
+  let revision = 0;
+  let pending: Stop | undefined;
+  const horizontal = options.axis === "x";
+  const scroll = (): void => {
+    if (!life.active || restoring || key === undefined) return;
+    const current = key;
+    untrack(() =>
+      cellFor(current)(horizontal ? host.scrollLeft : host.scrollTop),
+    );
+  };
+  if (life.active) {
+    host.addEventListener("scroll", scroll, { passive: true });
+    life.add(() => {
+      host.removeEventListener("scroll", scroll);
+      pending?.();
+    });
+  }
   return {
+    stop: life.stop,
     restore(next) {
+      if (!life.active) return;
+      const current = ++revision;
       key = next;
       restoring = true;
-      const cell = cellFor(next);
+      pending?.();
+      const cell = untrack(() => cellFor(next));
       queueMicrotask(() => {
-        if (!live) return;
-        host.scrollTop = untrack(() => cell());
-        // Release NEXT frame — the clamp's scroll event may land
-        // between the write above and its delivery.
-        nextFrame(() => {
-          restoring = false;
-        }, host);
+        if (!life.active || current !== revision) return;
+        if (horizontal) host.scrollLeft = untrack(() => cell());
+        else host.scrollTop = untrack(() => cell());
+        pending = afterFrames(
+          1,
+          () => {
+            if (life.active && current === revision) restoring = false;
+          },
+          { window: host.ownerDocument.defaultView ?? globalThis },
+        );
       });
-    },
-    stop() {
-      live = false;
-      stopListen();
-      stopUnmount();
     },
   };
 }

@@ -6,12 +6,12 @@
 // buildGraphPane / showGraph / revealSignal / clearGraphHighlight / teardownGraph, the stats
 // heartbeat calls renderGraphThrottled, and the Trace tab's row hover calls highlightSignal.
 import type { State } from "loom";
+import { type InspectNode, inspect } from "loom/observe";
 import {
   type ListSource,
   type VirtualList,
   virtualList,
-} from "loom/dom/virtual-list";
-import { type InspectNode, inspect } from "loom/observe";
+} from "loom/virtual-list";
 import { formatValue, valueClass } from "./format.js";
 import {
   ICON_BOUND,
@@ -25,7 +25,6 @@ import {
 const GRAPH_RENDER_MS = 300; // throttle the (heavy) graph reconcile below the 120ms heartbeat
 const GRAPH_ROW_H = 22; // uniform graph row/header height (must match the .li-grow/.li-gns-h CSS)
 const GRAPH_VALUE_MAX = 16; // string-value truncation budget in the (narrow) graph rows
-
 type GraphItem =
   | {
       readonly kind: "header";
@@ -57,7 +56,6 @@ let gSuppressFlash = false;
 let gGraphJustShown = false;
 const graphCollapsed = new Set<number>();
 let gRevealId = -1; // a signal to flash on its next render (set by revealSignal, from the Trace tab)
-
 export function buildGraphPane(): HTMLElement {
   graphVList = virtualList<GraphItem>({
     rowHeight: GRAPH_ROW_H,
@@ -67,7 +65,6 @@ export function buildGraphPane(): HTMLElement {
   graphVList.el.classList.add("li-pane", "li-graph");
   return graphVList.el;
 }
-
 // A signal is "bound" (filled dot) when editing it would visibly change the UI — i.e. it drives at
 // least one DOM node (element or text) downstream. Hollow means nothing in the DOM reflects it
 // (read only by non-rendering computeds, or read by nothing).
@@ -165,13 +162,11 @@ function gBeginEdit(
     else if (e.key === "Escape") restore();
   };
 }
-
 // After a self-edit the signal may drive DOM whose size just changed; if the row is still hovered, its
 // highlight overlay now frames the old bounds, so re-measure it (a no-op when the row isn't hovered).
 function gReframe(id: number, row: HTMLElement): void {
   if (row.matches(":hover")) gPaint(gTargetsFor(id), true);
 }
-
 // Views aren't listed; instead, hovering a state/computed outlines every DOM node it drives — walk
 // subscribers through computeds to the effects that write the DOM. A binding's target is an Element
 // (attr/class/style/list) or a Text node (text binding); both count, so a signal that only feeds a
@@ -269,16 +264,13 @@ function gScrollToTargets(targets: Node[], stillActive: () => boolean): void {
   window.addEventListener("scrollend", settle);
   window.setTimeout(settle, 600); // fallback: scrollend may not fire (already in view / unsupported)
 }
-
 // A group's display name: the props() label prefix ("card 3" from "card 3.title"), else anonymous.
 function gGroupLabel(gid: number, signals: InspectNode[]): string {
   const first = signals[0];
   const dot = first ? first.label.lastIndexOf(".") : -1;
   return first && dot > 0 ? first.label.slice(0, dot) : `props #${gid}`;
 }
-
 /* ---- virtual-list row renderers (create when reuse is null, else update in place) ---- */
-
 function gRender(item: GraphItem, reuse: HTMLElement | null): HTMLElement {
   if (item.kind === "header")
     return reuse ? gUpdateHeader(reuse, item) : gCreateHeader(item);
@@ -289,8 +281,11 @@ function gRender(item: GraphItem, reuse: HTMLElement | null): HTMLElement {
   }
   return row;
 }
-
-function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
+function gCreateHeader(
+  item: GraphItem & {
+    kind: "header";
+  },
+): HTMLElement {
   const count = (
     <span class="li-gns-c">{`(${item.count})`}</span>
   ) as HTMLElement;
@@ -328,7 +323,9 @@ function gCreateHeader(item: GraphItem & { kind: "header" }): HTMLElement {
 }
 function gUpdateHeader(
   header: HTMLElement,
-  item: GraphItem & { kind: "header" },
+  item: GraphItem & {
+    kind: "header";
+  },
 ): HTMLElement {
   const c = header.querySelector(".li-gns-c");
   if (c) c.textContent = `(${item.count})`;
@@ -337,8 +334,11 @@ function gUpdateHeader(
   header.classList.toggle("collapsed", graphCollapsed.has(item.gid));
   return header;
 }
-
-function gCreateCell(item: GraphItem & { kind: "signal" }): HTMLElement {
+function gCreateCell(
+  item: GraphItem & {
+    kind: "signal";
+  },
+): HTMLElement {
   const n = item.node;
   const val = <span class="li-gval" />;
   const bound = gBound(n);
@@ -375,12 +375,13 @@ function gCreateCell(item: GraphItem & { kind: "signal" }): HTMLElement {
 }
 function gUpdateCell(
   row: HTMLElement,
-  item: GraphItem & { kind: "signal" },
+  item: GraphItem & {
+    kind: "signal";
+  },
 ): HTMLElement {
   gPaintVal(row, item.node.value, item.node.id);
   return row;
 }
-
 // The visible row list as a lazy source for the vlist: it needs only the total count (for scroll
 // height) plus random access to the viewport rows, so items are built on demand for the ~25 visible
 // rows rather than materialising the whole tree each tick. Honours collapse state.
@@ -390,7 +391,6 @@ function gListLength(): number {
     n += 1 + (graphCollapsed.has(g.gid) ? 0 : g.signals.length);
   return n;
 }
-
 function gItemAt(index: number): GraphItem | undefined {
   let i = index;
   for (const g of graphGroupsData) {
@@ -416,11 +416,9 @@ function gItemAt(index: number): GraphItem | undefined {
     ? { kind: "signal", node: graphSingles[i] as InspectNode, child: false }
     : undefined;
 }
-
 function gListSource(): ListSource<GraphItem> {
   return { length: gListLength(), at: gItemAt };
 }
-
 function renderGraph(): void {
   if (!graphVList) return;
   // active:true drops subscriber-less signals before they're even built — excluding the ghost signals
@@ -428,7 +426,6 @@ function renderGraph(): void {
   const all = inspect({ active: true }).nodes;
   graphById = new Map(all.map((n) => [n.id, n]));
   graphByIdAt = performance.now();
-
   // The tree holds state + computed signals only; views (effects) are reached by hover, not listed.
   const groups = new Map<number, InspectNode[]>();
   const singles: InspectNode[] = [];
@@ -452,14 +449,11 @@ function renderGraph(): void {
   gSuppressFlash = false;
   gGraphJustShown = false;
 }
-
 /* ---- seams the panel drives ---- */
-
 // Drop any lingering hover-highlight overlay (the panel calls this when leaving the graph tab).
 export function clearGraphHighlight(): void {
   gPaint([], false);
 }
-
 // Throttle the heavy graph walk below the heartbeat (the inspect() walk is the costly part).
 export function renderGraphThrottled(): void {
   const now = performance.now();
@@ -468,7 +462,6 @@ export function renderGraphThrottled(): void {
     renderGraph();
   }
 }
-
 // Graph tab became visible: CSS animations pause under display:none and resume when shown, so strip
 // any half-played flash and suppress the first render's flash burst, then re-window at the restored
 // scroll position.
@@ -479,7 +472,6 @@ export function showGraph(): void {
   gGraphJustShown = true;
   graphVList.refresh();
 }
-
 // The flat index of a signal in the rendered tree, expanding its group if it's collapsed.
 function gIndexOf(id: number): number {
   let i = 0;
@@ -497,7 +489,6 @@ function gIndexOf(id: number): number {
   const si = graphSingles.findIndex((c) => c.id === id);
   return si >= 0 ? i + si : -1;
 }
-
 // Jump the graph to a signal — used by the Trace tab's clickable name. Rebuilds the tree so the signal
 // is current, expands its group if needed, scrolls it to centre, and flashes it on render.
 export function revealSignal(id: number): void {
@@ -508,14 +499,13 @@ export function revealSignal(id: number): void {
   gRevealId = id;
   graphVList.scrollToIndex(index);
 }
-
 // Tear down the graph tab's DOM and state (from unmountInspector).
 export function teardownGraph(): void {
   for (const o of gOverlays) o.remove();
   gOverlays = [];
   gEditing = null;
   gEditingId = -1;
-  graphVList?.destroy();
+  graphVList?.stop();
   graphVList = null;
   graphGroupsData = [];
   graphSingles = [];

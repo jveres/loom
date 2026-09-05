@@ -1,3 +1,4 @@
+import { untrack } from "../core/tracking.js";
 // A minimal fixed-row-height windowing list: only the rows in (and just around) the viewport are
 // kept in the DOM. `el` is an in-flow, full-height holder (a spacer sets its height) meant to be
 // placed inside an existing scroll container — it does not introduce its own scrollbar; the visible
@@ -8,10 +9,10 @@
 //
 // Contract: the elements returned by `render` must be absolutely positioned within `el` (which this
 // module sets to `position: relative`); this module only sets their `transform`. Rows participate in
-// Loom's node ownership: replacement, eviction, and destroy dispose their subtree before removal.
+// Loom's node ownership: replacement, eviction, and stop dispose their subtree before removal.
 
 import { throwCollected } from "../core/errors.js";
-import { dispose, remove } from "./ownership-base.js";
+import { dispose, onUnmount, remove } from "./ownership-base.js";
 
 // The backing data: the windower needs only the total count (for scroll height) and random access
 // to the items currently in the viewport — never the whole list. A plain array satisfies this
@@ -34,10 +35,12 @@ export interface VirtualList<T> {
   /** Scroll so the row at `index` is centered in the viewport. */
   scrollToIndex(index: number): void;
   /** Detach listeners and clear mounted rows. */
-  destroy(): void;
+  stop(): void;
 }
 
 export interface VirtualListOptions<T> {
+  readonly signal?: AbortSignal;
+  readonly document?: Document;
   /** Uniform row height in pixels. */
   readonly rowHeight: number;
   /** Stable identity for an item, so a row can be reused across windows. */
@@ -51,9 +54,21 @@ export interface VirtualListOptions<T> {
 export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
   const h = options.rowHeight;
   const overscan = options.overscan ?? 6;
-  const el = document.createElement("div");
+  if (
+    !Number.isFinite(h) ||
+    h <= 0 ||
+    !Number.isInteger(overscan) ||
+    overscan < 0
+  )
+    throw new RangeError(
+      "Virtual row height must be positive and overscan a non-negative integer.",
+    );
+  const doc = options.document ?? document;
+  const el = doc.createElement("div");
+  const view = doc.defaultView ?? globalThis;
+  let stopped = options.signal?.aborted ?? false;
   el.style.position = "relative";
-  const sizer = document.createElement("div");
+  const sizer = doc.createElement("div");
   sizer.style.cssText = "width:1px;pointer-events:none";
   el.append(sizer);
   let items: ListSource<T> = [];
@@ -72,6 +87,7 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
   let windowRevision = -1;
 
   const reconcile = (force = true): void => {
+    if (stopped) return;
     const sp = scroller;
     if (!sp) return;
     const vh = sp.clientHeight;
@@ -111,7 +127,7 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
         continue;
       }
       const previousRow = existing?.row ?? null;
-      const row = options.render(item, previousRow);
+      const row = untrack(() => options.render(item, previousRow));
       row.style.transform = `translateY(${i * h}px)`;
       if (existing === undefined) {
         el.append(row);
@@ -149,8 +165,8 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
   };
 
   const schedule = (): void => {
-    if (raf) return;
-    raf = requestAnimationFrame(() => {
+    if (raf || stopped) return;
+    raf = view.requestAnimationFrame(() => {
       raf = 0;
       reconcile(false);
     });
@@ -158,16 +174,44 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
 
   // The scroll container is resolved on first reconcile (el must be mounted first).
   const ensureScroller = (): void => {
-    if (scroller) return;
+    if (scroller || stopped) return;
     const sp = el.parentElement;
     if (!sp) return;
     scroller = sp;
     sp.addEventListener("scroll", schedule, { passive: true });
   };
 
+  let release = (): void => {};
+  const stop = (): void => {
+    if (stopped) return;
+    stopped = true;
+    options.signal?.removeEventListener("abort", stop);
+    release();
+    if (raf) view.cancelAnimationFrame(raf);
+    scroller?.removeEventListener("scroll", schedule);
+    scroller = null;
+    let disposalFailed = false;
+    let disposalError: unknown;
+    try {
+      dispose(el);
+    } catch (error) {
+      disposalFailed = true;
+      disposalError = error;
+    }
+    mounted.clear();
+    el.replaceChildren();
+    if (disposalFailed) throw disposalError;
+  };
+
+  if (!stopped) {
+    release = onUnmount(el, stop);
+    options.signal?.addEventListener("abort", stop, { once: true });
+  }
+
   return {
     el,
     setItems(next) {
+      if (stopped) return;
       items = next;
       revision++;
       sizer.style.height = `${items.length * h}px`;
@@ -179,31 +223,16 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
       reconcile();
     },
     scrollToEnd() {
-      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+      if (!stopped && scroller) scroller.scrollTop = scroller.scrollHeight;
     },
     scrollToIndex(index) {
-      if (!scroller) return;
+      if (stopped || !scroller) return;
       scroller.scrollTop = Math.max(
         0,
         index * h - (scroller.clientHeight - h) / 2,
       );
       reconcile();
     },
-    destroy() {
-      if (raf) cancelAnimationFrame(raf);
-      scroller?.removeEventListener("scroll", schedule);
-      scroller = null;
-      let disposalFailed = false;
-      let disposalError: unknown;
-      try {
-        dispose(el);
-      } catch (error) {
-        disposalFailed = true;
-        disposalError = error;
-      }
-      mounted.clear();
-      el.replaceChildren();
-      if (disposalFailed) throw disposalError;
-    },
+    stop,
   };
 }

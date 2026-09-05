@@ -1,4 +1,5 @@
 import { throwCollected } from "../core/errors.js";
+import { untrack } from "../core/tracking.js";
 
 export type OwnershipStop = () => void;
 export type OwnedResource = object;
@@ -78,7 +79,7 @@ function runOwned(
     if (clear) target[OWNED] = undefined;
 
     if (Array.isArray(owned)) {
-      for (const entry of owned) {
+      for (const entry of clear ? owned : [...owned]) {
         if (isRegisteredStop(entry) && !entry.active) continue;
         try {
           fn(entry);
@@ -146,7 +147,7 @@ function isRegisteredStop(entry: OwnedEntry): entry is RegisteredStop {
   return typeof entry !== "function" && REGISTERED_STOP in entry;
 }
 
-function unregister(node: Node, entry: RegisteredStop): void {
+function unregister(node: Node, entry: OwnedEntry): void {
   const target = node as OwnedNode;
   const owned = target[OWNED];
   if (!owned) return;
@@ -178,6 +179,32 @@ export function own(node: Node, stop: OwnershipStop): void {
 /** Register a raw resource without allocating a public/manual stop handle. */
 export function ownResource(node: Node, resource: OwnedResource): void {
   addOwned(node, resource);
+}
+
+/** A manually stoppable raw binding still participates in DOM pause/resume. */
+export function ownStoppableResource(
+  node: Node,
+  resource: OwnedResource,
+  signal?: AbortSignal,
+): OwnershipStop {
+  const driver = resourceDriver as OwnedResourceDriver;
+  let owner: Node | undefined = node;
+  let held: OwnedResource | undefined = resource;
+  const stop = (): void => {
+    const current = held;
+    if (current !== undefined) driver.stop(current);
+  };
+  addOwned(node, resource);
+  driver.onStop(resource, () => {
+    signal?.removeEventListener("abort", stop);
+    if (owner !== undefined && held !== undefined) unregister(owner, held);
+    owner = undefined;
+    held = undefined;
+  });
+  if (signal?.aborted) stop();
+  else if (held !== undefined)
+    signal?.addEventListener("abort", stop, { once: true });
+  return stop;
 }
 
 /** @internal Release resources created by a failed synchronous render, including
@@ -362,7 +389,7 @@ export function onUnmount(node: Node, stop: OwnershipStop): OwnershipStop {
     entry.release = undefined;
     release?.();
     if (owner !== undefined) unregister(owner, entry);
-    current?.();
+    if (current) untrack(current);
   };
   addOwned(node, entry);
   return entry.dispose;
@@ -400,7 +427,7 @@ export function dispose(root: Node): void {
   runOwned(
     root,
     (owned) => {
-      if (typeof owned === "function") owned();
+      if (typeof owned === "function") untrack(owned as OwnershipStop);
       else if (isRegisteredStop(owned)) owned.dispose();
       else if (resourceDriver !== undefined) resourceDriver.stop(owned);
       else throw new Error("No Loom DOM resource driver is installed.");

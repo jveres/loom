@@ -1,12 +1,11 @@
-import { type State } from "../loom.js";
+import { type State, type Stop } from "../loom.js";
 export interface BindValueOptions {
-    /** The bound property: "value" (default) or "checked" — the
-     *  checkbox/radio twin, a State<boolean> over `change`. */
     readonly property?: "value" | "checked";
+    readonly signal?: AbortSignal;
 }
-export declare function bindValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, cell: State<string>, options?: {
+export declare function bindValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, cell: State<string>, options?: BindValueOptions & {
     readonly property?: "value";
-}): void;
-export declare function bindValue(el: HTMLInputElement, cell: State<boolean>, options: {
+}): Stop;
+export declare function bindValue(el: HTMLInputElement, cell: State<boolean>, options: BindValueOptions & {
     readonly property: "checked";
-}): void;
+}): Stop;

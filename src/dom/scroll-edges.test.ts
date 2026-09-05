@@ -1,14 +1,18 @@
 // @vitest-environment happy-dom
+import { effect } from "loom";
+import { scrollEdges } from "loom/browser";
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { effect } from "../loom.js";
-import { scrollEdges } from "./index.js";
 
 const microtask = (): Promise<void> => Promise.resolve();
-
 // happy-dom has no layout: the scroll metrics are stubbed per element.
 const metrics = (
   el: HTMLElement,
-  m: { top?: number; height?: number; client?: number },
+  m: {
+    top?: number;
+    height?: number;
+    client?: number;
+  },
 ): void => {
   Object.defineProperty(el, "scrollTop", {
     value: m.top ?? 0,
@@ -24,11 +28,9 @@ const metrics = (
     configurable: true,
   });
 };
-
 afterEach(() => {
   document.body.replaceChildren();
 });
-
 describe("scrollEdges", () => {
   it("reads {start, end} from the scroll metrics, resyncs on scroll, dedupes equal verdicts", async () => {
     const el = document.createElement("div");
@@ -40,22 +42,18 @@ describe("scrollEdges", () => {
       seen.push(`${edges.start ? "S" : "-"}${edges.end ? "E" : "-"}`);
     });
     expect(seen).toEqual(["-E"]);
-
     metrics(el, { top: 50, height: 300, client: 100 });
     el.dispatchEvent(new Event("scroll"));
     expect(seen).toEqual(["-E", "SE"]);
-
     metrics(el, { top: 52, height: 300, client: 100 });
     el.dispatchEvent(new Event("scroll"));
     expect(seen).toEqual(["-E", "SE"]); // same verdict, no notification
-
     metrics(el, { top: 200, height: 300, client: 100 });
     el.dispatchEvent(new Event("scroll"));
     expect(seen).toEqual(["-E", "SE", "S-"]);
     await microtask();
     stop();
   });
-
   it("the horizontal axis and epsilon are options; nothing to scroll is {false, false}", () => {
     const el = document.createElement("div");
     document.body.append(el);

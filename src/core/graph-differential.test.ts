@@ -5,21 +5,19 @@ import {
   endBatch,
   startBatch,
 } from "alien-signals";
+import { batch, computed, effect, state } from "loom";
 import { expect, it } from "vitest";
-import { batch, computed, effect, state } from "../loom.js";
 
 interface Signal {
   (): number;
   (value: number): void;
 }
-
 interface ReactiveApi {
   state(initial: number): Signal;
   computed(getter: () => number): () => number;
   effect(fn: () => void): () => void;
   batch<T>(fn: () => T): T;
 }
-
 const loomApi: ReactiveApi = { state, computed, effect, batch };
 const alienApi: ReactiveApi = {
   state: alienSignal,
@@ -34,7 +32,6 @@ const alienApi: ReactiveApi = {
     }
   },
 };
-
 it("matches alien-signals across deterministic dynamic batch churn", () => {
   let seed = 0x6d2b79f5;
   const random = (): number => {
@@ -48,7 +45,6 @@ it("matches alien-signals across deterministic dynamic batch churn", () => {
       value: (random() % 17) - 8,
     })),
   );
-
   const run = (api: ReactiveApi): number[][] => {
     const values = Array.from({ length: 16 }, (_, index) => api.state(index));
     const mode = api.state(0);
@@ -70,7 +66,6 @@ it("matches alien-signals across deterministic dynamic batch churn", () => {
         log.push([step, index, selected, raw]);
       }),
     );
-
     for (step = 0; step < actions.length; step++) {
       const writes = actions[step] as Array<{
         readonly index: number;
@@ -85,6 +80,5 @@ it("matches alien-signals across deterministic dynamic batch churn", () => {
     for (const stop of stops) stop();
     return log;
   };
-
   expect(run(loomApi)).toEqual(run(alienApi));
 });

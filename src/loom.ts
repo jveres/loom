@@ -12,6 +12,7 @@ import {
   swapRemove,
   walkResources,
 } from "./core/scope-ownership.js";
+import { installUntrack } from "./core/tracking.js";
 
 const Mutable = 1;
 const Watching = 2;
@@ -355,6 +356,17 @@ export function source<T>(
   return read;
 }
 
+/** @internal Install manually owned work without inheriting a scope or effect. */
+export function detached<T>(run: () => T): T {
+  const previous = activeScope;
+  activeScope = undefined;
+  try {
+    return untrack(run);
+  } finally {
+    activeScope = previous;
+  }
+}
+
 /** @internal A cached producer belongs to its subscribers, not its first
  * caller's scope. Creation also avoids inheriting that caller's inspect options. */
 export function sharedSource<T>(
@@ -533,12 +545,8 @@ export function domEffect(
       : inspectHooks !== undefined
         ? { label, target }
         : undefined;
-  const previous = setActiveSub(undefined);
-  try {
-    return startEffect(fn, resolved);
-  } finally {
-    restoreActiveSub(previous);
-  }
+  const attributed = mergeOptions(activeScope?.options, resolved);
+  return detached(() => startEffect(fn, attributed));
 }
 
 /** @internal Start a plain node-owned DOM sink on the minimal production path. */
@@ -896,6 +904,8 @@ export function untrack<T>(fn: () => T): T {
     restoreActiveSub(previous);
   }
 }
+// Platform helpers can suppress tracking without importing the reactive engine.
+installUntrack(untrack);
 
 /**
  * Functional read-modify-write: `update(count, n => n + 1)`. The read is **untracked** — inside an
@@ -1112,7 +1122,6 @@ function setActiveSub(sub: NodeBase | undefined): NodeBase | undefined {
   activeSub = sub;
   return previous;
 }
-
 function restoreActiveSub(previous: NodeBase | undefined): void {
   activeSub = previous?.flags ? previous : undefined;
 }

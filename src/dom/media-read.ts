@@ -1,26 +1,26 @@
-// mediaRead(query) — a media query as a reactive boolean, pooled per
-// query string: one MediaQueryList and one change listener per
-// distinct query, subscriber-counted through source() (with nothing
-// observing, the listener is detached and this module costs zero —
-// the element-reads shape). Reconnects RESYNC from the live list:
-// the OS can flip the query while unobserved, and a stale cached
-// value would swallow the next notification through source()'s
-// value dedupe.
-//
-// The pool is keyed by the raw query string — normalize spellings at
-// the call site if two must share ("(min-width: 600px)" and
-// "(min-width:600px)" are two pool entries).
 import { type Read, sharedSource } from "../loom.js";
 
-const signals = new Map<string, Read<boolean>>();
-
-export function mediaRead(query: string): Read<boolean> {
+export interface MediaReadOptions {
+  readonly window?: Pick<Window, "matchMedia">;
+}
+const realms = new WeakMap<object, Map<string, Read<boolean>>>();
+/** A shared reactive media query, isolated by its window. */
+export function mediaRead(
+  query: string,
+  options?: MediaReadOptions,
+): Read<boolean> {
+  const realm = options?.window ?? globalThis;
+  let signals = realms.get(realm);
+  if (!signals) {
+    signals = new Map();
+    realms.set(realm, signals);
+  }
   let signal = signals.get(query);
   if (!signal) {
-    const list = matchMedia(query);
+    const list = realm.matchMedia(query);
     signal = sharedSource<boolean>((set) => {
       const push = (): void => set(list.matches);
-      push(); // resync: it may have changed while unobserved
+      push();
       list.addEventListener("change", push);
       return () => list.removeEventListener("change", push);
     }, list.matches);

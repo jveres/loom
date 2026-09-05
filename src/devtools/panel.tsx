@@ -12,8 +12,10 @@ import {
   scope,
   state,
 } from "loom";
-import { bind, onTap, persisted, remove, startPointerSession } from "loom/dom";
-import { scrollFade } from "loom/dom/scroll-fade";
+import { bind, pause, remove, resume } from "loom/dom";
+import { onTap, startPointerSession } from "loom/events";
+import { scrollFade } from "loom/motion";
+import { bindStorage, codecs, storageSlot } from "loom/storage";
 import { PANEL_OPTS } from "./bindings.js";
 import { CSS, PANEL_ID } from "./css.js";
 import {
@@ -51,16 +53,16 @@ const THEME_ICONS: Record<Theme, string> = {
   light: ICON_SUN,
   dark: ICON_MOON,
 };
-
 /* ============================================================ module state ========= */
-
 export type TabId = "stats" | "graph" | "trace";
-const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
+const TABS: ReadonlyArray<{
+  id: TabId;
+  label: string;
+}> = [
   { id: "stats", label: "Info" },
   { id: "graph", label: "Graph" },
   { id: "trace", label: "Trace" },
 ];
-
 let panel: HTMLElement | null = null;
 let menuEl: HTMLElement | null = null;
 let bodyEl: HTMLElement | null = null;
@@ -69,23 +71,25 @@ const scrollFades: Array<() => void> = [];
 // Scopes for collective pause: the whole panel (paused when minimized) and, nested inside it, the
 // stats tab (paused when it isn't the active tab) — so a hidden subtree does no reactive work.
 let inspectorScope: Scope | null = null;
-let signalScope: Scope | null = null;
+let storageAbort: AbortController | null = null;
 let previousInspect: boolean | null = null;
 let activePanelGesture: Stop | null = null;
-
 // Inspector-owned UI state (internal: filtered from observation). Lazily created on first mount.
 let ui: State<TabId> | null = null;
 // Per-tab body scroll position, preserved across tab switches (the panes share one scroller, so
 // switching otherwise clobbers it as the content height changes).
 const scrollByTab = new Map<TabId, number>();
 let prevTab: TabId | null = null;
-
 /* ============================================================ persistence ========== */
-
 const LOG_SIZES = [1000, 5000, 25000];
-
-type PanelPos = { left: number; top: number } | null;
-type PanelSize = { width: number; height: number } | null;
+type PanelPos = {
+  left: number;
+  top: number;
+} | null;
+type PanelSize = {
+  width: number;
+  height: number;
+} | null;
 interface PanelSignals {
   readonly theme: State<Theme>;
   readonly min: State<boolean>;
@@ -93,60 +97,80 @@ interface PanelSignals {
   readonly pos: State<PanelPos>;
   readonly size: State<PanelSize>;
 }
-
-// Persisted panel chrome, on loom's own persisted() signals (all `internal`, so the inspector never
-// observes itself). Created lazily on first mount — the module stays a strict no-op until then —
-// and memoized across mount/unmount cycles. Theme/min/logSize keep their historical raw-string
-// storage formats via parse/serialize, so values persisted before this migration still load;
-// validate is the choke point that drops a clobbered or out-of-range stored value.
+// Panel preferences have an explicit mount lifetime, independent of reactive scopes.
 let signals: PanelSignals | null = null;
 function panelSignals(): PanelSignals {
-  if (!signals) {
-    // persisted() owns a watch effect. Build those watches in a small scope so unmount can release
-    // them instead of retaining five module-lifetime subscriptions after the panel is gone.
-    let created!: PanelSignals;
-    signalScope = scope(() => {
-      created = {
-        theme: persisted<Theme>(`${PANEL_ID}-theme`, "system", {
-          internal: true,
-          serialize: (t) => t,
-          parse: (raw) => raw as Theme,
-          validate: (t) => t === "light" || t === "dark" || t === "system",
-        }),
-        min: persisted<boolean>(`${PANEL_ID}-min`, false, {
-          internal: true,
-          serialize: (v) => (v ? "1" : "0"),
-          parse: (raw) => raw === "1",
-        }),
-        logSize: persisted<number>(`${PANEL_ID}-logsize`, 1000, {
-          internal: true,
-          serialize: String,
-          parse: Number,
-          validate: (n) => LOG_SIZES.includes(n),
-        }),
-        pos: persisted<PanelPos>(`${PANEL_ID}-pos`, null, {
-          internal: true,
-          validate: (v) =>
-            v !== null &&
-            typeof v.left === "number" &&
-            typeof v.top === "number",
-        }),
-        size: persisted<PanelSize>(`${PANEL_ID}-size`, null, {
-          internal: true,
-          validate: (v) =>
-            v !== null &&
-            typeof v.width === "number" &&
-            typeof v.height === "number",
-        }),
-      };
-    }, PANEL_OPTS);
-    signals = created;
-  }
-  return signals;
+  if (signals) return signals;
+  storageAbort = new AbortController();
+  const options = { signal: storageAbort.signal };
+  const created: PanelSignals = {
+    theme: state<Theme>("system", PANEL_OPTS),
+    min: state(false, PANEL_OPTS),
+    logSize: state(1000, PANEL_OPTS),
+    pos: state<PanelPos>(null, PANEL_OPTS),
+    size: state<PanelSize>(null, PANEL_OPTS),
+  };
+  bindStorage(
+    created.theme,
+    storageSlot(
+      `${PANEL_ID}-theme`,
+      codecs.string<Theme>(["system", "light", "dark"]),
+    ),
+    options,
+  );
+  bindStorage(
+    created.min,
+    storageSlot(`${PANEL_ID}-min`, codecs.boolean),
+    options,
+  );
+  bindStorage(
+    created.logSize,
+    storageSlot<number>(`${PANEL_ID}-logsize`, {
+      ...codecs.number(),
+      validate: (value) => LOG_SIZES.includes(value),
+    }),
+    options,
+  );
+  bindStorage(
+    created.pos,
+    storageSlot<PanelPos>(
+      `${PANEL_ID}-pos`,
+      codecs.json(
+        (value): value is PanelPos =>
+          typeof value === "object" &&
+          value !== null &&
+          "left" in value &&
+          "top" in value &&
+          typeof value.left === "number" &&
+          Number.isFinite(value.left) &&
+          typeof value.top === "number" &&
+          Number.isFinite(value.top),
+      ),
+    ),
+    options,
+  );
+  bindStorage(
+    created.size,
+    storageSlot<PanelSize>(
+      `${PANEL_ID}-size`,
+      codecs.json(
+        (value): value is PanelSize =>
+          typeof value === "object" &&
+          value !== null &&
+          "width" in value &&
+          "height" in value &&
+          typeof value.width === "number" &&
+          value.width > 0 &&
+          typeof value.height === "number" &&
+          value.height > 0,
+      ),
+    ),
+    options,
+  );
+  signals = created;
+  return created;
 }
-
 /* ============================================================ chrome helpers ======= */
-
 // Snap a CSS-pixel value to the device-pixel grid. The panel is positioned/sized via JS during
 // drag and resize; a fractional device-pixel origin makes the browser re-round the panel's
 // content (notably the SVG icons) frame to frame, so they shimmer/jitter left-right. Snapping
@@ -155,13 +179,15 @@ function snapPx(v: number): number {
   const dpr = window.devicePixelRatio || 1;
   return Math.round(v * dpr) / dpr;
 }
-
 function clampPanel(
   target: HTMLElement,
   barH: number,
   left: number,
   top: number,
-): { left: number; top: number } {
+): {
+  left: number;
+  top: number;
+} {
   const w = target.offsetWidth;
   const edge = Math.min(80, w);
   return {
@@ -169,12 +195,14 @@ function clampPanel(
     top: snapPx(Math.min(window.innerHeight - barH, Math.max(0, top))),
   };
 }
-
 function clampOnScreen(
   target: HTMLElement,
   left: number,
   top: number,
-): { left: number; top: number } {
+): {
+  left: number;
+  top: number;
+} {
   const maxLeft = Math.max(0, window.innerWidth - target.offsetWidth);
   const maxTop = Math.max(0, window.innerHeight - target.offsetHeight);
   return {
@@ -182,7 +210,6 @@ function clampOnScreen(
     top: snapPx(Math.max(0, Math.min(top, maxTop))),
   };
 }
-
 // The shared pointer-gesture session behind drag and resize: snapshot the rect, pin the panel to
 // left/top positioning (dragging/resizing can't work against right/bottom anchoring), capture the
 // pointer, and freeze text selection for the duration. `onMove` gets the pointerdown-time rect to do
@@ -215,7 +242,6 @@ function startDragSession(
   });
   activePanelGesture = stop;
 }
-
 function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
   handle.addEventListener("pointerdown", (e) => {
     if ((e.target as HTMLElement | null)?.closest("button")) return;
@@ -246,7 +272,6 @@ function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
     );
   });
 }
-
 function makeResizable(handle: HTMLElement, target: HTMLElement): void {
   handle.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -287,9 +312,7 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
     );
   });
 }
-
 /* ============================================================ SVG widgets ========== */
-
 // Bar-button icon: the <svg> fills the button's content box and the 24-unit glyph is inset via
 // the viewBox to ~14px visual. A small centered svg *box* leaves margins that round to
 // sub-device-pixels on scaled displays (fractional DPR), making the icon's gap shimmer in
@@ -300,28 +323,22 @@ function barIcon(inner: string): Element {
     `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="-8.571 -8.571 41.143 41.143" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`,
   );
 }
-
 /* ============================================================ mount / unmount ====== */
-
 /** Mount the floating inspector panel (dev only). Idempotent; a no-op until called. */
 export function mountInspector(target?: Element): void {
   if (panel || typeof document === "undefined") return;
   const mountTarget = target ?? document.body;
-
   // Inspection is opt-in and off by default; mounting the panel is the explicit request for it, so
   // turn it on. Only nodes created from here on carry metadata — enable earlier (configure({ inspect:
   // true }) at startup) if you want pre-existing nodes in the census too.
   previousInspect = configure({ inspect: true }).inspect ?? false;
-
   if (!document.getElementById(`${PANEL_ID}-css`)) {
     const style = document.createElement("style");
     style.id = `${PANEL_ID}-css`;
     style.textContent = CSS;
     document.head.append(style);
   }
-
   ui = state<TabId>("stats", PANEL_OPTS);
-
   let theme = panelSignals().theme();
   const themeVal = <span class="li-menu-val" />;
   const applyTheme = (): void => {
@@ -346,7 +363,6 @@ export function mountInspector(target?: Element): void {
   menu.id = `${PANEL_ID}-menu`;
   menu.append(themeItem);
   menuEl = menu;
-
   // Trace-log window size — cycle 1k / 5k / 25k (how many events the Trace tab keeps).
   let logSize = panelSignals().logSize();
   const sizeVal = <span class="li-menu-val" />;
@@ -390,7 +406,6 @@ export function mountInspector(target?: Element): void {
     unmountInspector();
   });
   menu.append(hideItem);
-
   const gear = (<button type="button" title="Settings" />) as HTMLButtonElement;
   gear.append(barIcon(ICON_SETTINGS));
   onTap(gear, (e): void => {
@@ -412,7 +427,6 @@ export function mountInspector(target?: Element): void {
     menu.style.left = `${Math.max(margin, left)}px`;
     menu.style.top = `${Math.max(margin, top)}px`;
   });
-
   const min = (<button type="button" />) as HTMLButtonElement;
   const paintMin = (isMin: boolean): void => {
     min.title = isMin ? "Expand" : "Collapse";
@@ -425,11 +439,15 @@ export function mountInspector(target?: Element): void {
     paintMin(isMin);
     panelSignals().min(isMin);
     // Freeze (or thaw) the panel's reactivity while collapsed.
-    if (isMin) inspectorScope?.pause();
-    else inspectorScope?.resume();
+    if (isMin) {
+      inspectorScope?.pause();
+      pause(statsPane);
+    } else {
+      inspectorScope?.resume();
+      resume(statsPane);
+    }
     setTraceActive(!isMin && ui?.() === "trace"); // detach/re-attach the trace meters with minimize
   });
-
   const brand = (
     <span class="li-brand">
       {loomLogo(15)}
@@ -444,7 +462,6 @@ export function mountInspector(target?: Element): void {
       {min}
     </div>
   );
-
   // Build the reactive UI inside the inspector scope so minimizing can pause the whole panel; the
   // stats pane gets its own nested scope so switching tabs pauses just it. The scope's options
   // mark everything created inside as internal/PANEL_ID — so the heartbeat, vitals, heap timer and
@@ -461,8 +478,10 @@ export function mountInspector(target?: Element): void {
       isMinimized: () => panel?.classList.contains("li-min") ?? false,
     });
   }, PANEL_OPTS);
-  if (startMin) inspectorScope.pause();
-
+  if (startMin) {
+    inspectorScope.pause();
+    pause(statsPane);
+  }
   // Panes: Info (stats), Graph, and Trace are each their own module.
   const panes = new Map<TabId, HTMLElement>();
   const tabBtns = new Map<TabId, HTMLElement>();
@@ -482,7 +501,6 @@ export function mountInspector(target?: Element): void {
     ui?.("graph");
     revealSignal(id);
   });
-
   const tabscroll = <div class="li-tabscroll" />;
   for (const t of TABS) {
     const btn = (
@@ -503,7 +521,6 @@ export function mountInspector(target?: Element): void {
     tabscroll.append(btn);
   }
   const tabs = <div class="li-tabs">{tabscroll}</div>;
-
   const resize = (
     <div class="li-resize" title="Drag to resize">
       <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -522,7 +539,6 @@ export function mountInspector(target?: Element): void {
   panel.id = PANEL_ID;
   if (startMin) panel.classList.add("li-min");
   applyTheme();
-
   makeDraggable(bar, panel);
   makeResizable(resize, panel);
   closeMenuOnOutside = (e: Event): void => {
@@ -535,10 +551,8 @@ export function mountInspector(target?: Element): void {
       closeMenu();
   };
   document.addEventListener("pointerdown", closeMenuOnOutside);
-
   mountTarget.append(panel);
   document.body.append(menu);
-
   const savedSize = panelSignals().size();
   const savedPos = panelSignals().pos();
   if (savedSize) {
@@ -552,7 +566,6 @@ export function mountInspector(target?: Element): void {
     panel.style.right = "auto";
     panel.style.bottom = "auto";
   }
-
   // Reactive tab switching (dogfood: ui -> pane visibility + active styling). Owned by the panel
   // node — remove(panel) at unmount disposes it with every other binding.
   bind(panel, () => {
@@ -597,13 +610,11 @@ export function mountInspector(target?: Element): void {
     );
     prevTab = tab ?? null;
   });
-
   scrollFades.push(
     scrollFade(bodyEl, { transition: 120 }),
     scrollFade(tabscroll, { axis: "x", transition: 120 }),
   );
 }
-
 /** Remove the panel and stop all observation/timers. Safe to call when not mounted. */
 export function unmountInspector(): void {
   if (typeof document === "undefined") return;
@@ -620,8 +631,8 @@ export function unmountInspector(): void {
   // returned — e.g. the tab switcher — are node-owned and die with remove(panel) below.)
   inspectorScope?.stop();
   inspectorScope = null;
-  signalScope?.stop();
-  signalScope = null;
+  storageAbort?.abort();
+  storageAbort = null;
   signals = null;
   if (closeMenuOnOutside)
     document.removeEventListener("pointerdown", closeMenuOnOutside);
@@ -639,12 +650,10 @@ export function unmountInspector(): void {
   if (previousInspect !== null) configure({ inspect: previousInspect });
   previousInspect = null;
 }
-
 /** Whether the inspector is currently mounted. */
 export function inspectorMounted(): boolean {
   return panel !== null;
 }
-
 /** Show the inspector if hidden, hide it if shown. */
 export function toggleInspector(target?: Element): void {
   if (panel) unmountInspector();

@@ -4,22 +4,15 @@ import {
   endBatch,
   startBatch,
 } from "alien-signals";
+import { batch, effect, props, state } from "loom";
 import { bench, describe } from "vitest";
-import {
-  batch,
-  effect,
-  type Props,
-  props,
-  type Stop,
-  state,
-} from "../src/loom.js";
+import type { Props, Stop } from "../src/loom.js";
 
 type Tone = 0 | 1 | 2 | 3 | 4;
 type Signal<T> = {
   (): T;
   (value: T): void;
 };
-
 interface CardModel {
   id: number;
   headline: number;
@@ -32,58 +25,49 @@ interface CardModel {
   liked: boolean;
   pending: number;
 }
-
-type CardSignals = { readonly [K in keyof CardModel]: Signal<CardModel[K]> };
+type CardSignals = {
+  readonly [K in keyof CardModel]: Signal<CardModel[K]>;
+};
 type LoomCard = Props<CardModel>;
 type AlienCard = CardSignals;
-
 interface CardRef<T> {
   readonly model: T;
   dispose(): void;
 }
-
 interface TrafficOp {
   readonly card: number;
   readonly kind: 0 | 1 | 2 | 3;
   readonly amount: number;
   readonly dir: 1 | -1;
 }
-
 interface AiOp {
   readonly card: number;
   readonly kind: 0 | 1 | 2 | 3;
   readonly headline: number;
 }
-
 const FRAME_COUNT = 120;
-const TRAFFIC_WRITES_PER_FRAME = 1_000;
+const TRAFFIC_WRITES_PER_FRAME = 1000;
 const INITIAL_CARDS = 12;
 const MAX_CARDS = 80;
 const EDIT_RATE = 180;
 const DT = 1 / 60;
 const TRAFFIC = makeTrafficPlan();
 const AI = makeAiPlan();
-
 let sink = 0;
-
 function consume(value: number): void {
   sink = (sink + value) | 0;
 }
-
 describe("loom vs alien-signals", () => {
   bench("loom: full chaos core", () => {
     runLoomChaos();
   });
-
   bench("loom manual: full chaos core", () => {
     runLoomManualChaos();
   });
-
   bench("alien native: full chaos core", () => {
     runAlienChaos();
   });
 });
-
 function runLoomChaos(): void {
   let nextId = INITIAL_CARDS;
   let cards = Array.from({ length: INITIAL_CARDS }, (_, id) =>
@@ -121,7 +105,6 @@ function runLoomChaos(): void {
   structureView();
   for (const card of cards) card.dispose();
 }
-
 function runAlienChaos(): void {
   let nextId = INITIAL_CARDS;
   let cards = Array.from({ length: INITIAL_CARDS }, (_, id) =>
@@ -159,7 +142,6 @@ function runAlienChaos(): void {
   stopStructure();
   for (const card of cards) card.dispose();
 }
-
 function runLoomManualChaos(): void {
   let nextId = INITIAL_CARDS;
   let cards = Array.from({ length: INITIAL_CARDS }, (_, id) =>
@@ -197,7 +179,6 @@ function runLoomManualChaos(): void {
   structureView();
   for (const card of cards) card.dispose();
 }
-
 function makeLoomCard(initial: CardModel): CardRef<LoomCard> {
   const model = props(initial);
   const views = bindLoomCardViews(model);
@@ -208,7 +189,6 @@ function makeLoomCard(initial: CardModel): CardRef<LoomCard> {
     },
   };
 }
-
 function makeLoomManualCard(initial: CardModel): CardRef<LoomCard> {
   const model: LoomCard = {
     id: state(initial.id),
@@ -230,7 +210,6 @@ function makeLoomManualCard(initial: CardModel): CardRef<LoomCard> {
     },
   };
 }
-
 function makeAlienCard(initial: CardModel): CardRef<AlienCard> {
   const model: AlienCard = {
     id: alienSignal(initial.id),
@@ -252,7 +231,6 @@ function makeAlienCard(initial: CardModel): CardRef<AlienCard> {
     },
   };
 }
-
 function bindLoomCardViews(model: LoomCard): Stop[] {
   return [
     effect(() => {
@@ -275,7 +253,6 @@ function bindLoomCardViews(model: LoomCard): Stop[] {
     }),
   ];
 }
-
 function bindAlienCardViews(model: AlienCard): Array<() => void> {
   return [
     alienEffect(() => {
@@ -298,7 +275,6 @@ function bindAlienCardViews(model: AlienCard): Array<() => void> {
     }),
   ];
 }
-
 function applyTraffic(card: CardRef<CardSignals>, op: TrafficOp): void {
   const model = card.model;
   if (op.kind === 0) model.likes(model.likes() + op.amount);
@@ -307,7 +283,6 @@ function applyTraffic(card: CardRef<CardSignals>, op: TrafficOp): void {
     model.readers(Math.max(0, model.readers() + op.dir * op.amount));
   else if (model.hot()) model.trend(model.trend() + op.amount);
 }
-
 function baseCard(id: number): CardModel {
   return {
     id,
@@ -322,11 +297,9 @@ function baseCard(id: number): CardModel {
     pending: 0,
   };
 }
-
 function nextTone(tone: Tone): Tone {
   return ((tone + 1) % 5) as Tone;
 }
-
 function shuffled<T>(items: readonly T[], seed: number): T[] {
   const next = items.slice();
   let value = seed || 1;
@@ -339,14 +312,13 @@ function shuffled<T>(items: readonly T[], seed: number): T[] {
   }
   return next;
 }
-
 function makeTrafficPlan(): readonly TrafficOp[][] {
   const random = prng(0x1eed);
   return Array.from({ length: FRAME_COUNT }, () =>
     Array.from({ length: TRAFFIC_WRITES_PER_FRAME }, () => {
       const roll = random();
       return {
-        card: Math.floor(random() * 10_000),
+        card: Math.floor(random() * 10000),
         kind: roll < 0.5 ? 0 : roll < 0.82 ? 1 : roll < 0.94 ? 2 : 3,
         amount: 1 + Math.floor(random() * 4),
         dir: random() < 0.5 ? 1 : -1,
@@ -354,7 +326,6 @@ function makeTrafficPlan(): readonly TrafficOp[][] {
     }),
   );
 }
-
 function makeAiPlan(): readonly AiOp[][] {
   const random = prng(0xa11e);
   let budget = 0;
@@ -365,7 +336,7 @@ function makeAiPlan(): readonly AiOp[][] {
       budget--;
       const roll = random();
       ops.push({
-        card: Math.floor(random() * 10_000),
+        card: Math.floor(random() * 10000),
         kind: roll < 0.55 ? 0 : roll < 0.72 ? 1 : roll < 0.88 ? 2 : 3,
         headline: Math.floor(random() * 6),
       });
@@ -373,11 +344,10 @@ function makeAiPlan(): readonly AiOp[][] {
     return ops;
   });
 }
-
 function prng(seed: number): () => number {
   let value = seed >>> 0;
   return () => {
     value = (value * 1664525 + 1013904223) >>> 0;
-    return value / 0x1_0000_0000;
+    return value / 4294967296;
   };
 }

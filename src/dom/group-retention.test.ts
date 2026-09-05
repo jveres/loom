@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
+import { scope, state } from "loom";
+import { bind, h, onUnmount, remove, resourceGroup } from "loom/dom";
+// @vitest-environment happy-dom
 import { expect, it } from "vitest";
-import { scope, state } from "../loom.js";
-import { bind, h, onUnmount, remove, resourceGroup } from "./index.js";
 
 it("preserves registration order after several early stops during group construction", () => {
   const calls: string[] = [];
@@ -26,13 +27,10 @@ it("preserves registration order after several early stops during group construc
     });
     return node;
   });
-
   group.dispose();
   remove(group.value);
-
   expect(calls).toEqual(["a", "b", "c", "d", "e"]);
 });
-
 it("keeps descendant-first cleanup after granular removal and throwing callbacks", () => {
   const calls: string[] = [];
   const group = resourceGroup(() => {
@@ -54,11 +52,9 @@ it("keeps descendant-first cleanup after granular removal and throwing callbacks
   expect(() => group.dispose()).toThrow("left failed");
   group.dispose();
   remove(group.value);
-
   expect(calls).toEqual(["removed", "left", "right", "root"]);
 });
-
-it("handles scope-stopped bindings before the resource group stops", () => {
+it("keeps node-owned bindings alive after a creating scope stops", () => {
   const calls: string[] = [];
   const signal = state(0);
   let owner: ReturnType<typeof scope> | undefined;
@@ -77,16 +73,13 @@ it("handles scope-stopped bindings before the resource group stops", () => {
     });
     return root;
   });
-
   owner?.stop();
   signal(1);
   group.dispose();
   remove(group.value);
-
-  expect(calls).toEqual(["scoped", "manual"]);
-  expect(group.value.textContent).toBe("0");
+  expect(calls).toEqual(["scoped", "scoped", "manual"]);
+  expect(group.value.textContent).toBe("1");
 });
-
 it("releases a sibling from the group during cleanup without skipping remaining callbacks", () => {
   const calls: number[] = [];
   let stopSibling = () => {};

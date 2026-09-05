@@ -1,5 +1,6 @@
+import { effect, scope, source } from "loom";
 import { expect, it, onTestFinished } from "vitest";
-import { effect, type Read, scope, source } from "./loom.js";
+import type { Read } from "./loom.js";
 
 it("does not connect a scoped source first observed while its owner is paused", () => {
   let connections = 0;
@@ -18,15 +19,12 @@ it("does not connect a scoped source first observed while its owner is paused", 
     seen.push(read());
   });
   onTestFinished(stop);
-
   expect(connections).toBe(0);
   expect(seen).toEqual([0]);
   owner.resume();
-
   expect(connections).toBe(1);
   expect(seen).toEqual([0, 42]);
 });
-
 it("never connects an escaped source after its owner has stopped", () => {
   let connections = 0;
   let read!: Read<number>;
@@ -37,7 +35,6 @@ it("never connects an escaped source after its owner has stopped", () => {
     }, 42);
   });
   owner.stop();
-
   const stop = effect(() => {
     expect(read()).toBe(42);
   });
@@ -46,10 +43,8 @@ it("never connects an escaped source after its owner has stopped", () => {
     expect(read()).toBe(42);
   });
   again();
-
   expect(connections).toBe(0);
 });
-
 it("ignores disconnected callbacks even after a newer connection starts", () => {
   const pushes: Array<(value: number) => void> = [];
   let read!: Read<number>;
@@ -65,7 +60,6 @@ it("ignores disconnected callbacks even after a newer connection starts", () => 
     seen.push(read());
   });
   onTestFinished(stop);
-
   pushes[0]?.(1);
   owner.pause();
   pushes[0]?.(2);
@@ -75,11 +69,9 @@ it("ignores disconnected callbacks even after a newer connection starts", () => 
   pushes[0]?.(4);
   owner.stop();
   pushes[1]?.(5);
-
   expect(seen).toEqual([0, 1, 3]);
   expect(read()).toBe(3);
 });
-
 it("retains a producer's synchronous teardown value but rejects later callbacks", () => {
   let push!: (value: number) => void;
   const read = source((set) => {
@@ -90,13 +82,10 @@ it("retains a producer's synchronous teardown value but rejects later callbacks"
     };
   }, 0);
   const stop = effect(() => read());
-
   stop();
   push(2);
-
   expect(read()).toBe(0);
 });
-
 it.each(["pause", "stop"] as const)(
   "releases a connection when its owner calls %s during connect",
   (action) => {
@@ -113,18 +102,15 @@ it.each(["pause", "stop"] as const)(
       }, 0);
     });
     onTestFinished(owner.stop);
-
     const stop = effect(() => read());
     onTestFinished(stop);
     expect(disconnections).toBe(1);
     owner.resume();
     stop();
-
     expect(connections).toBe(action === "pause" ? 2 : 1);
     expect(disconnections).toBe(connections);
   },
 );
-
 it("keeps sources suspended until both nested scope pauses are lifted", () => {
   let connections = 0;
   let read!: Read<number>;
@@ -142,14 +128,11 @@ it("keeps sources suspended until both nested scope pauses are lifted", () => {
   parent.pause();
   const stop = effect(() => read());
   onTestFinished(stop);
-
   parent.resume();
   expect(connections).toBe(0);
   child.resume();
-
   expect(connections).toBe(1);
 });
-
 it("blocks a new connection during another producer's pause teardown", () => {
   let connections = 0;
   let read!: Read<number>;
@@ -172,14 +155,11 @@ it("blocks a new connection during another producer's pause teardown", () => {
     owner.stop();
     stopLate?.();
   });
-
   owner.pause();
-
   expect(connections).toBe(0);
   owner.resume();
   expect(connections).toBe(1);
 });
-
 it("keeps the newer teardown when connect synchronously pauses and resumes its owner", () => {
   let connections = 0;
   const disconnected: number[] = [];
@@ -199,14 +179,11 @@ it("keeps the newer teardown when connect synchronously pauses and resumes its o
   onTestFinished(owner.stop);
   const stop = effect(() => read());
   onTestFinished(stop);
-
   expect(disconnected).toEqual([1]);
   owner.stop();
-
   expect(connections).toBe(2);
   expect(disconnected).toEqual([1, 2]);
 });
-
 it("keeps a connection started during the previous connection's teardown", () => {
   const pushes: Array<(value: number) => void> = [];
   const disconnected: number[] = [];
@@ -223,16 +200,13 @@ it("keeps a connection started during the previous connection's teardown", () =>
     stop();
     stopNext?.();
   });
-
   stop();
   pushes[1]?.(42);
   pushes[0]?.(99);
-
   expect(read()).toBe(42);
   stopNext?.();
   expect(disconnected).toEqual([1, 2]);
 });
-
 it("retires callbacks even when producer teardown throws", () => {
   const pushes: Array<(value: number) => void> = [];
   let read!: Read<number>;
@@ -248,12 +222,10 @@ it("retires callbacks even when producer teardown throws", () => {
   onTestFinished(owner.stop);
   const stop = effect(() => read());
   onTestFinished(stop);
-
   expect(owner.pause).toThrow("teardown failed");
   pushes[0]?.(99);
   expect(read()).toBe(0);
   owner.resume();
   pushes[1]?.(42);
-
   expect(read()).toBe(42);
 });

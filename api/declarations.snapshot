@@ -1,0 +1,1417 @@
+// dist/types/async/index.d.ts
+import { type NodeOptions, type Read, type Stop } from "../loom.js";
+export interface Resource<T> {
+    /** The latest resolved value; `undefined` until the first fetch settles (stale-while-refetch). */
+    (): T | undefined;
+    /** True from fetch start to settle — initially and on every refetch. */
+    readonly loading: Read<boolean>;
+    /**
+     * False until the first fetch **succeeds**, then permanently true. The initial-readiness
+     * question, distinct from `loading` (which is true again on every refetch): `!ready()` selects
+     * the skeleton shown only before the first data, while later refetches hold the stale value.
+     * A first-fetch rejection leaves it false — the next success flips it.
+     */
+    readonly ready: Read<boolean>;
+    /** The last rejection; cleared by the next successful settle. */
+    readonly error: Read<unknown>;
+    /** Start a new fetch now (one also starts whenever the fetcher's tracked reads change). */
+    refresh(): void;
+    /** Dispose the underlying effect (a resource inside a scope also stops with the scope). */
+    readonly stop: Stop;
+}
+/**
+ * An async computed: runs `fetcher` immediately and again whenever its **synchronously tracked**
+ * reads change (reads after the first `await`/`.then` are outside the tracked run — hoist them or
+ * use {@link Resource.refresh}). The previous value is passed to `fetcher` untracked, and `signal`
+ * aborts when this fetch becomes obsolete (a newer fetch started, or the resource was disposed) —
+ * forward it to `fetch()` and the obsolete request is cancelled, not just ignored. While a fetch
+ * is in flight the previous value and error stay readable (stale-while-revalidate); a late
+ * response from an aborted or superseded fetch never clobbers newer state, and its abort rejection
+ * never surfaces through `error()`. Pausing an owning scope suspends refetches but does NOT abort
+ * the in-flight fetch (unlike a `source()`'s producer, which disconnects on pause): it settles,
+ * writes, and can flip `ready()` while paused — consumers catch up on resume.
+ */
+export declare function resource<T>(fetcher: (previous: T | undefined, signal: AbortSignal) => Promise<T>, options?: NodeOptions): Resource<T>;
+/**
+ * True while any of the given resources has a fetch in flight — the aggregate `loading` for
+ * dimming a stale pane or disabling a submit that spans several requests. A plain derived read
+ * (like `writable`), not a node: use it directly in an effect or binding; wrap it in `computed`
+ * if a large fan-out wants value-deduped re-runs.
+ */
+export declare function pending(...resources: ReadonlyArray<Pick<Resource<unknown>, "loading">>): Read<boolean>;
+
+// dist/types/browser.d.ts
+export { connected } from "./dom/connected.js";
+export { attrRead, classRead, styleRead } from "./dom/element-reads.js";
+export { focusWithin, hovered } from "./dom/hovered.js";
+export { type MediaReadOptions, mediaRead } from "./dom/media-read.js";
+export { type IntersectionCallback, type ObserveIntersectionOptions, observeIntersection, } from "./dom/observe-intersection.js";
+export { type MutationsCallback, type ObserveMutationOptions, observeMutation, } from "./dom/observe-mutation.js";
+export { type ObserveSizeOptions, observeSize, type SizeCallback, } from "./dom/observe-size.js";
+export { pressed } from "./dom/pressed.js";
+export { type ScrollEdges, type ScrollEdgesOptions, scrollEdges, } from "./dom/scroll-edges.js";
+
+// dist/types/core/defer.d.ts
+export {};
+
+// dist/types/core/graph.d.ts
+/**
+ * Vendored reactive-graph system from alien-signals v3.2.1 (system.mjs),
+ * typed for this codebase. Verbatim port — the algorithm, flag values, and
+ * control flow are intentionally identical to upstream so benchmarks compare
+ * like for like; do not "clean up" without re-running `pnpm bench`.
+ *
+ * MIT License
+ * Copyright (c) 2024-present Johnson Chu
+ * https://github.com/stackblitz/alien-signals
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+export interface ReactiveNode {
+    deps?: Link | undefined;
+    depsTail?: Link | undefined;
+    subs?: Link | undefined;
+    subsTail?: Link | undefined;
+    flags: number;
+}
+export interface Link {
+    version: number;
+    dep: ReactiveNode;
+    sub: ReactiveNode;
+    prevSub: Link | undefined;
+    nextSub: Link | undefined;
+    prevDep: Link | undefined;
+    nextDep: Link | undefined;
+}
+export declare function createReactiveSystem({ update, notify, unwatched, }: {
+    update(sub: ReactiveNode): boolean;
+    notify(sub: ReactiveNode): void;
+    unwatched(sub: ReactiveNode): void;
+}): {
+    link: (dep: ReactiveNode, sub: ReactiveNode, version: number) => void;
+    unlink: (link: Link, sub?: ReactiveNode) => Link | undefined;
+    propagate: (link: Link, innerWrite: boolean) => void;
+    checkDirty: (link: Link, sub: ReactiveNode) => boolean;
+    shallowPropagate: (link: Link) => void;
+};
+
+// dist/types/core/inspect.d.ts
+import { type NodeInfo, type State } from "../loom.js";
+export interface InspectNode extends NodeInfo {
+    readonly internal: boolean;
+    readonly deps: readonly number[];
+    readonly subs: readonly number[];
+    readonly runs: number;
+    readonly disposed: boolean;
+    readonly target?: object;
+    readonly value?: unknown;
+    readonly source?: State<unknown>;
+    readonly group?: number;
+    readonly key?: string;
+}
+export interface InspectSnapshot {
+    readonly nodes: readonly InspectNode[];
+}
+/**
+ * Snapshot the reactive graph. With `{ active: true }`, skip state/computed signals that have no
+ * subscribers — these are either idle (nothing reads them) or "ghosts": signals of a removed object
+ * that are unreachable from the app but still alive until GC clears their WeakRef. Effects are
+ * always kept. There is no way to detect a not-yet-collected ghost directly (reachability is the
+ * GC's business), so the subscriber count is the proxy: a live signal is one something still reads.
+ */
+export declare function inspect(options?: {
+    readonly active?: boolean;
+}): InspectSnapshot;
+export interface ResourceCounts {
+    readonly states: number;
+    readonly computeds: number;
+    readonly effects: number;
+    readonly targetedEffects: number;
+    readonly sources: number;
+    readonly scopes: number;
+    readonly channels: number;
+    readonly unread: number;
+}
+export declare function inspectResources(): ResourceCounts;
+
+// dist/types/core/meter.d.ts
+export interface ChannelOptions {
+    /** Detail-ring capacity (rounded up to a power of two). 0 = count-only. Default 0. */
+    readonly capacity?: number;
+    /** Field names recorded per event on a detail channel (up to 5); emit() takes one value each. */
+    readonly fields?: readonly string[];
+}
+export interface Channel<Name extends string = string> {
+    readonly name: Name;
+    /** True while ≥1 meter is attached — gate expensive argument prep behind it. */
+    readonly active: boolean;
+    /** Record one event. No-op and zero-allocation when inactive. One value per declared field. */
+    emit(a?: unknown, b?: unknown, c?: unknown, d?: unknown, e?: unknown): void;
+}
+export interface Frame {
+    /** Exact events on this channel since the last read(). */
+    readonly count: number;
+    /** Events lost to ring overwrite since the last read() (detail channels only). */
+    readonly dropped: number;
+    /** Most-recent records, oldest→newest, at most `capacity`; keyed by the channel's fields. */
+    readonly samples: ReadonlyArray<Readonly<Record<string, unknown>>>;
+}
+/**
+ * How a meter reads its channels — borrowed from OpenTelemetry's instrument↔view split: the channel
+ * is the instrument (what's measured), the meter is the reader/view (how it's read), and different
+ * meters can read the same channel differently.
+ * - `"count"` (default) — the Sum/Counter view: `read()` returns counts only and builds no per-event
+ *   objects (zero allocation). For rates.
+ * - `"samples"` — the records view (OTel exemplars/logs): `read()` also materialises the channel's
+ *   retained ring records. For event streams and histograms.
+ */
+export type MeterAggregation = "count" | "samples";
+export interface Meter<Name extends string = string> {
+    /** Pull one Frame per metered channel, keyed by channel name. Call on your own clock. */
+    read(): Readonly<Partial<Record<Name, Frame>>>;
+    /** Detach from every channel (drops their gate). */
+    stop(): void;
+}
+export declare function channel<const Name extends string>(name: Name, options?: ChannelOptions): Channel<Name>;
+export declare function meter<const Channels extends ReadonlyArray<Channel>>(channels: Channels, aggregation?: MeterAggregation): Meter<Channels[number]["name"]>;
+export declare const events: {
+    readonly read: Channel<"loom:read">;
+    readonly write: Channel<"loom:write">;
+    readonly compute: Channel<"loom:compute">;
+    readonly effect: Channel<"loom:effect">;
+    readonly flush: Channel<"loom:flush">;
+    readonly create: Channel<"loom:create">;
+    readonly dispose: Channel<"loom:dispose">;
+};
+export interface ReadSample {
+    readonly id: number;
+    readonly by: number | undefined;
+    readonly t: number;
+}
+export interface WriteSample {
+    readonly id: number;
+    readonly prev: unknown;
+    readonly next: unknown;
+    readonly by: number | undefined;
+    readonly t: number;
+}
+export interface FlushSample {
+    readonly batchSize: number;
+    readonly durationMs: number;
+}
+export declare function sampleOf<T>(sample: Readonly<Record<string, unknown>>): T;
+export declare function sampleOf<T>(sample: Readonly<Record<string, unknown>> | undefined): T | undefined;
+
+// dist/types/core/scope-ownership.d.ts
+import type { EffectNode, NodeOptions } from "../loom.js";
+export interface ScopeResource {
+    pause(): void;
+    resume(): void;
+    stop(): void;
+}
+export interface OwnedScopeResource extends ScopeResource {
+    owner: ScopeNode | undefined;
+    ownerIndex: number;
+    stopped: boolean;
+}
+export interface ScopeNode {
+    readonly effects: EffectNode[];
+    readonly resources: OwnedScopeResource[];
+    readonly children: ScopeNode[];
+    readonly parent: ScopeNode | undefined;
+    childIndex: number;
+    readonly options: NodeOptions | undefined;
+    paused: boolean;
+    pausedCount: number;
+    stopped: boolean;
+}
+export declare function bumpPausedCount(node: ScopeNode, delta: number): void;
+export declare function stopScopeResource(resource: OwnedScopeResource): void;
+export declare function swapRemove<T>(list: T[], i: number, reindex: (moved: T, index: number) => void): void;
+export declare function walkResources(node: ScopeNode, act: (resource: OwnedScopeResource) => void): void;
+
+// dist/types/devtools/index.d.ts
+import "loom/defer";
+export { inspectorMounted, mountInspector, toggleInspector, unmountInspector, } from "./panel.js";
+
+// dist/types/devtools/panel.d.ts
+export type TabId = "stats" | "graph" | "trace";
+/** Mount the floating inspector panel (dev only). Idempotent; a no-op until called. */
+export declare function mountInspector(target?: Element): void;
+/** Remove the panel and stop all observation/timers. Safe to call when not mounted. */
+export declare function unmountInspector(): void;
+/** Whether the inspector is currently mounted. */
+export declare function inspectorMounted(): boolean;
+/** Show the inspector if hidden, hide it if shown. */
+export declare function toggleInspector(target?: Element): void;
+
+// dist/types/dom/bind-value.d.ts
+import { type State, type Stop } from "../loom.js";
+export interface BindValueOptions {
+    readonly property?: "value" | "checked";
+    readonly signal?: AbortSignal;
+}
+export declare function bindValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, cell: State<string>, options?: BindValueOptions & {
+    readonly property?: "value";
+}): Stop;
+export declare function bindValue(el: HTMLInputElement, cell: State<boolean>, options: BindValueOptions & {
+    readonly property: "checked";
+}): Stop;
+
+// dist/types/dom/caret-at-point.d.ts
+export interface CaretPoint {
+    node: Node;
+    offset: number;
+}
+export declare function caretAtPoint(doc: Document, x: number, y: number): CaretPoint | undefined;
+
+// dist/types/dom/connected.d.ts
+import { type Read } from "../loom.js";
+export declare function connected(node: Node): Read<boolean>;
+
+// dist/types/dom/css-completion.d.ts
+import type { Stop } from "../loom.js";
+export interface AfterAnimationOptions {
+    readonly name?: string;
+    readonly signal?: AbortSignal;
+}
+export interface AfterTransitionOptions {
+    readonly property: string;
+    readonly signal?: AbortSignal;
+}
+/** Wait for selected CSS animations; infinite animations require end/cancel events. */
+export declare function afterAnimation(el: HTMLElement, run: () => void, options?: AfterAnimationOptions): Stop;
+/** Wait for one CSS property to finish transitioning, with a computed-time fallback. */
+export declare function afterTransition(el: HTMLElement, run: () => void, options: AfterTransitionOptions): Stop;
+
+// dist/types/dom/element-reads.d.ts
+import { type Read } from "../loom.js";
+export declare function attrRead(el: Element, name: string): Read<string | null>;
+export declare function classRead(el: Element, name: string): Read<boolean>;
+export declare function styleRead(el: Element, prop: string): Read<string>;
+
+// dist/types/dom/height-fold.d.ts
+import type { Stop } from "../loom.js";
+export interface HeightFoldOptions {
+    readonly signal?: AbortSignal;
+    readonly onStart?: (open: boolean) => void;
+    readonly onSettle?: (open: boolean) => void;
+}
+export interface HeightFold {
+    readonly set: (open: boolean) => void;
+    readonly stop: Stop;
+}
+/** Animate height using the element's CSS transition; remeasure on every expansion. */
+export declare function heightFold(el: HTMLElement, options?: HeightFoldOptions): HeightFold;
+
+// dist/types/dom/hover-class.d.ts
+export interface HoverClassOptions {
+    readonly signal?: AbortSignal;
+    /** The class. Default "is-hover". */
+    readonly name?: string;
+    /** Which element(s) wear the costume for this pointerover — null
+     *  clears. Default: the event target itself. */
+    readonly target?: (event: PointerEvent) => Element | readonly Element[] | null;
+    /** A gate: return false and the pointer is left to CSS. */
+    readonly when?: (event: PointerEvent) => boolean;
+    /** Capture-phase listeners — a document-level channel. */
+    readonly capture?: boolean;
+}
+export interface HoverClass {
+    readonly stop: () => void;
+    /** Dress `next` (and undress the rest); null undresses everything. */
+    set(next: Element | readonly Element[] | null): void;
+    /** The elements wearing the costume now. */
+    current(): readonly Element[];
+}
+export declare function hoverClass(host: Element, options?: HoverClassOptions): HoverClass;
+
+// dist/types/dom/hovered.d.ts
+import { type Read } from "../loom.js";
+export declare function hovered(el: Element): Read<boolean>;
+export declare function focusWithin(el: Element): Read<boolean>;
+
+// dist/types/dom/index.d.ts
+import { type CleanupEffectFn, type EffectFn, type EffectOptions, type Read, type State, type Stop } from "../loom.js";
+import { type EachOptions, type ListOptions } from "./keyed-reconcile.js";
+export type { EachOptions, ListOptions, ListUpdate, } from "./keyed-reconcile.js";
+export type Child = Node | Read<unknown> | DynamicChild | string | number | boolean | null | undefined | readonly Child[];
+declare const BINDING: unique symbol;
+export type DynamicChild = {
+    readonly [BINDING]: "dynamic";
+};
+type ClassProp = string | ClassMap | null | undefined | readonly ClassProp[];
+type ClassMap = Record<string, unknown>;
+type StyleMap = Record<string, unknown>;
+type StyleProp = string | StyleMap | null | undefined | readonly StyleProp[];
+type StyledElement = Element & ElementCSSInlineStyle;
+export type ElementProps = Record<string, unknown> & {
+    class?: ClassProp;
+    className?: ClassProp;
+    key?: string | number;
+    style?: StyleProp;
+    ontap?: never;
+    onTap?: never;
+    onDoublePress?: never;
+    ondoublepress?: never;
+};
+declare const SVG_TAG_LIST: readonly ["svg", "g", "defs", "symbol", "use", "switch", "foreignObject", "image", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "textPath", "linearGradient", "radialGradient", "stop", "clipPath", "mask", "pattern", "marker", "filter", "feGaussianBlur", "feOffset", "feBlend", "feColorMatrix", "feComposite", "feFlood", "feMerge", "feMergeNode", "feMorphology", "feDropShadow", "feImage", "feTile", "feTurbulence", "feDisplacementMap"];
+export type SvgTagName = (typeof SVG_TAG_LIST)[number];
+/**
+ * Parse a static, single-root HTML fragment once and return a cheap deep-clone
+ * factory. A standard HTML tag gives the clone its precise element type;
+ * custom-element and other tag names safely fall back to Element. Dynamic
+ * values deliberately are not accepted: clone the skeleton, then bind or
+ * assign its dynamic fields. This keeps repeated views on the browser's
+ * optimized native clone path and makes the trust boundary explicit.
+ */
+export declare function template<K extends keyof HTMLElementTagNameMap>(rootTag: K): (strings: TemplateStringsArray, ...values: readonly unknown[]) => () => HTMLElementTagNameMap[K];
+export declare function template(rootTag: string): (strings: TemplateStringsArray, ...values: readonly unknown[]) => () => Element;
+export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): HTMLElementTagNameMap[K];
+export declare function h<K extends keyof SVGElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): SVGElementTagNameMap[K];
+export declare function h(tag: string, props?: ElementProps | null, children?: Child): Element;
+/** Replace a node's children while preserving Loom ownership. Incoming
+ *  descendants are moved aside first. After native replacement succeeds,
+ *  every outgoing subtree is disposed; disposal failures are rethrown only
+ *  after all outgoing resources have been given a chance to stop. A staging
+ *  or native failure restores supplied nodes and disposes newly staged
+ *  reactive children before it is rethrown. */
+export declare function replaceChildren(parent: Node & ParentNode, ...children: readonly Child[]): void;
+/**
+ * Create an explicitly SVG-namespaced element. Use this for names shared with HTML (`a`, `title`,
+ * `script`, and `style`), whose namespace cannot be inferred from an already-evaluated JSX child.
+ */
+export declare function svgElement<K extends keyof SVGElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): SVGElementTagNameMap[K];
+export declare function svgElement(tag: string, props?: ElementProps | null, children?: Child): SVGElement;
+export declare function text(read: Read<unknown>, options?: EffectOptions): Text;
+/** Options for a node-owned reactive binding. */
+export interface BindingOptions extends EffectOptions {
+    readonly signal?: AbortSignal;
+}
+/** Bind an attribute to a tracked read; nullish/false removes it. */
+export declare function bindAttr(el: Element, name: string, read: Read<unknown>, options?: BindingOptions): Stop;
+/** Bind one class token to the truthiness of a tracked read. */
+export declare function bindClass(el: Element, name: string, read: Read<unknown>, options?: BindingOptions): Stop;
+/** Bind an inline style property to a tracked read. */
+export declare function bindStyle(el: StyledElement, name: string, read: Read<unknown>, options?: BindingOptions): Stop;
+export declare function list<T>(container: Element, read: State<readonly T[]> | Read<readonly T[]>, options: ListOptions<NoInfer<T>>): Stop;
+/**
+ * Conditional subtree, keyed on the truthiness of `cond`. Renders `render()` while truthy and the
+ * optional `fallback()` while falsy, rebuilding **only when the truthiness flips** — so a `cond` whose
+ * value changes while staying truthy does not tear down and recreate the subtree (read live state with
+ * your own bindings inside `render` for that). The returned value is a child: place it in JSX or
+ * `h()`, e.g. `{when(open, () => <Panel />)}`. Removing the subtree disposes its effects.
+ */
+export declare function when(cond: Read<unknown>, render: () => Child, fallback?: () => Child): Child;
+/**
+ * Multi-way subtree, keyed on `selector()`. Builds `cases[String(selector())]` (or `fallback` when no
+ * case matches), rebuilding **only when the selected key changes**. The switch/case companion to
+ * {@link when}: `{match(tab, { info: () => <Info />, graph: () => <Graph /> })}`. Place the result as a
+ * child of a Loom element.
+ */
+export declare function match(selector: Read<string | number>, cases: Readonly<Record<string, () => Child>>, fallback?: () => Child): Child;
+/**
+ * Inline keyed list. Reconciles `items()` against an anchor — the `list()` companion for when you want
+ * a keyed list as a child expression rather than against a container: `{each(rows, r => <Row />, r =>
+ * r.id)}`. `render(item, key)` must return a single Element (its owned effects are disposed when the
+ * item leaves); `key(item)` identifies it across updates so existing rows are moved, not rebuilt. Like
+ * `list()`, it reorders by key and throws on a duplicate key. Place the result as a child of a Loom
+ * element.
+ */
+export declare function each<T>(items: State<readonly T[]> | Read<readonly T[]>, render: (item: NoInfer<T>, key: string) => Element, key: (item: NoInfer<T>) => string | number, options?: EachOptions<NoInfer<T>>): Child;
+/** Install a tracked DOM effect with node ownership and explicit early teardown. */
+export declare function bind(node: Node, fn: CleanupEffectFn, options?: BindingOptions): Stop;
+export declare function bind(node: Node, fn: EffectFn, options?: BindingOptions): Stop;
+export { type BindValueOptions, bindValue } from "./bind-value.js";
+export { keyedChild } from "./keyed-child.js";
+export { type MorphOptions, morph } from "./morph.js";
+export { type OnMountOptions, onMount } from "./on-mount.js";
+export { dispose, onUnmount, pause, type ResourceGroup, remove, resourceGroup, resume, } from "./ownership.js";
+
+// dist/types/dom/jsx-runtime.d.ts
+import { type Child, type ElementProps } from "./index.js";
+export type { JSX } from "./jsx-types.js";
+type Component<P extends object> = (props: P) => Child;
+type JsxProps = (ElementProps & {
+    readonly children?: Child;
+}) | null | undefined;
+type JsxType = string | Component<object>;
+export declare function jsx<K extends keyof HTMLElementTagNameMap>(type: K, props: JsxProps, key?: string | number): HTMLElementTagNameMap[K];
+export declare function jsx<K extends keyof SVGElementTagNameMap>(type: K, props: JsxProps, key?: string | number): SVGElementTagNameMap[K];
+export declare function jsx<P extends object>(type: Component<P>, props: P | null, key?: string | number): Child;
+export declare const jsxs: typeof jsx;
+export declare function Fragment(props: {
+    readonly children?: Child;
+} | null): Child;
+export declare function jsxDEV(type: JsxType, props: JsxProps, _key?: string | number, _isStaticChildren?: boolean, _source?: unknown, _self?: unknown): Child;
+
+// dist/types/dom/jsx-types.d.ts
+import type { Child, ElementProps, SvgTagName } from "./index.js";
+type Component = (props: never) => Child;
+type EventHandler<TElement extends Element, TEvent extends Event> = (event: TEvent & {
+    readonly currentTarget: TElement;
+}) => void;
+interface DomEventMap {
+    blur: FocusEvent;
+    change: Event;
+    click: MouseEvent;
+    contextmenu: MouseEvent;
+    dblclick: MouseEvent;
+    drag: DragEvent;
+    dragend: DragEvent;
+    dragenter: DragEvent;
+    dragleave: DragEvent;
+    dragover: DragEvent;
+    dragstart: DragEvent;
+    drop: DragEvent;
+    focus: FocusEvent;
+    focusin: FocusEvent;
+    focusout: FocusEvent;
+    input: InputEvent;
+    keydown: KeyboardEvent;
+    keypress: KeyboardEvent;
+    keyup: KeyboardEvent;
+    mousedown: MouseEvent;
+    mouseenter: MouseEvent;
+    mouseleave: MouseEvent;
+    mousemove: MouseEvent;
+    mouseout: MouseEvent;
+    mouseover: MouseEvent;
+    mouseup: MouseEvent;
+    pointercancel: PointerEvent;
+    pointerdown: PointerEvent;
+    pointerenter: PointerEvent;
+    pointerleave: PointerEvent;
+    pointermove: PointerEvent;
+    pointerup: PointerEvent;
+    scroll: Event;
+    submit: SubmitEvent;
+    touchcancel: TouchEvent;
+    touchend: TouchEvent;
+    touchmove: TouchEvent;
+    touchstart: TouchEvent;
+    wheel: WheelEvent;
+}
+type EventProps<TElement extends Element> = {
+    [K in keyof DomEventMap as `on${K & string}`]?: EventHandler<TElement, DomEventMap[K]>;
+} & {
+    [K in keyof CamelDomEventNames as `on${K & string}`]?: EventHandler<TElement, DomEventMap[CamelDomEventNames[K]]>;
+};
+interface CamelDomEventNames {
+    Blur: "blur";
+    Change: "change";
+    Click: "click";
+    ContextMenu: "contextmenu";
+    DblClick: "dblclick";
+    DoubleClick: "dblclick";
+    Drag: "drag";
+    DragEnd: "dragend";
+    DragEnter: "dragenter";
+    DragLeave: "dragleave";
+    DragOver: "dragover";
+    DragStart: "dragstart";
+    Drop: "drop";
+    Focus: "focus";
+    FocusIn: "focusin";
+    FocusOut: "focusout";
+    Input: "input";
+    KeyDown: "keydown";
+    KeyPress: "keypress";
+    KeyUp: "keyup";
+    MouseDown: "mousedown";
+    MouseEnter: "mouseenter";
+    MouseLeave: "mouseleave";
+    MouseMove: "mousemove";
+    MouseOut: "mouseout";
+    MouseOver: "mouseover";
+    MouseUp: "mouseup";
+    PointerCancel: "pointercancel";
+    PointerDown: "pointerdown";
+    PointerEnter: "pointerenter";
+    PointerLeave: "pointerleave";
+    PointerMove: "pointermove";
+    PointerUp: "pointerup";
+    Scroll: "scroll";
+    Submit: "submit";
+    TouchCancel: "touchcancel";
+    TouchEnd: "touchend";
+    TouchMove: "touchmove";
+    TouchStart: "touchstart";
+    Wheel: "wheel";
+}
+type SharedProps<TElement extends Element> = ElementProps & EventProps<TElement> & {
+    children?: Child;
+    onMount?: (node: Node) => void;
+    onmount?: (node: Node) => void;
+    onUnmount?: () => void;
+    onunmount?: () => void;
+    [name: `aria-${string}`]: unknown;
+    [name: `data-${string}`]: unknown;
+};
+type HtmlProps<TElement extends HTMLElement> = SharedProps<TElement> & {
+    htmlFor?: string;
+};
+type SvgProps<TElement extends SVGElement> = SharedProps<TElement>;
+type HtmlIntrinsics = {
+    [K in keyof HTMLElementTagNameMap]: HtmlProps<HTMLElementTagNameMap[K]>;
+};
+type SvgIntrinsics = {
+    [K in SvgTagName]: SvgProps<SVGElementTagNameMap[K]>;
+};
+export declare namespace JSX {
+    type Element = HTMLElement;
+    type ElementType = string | Component;
+    interface ElementChildrenAttribute {
+        children: unknown;
+    }
+    interface IntrinsicAttributes {
+        key?: string | number;
+    }
+    interface IntrinsicElements extends HtmlIntrinsics, SvgIntrinsics {
+    }
+}
+export {};
+
+// dist/types/dom/keyed-child.d.ts
+/** Replace a host's content only after a different key builds and inserts successfully. */
+export declare function keyedChild(host: Element): (key: string, build: () => Node) => void;
+
+// dist/types/dom/keyed-reconcile.d.ts
+import type { Read } from "../loom.js";
+/** Called untracked for a reused key whose item changed by reference/value (===). */
+export type ListUpdate<T> = (node: Element, item: T, previous: T) => void;
+export interface EachOptions<T> {
+    readonly update?: ListUpdate<T>;
+}
+export interface ListOptions<T> extends EachOptions<T> {
+    readonly signal?: AbortSignal;
+    readonly key: (item: T) => string | number;
+    readonly render: (item: T, key: string) => Element;
+    readonly reorder?: Read<boolean>;
+}
+export type LoomKey = string | number;
+export interface RowUpdates<T> {
+    readonly update: ListUpdate<T>;
+    readonly items: Map<LoomKey, T>;
+}
+export declare function reconcileKeyed<T>(parent: Node, before: Node | null, items: readonly T[], nodes: Map<LoomKey, Element>, key: (item: T) => LoomKey, render: (item: T, key: string) => Element, reorder?: boolean, updates?: RowUpdates<T>): void;
+
+// dist/types/dom/listen.d.ts
+import type { Stop } from "../loom.js";
+export interface ListenOptions extends AddEventListenerOptions {
+    readonly owner: Node;
+}
+/** Subscribe to a target with an explicit owner; callbacks run untracked. */
+export declare function listen<K extends keyof WindowEventMap>(target: Window, type: K, handler: (event: WindowEventMap[K]) => void, options: ListenOptions): Stop;
+export declare function listen<K extends keyof DocumentEventMap>(target: Document, type: K, handler: (event: DocumentEventMap[K]) => void, options: ListenOptions): Stop;
+export declare function listen<K extends keyof HTMLElementEventMap>(target: HTMLElement, type: K, handler: (event: HTMLElementEventMap[K]) => void, options: ListenOptions): Stop;
+export declare function listen(target: EventTarget, type: string, handler: (event: Event) => void, options: ListenOptions): Stop;
+
+// dist/types/dom/media-read.d.ts
+import { type Read } from "../loom.js";
+export interface MediaReadOptions {
+    readonly window?: Pick<Window, "matchMedia">;
+}
+/** A shared reactive media query, isolated by its window. */
+export declare function mediaRead(query: string, options?: MediaReadOptions): Read<boolean>;
+
+// dist/types/dom/morph.d.ts
+export interface MorphOptions {
+    /**
+     * Stable identity for an element (return null for unkeyed). Keyed
+     * elements match across positions; an element never matches a different
+     * key positionally.
+     */
+    key?: (el: Element) => string | null;
+    /**
+     * Elements the morph must not touch — the hook for enhancer-injected
+     * nodes (streaming cursors, copy buttons, post-render highlighting). A
+     * matched element returning true is left exactly as-is (no attribute,
+     * text, or children sync); an unmatched one is kept instead of removed,
+     * with managed siblings ordered around it — and it is TRANSPARENT to
+     * positional matching, so the siblings after it still pair up with their
+     * counterparts. A string is shorthand for a
+     * selector match: `skip: "[data-chrome]"` ≡ `el => el.matches("[data-chrome]")`.
+     */
+    skip?: ((el: Element) => boolean) | string;
+}
+export declare function morph(from: Element, to: Element, options?: MorphOptions): Element;
+
+// dist/types/dom/observe-intersection.d.ts
+import type { Stop } from "../loom.js";
+export type IntersectionCallback = (entry: IntersectionObserverEntry) => void;
+export interface ObserveIntersectionOptions {
+    readonly signal?: AbortSignal;
+    readonly root?: Element | Document | null;
+    readonly rootMargin?: string;
+    readonly threshold?: number | readonly number[];
+}
+export declare function observeIntersection(el: Element, cb: IntersectionCallback, options?: ObserveIntersectionOptions): Stop;
+
+// dist/types/dom/observe-mutation.d.ts
+import type { Stop } from "../loom.js";
+export type MutationsCallback = (records: MutationRecord[]) => void;
+export interface ObserveMutationOptions extends MutationObserverInit {
+    readonly signal?: AbortSignal;
+}
+/** @internal Connection-owned observation, independent of node disposal. */
+export declare function connectMutation(el: Node, callback: MutationsCallback, options: MutationObserverInit): Stop;
+export declare function observeMutation(el: Node, callback: MutationsCallback, options: ObserveMutationOptions): Stop;
+
+// dist/types/dom/observe-size.d.ts
+import type { Stop } from "../loom.js";
+export type SizeCallback = (entry: ResizeObserverEntry) => void;
+export interface ObserveSizeOptions extends ResizeObserverOptions {
+    readonly signal?: AbortSignal;
+}
+/** @internal Connection-owned observation, independent of node disposal. */
+export declare function connectSize(el: Element, callback: SizeCallback, options?: ResizeObserverOptions): Stop;
+export declare function observeSize(el: Element, callback: SizeCallback, options?: ObserveSizeOptions): Stop;
+
+// dist/types/dom/offset-in.d.ts
+export interface OffsetRect {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+}
+export declare function offsetIn(el: Element, box: HTMLElement): OffsetRect;
+
+// dist/types/dom/on-mount.d.ts
+import type { Stop } from "../loom.js";
+export interface OnMountOptions {
+    readonly signal?: AbortSignal;
+}
+export declare function onMount(node: Node, fn: (node: Node) => void, options?: OnMountOptions): Stop;
+
+// dist/types/dom/ownership-base.d.ts
+export type OwnershipStop = () => void;
+export type OwnedResource = object;
+interface OwnedResourceDriver {
+    readonly onStop: (resource: OwnedResource, release: OwnershipStop) => void;
+    readonly stop: (resource: OwnedResource) => void;
+    readonly pause: (resource: OwnedResource) => void;
+    readonly resume: (resource: OwnedResource) => void;
+    readonly requiresOrderedStop: (resource: OwnedResource) => boolean;
+}
+/** @internal Install operations for raw resources stored by the reactive DOM layer. */
+export declare function installOwnedResourceDriver(driver: OwnedResourceDriver): void;
+/** Register a stop that is only driven by ownership (no separately exposed manual stop). */
+export declare function own(node: Node, stop: OwnershipStop): void;
+/** Register a raw resource without allocating a public/manual stop handle. */
+export declare function ownResource(node: Node, resource: OwnedResource): void;
+/** A manually stoppable raw binding still participates in DOM pause/resume. */
+export declare function ownStoppableResource(node: Node, resource: OwnedResource, signal?: AbortSignal): OwnershipStop;
+/** @internal Release resources created by a failed synchronous render, including
+ * nodes the renderer never returned. Nested renders share a rollback journal;
+ * successful construction leaves lifetime management with the owning nodes. */
+export declare function withConstructionRollback<T>(build: () => T): T;
+/** @internal Remove every node before reporting disposal or insertion failures. */
+export declare function removeNodes(nodes: Iterable<Node>, errors?: unknown[]): void;
+export interface ResourceGroup<T> {
+    readonly value: T;
+    readonly dispose: OwnershipStop;
+}
+type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
+/**
+ * Capture node-owned resources and lifecycle stops created by `fn` in a flat
+ * ownership arena. Node ownership remains intact for granular removal;
+ * disposing the arena is the fast path for tearing down an entire view before
+ * native DOM replacement. Construction is synchronous, arenas cannot nest,
+ * and observable cleanup retains descendant-first DOM order.
+ */
+export declare function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T>;
+/**
+ * Attach a disposer to a node's Loom-managed lifetime. The returned stop also unregisters itself,
+ * allowing early manual teardown without retaining the stopped resource on a long-lived node.
+ */
+export declare function onUnmount(node: Node, stop: OwnershipStop): OwnershipStop;
+/** @internal Suspend raw resources without exposing their concrete representation. */
+export declare function pauseOwnedResources(root: Node): void;
+/** @internal Resume raw resources without exposing their concrete representation. */
+export declare function resumeOwnedResources(root: Node): void;
+/** Dispose every owned resource in a subtree, descendants before ancestors. */
+export declare function dispose(root: Node): void;
+/** Dispose a subtree and detach it even when one of its disposers fails. */
+export declare function remove(node: Node): void;
+export {};
+
+// dist/types/dom/ownership.d.ts
+export { dispose, onUnmount, type ResourceGroup, remove, resourceGroup, } from "./ownership-base.js";
+/** Suspend every effect-backed binding owned by a subtree. Pause operations nest. */
+export declare function pause(root: Node): void;
+/** Resume every effect-backed binding owned by a subtree. */
+export declare function resume(root: Node): void;
+
+// dist/types/dom/place.d.ts
+/** Position members in the requested relative order, inserting new nodes before `end`.
+ * Contiguous regions skip the ordering map; genuine reorders retain a longest increasing
+ * subsequence to minimize moves. Existing unrelated siblings remain unmanaged.
+ * Moves preserve DOM state when the platform provides moveBefore(). */
+export declare function positionOrdered(parent: Node, ordered: readonly Node[], end: Node | null): void;
+/** Seat `node` immediately after `ref`. Already seated nodes are untouched; other moves
+ * use the platform's state-preserving move when available, otherwise insertBefore(). */
+export declare function placeAfter(ref: Element, node: Node): void;
+
+// dist/types/dom/pointer-session.d.ts
+import type { Stop } from "../loom.js";
+export type PointerSessionEndReason = "pointerup" | "pointercancel" | "lostpointercapture" | "stopped";
+export interface PointerSessionOptions {
+    readonly signal?: AbortSignal;
+    /** Receives matching pointer moves while the session is active. */
+    readonly move: (event: PointerEvent) => void;
+    /** Runs once, after listeners and capture have been released. */
+    readonly end?: (reason: PointerSessionEndReason, event?: PointerEvent) => void;
+}
+/**
+ * Start one pointer-ID-filtered gesture on `handle`. Capture is best-effort; pointer up, cancel,
+ * lost capture, manual stop, or Loom-managed unmount finishes the session exactly once.
+ */
+export declare function startPointerSession(handle: Element, start: PointerEvent, options: PointerSessionOptions): Stop;
+
+// dist/types/dom/press-class.d.ts
+import type { Stop } from "../loom.js";
+export interface PressClassOptions {
+    readonly signal?: AbortSignal;
+    readonly name?: string;
+    /** A gate read at contact: return false and the press is ignored
+     *  (Chrome 119+ dispatches pointer events to disabled controls —
+     *  `() => !el.disabled` keeps the voice honest without a signal). */
+    readonly when?: () => boolean;
+}
+export declare function pressClass(el: Element, options?: PressClassOptions): Stop;
+
+// dist/types/dom/pressed.d.ts
+import { type Read } from "../loom.js";
+export declare function pressed(el: Element): Read<boolean>;
+
+// dist/types/dom/reveal.d.ts
+export type RevealAxis = "x" | "y";
+export interface ScrollOptions {
+    readonly axis?: RevealAxis;
+    /** Clearance in px kept between el and the box's edge. */
+    readonly margin?: number;
+    /** "smooth" scrolls with the browser's animation; default instant. */
+    readonly behavior?: ScrollBehavior;
+}
+export interface RevealOptions extends ScrollOptions {
+    readonly scroller?: HTMLElement | string;
+    readonly align?: "nearest" | "center";
+    readonly ifHidden?: boolean;
+}
+export interface FindScrollerOptions {
+    readonly axis?: RevealAxis;
+    readonly requireOverflow?: boolean;
+}
+export declare function findScroller(el: Element, options?: FindScrollerOptions): HTMLElement | null;
+export declare function reveal(el: Element, options?: RevealOptions): boolean;
+
+// dist/types/dom/scroll-edges.d.ts
+import { type Read } from "../loom.js";
+export interface ScrollEdges {
+    readonly start: boolean;
+    readonly end: boolean;
+}
+export interface ScrollEdgesOptions {
+    /** "y" (default) or "x". */
+    readonly axis?: "x" | "y";
+    /** Slack in px before an edge counts as scrolled (default 4). */
+    readonly epsilon?: number;
+}
+export declare function scrollEdges(el: Element, options?: ScrollEdgesOptions): Read<ScrollEdges>;
+
+// dist/types/dom/scroll-fade.d.ts
+export interface ScrollFadeOptions {
+    readonly signal?: AbortSignal;
+    /** Fade length in px (default 14). */
+    readonly size?: number;
+    /** Scroll axis to fade (default "y"). */
+    readonly axis?: "x" | "y";
+    /** Edge transition duration in ms (default 0). */
+    readonly transition?: number;
+}
+export declare function scrollFade(el: HTMLElement, options?: ScrollFadeOptions): () => void;
+
+// dist/types/dom/scroll-memory.d.ts
+import type { State, Stop } from "../loom.js";
+export interface ScrollMemory {
+    readonly restore: (key: string) => void;
+    readonly stop: Stop;
+}
+export interface ScrollMemoryOptions {
+    readonly axis?: "x" | "y";
+    readonly signal?: AbortSignal;
+}
+/** Remember positions for one host; the latest restore wins across pending frames. */
+export declare function scrollMemory(host: HTMLElement, cellFor: (key: string) => State<number>, options?: ScrollMemoryOptions): ScrollMemory;
+
+// dist/types/dom/tap.d.ts
+import type { Stop } from "../loom.js";
+export interface TapOptions {
+    readonly signal?: AbortSignal;
+    /** Maximum pointer travel in CSS pixels. Default 10. */
+    readonly slop?: number;
+    /** Recent-tap interval in milliseconds. Default 600. */
+    readonly recentMs?: number;
+}
+export interface TapController {
+    readonly stop: Stop;
+    readonly recent: () => boolean;
+}
+export interface DoubleTapOptions extends TapOptions {
+    /** Maximum interval between taps in milliseconds. Default 350. */
+    readonly withinMs?: number;
+}
+export declare function onTap(node: Element, handler: (event: PointerEvent) => void, options?: TapOptions): TapController;
+export declare function onDoubleTap(node: Element, handler: (event: PointerEvent) => void, options?: DoubleTapOptions): Stop;
+
+// dist/types/dom/virtual-list.d.ts
+export interface ListSource<T> {
+    readonly length: number;
+    at(index: number): T | undefined;
+}
+export interface VirtualList<T> {
+    /** The holder element to mount inside a scroll container. */
+    readonly el: HTMLElement;
+    /** Replace the backing source and re-window. */
+    setItems(source: ListSource<T>): void;
+    /** Recompute the window against the current scroll position. */
+    refresh(): void;
+    /** Scroll the parent container to the end of the list. */
+    scrollToEnd(): void;
+    /** Scroll so the row at `index` is centered in the viewport. */
+    scrollToIndex(index: number): void;
+    /** Detach listeners and clear mounted rows. */
+    stop(): void;
+}
+export interface VirtualListOptions<T> {
+    readonly signal?: AbortSignal;
+    readonly document?: Document;
+    /** Uniform row height in pixels. */
+    readonly rowHeight: number;
+    /** Stable identity for an item, so a row can be reused across windows. */
+    readonly key: (item: T) => string | number;
+    /** Build a row when `reuse` is null, else update `reuse` in place and return it. */
+    readonly render: (item: T, reuse: HTMLElement | null) => HTMLElement;
+    /** Extra rows rendered above and below the viewport (default 6). */
+    readonly overscan?: number;
+}
+export declare function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T>;
+
+// dist/types/events.d.ts
+export { type HoverClass, type HoverClassOptions, hoverClass, } from "./dom/hover-class.js";
+export { type ListenOptions, listen } from "./dom/listen.js";
+export { type PointerSessionEndReason, type PointerSessionOptions, startPointerSession, } from "./dom/pointer-session.js";
+export { type PressClassOptions, pressClass } from "./dom/press-class.js";
+export { type DoubleTapOptions, onDoubleTap, onTap, type TapController, type TapOptions, } from "./dom/tap.js";
+
+// dist/types/html/attributes.d.ts
+export declare function renderAttribute(tag: string, name: string, value: unknown, dev: boolean): string;
+export interface SerializeAttributesOptions {
+    /** Warn (console) for the two drops that almost always mean a bug —
+     *  a malformed name, an unsafe URL scheme. */
+    readonly dev?: boolean;
+    /** The tag named in those warnings. */
+    readonly tag?: string;
+}
+/** Serialize an attribute bag with the JSX runtime's rule: each rendered
+ *  attribute joins with a LEADING space (` a="1" b`) so the result drops
+ *  straight after a tag name; an all-dropped bag is "". */
+export declare function serializeAttributes(attrs: Record<string, unknown>, options?: SerializeAttributesOptions): string;
+
+// dist/types/html/escape.d.ts
+export declare function escapeText(value: string): string;
+export declare function escapeAttribute(value: string): string;
+
+// dist/types/html/index.d.ts
+declare const htmlTypeBrand: unique symbol;
+export interface Html {
+    /** Nominal brand: trusted HTML values can only be constructed by this module. */
+    readonly [htmlTypeBrand]: true;
+    readonly value: string;
+    toString(): string;
+}
+export type HtmlChild = Html | string | number | boolean | null | undefined | readonly HtmlChild[];
+export declare function unsafeHtml(value: string): Html;
+export declare function html(strings: TemplateStringsArray, ...values: readonly HtmlChild[]): Html;
+export declare function renderToString(value: HtmlChild): string;
+export declare function isHtml(value: unknown): value is Html;
+/** Read one attribute off a rendered value's ROOT opening tag — the
+ *  reader twin of serializeAttributes for a static tree a parent
+ *  composes without parsing it: a builder stamp on a child root. Only
+ *  the root's own tag is read (it closes before any child opens); a
+ *  bare attribute reads ""; a missing one, or a value with no leading
+ *  element tag, reads undefined. Quoted values are unescaped. A `>`
+ *  inside a quoted attribute value of the root tag is not supported. */
+export declare function attributeOf(value: Html | string, name: string): string | undefined;
+/** SPLICE attributes into a rendered value's ROOT opening tag — the
+ *  writer twin of attributeOf, for a parent stamping a child's static
+ *  tree without parsing it. Values serialize by serializeAttributes'
+ *  rules (nullish drops, "" renders =""). `merge` names attributes
+ *  whose existing root value is JOINED instead of doubled (style with
+ *  "; ", class with " ") — the new value lands after the old, so it
+ *  wins the per-property cascade. Only the root's own tag is touched;
+ *  the same contract as attributeOf: a rootless value throws, a `>`
+ *  inside a quoted root attribute is unsupported, and a single-quoted
+ *  existing attribute is not merged (its double-quoted spelling is
+ *  the serializer's own). */
+export declare function withRootAttributes(value: Html, attrs: Record<string, string | number | boolean | null | undefined>, options?: {
+    readonly tag?: string;
+    readonly merge?: Record<string, string>;
+}): Html;
+export { type SerializeAttributesOptions, serializeAttributes, } from "./attributes.js";
+export { escapeAttribute, escapeText } from "./escape.js";
+
+// dist/types/html/jsx-runtime.d.ts
+import { type Html, type HtmlChild } from "./index.js";
+export type { JSX } from "./jsx-types.js";
+type Component<P extends object> = (props: P) => HtmlChild;
+type JsxProps = (Record<string, unknown> & {
+    readonly children?: HtmlChild;
+}) | null | undefined;
+type JsxType = string | Component<object>;
+export declare function jsx(type: string, props: JsxProps, key?: string | number): Html;
+export declare function jsx<P extends object>(type: Component<P>, props: P | null, key?: string | number): Html;
+export declare const jsxs: typeof jsx;
+export declare function Fragment(props: {
+    readonly children?: HtmlChild;
+} | null): HtmlChild;
+export declare function jsxDEV(type: JsxType, props: JsxProps, _key?: string | number, _isStaticChildren?: boolean, _source?: unknown, _self?: unknown): Html;
+
+// dist/types/html/jsx-types.d.ts
+import type { HtmlChild } from "./index.js";
+type Component = (props: never) => HtmlChild;
+export declare namespace JSX {
+    type Element = HtmlChild;
+    type ElementType = string | Component;
+    interface ElementChildrenAttribute {
+        children: unknown;
+    }
+    interface IntrinsicAttributes {
+        key?: string | number;
+    }
+    interface IntrinsicElementProps {
+        children?: HtmlChild;
+        class?: unknown;
+        className?: unknown;
+        htmlFor?: string;
+        key?: string | number;
+        style?: string | Record<string, unknown>;
+        [name: string]: unknown;
+    }
+    interface IntrinsicElements {
+        [name: string]: IntrinsicElementProps;
+    }
+}
+export {};
+
+// dist/types/index.d.ts
+export type { CleanupEffectFn, ConfigureOptions, DeferScheduler, EffectFn, EffectOptions, ErrorHandler, NodeInfo, NodeKind, NodeOptions, Polled, Props, Read, Scope, SourceConnect, State, Stop, } from "./loom.js";
+export { batch, computed, configure, effect, mutate, poll, props, scope, source, state, trigger, untrack, update, watch, writable, } from "./loom.js";
+
+// dist/types/keyed-states.d.ts
+import { type NodeOptions, type State } from "./loom.js";
+/** Identity-keyed states with an explicit key/value schema. */
+export interface KeyedStates<Schema extends object> {
+    value<K extends Extract<keyof Schema, string>>(key: K, initial: NoInfer<Schema[K]>): State<Schema[K]>;
+    factory<K extends Extract<keyof Schema, string>>(key: K, create: () => State<NoInfer<Schema[K]>>): State<Schema[K]>;
+    prune(match: string | ((key: Extract<keyof Schema, string>) => boolean)): number;
+    has(key: Extract<keyof Schema, string>): boolean;
+}
+export declare function keyedStates<Schema extends object = never>(...args: [Schema] extends [never] ? [schemaRequired: never] : [options?: NodeOptions]): KeyedStates<Schema>;
+
+// dist/types/layout.d.ts
+export { type CaretPoint, caretAtPoint } from "./dom/caret-at-point.js";
+export { type OffsetRect, offsetIn } from "./dom/offset-in.js";
+export { placeAfter, positionOrdered } from "./dom/place.js";
+export { type FindScrollerOptions, findScroller, type RevealAxis, type RevealOptions, reveal, type ScrollOptions, } from "./dom/reveal.js";
+export { type ScrollMemory, type ScrollMemoryOptions, scrollMemory, } from "./dom/scroll-memory.js";
+
+// dist/types/lens.d.ts
+import { type State } from "./loom.js";
+export declare function lens<T extends object, K extends keyof T>(source: State<T>, key: K): State<T[K]>;
+
+// dist/types/loom.d.ts
+import { type Link, type ReactiveNode } from "./core/graph.js";
+import { type ScopeNode, type ScopeResource } from "./core/scope-ownership.js";
+export interface State<T> {
+    (): T;
+    (next: T): void;
+}
+export type Read<T> = () => T;
+export type Stop = () => void;
+export interface Scope {
+    readonly stop: Stop;
+    readonly pause: () => void;
+    readonly resume: () => void;
+}
+export type EffectFn = () => void;
+export type ErrorHandler = (error: unknown, node?: NodeInfo) => void;
+export type SourceConnect<T> = (set: (value: T) => void) => Stop;
+export type NodeKind = "state" | "computed" | "effect";
+export interface NodeOptions {
+    readonly internal?: boolean;
+    readonly label?: string;
+}
+export interface EffectOptions extends NodeOptions {
+    readonly target?: object;
+    /**
+     * Run this effect in the deferred lane (requires `import "loom/defer"` once at startup):
+     * re-runs happen off the critical path (idle-first,
+     * coalesced) instead of in the synchronous flush. The initial run is still synchronous (so deps
+     * are tracked and the first output is immediate); only re-runs defer. Coalesced means it sees the
+     * latest value, NOT every transition — use a channel for every-transition.
+     */
+    readonly defer?: boolean;
+    /**
+     * Deferred lane only: the guaranteed-refresh floor in ms — runs when idle, but at least this often
+     * under sustained load. Default 200ms. Best-effort, not hard real-time: an app task longer than
+     * this delays everything.
+     */
+    readonly maxStale?: number;
+}
+/**
+ * Schedules a deferred drain to run no later than `maxStale` ms, preferring idle time, passing it a
+ * `hasBudget()` to poll so it can yield mid-drain. Returns a cancel. Override via
+ * configure({ deferScheduler }) — e.g. a synchronous one in tests, a no-op on the server.
+ */
+export type DeferScheduler = (drain: (hasBudget: () => boolean) => void, maxStale: number) => () => void;
+export interface NodeInfo {
+    readonly id: number;
+    readonly kind: NodeKind;
+    readonly label: string;
+}
+export type CleanupEffectFn = () => Stop;
+type InternalEffectFn = () => unknown;
+type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
+type PropKey<T extends object> = Extract<keyof T, string>;
+export type Props<T extends object> = {
+    readonly [K in PropKey<T>]: State<T[K]>;
+};
+export type NodeBase = ReactiveNode & {
+    deps?: Link | undefined;
+    depsTail?: Link | undefined;
+    meta?: InspectMeta | undefined;
+    subs?: Link | undefined;
+    subsTail?: Link | undefined;
+};
+export interface StateNode<T> extends NodeBase {
+    currentValue: T;
+    pendingValue: T;
+    source?: State<unknown> | undefined;
+}
+export interface ComputedNode<T> extends NodeBase {
+    value: T | undefined;
+    getter(previousValue?: T): T;
+    failure?: {
+        readonly error: unknown;
+    } | undefined;
+}
+interface EffectNode extends NodeBase {
+    fn: InternalEffectFn;
+    cleanup: Stop | undefined;
+    /** Internal group unlink, installed only for effects captured by a DOM resource group. */
+    releaseOwnership?: Stop | undefined;
+    scope?: ScopeNode | undefined;
+    scopeIndex?: number | undefined;
+    pausedCount?: number | undefined;
+    directPausedCount?: number | undefined;
+    deferred?: boolean | undefined;
+    deferredQueued?: boolean;
+    maxStale?: number;
+    deferDeadline?: number;
+}
+export interface InspectMeta {
+    readonly id: number;
+    readonly internal: boolean;
+    readonly kind: NodeKind;
+    readonly label: string;
+    readonly target: WeakRef<object> | undefined;
+    disposed: boolean;
+    runs: number;
+    group?: number;
+    key?: string;
+}
+export declare const deferredLane: {
+    enqueue: ((node: EffectNode) => void) | undefined;
+    scheduler: DeferScheduler | undefined;
+};
+export interface InspectHooks {
+    register(node: NodeBase, kind: NodeKind, options: NodeOptions | EffectOptions | undefined): InspectMeta | undefined;
+    unregister(id: number): void;
+    setEnabled(on: boolean): void;
+    nextGroup(): number;
+    /** Dev diagnostics: a tracked run wrote `node` — warn if the writer also subscribes to it. */
+    trackedWrite?(node: NodeBase, writer: NodeBase): void;
+}
+/** @internal Optional observability hooks installed by loom/observe. */
+export interface RuntimeHooks {
+    create(meta: InspectMeta | undefined): void;
+    read(node: NodeBase, sub: NodeBase): void;
+    write(node: StateNode<unknown>, previous: unknown, next: unknown, writer: NodeBase | undefined): void;
+    compute(node: ComputedNode<unknown>): void;
+    effect(node: EffectNode): void;
+    beginFlush(): number | undefined;
+    endFlush(appBatchSize: number, startedAt: number): void;
+    dispose(node: EffectNode): void;
+}
+export declare function installRuntimeHooks(hooks: RuntimeHooks): void;
+export declare function installInspectHooks(hooks: InspectHooks): void;
+export declare function ambientOptions(): NodeOptions | undefined;
+export declare function liveScopeCount(): number;
+export declare function state<T>(initial: T, options?: NodeOptions): State<T>;
+/**
+ * A derived writable: reads through `read` (tracked — bindings and computeds subscribe through
+ * whatever it reads), writes through `write`. The two-way UI-vocabulary adapter (a picker showing
+ * a label over a domain signal) as a first-class helper. Arity decides direction — rest-args, so
+ * writing `undefined` through a `State<T | undefined>` is a WRITE, exactly like `state()` itself.
+ */
+export declare function writable<T>(read: () => T, write: (next: T) => void): State<T>;
+/**
+ * A lazy reactive source backed by an external producer. `connect(set)` is invoked the first
+ * time the source is read inside a live effect/computed (its first subscriber); it wires up the
+ * producer — a timer, event listener, `PerformanceObserver`, socket — and returns a teardown
+ * run automatically when the last subscriber goes away. Reads while unobserved return the last
+ * value (or `initial`). `connect` may push a synchronous initial value to resync.
+ * A source created inside a scope cannot connect while that scope is paused or
+ * after it stops. Teardown may publish a final value synchronously; callbacks
+ * from that connection are ignored after teardown returns.
+ */
+export declare function source<T>(connect: SourceConnect<T>, initial: T, options?: NodeOptions): Read<T>;
+/** @internal Install manually owned work without inheriting a scope or effect. */
+export declare function detached<T>(run: () => T): T;
+/** @internal A cached producer belongs to its subscribers, not its first
+ * caller's scope. Creation also avoids inheriting that caller's inspect options. */
+export declare function sharedSource<T>(connect: SourceConnect<T>, initial: T, options?: NodeOptions): Read<T>;
+export declare function computed<T>(getter: (previousValue?: T) => T, options?: NodeOptions): Read<T>;
+export declare function effect<Result>(fn: () => SyncResult<Result>, options?: EffectOptions): Stop;
+/** @internal Create a node-owned DOM effect without linking it to the currently running effect. */
+export declare function domEffect(fn: InternalEffectFn, label: string, target: Node, options?: EffectOptions): EffectNode;
+/** @internal Start a plain node-owned DOM sink on the minimal production path. */
+export declare function domBindingEffect(fn: EffectFn, label: string, target: Node): EffectNode;
+/** @internal Stop a raw owner-bound DOM effect. */
+export declare function stopEffectNode(node: EffectNode): void;
+export declare function batch<T>(fn: () => T): T;
+/**
+ * Group the effects created inside `fn` so they can be torn down or suspended together: `stop()`
+ * disposes them, `pause()` suspends their runs (intervening changes just mark them dirty), and
+ * `resume()` re-runs the ones that went dirty while paused. Scopes nest — a scope created inside
+ * another becomes its child, and an effect runs only while no scope in its parent chain is paused.
+ * So pausing a parent freezes its whole subtree, and resuming it leaves an independently-paused
+ * child suspended.
+ */
+export declare function scope<Result>(fn: () => SyncResult<Result>, options?: NodeOptions): Scope;
+export declare function installDeferredLane(enqueue: (node: EffectNode) => void): {
+    runEffect: (node: EffectNode) => void;
+    clearWatching: (node: EffectNode) => void;
+};
+export type { EffectNode };
+/** @internal Suspend one raw owner-bound effect. */
+export declare function pauseEffectNode(node: EffectNode): boolean;
+/** @internal Resume one raw owner-bound effect. */
+export declare function resumeEffectNode(node: EffectNode): boolean;
+export declare function registerScopeResource(resource: ScopeResource): Stop;
+export type Polled<T> = Read<T> & {
+    readonly stop: Stop;
+};
+/**
+ * The **pull** bridge for external data: re-samples `sample()` every `ms` milliseconds into a
+ * value-deduped signal, for values you can read imperatively at any time (clocks, `performance`
+ * counters, media state). Bindings reading the poll (`p()`) re-run only when the sampled value
+ * actually changed. Call `.stop()` to clear the timer; created inside a scope, the timer suspends
+ * and resumes with it. The backing state honours `options` (e.g. `{ internal: true }`).
+ * Push-style producers want {@link source}; async request/response wants `resource` (loom/async).
+ */
+export declare function poll<T>(sample: () => T, ms: number, options?: NodeOptions): Polled<T>;
+/** Internal cold-path query for plain state cells; does not subscribe the caller. */
+export declare function hasStateSubscribers<T>(source: State<T>): boolean;
+export declare function trigger<T>(source: State<T>): void;
+export declare function untrack<T>(fn: () => T): T;
+/**
+ * Functional read-modify-write: `update(count, n => n + 1)`. The read is **untracked** — inside an
+ * effect, updating a signal does not subscribe the effect to it, so the classic `v(v() + 1)`
+ * self-dependency foot-gun can't happen through this helper.
+ */
+export declare function update<T>(source: State<T>, fn: (value: T) => T): void;
+/**
+ * Watch an explicit source and react to its **changes**: `read` is tracked (its dependencies drive
+ * re-evaluation), `onChange(value, previous)` runs untracked and is skipped on the initial
+ * evaluation and whenever the derived value is unchanged. The write-back-binding shape without the
+ * `let first = true` boilerplate — and because `onChange` is untracked, writes inside it can't
+ * create accidental self-dependencies.
+ */
+export declare function watch<T>(read: Read<T>, onChange: (value: T, previous: T) => void, options?: EffectOptions): Stop;
+export declare function mutate<T extends object>(source: State<T>, fn: (value: T) => void): void;
+export declare function props<T extends object>(initial: T, options?: NodeOptions): Props<T>;
+/**
+ * Configure the runtime.
+ *
+ * `inspect` toggles the always-off-by-default inspection layer: while it is off, node creation
+ * allocates no metadata and `inspect()`/`inspectResources()` and the inspector see
+ * nothing — true zero cost. Turn it on (typically once at startup, before creating the nodes you
+ * want visible) when you need tooling; nodes created while it was off stay invisible.
+ *
+ * `onError` installs a global effect error boundary. Without one, an effect that throws propagates
+ * to whatever triggered the run (a `state` write or `batch`) and aborts the rest of that flush.
+ * With one, the throw is routed to the handler and the flush continues with the other effects. Pass
+ * `undefined` to remove it.
+ */
+export interface ConfigureOptions {
+    readonly inspect?: boolean;
+    readonly onError?: ErrorHandler | undefined;
+    /** Override the deferred-effect scheduler (e.g. synchronous in tests, no-op on the server). */
+    readonly deferScheduler?: DeferScheduler | undefined;
+}
+export declare function configure(options: ConfigureOptions): ConfigureOptions;
+export declare function mergeOptions(defaults: NodeOptions | undefined, own: NodeOptions | EffectOptions | undefined): NodeOptions | EffectOptions | undefined;
+
+// dist/types/model.d.ts
+export { type KeyedStates, keyedStates } from "./keyed-states.js";
+export { lens } from "./lens.js";
+export { type Revisions, type RevisionsOptions, revisions, } from "./revisions.js";
+export { weakMemo } from "./weak-memo.js";
+
+// dist/types/motion.d.ts
+export { type AfterAnimationOptions, type AfterTransitionOptions, afterAnimation, afterTransition, } from "./dom/css-completion.js";
+export { type HeightFold, type HeightFoldOptions, heightFold, } from "./dom/height-fold.js";
+export { type ScrollFadeOptions, scrollFade } from "./dom/scroll-fade.js";
+
+// dist/types/observe.d.ts
+export type { InspectNode, InspectSnapshot, ResourceCounts, } from "./core/inspect.js";
+export { inspect, inspectResources } from "./core/inspect.js";
+export type { Channel, ChannelOptions, FlushSample, Frame, Meter, MeterAggregation, ReadSample, WriteSample, } from "./core/meter.js";
+export { channel, events, meter, sampleOf } from "./core/meter.js";
+export type { NodeKind } from "./loom.js";
+
+// dist/types/revisions.d.ts
+import { type NodeOptions } from "./loom.js";
+export interface Revisions {
+    /** Tracked read of `path`'s revision — subscribes the caller. */
+    read(path: string): number;
+    /** Bump `paths` and their ancestors; one batch, each cell once. */
+    invalidate(...paths: readonly string[]): void;
+    /** Retained path cells, including cells without subscribers. */
+    readonly size: number;
+    /** Drop matching unsubscribed paths (all by default). Recreated counters start at zero. */
+    prune(match?: string | ((path: string) => boolean)): number;
+}
+export interface RevisionsOptions extends NodeOptions {
+    /** The path separator (default "."). */
+    readonly separator?: string;
+}
+export declare function revisions(options?: RevisionsOptions): Revisions;
+
+// dist/types/schedule.d.ts
+import { type Read, type State, type Stop } from "./loom.js";
+export interface FrameClock {
+    requestAnimationFrame?: (callback: FrameRequestCallback) => number;
+    cancelAnimationFrame?: (id: number) => void;
+}
+export interface ScheduleOptions {
+    readonly signal?: AbortSignal;
+}
+export interface FrameOptions extends ScheduleOptions {
+    readonly window?: FrameClock;
+}
+export interface Coalescer {
+    readonly request: () => void;
+    readonly cancel: () => void;
+    readonly stop: Stop;
+}
+/** Coalesce requests into one microtask. Cancel permits subsequent requests. */
+export declare function microtaskCoalescer(run: () => void, options?: ScheduleOptions): Coalescer;
+/** Coalesce requests into one frame of the selected window. */
+export declare function frameCoalescer(run: () => void, options?: FrameOptions): Coalescer;
+/** Run after a positive integer number of frames; no RAF means microtasks. */
+export declare function afterFrames(count: number, run: () => void, options?: FrameOptions): Stop;
+export interface EventOrTimeoutOptions extends ScheduleOptions {
+    readonly timeoutMs: number;
+    readonly capture?: boolean;
+}
+/** Race one event against a timeout. Teardown precedes the callback. */
+export declare function eventOrTimeout<K extends keyof WindowEventMap>(target: Window, type: K, run: (event: WindowEventMap[K] | undefined) => void, options: EventOrTimeoutOptions): Stop;
+export declare function eventOrTimeout<K extends keyof DocumentEventMap>(target: Document, type: K, run: (event: DocumentEventMap[K] | undefined) => void, options: EventOrTimeoutOptions): Stop;
+export declare function eventOrTimeout<K extends keyof HTMLElementEventMap>(target: HTMLElement, type: K, run: (event: HTMLElementEventMap[K] | undefined) => void, options: EventOrTimeoutOptions): Stop;
+export declare function eventOrTimeout(target: EventTarget, type: string, run: (event: Event | undefined) => void, options: EventOrTimeoutOptions): Stop;
+export interface WatchSettledOptions<T> extends ScheduleOptions {
+    readonly delayMs: number;
+    readonly equals?: (value: T, previous: T) => boolean;
+}
+export interface SettledWatcher {
+    readonly stop: Stop;
+    readonly cancel: () => void;
+    readonly flush: () => void;
+}
+/** Observe immediately, deliver changes after quiet time, and own the watcher explicitly. */
+export declare function watchSettled<T>(read: State<T> | Read<T>, run: (value: NoInfer<T>, previous: NoInfer<T>) => void, options: WatchSettledOptions<T>): SettledWatcher;
+
+// dist/types/storage.d.ts
+import { type State, type Stop } from "./loom.js";
+/** Explicit decoding is required at the storage boundary. */
+export interface StorageSlotOptions<T> {
+    readonly serialize?: (value: T) => string;
+    readonly parse: (raw: string) => T;
+    readonly validate?: (value: T) => boolean;
+    readonly storage?: Storage;
+}
+export interface StorageSlot<T> {
+    /** The stored value, or undefined: nothing stored, unparsable, or rejected by validate. */
+    load(): T | undefined;
+    /** Store the value; false when storage is absent or refused (quota, permission). */
+    store(value: T): boolean;
+    /** Remove the entry (guarded). */
+    clear(): void;
+}
+export declare function storageSlot<T>(key: string, options: StorageSlotOptions<T>): StorageSlot<T>;
+declare function stringCodec(): StorageSlotOptions<string>;
+declare function stringCodec<T extends string>(allowed: readonly T[]): StorageSlotOptions<T>;
+/** Decoders reject invalid storage data. Spread a codec to select storage. */
+export declare const codecs: {
+    readonly json: <T>(validate: (value: unknown) => value is T) => StorageSlotOptions<T>;
+    readonly boolean: {
+        serialize: (v: boolean) => string;
+        parse: (raw: string) => boolean;
+        validate: (v: boolean) => boolean;
+    };
+    readonly number: (range?: {
+        min?: number;
+        max?: number;
+    }) => {
+        serialize: StringConstructor;
+        parse: (raw: string) => number;
+        validate: (v: number) => boolean;
+    };
+    readonly string: typeof stringCodec;
+};
+export interface BindStorageOptions {
+    readonly signal?: AbortSignal;
+    readonly delayMs?: number;
+}
+export interface StorageBinding {
+    /** Attempt the pending write now. True means no pending write or a successful write. */
+    readonly flush: () => boolean;
+    readonly stop: Stop;
+}
+/** Load once without write-back, then persist changes for this explicit lifetime. */
+export declare function bindStorage<T>(cell: State<T>, slot: StorageSlot<NoInfer<T>>, options?: BindStorageOptions): StorageBinding;
+export {};
+
+// dist/types/weak-memo.d.ts
+import type { Read } from "./loom.js";
+export declare function weakMemo<K extends object, V>(compute: (key: K) => V, version?: Read<unknown>): (key: K) => V;

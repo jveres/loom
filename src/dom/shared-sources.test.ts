@@ -1,16 +1,18 @@
 // @vitest-environment happy-dom
-import { expect, it, onTestFinished, vi } from "vitest";
-import { effect, type Read, scope } from "../loom.js";
+import { effect, scope } from "loom";
 import {
-  attr,
-  classed,
+  attrRead,
+  classRead,
   connected,
   focusWithin,
   hovered,
   mediaRead,
   pressed,
-  style,
-} from "./index.js";
+  styleRead,
+} from "loom/browser";
+// @vitest-environment happy-dom
+import { expect, it, onTestFinished, vi } from "vitest";
+import type { Read } from "../loom.js";
 
 interface Fixture {
   read(): Read<unknown>;
@@ -18,12 +20,11 @@ interface Fixture {
   readonly initial: unknown;
   readonly next: unknown;
 }
-
 const fixtures = {
   attribute(el: HTMLElement): Fixture {
     el.setAttribute("data-active", "no");
     return {
-      read: () => attr(el, "data-active"),
+      read: () => attrRead(el, "data-active"),
       set: (active) => el.setAttribute("data-active", active ? "yes" : "no"),
       initial: "no",
       next: "yes",
@@ -31,7 +32,7 @@ const fixtures = {
   },
   class(el: HTMLElement): Fixture {
     return {
-      read: () => classed(el, "active"),
+      read: () => classRead(el, "active"),
       set: (active) => {
         el.classList.toggle("active", active);
       },
@@ -42,7 +43,7 @@ const fixtures = {
   style(el: HTMLElement): Fixture {
     el.style.opacity = "0";
     return {
-      read: () => style(el, "opacity"),
+      read: () => styleRead(el, "opacity"),
       set: (active) => {
         el.style.opacity = active ? "1" : "0";
       },
@@ -68,6 +69,7 @@ const fixtures = {
       set: (active) => {
         el.dispatchEvent(
           new PointerEvent(active ? "pointerenter" : "pointerleave", {
+            isPrimary: true,
             pointerType: "mouse",
           }),
         );
@@ -92,17 +94,22 @@ const fixtures = {
       set: (active) => {
         if (active)
           el.dispatchEvent(
-            new PointerEvent("pointerdown", { pointerId: 1, button: 0 }),
+            new PointerEvent("pointerdown", {
+              isPrimary: true,
+              pointerId: 1,
+              button: 0,
+            }),
           );
         else
-          window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+          window.dispatchEvent(
+            new PointerEvent("pointerup", { isPrimary: true, pointerId: 1 }),
+          );
       },
       initial: false,
       next: true,
     };
   },
 };
-
 it.each(Object.entries(fixtures))(
   "shared %s reads survive the creating consumer's pause and stop",
   async (_name, create) => {
@@ -126,7 +133,6 @@ it.each(Object.entries(fixtures))(
       });
     });
     onTestFinished(second.stop);
-
     first.pause();
     fixture.set(true);
     await vi.waitFor(() =>
@@ -146,7 +152,6 @@ it.each(Object.entries(fixtures))(
     );
   },
 );
-
 it("shared media queries disconnect only after the last consumer stops", () => {
   const listeners = new Set<() => void>();
   const list = {
@@ -175,7 +180,6 @@ it("shared media queries disconnect only after the last consumer stops", () => {
     });
   });
   onTestFinished(second.stop);
-
   first.pause();
   expect(listeners.size).toBe(1);
   list.matches = true;
@@ -183,7 +187,6 @@ it("shared media queries disconnect only after the last consumer stops", () => {
   first.stop();
   expect(listeners.size).toBe(1);
   second.stop();
-
   expect(seen).toEqual([false, true]);
   expect(listeners.size).toBe(0);
 });

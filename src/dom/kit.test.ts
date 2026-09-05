@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
-// Kit helpers: bind / observeSize / observeIntersection / observeMutation / onMount / persisted.
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { batch, scope, state } from "../loom.js";
+import { batch, scope, state } from "loom";
+import {
+  observeIntersection,
+  observeMutation,
+  observeSize,
+} from "loom/browser";
 import {
   bind,
-  bindManual,
   h,
   onMount,
   onUnmount,
@@ -12,11 +14,10 @@ import {
   remove,
   resume,
   when,
-} from "./index.js";
-import { observeIntersection } from "./observe-intersection.js";
-import { observeMutation } from "./observe-mutation.js";
-import { observeSize } from "./observe-size.js";
-import { codecs, persisted } from "./persisted.js";
+} from "loom/dom";
+// @vitest-environment happy-dom
+// Kit helpers: bind / observeSize / observeIntersection / observeMutation / onMount.
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("bind", () => {
   it("is effect + node lifetime + attribution in one call", () => {
@@ -28,17 +29,15 @@ describe("bind", () => {
     expect(el.textContent).toBe("a");
     label("b");
     expect(el.textContent).toBe("b");
-
     remove(el); // node teardown disposes the binding
     label("c");
     expect(el.textContent).toBe("b");
   });
-
   it("offers an explicit manual binding for early disposal", () => {
     const value = state(0);
     const el = h("div");
     let runs = 0;
-    const stop = bindManual(el, () => {
+    const stop = bind(el, () => {
       value();
       runs++;
     });
@@ -47,7 +46,6 @@ describe("bind", () => {
     expect(runs).toBe(1);
     remove(el); // second disposal via teardown must be harmless
   });
-
   it("runs the effect cleanup on re-run and teardown", () => {
     const value = state(0);
     const el = h("div");
@@ -62,7 +60,6 @@ describe("bind", () => {
     expect(cleanups).toEqual([0, 1]);
   });
 });
-
 describe("observeSize", () => {
   // happy-dom does no layout, so drive the shared observer through a stub.
   let instances: Array<{
@@ -70,7 +67,6 @@ describe("observeSize", () => {
     cb: ResizeObserverCallback;
     disconnected: boolean;
   }> = [];
-
   function stubRO(): void {
     instances = [];
     vi.stubGlobal(
@@ -97,7 +93,6 @@ describe("observeSize", () => {
       },
     );
   }
-
   function fire(el: Element): void {
     const inst = instances.at(-1);
     inst?.cb(
@@ -105,9 +100,7 @@ describe("observeSize", () => {
       inst as unknown as ResizeObserver,
     );
   }
-
   afterEach(() => vi.unstubAllGlobals());
-
   it("shares one observer, routes entries, and tears down with the node", () => {
     stubRO();
     const a = h("div");
@@ -117,19 +110,15 @@ describe("observeSize", () => {
     observeSize(a, () => seen.push("a2")); // second cb, same element
     observeSize(b, () => seen.push("b"));
     expect(instances.length).toBe(1); // ONE observer app-wide
-
     fire(a);
     fire(b);
     expect(seen).toEqual(["a", "a2", "b"]);
-
     remove(a); // node teardown detaches both of a's callbacks
     fire(a);
     expect(seen).toEqual(["a", "a2", "b"]);
-
     remove(b); // last watcher gone -> observer disconnected
     expect(instances[0]?.disconnected).toBe(true);
   });
-
   it("manual stop detaches just that callback", () => {
     stubRO();
     const el = h("div");
@@ -142,7 +131,6 @@ describe("observeSize", () => {
     remove(el);
   });
 });
-
 describe("onMount", () => {
   it("fires once on a microtask when inserted in the same task", async () => {
     const el = h("div");
@@ -154,7 +142,6 @@ describe("onMount", () => {
     expect(calls).toEqual([el]);
     el.remove();
   });
-
   it("fires for an already-connected element", async () => {
     const el = h("div");
     document.body.append(el);
@@ -164,7 +151,6 @@ describe("onMount", () => {
     expect(fired).toBe(1);
     el.remove();
   });
-
   it("falls back to observation for late insertion, still fires once", async () => {
     const el = h("div");
     let fired = 0;
@@ -175,7 +161,6 @@ describe("onMount", () => {
     await vi.waitFor(() => expect(fired).toBe(1));
     el.remove();
   });
-
   it("cancel and loom teardown both drop a pending hook", async () => {
     const a = h("div");
     const b = h("div");
@@ -191,7 +176,6 @@ describe("onMount", () => {
     a.remove();
     b.remove();
   });
-
   it("works as the JSX prop in both spellings", async () => {
     const calls: string[] = [];
     const el = h("div", { onmount: () => calls.push("lower") });
@@ -202,7 +186,6 @@ describe("onMount", () => {
     el.remove();
     el2.remove();
   });
-
   it("observes late insertion in the node's ownerDocument", async () => {
     const iframe = document.createElement("iframe");
     document.body.append(iframe);
@@ -212,7 +195,6 @@ describe("onMount", () => {
     const el = foreignDocument.createElement("div");
     const mounted = vi.fn();
     onMount(el, mounted);
-
     await Promise.resolve();
     foreignDocument.body.append(el);
     await vi.waitFor(() => expect(mounted).toHaveBeenCalledWith(el));
@@ -220,121 +202,6 @@ describe("onMount", () => {
     iframe.remove();
   });
 });
-
-describe("persisted codecs", () => {
-  it("boolean speaks the 1/0 dialect and refuses non-booleans", () => {
-    const pin = persisted("c1", false, codecs.boolean);
-    pin(true);
-    expect(localStorage.getItem("c1")).toBe("1");
-    expect(persisted("c1", false, codecs.boolean)()).toBe(true);
-    localStorage.setItem("c1", "yes");
-    expect(persisted("c1", false, codecs.boolean)()).toBe(false);
-  });
-
-  it("number keeps finite in-range values, else the initial", () => {
-    const width = persisted("c2", 280, codecs.number({ min: 100, max: 500 }));
-    width(320);
-    expect(localStorage.getItem("c2")).toBe("320");
-    expect(persisted("c2", 280, codecs.number({ min: 100, max: 500 }))()).toBe(
-      320,
-    );
-    localStorage.setItem("c2", "9000");
-    expect(persisted("c2", 280, codecs.number({ min: 100, max: 500 }))()).toBe(
-      280,
-    );
-    localStorage.setItem("c2", "abc");
-    expect(persisted("c2", 280, codecs.number())()).toBe(280);
-  });
-
-  it("string draws from the allowed set; unconstrained accepts any", () => {
-    const tabs = ["props", "style"] as const;
-    const tab = persisted("c3", "props", codecs.string(tabs));
-    tab("style");
-    expect(localStorage.getItem("c3")).toBe("style");
-    expect(persisted("c3", "props", codecs.string(tabs))()).toBe("style");
-    localStorage.setItem("c3", "nope");
-    expect(persisted("c3", "props", codecs.string(tabs))()).toBe("props");
-    expect(persisted("c3", "props", codecs.string())()).toBe("nope");
-  });
-
-  it("spreads under a caller's own options", () => {
-    const pin = persisted("c4", true, { ...codecs.boolean, label: "test.pin" });
-    pin(false);
-    expect(localStorage.getItem("c4")).toBe("0");
-  });
-});
-
-describe("persisted", () => {
-  it("loads, validates, and writes through", () => {
-    localStorage.setItem("k1", JSON.stringify(41));
-    const signal = persisted("k1", 0);
-    expect(signal()).toBe(41);
-
-    signal(42);
-    expect(localStorage.getItem("k1")).toBe("42");
-  });
-
-  it("validate is the load choke point: rejected values fall back to initial", () => {
-    localStorage.setItem("k2", JSON.stringify(3.7)); // the fractional-position bug
-    const signal = persisted("k2", 0, {
-      validate: (v) => Number.isInteger(v),
-    });
-    expect(signal()).toBe(0);
-    localStorage.removeItem("k2");
-  });
-
-  it("unparsable storage falls back to initial and does not write back", () => {
-    localStorage.setItem("k3", "{not json");
-    const signal = persisted("k3", "fallback");
-    expect(signal()).toBe("fallback");
-    expect(localStorage.getItem("k3")).toBe("{not json"); // load never writes
-  });
-
-  it("honors serialize/parse hooks", () => {
-    const signal = persisted<Set<string>>("k4", new Set(), {
-      serialize: (s) => JSON.stringify([...s]),
-      parse: (raw) => new Set(JSON.parse(raw)),
-    });
-    signal(new Set(["a", "b"]));
-    expect(localStorage.getItem("k4")).toBe('["a","b"]');
-
-    const again = persisted<Set<string>>("k4-copy", new Set(), {
-      parse: (raw) => new Set(JSON.parse(raw)),
-    });
-    void again;
-    const reloaded = persisted<Set<string>>("k4", new Set(), {
-      serialize: (s) => JSON.stringify([...s]),
-      parse: (raw) => new Set(JSON.parse(raw)),
-    });
-    expect([...reloaded()]).toEqual(["a", "b"]);
-    localStorage.removeItem("k4");
-  });
-
-  it("degrades to a plain signal when storage is absent", () => {
-    vi.stubGlobal("localStorage", undefined);
-    try {
-      const signal = persisted("k5", 7);
-      signal(8);
-      expect(signal()).toBe(8); // still a working state signal, just unpersisted
-    } finally {
-      vi.unstubAllGlobals();
-    }
-    expect(localStorage.getItem("k5")).toBeNull(); // nothing was written
-  });
-
-  it("a throwing setItem degrades writes, not the signal", () => {
-    const broken = {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error("quota");
-      },
-    } as unknown as Storage;
-    const signal = persisted("k6", 1, { storage: broken });
-    signal(2);
-    expect(signal()).toBe(2);
-  });
-});
-
 describe("observeMutation", () => {
   it("delivers records and detaches with the node", async () => {
     const el = h("div");
@@ -348,13 +215,11 @@ describe("observeMutation", () => {
     );
     el.setAttribute("data-x", "1");
     await vi.waitFor(() => expect(seen).toEqual(["attributes"]));
-
     remove(el); // node teardown disconnects
     el.setAttribute("data-x", "2");
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(seen).toEqual(["attributes"]);
   });
-
   it("manual stop is idempotent with teardown", () => {
     const el = h("div");
     const stop = observeMutation(el, () => {}, { childList: true });
@@ -362,14 +227,12 @@ describe("observeMutation", () => {
     remove(el); // second detach must be harmless
   });
 });
-
 describe("observeIntersection", () => {
   let instances: Array<{
     observed: Element[];
     cb: IntersectionObserverCallback;
     disconnected: boolean;
   }> = [];
-
   function stubIO(): void {
     instances = [];
     vi.stubGlobal(
@@ -396,9 +259,7 @@ describe("observeIntersection", () => {
       },
     );
   }
-
   afterEach(() => vi.unstubAllGlobals());
-
   it("pools same-options observers and routes by target", () => {
     stubIO();
     const a = h("div");
@@ -407,25 +268,21 @@ describe("observeIntersection", () => {
     observeIntersection(a, () => seen.push("a"));
     observeIntersection(b, () => seen.push("b"));
     expect(instances.length).toBe(1); // shared default pool
-
     observeIntersection(a, () => seen.push("a-margin"), {
       rootMargin: "10px",
     });
     expect(instances.length).toBe(2); // distinct options -> distinct pool
-
     const inst = instances[0];
     inst?.cb(
       [{ target: a } as unknown as IntersectionObserverEntry],
       inst as unknown as IntersectionObserver,
     );
     expect(seen).toEqual(["a"]);
-
     remove(a);
     remove(b);
     expect(instances[0]?.disconnected).toBe(true);
     expect(instances[1]?.disconnected).toBe(true);
   });
-
   it("pools equivalent options for viewport and custom roots", () => {
     stubIO();
     const a = h("div");
@@ -434,7 +291,6 @@ describe("observeIntersection", () => {
     observeIntersection(a, () => {});
     observeIntersection(b, () => {}, { rootMargin: "0" });
     expect(instances.length).toBe(1);
-
     observeIntersection(a, () => {}, { root, threshold: [0.5, 0] });
     observeIntersection(b, () => {}, { root, threshold: [0, 0.5] });
     expect(instances.length).toBe(2);
@@ -443,7 +299,6 @@ describe("observeIntersection", () => {
     expect(instances.every((i) => i.disconnected)).toBe(true);
   });
 });
-
 describe("pause/resume (subtree)", () => {
   it("suspends bindings, delivers one catch-up on resume, nests", () => {
     const label = state("a");
@@ -456,17 +311,14 @@ describe("pause/resume (subtree)", () => {
       runs++;
     });
     expect(runs).toBe(1);
-
     pause(root);
     label("b");
     label("c");
     expect(runs).toBe(1); // suspended, stays subscribed
-
     pause(root); // nested pause
     resume(root);
     label("d");
     expect(runs).toBe(1); // still one level deep
-
     resume(root);
     expect(runs).toBe(2); // one coalesced catch-up at the latest value
     expect(child.textContent).toBe("");
@@ -474,7 +326,6 @@ describe("pause/resume (subtree)", () => {
     expect(runs).toBe(3);
     remove(root);
   });
-
   it("suspends dynamic slot effects without inspection metadata", () => {
     const visible = state(true);
     const root = h(
@@ -482,16 +333,13 @@ describe("pause/resume (subtree)", () => {
       null,
       when(visible, () => "shown"),
     );
-
     pause(root);
     visible(false);
     expect(root.textContent).toBe("shown");
-
     resume(root);
     expect(root.textContent).toBe("");
     remove(root);
   });
-
   it("leaves manual disposers and unrelated subtrees alone", () => {
     const value = state(0);
     const inside = h("div");
@@ -508,7 +356,6 @@ describe("pause/resume (subtree)", () => {
       value();
       outsideRuns++;
     });
-
     pause(inside);
     value(1);
     expect(insideRuns).toBe(1);
@@ -521,7 +368,6 @@ describe("pause/resume (subtree)", () => {
     expect(manual).toHaveBeenCalledTimes(1);
   });
 });
-
 describe("pause edge cases (audit round)", () => {
   it("an effect queued before pause stays suspended until resume", () => {
     const value = state(0);
@@ -540,7 +386,6 @@ describe("pause edge cases (audit round)", () => {
     expect(runs).toBe(2); // catch-up delivers it
     remove(el);
   });
-
   it("scope resume does not wake a subtree-paused effect", () => {
     const value = state(0);
     const el = h("div");
@@ -561,7 +406,6 @@ describe("pause edge cases (audit round)", () => {
     s.stop();
     remove(el);
   });
-
   it("remove() of a paused subtree disposes cleanly; stray resume is a no-op", () => {
     const value = state(0);
     const el = h("div");
@@ -576,12 +420,10 @@ describe("pause edge cases (audit round)", () => {
     resume(el); // nothing owned anymore — must not throw or run
     value(2);
     expect(runs).toBe(1);
-
     const fresh = h("div");
     resume(fresh); // resume without any prior pause: no-op
   });
 });
-
 it("dom pause suspends a deferred effect already in the lane", async () => {
   await import("../core/defer.js");
   const { configure } = await import("../loom.js");

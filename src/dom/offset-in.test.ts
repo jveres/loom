@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
+import { offsetIn } from "loom/layout";
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { offsetIn } from "./index.js";
 
 const rect = (
   el: Element,
@@ -21,7 +22,6 @@ const rect = (
     configurable: true,
   });
 };
-
 describe("offsetIn", () => {
   it("answers the rect difference corrected for the box's border and scroll", () => {
     const box = document.createElement("div");

@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { loomAliases } from "./loom.aliases.js";
+import { loomEntries } from "./loom.entries.js";
 
 const root = import.meta.dirname;
 
@@ -10,24 +11,12 @@ export default defineConfig({
     copyPublicDir: false,
     emptyOutDir: true,
     lib: {
-      entry: {
-        loom: resolve(root, "src/index.ts"),
-        observe: resolve(root, "src/observe.ts"),
-        async: resolve(root, "src/async/index.ts"),
-        settle: resolve(root, "src/settle.ts"),
-        dom: resolve(root, "src/dom/index.ts"),
-        "dom/virtual-list": resolve(root, "src/dom/virtual-list.ts"),
-        defer: resolve(root, "src/core/defer.ts"),
-        "dom/scroll-fade": resolve(root, "src/dom/scroll-fade.ts"),
-        // Zero-import module — the granular door for consumers that
-        // must stay barrel-free (an island bundle wanting only the
-        // scroller walk).
-        "dom/reveal": resolve(root, "src/dom/reveal.ts"),
-        devtools: resolve(root, "src/devtools/index.ts"),
-        "jsx-runtime": resolve(root, "src/dom/jsx-runtime.ts"),
-        html: resolve(root, "src/html/index.ts"),
-        "html/jsx-runtime": resolve(root, "src/html/jsx-runtime.ts"),
-      },
+      entry: Object.fromEntries(
+        Object.entries(loomEntries).map(([name, path]) => [
+          name,
+          resolve(root, path),
+        ]),
+      ),
       // ./jsx-dev-runtime and ./html/jsx-dev-runtime intentionally reuse the prod
       // runtime bundles (see package.json exports) — Loom has no dev-only JSX behaviour.
       formats: ["es"],

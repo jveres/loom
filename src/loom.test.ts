@@ -1,27 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import "./core/defer.js";
-import { inspect, inspectResources } from "./core/inspect.js";
-import {
-  channel,
-  events,
-  type FlushSample,
-  type Frame,
-  type Meter,
-  meter,
-  sampleOf,
-} from "./core/meter.js";
 import {
   batch,
   computed,
   configure,
-  type EffectFn,
   effect,
   mutate,
-  type Polled,
   poll,
   props,
-  registerScopeResource,
-  type Scope,
   scope,
   source,
   state,
@@ -30,6 +14,23 @@ import {
   update,
   watch,
   writable,
+} from "loom";
+import {
+  channel,
+  events,
+  inspect,
+  inspectResources,
+  meter,
+  sampleOf,
+} from "loom/observe";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "./core/defer.js";
+import type { FlushSample, Frame, Meter } from "./core/meter.js";
+import {
+  type EffectFn,
+  type Polled,
+  registerScopeResource,
+  type Scope,
 } from "./loom.js";
 
 // Inspection is opt-in (off by default). Most tests assert on inspect()/channel internal
@@ -38,46 +39,36 @@ import {
 beforeEach(() => {
   configure({ inspect: true, onError: undefined });
 });
-
 describe("loom core", () => {
   it("creates callable state signals", () => {
     const count = state(0);
-
     expect(count()).toBe(0);
     count(1);
     expect(count()).toBe(1);
-
     update(count, (value) => value + 1);
     expect(count()).toBe(2);
   });
-
   it("runs computed values and effects", () => {
     const count = state(1);
     const doubled = computed(() => count() * 2);
     const seen: number[] = [];
-
     const stop = effect(() => {
       seen.push(doubled());
     });
-
     expect(seen).toEqual([2]);
-
     batch(() => {
       count(2);
       count(3);
     });
-
     expect(seen).toEqual([2, 6]);
     stop();
   });
-
   it("coalesces repeated pending writes without changing batch semantics", () => {
     const value = state(0);
     const seen: number[] = [];
     const stop = effect(() => {
       seen.push(value());
     });
-
     batch(() => {
       value(1);
       value(2);
@@ -87,11 +78,9 @@ describe("loom core", () => {
       value(4);
       value(3);
     });
-
     expect(seen).toEqual([0, 3]);
     stop();
   });
-
   it("notifies an effect created between coalesced writes", () => {
     const value = state(0);
     const first: number[] = [];
@@ -101,7 +90,6 @@ describe("loom core", () => {
         first.push(value());
       }),
     ];
-
     batch(() => {
       value(1);
       stops.push(
@@ -112,12 +100,10 @@ describe("loom core", () => {
       value(2);
       value(3);
     });
-
     expect(first).toEqual([0, 3]);
     expect(late).toEqual([1, 3]);
     for (const stop of stops) stop();
   });
-
   it("coalesces repeated source pushes in a batch", () => {
     let push: ((value: number) => void) | undefined;
     const value = source<number>((set) => {
@@ -128,34 +114,28 @@ describe("loom core", () => {
     const stop = effect(() => {
       seen.push(value());
     });
-
     batch(() => {
       push?.(1);
       push?.(2);
       push?.(3);
     });
-
     expect(seen).toEqual([0, 3]);
     stop();
   });
-
   it("does not record flushes for empty or equality-only batches", () => {
     const value = state(0);
     const m = meter([events.flush]);
     const stop = effect(() => {
       value();
     });
-
     batch(() => {});
     batch(() => value(0));
-
     expect(m.read()["loom:flush"]?.count).toBe(0);
     stop();
     m.stop();
   });
-
   it("drains long synchronous cascades without recursive flushes", () => {
-    const length = 5_000;
+    const length = 5000;
     const values = Array.from({ length }, () => state(0));
     const stops: Array<() => void> = [];
     for (let index = 0; index < length - 1; index++) {
@@ -167,35 +147,28 @@ describe("loom core", () => {
         }),
       );
     }
-
     (values[0] as ReturnType<typeof state<number>>)(1);
     expect((values.at(-1) as ReturnType<typeof state<number>>)()).toBe(1);
-
     // The first burst crosses the retained-queue high-water mark; a fresh drain still works after
     // that oversized backing store is released.
     (values[0] as ReturnType<typeof state<number>>)(2);
     expect((values.at(-1) as ReturnType<typeof state<number>>)()).toBe(2);
     for (const stop of stops) stop();
   });
-
   it("runs effect cleanup callbacks", () => {
     const count = state(0);
     let cleanups = 0;
-
     const stop = effect(() => {
       count();
       return () => {
         cleanups++;
       };
     });
-
     count(1);
     expect(cleanups).toBe(1);
-
     stop();
     expect(cleanups).toBe(2);
   });
-
   it("does not relink reads made after an effect stops itself", () => {
     const fire = state(false);
     let connects = 0;
@@ -213,14 +186,11 @@ describe("loom core", () => {
         lazy();
       }
     });
-
     fire(true);
-
     expect({ connects, disconnects }).toEqual({ connects: 0, disconnects: 0 });
     fire(false);
     expect({ connects, disconnects }).toEqual({ connects: 0, disconnects: 0 });
   });
-
   it("does not restore a parent stopped by its nested child", () => {
     const tick = state(0);
     let connects = 0;
@@ -236,14 +206,11 @@ describe("loom core", () => {
       });
       if (current === 1) lazy();
     });
-
     tick(1);
-
     expect(connects).toBe(0);
     tick(2);
     expect(connects).toBe(0);
   });
-
   it("runs a cleanup returned after self-stop exactly once", () => {
     const fire = state(false);
     let cleanups = 0;
@@ -255,13 +222,10 @@ describe("loom core", () => {
         cleanups++;
       };
     });
-
     fire(true);
     stop();
-
     expect(cleanups).toBe(1);
   });
-
   it("routes a cleanup returned after self-stop through the error boundary", () => {
     const errors: unknown[] = [];
     configure({ onError: (error) => errors.push(error) });
@@ -279,48 +243,38 @@ describe("loom core", () => {
       fire();
       siblingRuns++;
     });
-
     expect(() => fire(true)).not.toThrow();
-
     expect(errors).toEqual([new Error("late cleanup")]);
     expect(siblingRuns).toBe(2);
     stopSibling();
   });
-
   it("accepts reusable void effect callbacks", () => {
     const count = state(0);
     let seen = -1;
     const syncSeen: EffectFn = () => {
       seen = count();
     };
-
     const stop = effect(syncSeen);
-
     expect(seen).toBe(0);
     count(1);
     expect(seen).toBe(1);
     stop();
   });
-
   it("supports untracked reads", () => {
     const tracked = state(0);
     const ignored = state(0);
     let runs = 0;
-
     const stop = effect(() => {
       runs++;
       tracked();
       untrack(() => ignored());
     });
-
     ignored(1);
     expect(runs).toBe(1);
-
     tracked(1);
     expect(runs).toBe(2);
     stop();
   });
-
   it("nested effects die on the parent's rerun; untrack() escapes ownership", () => {
     const trigger = state(0);
     const signal = state(0);
@@ -328,7 +282,6 @@ describe("loom core", () => {
     let escapedRuns = 0;
     let built = false;
     let escapedStop = (): void => {};
-
     const stop = effect(() => {
       trigger();
       if (!built) {
@@ -345,60 +298,47 @@ describe("loom core", () => {
         );
       }
     });
-
     signal(1); // both children alive
     expect(ownedRuns).toBe(2);
     expect(escapedRuns).toBe(2);
-
     trigger(1); // parent reruns: the owned child is disposed with it
     signal(2);
     expect(ownedRuns).toBe(2); // dead — did not see the write
     expect(escapedRuns).toBe(3); // escaped construction survives reruns
-
     stop();
     signal(3);
     expect(escapedRuns).toBe(4); // not owned by the parent at all
     escapedStop();
   });
-
   it("supports manual triggers for in-place mutation", () => {
     const values = state<number[]>([]);
     const length = computed(() => values().length);
     const seen: number[] = [];
-
     const stop = effect(() => {
       seen.push(length());
     });
-
     values().push(1);
     expect(seen).toEqual([0]);
-
     trigger(values);
     expect(seen).toEqual([0, 1]);
     stop();
   });
-
   it("provides a mutate helper for object state", () => {
     const model = state({ count: 0 });
     const seen: number[] = [];
-
     const stop = effect(() => {
       seen.push(model().count);
     });
-
     mutate(model, (value) => {
       value.count = 1;
     });
-
     expect(seen).toEqual([0, 1]);
     stop();
   });
-
   it("creates fine-grained property signals", () => {
     const model = props({ left: 0, right: 0 });
     let leftRuns = 0;
     let rightRuns = 0;
-
     const stopLeft = effect(() => {
       leftRuns++;
       model.left();
@@ -407,32 +347,24 @@ describe("loom core", () => {
       rightRuns++;
       model.right();
     });
-
     model.left(1);
-
     expect(leftRuns).toBe(2);
     expect(rightRuns).toBe(1);
-
     stopLeft();
     stopRight();
   });
-
   it("creates signals from string keys only", () => {
     const hidden = Symbol("hidden");
     const model = props({ visible: 1, [hidden]: 2 });
-
     expect(model.visible()).toBe(1);
     expect(Object.getOwnPropertySymbols(model)).toHaveLength(0);
   });
-
   it("creates prototype-safe property signals for every own string key", () => {
     const initial = Object.create(null) as Record<string, number>;
     Reflect.set(initial, "__proto__", 1);
     initial["constructor"] = 2;
     initial["toString"] = 3;
-
     const model = props(initial);
-
     expect(Object.getPrototypeOf(model)).toBeNull();
     expect(Object.hasOwn(model, "__proto__")).toBe(true);
     const protoSignal = Reflect.get(model, "__proto__") as
@@ -442,12 +374,10 @@ describe("loom core", () => {
     expect(model["constructor"]?.()).toBe(2);
     expect(model["toString"]?.()).toBe(3);
   });
-
   it("rejects non-plain prop sources", () => {
     expect(() => props([])).toThrow(TypeError);
     expect(() => props(new Date())).toThrow(TypeError);
   });
-
   it("update() reads untracked — no self-dependency from read-modify-write", () => {
     const counter = state(0);
     const trig = state(0);
@@ -466,7 +396,6 @@ describe("loom core", () => {
     expect(counter()).toBe(11);
     stop();
   });
-
   it("watch() skips the initial run, dedups, and keeps the callback untracked", () => {
     const a = state(1);
     const other = state(0);
@@ -492,7 +421,6 @@ describe("loom core", () => {
     ]);
     stop();
   });
-
   it("warns once when an effect writes a signal it also reads (inspection on)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const c = state(0, { label: "selfdep.signal" });
@@ -511,25 +439,20 @@ describe("loom core", () => {
     stop();
     warn.mockRestore();
   });
-
   it("labels inspectable nodes and reports dependencies", () => {
     const count = state(1, { label: "inspect.count" });
     const doubled = computed(() => count() * 2, {
       label: "inspect.doubled",
     });
     let seen = 0;
-
     const stop = effect(
       () => {
         seen = doubled();
       },
       { label: "inspect.view" },
     );
-
     expect(seen).toBe(2);
-
     count(2);
-
     expect(seen).toBe(4);
     expect(
       inspect().nodes.find((node) => node.label === "inspect.view"),
@@ -537,14 +460,11 @@ describe("loom core", () => {
       kind: "effect",
       runs: 2,
     });
-
     stop();
-
     expect(
       inspect().nodes.find((node) => node.label === "inspect.view"),
     ).toBeUndefined();
   });
-
   it("counts non-internal reactive ops on the built-in channels", () => {
     const m = meter([events.read, events.write, events.compute, events.effect]);
     const a = state(0);
@@ -553,17 +473,14 @@ describe("loom core", () => {
       c();
     });
     a(1);
-
     const f = m.read();
     expect(f["loom:write"]?.count).toBe(1); // a(1)
     expect(f["loom:read"]?.count ?? 0).toBeGreaterThan(0);
     expect(f["loom:compute"]?.count ?? 0).toBeGreaterThan(0);
     expect(f["loom:effect"]?.count ?? 0).toBeGreaterThan(0);
-
     stop();
     m.stop();
   });
-
   it("counts effect reruns and disposal while inspection is disabled", () => {
     configure({ inspect: false });
     const m = meter([events.effect, events.dispose]);
@@ -571,16 +488,13 @@ describe("loom core", () => {
     const stop = effect(() => {
       value();
     });
-
     value(1);
     stop();
-
     const frame = m.read();
     expect(frame["loom:effect"]?.count).toBe(2);
     expect(frame["loom:dispose"]?.count).toBe(1);
     m.stop();
   });
-
   it("excludes internal nodes from the built-in channels", () => {
     const m = meter([events.write]);
     const visible = state(0);
@@ -590,7 +504,6 @@ describe("loom core", () => {
     expect(m.read()["loom:write"]?.count).toBe(1);
     m.stop();
   });
-
   it("streams id + prev→next on the write samples view, in order", () => {
     const m = meter([events.write], "samples");
     const a = state(5);
@@ -607,7 +520,6 @@ describe("loom core", () => {
     expect(new Set(rows.map((r) => r["id"])).size).toBe(1); // same signal
     m.stop();
   });
-
   it("records the source — the effect that read or wrote a signal", () => {
     const rm = meter([events.read], "samples");
     const wm = meter([events.write], "samples");
@@ -631,7 +543,6 @@ describe("loom core", () => {
     rm.stop();
     wm.stop();
   });
-
   it("records flush batch size + duration, for app work only", () => {
     const m = meter([events.flush], "samples");
     const app = state(0);
@@ -646,22 +557,18 @@ describe("loom core", () => {
       { internal: true },
     );
     m.read(); // drain anything from setup
-
     internal(1); // internal-only flush -> no record
     expect(m.read()["loom:flush"]?.count).toBe(0);
-
     app(1); // app flush -> batchSize 1
     // sampleOf is the sanctioned narrowing for ring records (the undefined of
     // a possibly-empty ring carries through).
     const last = sampleOf<FlushSample>(m.read()["loom:flush"]?.samples.at(-1));
     expect(last?.batchSize).toBe(1);
     expect(typeof last?.durationMs).toBe("number");
-
     stopApp();
     stopInternal();
     m.stop();
   });
-
   it("propagates an effect throw without an error handler", () => {
     const a = state(0);
     const stop = effect(() => {
@@ -670,7 +577,6 @@ describe("loom core", () => {
     expect(() => a(1)).toThrow("boom"); // surfaces at the setter that triggered the flush
     stop();
   });
-
   it("disposes the partial subscription when a first effect run throws without a handler", () => {
     const a = state(0);
     // The first run reads `a` then throws, so the caller never receives a disposer.
@@ -683,7 +589,6 @@ describe("loom core", () => {
     // The dead effect must not remain subscribed to `a` — writing must not re-trigger (re-throw) it.
     expect(() => a(1)).not.toThrow();
   });
-
   it("routes effect errors to configure({ onError }) and continues the flush", () => {
     const errors: unknown[] = [];
     configure({
@@ -702,17 +607,26 @@ describe("loom core", () => {
       otherRuns++;
     });
     otherRuns = 0;
-
     expect(() => a(1)).not.toThrow(); // isolated, not propagated to the setter
     expect(errors).toHaveLength(1);
-    expect((errors[0] as { error: Error }).error.message).toBe("boom");
-    expect((errors[0] as { label?: string }).label).toBe("bad-effect"); // node context
+    expect(
+      (
+        errors[0] as {
+          error: Error;
+        }
+      ).error.message,
+    ).toBe("boom");
+    expect(
+      (
+        errors[0] as {
+          label?: string;
+        }
+      ).label,
+    ).toBe("bad-effect"); // node context
     expect(otherRuns).toBe(1); // the other effect still ran in the same flush
-
     stopBad();
     stopOther();
   });
-
   it("routes cleanup errors to the boundary and continues the flush", () => {
     const errors: unknown[] = [];
     configure({ onError: (error) => errors.push(error) });
@@ -730,9 +644,7 @@ describe("loom core", () => {
       siblingRuns++;
     });
     siblingRuns = 0;
-
     expect(() => value(1)).not.toThrow();
-
     expect(errors).toHaveLength(1);
     expect(errors[0]).toEqual(new Error("cleanup failed"));
     expect(siblingRuns).toBe(1);
@@ -740,7 +652,6 @@ describe("loom core", () => {
     stopBad();
     stopSibling();
   });
-
   it("re-arms an effect after an unhandled cleanup error", () => {
     const value = state(0);
     let runs = 0;
@@ -752,16 +663,13 @@ describe("loom core", () => {
         if (cleanupShouldThrow) throw new Error("cleanup failed");
       };
     });
-
     expect(() => value(1)).toThrow("cleanup failed");
     expect(runs).toBe(1);
-
     cleanupShouldThrow = false;
     value(2);
     expect(runs).toBe(2);
     stop();
   });
-
   it("does not resurrect a stopped effect left behind an aborted flush", () => {
     const value = state(0);
     const m = meter([events.dispose]);
@@ -775,16 +683,13 @@ describe("loom core", () => {
     stopSibling = effect(() => {
       value();
     });
-
     expect(() => value(1)).toThrow("abort flush");
     expect(m.read()["loom:dispose"]?.count).toBe(1);
     stopSibling();
-
     expect(m.read()["loom:dispose"]?.count).toBe(0);
     stopThrower();
     m.stop();
   });
-
   it("rejects promise-returning effects at runtime and disposes their subscriptions", () => {
     const value = state(0);
     let runs = 0;
@@ -794,25 +699,20 @@ describe("loom core", () => {
       value();
       runs++;
     };
-
     expect(() => effect(asyncEffect)).toThrow(
       "effect() callbacks must be synchronous",
     );
     value(1);
     expect(runs).toBe(1);
   });
-
   it("returns the previous runtime configuration and permits scheduler reset", () => {
     const scheduler = vi.fn(() => () => {});
-
     const before = configure({ inspect: false, deferScheduler: scheduler });
     const changed = configure(before);
-
     expect(before.inspect).toBe(true);
     expect(changed.inspect).toBe(false);
     expect(changed.deferScheduler).toBe(scheduler);
   });
-
   const verifySyncCallbackTypes = (): void => {
     // These calls are compile-time API regressions only; promise callbacks must not type-check.
     // @ts-expect-error effect callbacks are synchronous
@@ -821,11 +721,9 @@ describe("loom core", () => {
     scope(async () => {});
   };
   void verifySyncCallbackTypes;
-
   it("allocates no inspect metadata while inspection is disabled", () => {
     configure({ inspect: false });
     const before = inspectResources();
-
     const off = state(0); // created while disabled -> no metadata
     let seen = -1;
     const stop = effect(() => {
@@ -833,34 +731,28 @@ describe("loom core", () => {
     });
     off(7);
     expect(seen).toBe(7); // fully reactive without any inspect metadata
-
     const after = inspectResources();
     expect(after.states).toBe(before.states); // invisible to the census
     expect(after.effects).toBe(before.effects);
     stop();
-
     configure({ inspect: true });
     const node = state(0, { label: "re-enabled" });
     expect(inspect().nodes.find((n) => n.label === "re-enabled")).toBeDefined(); // visible again once re-enabled
     void node;
   });
 });
-
 describe("loom channels", () => {
   it("is zero-cost until metered, then records up to four detail fields", () => {
     const ch = channel("test:multi", {
       capacity: 4,
       fields: ["x", "y", "p", "t"],
     });
-
     ch.emit(1, 2, 3, 4); // no meter yet -> gated no-op
     expect(ch.active).toBe(false);
-
     const m = meter([ch], "samples");
     expect(ch.active).toBe(true);
     ch.emit(10, 20, 30, 40);
     ch.emit(11, 21, 31, 41);
-
     const f = m.read()["test:multi"];
     expect(f?.count).toBe(2); // the pre-meter emit is not counted
     expect(f?.dropped).toBe(0);
@@ -871,19 +763,16 @@ describe("loom channels", () => {
     m.stop();
     expect(ch.active).toBe(false);
   });
-
   it("counts everything but drops oldest detail past capacity", () => {
     const ch = channel("test:overflow", { capacity: 2, fields: ["n"] });
     const m = meter([ch], "samples");
     for (let i = 0; i < 5; i++) ch.emit(i);
-
     const f = m.read()["test:overflow"];
     expect(f?.count).toBe(5); // exact count survives overflow
     expect(f?.dropped).toBe(3); // 5 - capacity(2)
     expect(f?.samples).toEqual([{ n: 3 }, { n: 4 }]); // newest two, oldest→newest
     m.stop();
   });
-
   it("supports count-only channels (capacity 0, no samples)", () => {
     const ch = channel("test:count");
     const m = meter([ch]);
@@ -894,14 +783,12 @@ describe("loom channels", () => {
     expect(f?.samples).toEqual([]);
     m.stop();
   });
-
   it("reads one channel through two views: count (default) vs samples", () => {
     const ch = channel("test:views", { capacity: 4, fields: ["v"] });
     const countView = meter([ch]); // default "count"
     const sampleView = meter([ch], "samples");
     ch.emit(1);
     ch.emit(2);
-
     const c = countView.read()["test:views"];
     const s = sampleView.read()["test:views"];
     // both see the exact count; only the samples view materialises records
@@ -912,7 +799,6 @@ describe("loom channels", () => {
     countView.stop();
     sampleView.stop();
   });
-
   it("detaches as a scope resource on pause and re-attaches on resume", () => {
     const ch = channel("test:scoped", { capacity: 2, fields: ["n"] });
     let m!: Meter;
@@ -920,24 +806,19 @@ describe("loom channels", () => {
       m = meter([ch]);
     });
     expect(ch.active).toBe(true); // metered while the scope runs
-
     s.pause();
     expect(ch.active).toBe(false); // detached -> core emit sites go inactive
     ch.emit(1); // dropped on the floor while detached
-
     s.resume();
     expect(ch.active).toBe(true); // re-attached fresh
     ch.emit(2);
     expect(m.read()["test:scoped"]?.count).toBe(1); // only the post-resume emit
-
     s.stop();
     expect(ch.active).toBe(false); // scope teardown detaches too
   });
-
   it("inspectResources censuses live reactive resources off the hot path", () => {
     const before = inspectResources();
     expect(before.channels).toBeGreaterThanOrEqual(7); // the 7 built-in channels
-
     const keep: unknown[] = [];
     const s = scope(() => {
       keep.push(state(0));
@@ -946,7 +827,6 @@ describe("loom channels", () => {
       keep.push(effect(() => {}, { target: {} })); // a targeted effect (attributed to an object)
       keep.push(source(() => () => {}, 0)); // a lazy source
     });
-
     const after = inspectResources();
     expect(after.states - before.states).toBe(1);
     expect(after.computeds - before.computeds).toBe(1);
@@ -956,12 +836,10 @@ describe("loom channels", () => {
     expect(after.scopes - before.scopes).toBe(1);
     // the state + computed have no readers -> both counted unread
     expect(after.unread - before.unread).toBe(2);
-
     s.stop();
     expect(inspectResources().scopes).toBe(before.scopes); // scope teardown decrements
     expect(keep).toHaveLength(5);
   });
-
   it("inspect({ active }) skips subscriber-less signals but keeps effects", () => {
     const watched = state(0, { label: "act-watched" });
     const idle = state(0, { label: "act-idle" }); // nothing ever reads it
@@ -971,27 +849,22 @@ describe("loom channels", () => {
       },
       { label: "act-effect" },
     );
-
     const active = inspect({ active: true }).nodes;
     const has = (label: string) => active.some((n) => n.label === label);
     expect(has("act-watched")).toBe(true); // has a subscriber (the effect)
     expect(has("act-effect")).toBe(true); // effects are always kept
     expect(has("act-idle")).toBe(false); // no subscribers -> skipped
-
     // the full snapshot still includes the idle signal
     expect(inspect().nodes.some((n) => n.label === "act-idle")).toBe(true);
-
     stop();
     expect(idle()).toBe(0);
   });
-
   it("ignores channels it doesn't know", () => {
     const ghost = { name: "test:ghost", active: false, emit: () => {} };
     const m = meter([ghost]);
     expect(m.read()["test:ghost"]).toBeUndefined();
     m.stop();
   });
-
   it("returns the same channel on redeclare, throws on conflicting options", () => {
     const a = channel("test:redeclare", { capacity: 4, fields: ["v"] });
     const b = channel("test:redeclare", { capacity: 4, fields: ["v"] });
@@ -1004,13 +877,11 @@ describe("loom channels", () => {
       channel("test:redeclare", { capacity: 4, fields: ["w"] }),
     ).toThrow(/different options/);
   });
-
   it("rejects the reserved loom: prefix for app channels", () => {
     expect(() => channel("loom:write")).toThrow(/reserved "loom:" prefix/);
     expect(() => channel("loom:custom")).toThrow(/reserved/);
     expect(() => channel("app:loom:x")).not.toThrow(); // only a leading loom: is reserved
   });
-
   it("rejects out-of-range capacity instead of hanging the pow2 loop", () => {
     expect(() => channel("test:bigcap", { capacity: 2 ** 31 })).toThrow(
       /capacity/,
@@ -1022,7 +893,6 @@ describe("loom channels", () => {
     // A valid capacity rounds up to a power of two and works.
     expect(channel("test:okcap", { capacity: 100 }).name).toBe("test:okcap");
   });
-
   it("rejects more than five fields", () => {
     expect(() =>
       channel("test:6fields", {
@@ -1037,7 +907,6 @@ describe("loom channels", () => {
       }),
     ).not.toThrow();
   });
-
   it("records a fifth field (emit's 5th value)", () => {
     const ch = channel("test:5cols", {
       capacity: 4,
@@ -1050,7 +919,6 @@ describe("loom channels", () => {
     ]);
     m.stop();
   });
-
   it("treats prototype-like channel and field names as ordinary own keys", () => {
     const ch = channel("__proto__", {
       capacity: 1,
@@ -1058,7 +926,6 @@ describe("loom channels", () => {
     });
     const m = meter([ch], "samples");
     ch.emit("value", "ctor");
-
     const frames = m.read();
     const frame = Reflect.get(frames, "__proto__") as Frame | undefined;
     const sample = frame?.samples[0];
@@ -1071,11 +938,9 @@ describe("loom channels", () => {
     expect(sample && Reflect.get(sample, "constructor")).toBe("ctor");
     m.stop();
   });
-
   it("shares an immutable empty samples collection", () => {
     const ch = channel("test:frozen-empty");
     const m = meter([ch]);
-
     const first = m.read()["test:frozen-empty"]?.samples;
     const second = m.read()["test:frozen-empty"]?.samples;
     expect(first).toBe(second);
@@ -1083,22 +948,18 @@ describe("loom channels", () => {
     expect(Reflect.set(first as object, "0", {})).toBe(false);
     m.stop();
   });
-
   it("does not reattach a manually stopped scoped meter", () => {
     const ch = channel("test:stopped-scoped-meter");
     let m!: Meter;
     const owner = scope(() => {
       m = meter([ch]);
     });
-
     m.stop();
     owner.pause();
     owner.resume();
-
     expect(ch.active).toBe(false);
     owner.stop();
   });
-
   it.skipIf(typeof globalThis.gc !== "function")(
     "releases retained sample values when the last samples meter stops",
     async () => {
@@ -1113,7 +974,6 @@ describe("loom channels", () => {
         ref = new WeakRef(marker);
         ch.emit(marker);
       })();
-
       m.stop();
       for (let i = 0; i < 6; i++) {
         globalThis.gc?.();
@@ -1122,7 +982,6 @@ describe("loom channels", () => {
       expect(ref.deref()).toBeUndefined();
     },
   );
-
   const verifyMeterNameTypes = (): void => {
     const named = channel("test:typed-name");
     const frames = meter([named]).read();
@@ -1132,29 +991,23 @@ describe("loom channels", () => {
   };
   void verifyMeterNameTypes;
 });
-
 describe("loom poll", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
-
   it("samples immediately and re-samples on the interval", () => {
     vi.useFakeTimers();
     let value = 0;
     const p = poll(() => value, 100);
     expect(p()).toBe(0);
-
     value = 1;
     vi.advanceTimersByTime(100);
     expect(p()).toBe(1);
-
     value = 2;
     vi.advanceTimersByTime(250); // two ticks (100, 200), both read 2
     expect(p()).toBe(2);
-
     p.stop();
   });
-
   it("wakes a dependent effect only when the sampled value changes", () => {
     vi.useFakeTimers();
     let value = 0;
@@ -1167,32 +1020,26 @@ describe("loom poll", () => {
     });
     expect(runs).toBe(1);
     expect(seen).toBe(0);
-
     // Unchanged sample -> value-dedup -> no re-run.
     vi.advanceTimersByTime(100);
     expect(runs).toBe(1);
-
     // Changed sample -> re-run.
     value = 5;
     vi.advanceTimersByTime(100);
     expect(runs).toBe(2);
     expect(seen).toBe(5);
-
     stop();
     p.stop();
   });
-
   it("stops sampling after stop()", () => {
     vi.useFakeTimers();
     let value = 0;
     const p = poll(() => value, 100);
     p.stop();
-
     value = 9;
     vi.advanceTimersByTime(500);
     expect(p()).toBe(0);
   });
-
   it("does not restart a manually stopped scoped poll", () => {
     vi.useFakeTimers();
     let samples = 0;
@@ -1200,34 +1047,27 @@ describe("loom poll", () => {
     const owner = scope(() => {
       p = poll(() => ++samples, 100);
     });
-
     p.stop();
     owner.pause();
     owner.resume();
     vi.advanceTimersByTime(300);
-
     expect(samples).toBe(1);
     owner.stop();
   });
-
   it("honours state options: an internal poll is excluded from the channels", () => {
     vi.useFakeTimers();
     const m = meter([events.write]);
-
     let value = 0;
     // The timer resamples regardless of subscribers, so no effect is needed to drive it.
     const internalSource = poll(() => value, 100, { internal: true });
-
     value = 1;
     vi.advanceTimersByTime(100);
     expect(internalSource()).toBe(1); // value updated
     expect(m.read()["loom:write"]?.count).toBe(0); // ...but the internal write is not counted
-
     internalSource.stop();
     m.stop();
   });
 });
-
 describe("loom source", () => {
   it("connects on first observe and disconnects on last unobserve", () => {
     let connects = 0;
@@ -1241,28 +1081,23 @@ describe("loom source", () => {
         push = undefined;
       };
     }, 0);
-
     // Untracked read: not observed -> not connected, returns the initial value.
     expect(reading()).toBe(0);
     expect(connects).toBe(0);
-
     let seen: number | undefined;
     const stop = effect(() => {
       seen = reading();
     });
     expect(connects).toBe(1);
     expect(seen).toBe(0);
-
     // The producer pushes a new value -> the subscriber re-runs.
     push?.(5);
     expect(seen).toBe(5);
-
     // Last subscriber gone -> disconnect runs.
     stop();
     expect(disconnects).toBe(1);
     expect(push).toBeUndefined();
   });
-
   it("a connect() that set()s current state resyncs the connecting reader", () => {
     // The bridge idiom: external state changes while nothing observes; connect
     // pushes the current value on attach. The set() lands mid-read of the
@@ -1273,14 +1108,12 @@ describe("loom source", () => {
       set(real);
       return () => {};
     }, real);
-
     let seen = -1;
     const stop1 = effect(() => {
       seen = reading();
     });
     expect(seen).toBe(0);
     stop1();
-
     real = 7; // moves while unobserved
     const stop2 = effect(() => {
       seen = reading();
@@ -1288,7 +1121,6 @@ describe("loom source", () => {
     expect(seen).toBe(7); // resynced within the connecting read
     stop2();
   });
-
   it("does not wedge a source whose connect() throws; retries on the next observe", () => {
     let attempts = 0;
     let push: ((v: number) => void) | undefined;
@@ -1298,7 +1130,6 @@ describe("loom source", () => {
       push = set;
       return () => {};
     }, 0);
-
     // First observe triggers connect(), which throws -> surfaces at the reader; not left "active".
     expect(() =>
       effect(() => {
@@ -1306,7 +1137,6 @@ describe("loom source", () => {
       }),
     ).toThrow("connect failed");
     expect(attempts).toBe(1);
-
     // A later observe must retry connect() (the source wasn't wedged active with no teardown).
     let seen: number | undefined;
     const stop = effect(() => {
@@ -1317,7 +1147,6 @@ describe("loom source", () => {
     expect(seen).toBe(7);
     stop();
   });
-
   it("retains the last value while unobserved and reconnects when observed again", () => {
     let connects = 0;
     let push: ((v: number) => void) | undefined;
@@ -1326,17 +1155,14 @@ describe("loom source", () => {
       push = set;
       return () => {};
     }, 1);
-
     const first = effect(() => {
       reading();
     });
     expect(connects).toBe(1);
     push?.(9);
     first();
-
     // Unobserved: keeps the last value.
     expect(reading()).toBe(9);
-
     // Observed again: connect runs a second time.
     const second = effect(() => {
       reading();
@@ -1344,7 +1170,6 @@ describe("loom source", () => {
     expect(connects).toBe(2);
     second();
   });
-
   it("shares one connection across multiple subscribers", () => {
     let connects = 0;
     let disconnects = 0;
@@ -1354,7 +1179,6 @@ describe("loom source", () => {
         disconnects++;
       };
     }, 0);
-
     const a = effect(() => {
       reading();
     });
@@ -1362,14 +1186,12 @@ describe("loom source", () => {
       reading();
     });
     expect(connects).toBe(1); // one connection for both
-
     a();
     expect(disconnects).toBe(0); // still observed by b
     b();
     expect(disconnects).toBe(1); // last subscriber gone
   });
 });
-
 describe("loom scope", () => {
   it("stop() disposes every effect created in the scope", () => {
     const a = state(0);
@@ -1383,12 +1205,10 @@ describe("loom scope", () => {
     expect(runs).toBe(1); // initial run
     a(1);
     expect(runs).toBe(2);
-
     s.stop();
     a(2);
     expect(runs).toBe(2); // disposed: no more runs
   });
-
   it("pause() suspends runs; resume() re-runs once with the latest value", () => {
     const a = state(0);
     let seen = -1;
@@ -1401,19 +1221,16 @@ describe("loom scope", () => {
     });
     expect(runs).toBe(1);
     expect(seen).toBe(0);
-
     s.pause();
     a(1);
     a(2);
     a(3);
     expect(runs).toBe(1); // suspended
     expect(seen).toBe(0); // stale while paused
-
     s.resume();
     expect(runs).toBe(2); // a single coalesced catch-up run
     expect(seen).toBe(3); // latest value
   });
-
   it("resume() does not re-run effects that stayed clean", () => {
     const a = state(0);
     let runs = 0;
@@ -1424,12 +1241,10 @@ describe("loom scope", () => {
       });
     });
     expect(runs).toBe(1);
-
     s.pause();
     s.resume(); // nothing changed while paused
     expect(runs).toBe(1);
   });
-
   it("pausing a parent scope freezes nested child effects", () => {
     const a = state(0);
     let runs = 0;
@@ -1442,15 +1257,12 @@ describe("loom scope", () => {
       });
     });
     expect(runs).toBe(1);
-
     parent.pause();
     a(1);
     expect(runs).toBe(1); // child frozen by the parent
-
     parent.resume();
     expect(runs).toBe(2); // catches up
   });
-
   it("resuming a parent leaves an independently-paused child suspended", () => {
     const a = state(0);
     let runs = 0;
@@ -1464,19 +1276,15 @@ describe("loom scope", () => {
       });
     });
     expect(runs).toBe(1);
-
     child.pause();
     parent.pause();
     a(1);
     expect(runs).toBe(1);
-
     parent.resume(); // parent unpaused, but child is still paused
     expect(runs).toBe(1); // child stays suspended
-
     child.resume();
     expect(runs).toBe(2); // now it catches up
   });
-
   it("stop() cascades to nested scopes", () => {
     const a = state(0);
     let runs = 0;
@@ -1489,12 +1297,10 @@ describe("loom scope", () => {
       });
     });
     expect(runs).toBe(1);
-
     parent.stop();
     a(1);
     expect(runs).toBe(1); // nested effect disposed too
   });
-
   it("suspends a poll() created inside the scope while paused", () => {
     vi.useFakeTimers();
     let samples = 0;
@@ -1505,20 +1311,16 @@ describe("loom scope", () => {
     expect(samples).toBe(1); // initial sample at creation
     vi.advanceTimersByTime(200);
     expect(samples).toBe(3); // two ticks
-
     s.pause();
     vi.advanceTimersByTime(300);
     expect(samples).toBe(3); // timer cleared while paused
-
     s.resume();
     expect(samples).toBe(4); // immediate catch-up sample on resume
     vi.advanceTimersByTime(100);
     expect(samples).toBe(5); // timer restarted
-
     p.stop();
     vi.useRealTimers();
   });
-
   it("stop() clears a poll() timer created inside the scope", () => {
     vi.useFakeTimers();
     let samples = 0;
@@ -1529,7 +1331,6 @@ describe("loom scope", () => {
     expect(samples).toBe(1); // only the creation-time sample; timer cleared by stop()
     vi.useRealTimers();
   });
-
   it("disconnects a source() inside the scope while paused, reconnecting on resume", () => {
     let connects = 0;
     let disconnects = 0;
@@ -1552,25 +1353,20 @@ describe("loom scope", () => {
     });
     expect(connects).toBe(1);
     expect(disconnects).toBe(0);
-
     s.pause();
     expect(disconnects).toBe(1); // disconnected even though still observed
-
     s.resume();
     expect(connects).toBe(2); // reconnected because it is still observed
-
     stop();
     expect(disconnects).toBe(2); // last subscriber gone
     s.stop();
   });
 });
-
 describe("loom scope options", () => {
   // Verify the inherited options through inspect() (the snapshot carries each node's metadata).
   const node = (
     predicate: (n: ReturnType<typeof inspect>["nodes"][number]) => boolean,
   ) => inspect().nodes.find(predicate);
-
   it("applies scope options as defaults to nodes created inside", () => {
     const keep: unknown[] = [];
     scope(
@@ -1586,7 +1382,6 @@ describe("loom scope options", () => {
     expect(en?.internal).toBe(true);
     expect(keep).toHaveLength(2);
   });
-
   it("lets a node's own options override the scope defaults", () => {
     const keep: unknown[] = [];
     scope(
@@ -1599,7 +1394,6 @@ describe("loom scope options", () => {
     expect(sn?.internal).toBe(false); // the node's own internal overrides the scope default
     expect(keep).toHaveLength(1);
   });
-
   it("merges options through nested scopes", () => {
     const keep: unknown[] = [];
     scope(
@@ -1618,7 +1412,6 @@ describe("loom scope options", () => {
     expect(sn?.label).toBe("outer-default"); // from the outer scope
     expect(keep).toHaveLength(1);
   });
-
   it("applies scope options to props() signals", () => {
     const keep: unknown[] = [];
     scope(
@@ -1634,7 +1427,6 @@ describe("loom scope options", () => {
     expect(signals.every((n) => n.internal)).toBe(true);
   });
 });
-
 describe("loom scope edge cases", () => {
   it("disposes a throwing scope's already-created effects instead of orphaning them", () => {
     // alien-signals #118.3: a scope body that throws after creating effects must not leak them — the
@@ -1654,7 +1446,6 @@ describe("loom scope edge cases", () => {
     a(1); // a leaked, still-subscribed effect would re-run here
     expect(runs).toBe(afterCreate);
   });
-
   it("rejects promise-returning scope callbacks and disposes their synchronous prefix", () => {
     const value = state(0);
     let runs = 0;
@@ -1665,14 +1456,12 @@ describe("loom scope edge cases", () => {
       });
       await Promise.resolve();
     };
-
     expect(() => scope(asyncScope)).toThrow(
       "scope() callbacks must be synchronous",
     );
     value(1);
     expect(runs).toBe(1);
   });
-
   it("finishes scope teardown when one effect cleanup throws", () => {
     const value = state(0);
     let firstRuns = 0;
@@ -1696,10 +1485,8 @@ describe("loom scope edge cases", () => {
         { label: "cleanup-sibling" },
       );
     });
-
     expect(() => owner.stop()).toThrow("cleanup failed");
     value(1);
-
     expect(firstRuns).toBe(1);
     expect(siblingRuns).toBe(1);
     expect(
@@ -1709,7 +1496,6 @@ describe("loom scope edge cases", () => {
       ),
     ).toBe(false);
   });
-
   it("completes snapshotted resource transitions despite throws and stops", () => {
     const events: string[] = [];
     const value = state(0);
@@ -1766,7 +1552,6 @@ describe("loom scope edge cases", () => {
         });
       });
     });
-
     expect(() => owner.pause()).toThrow("pause failed");
     expect(events).toEqual([
       "self:pause",
@@ -1779,7 +1564,6 @@ describe("loom scope edge cases", () => {
     ]);
     value(1);
     expect(effectRuns).toBe(1);
-
     events.length = 0;
     expect(() => owner.resume()).toThrow("resume failed");
     expect(events).toEqual([
@@ -1791,7 +1575,6 @@ describe("loom scope edge cases", () => {
     expect(effectRuns).toBe(2);
     owner.stop();
   });
-
   it("pause/resume/stop are idempotent", () => {
     const a = state(0);
     let runs = 0;
@@ -1802,22 +1585,18 @@ describe("loom scope edge cases", () => {
       });
     });
     expect(runs).toBe(1);
-
     s.pause();
     s.pause(); // second pause is a no-op
     a(1);
     expect(runs).toBe(1);
-
     s.resume();
     s.resume(); // second resume is a no-op (already running)
     expect(runs).toBe(2);
-
     s.stop();
     s.stop(); // second stop is a no-op
     a(2);
     expect(runs).toBe(2);
   });
-
   it("does not connect a source that nothing observes when resumed", () => {
     let connects = 0;
     const s = scope(() => {
@@ -1831,13 +1610,11 @@ describe("loom scope edge cases", () => {
       );
     });
     expect(connects).toBe(0); // never observed -> never connected
-
     s.pause();
     s.resume();
     expect(connects).toBe(0); // resume must not connect an unobserved source
     s.stop();
   });
-
   it("stopping a child scope directly detaches it from its parent", () => {
     const a = state(0);
     let parentRuns = 0;
@@ -1857,17 +1634,14 @@ describe("loom scope edge cases", () => {
     });
     expect(parentRuns).toBe(1);
     expect(childRuns).toBe(1);
-
     child.stop(); // dispose + detach the child only
     a(1);
     expect(childRuns).toBe(1); // child disposed
     expect(parentRuns).toBe(2); // parent still live
-
     parent.stop();
     a(2);
     expect(parentRuns).toBe(2); // parent now disposed too (no double-free on the child)
   });
-
   it("resuming a child while its parent is paused keeps it suspended", () => {
     const a = state(0);
     let runs = 0;
@@ -1881,18 +1655,15 @@ describe("loom scope edge cases", () => {
       });
     });
     expect(runs).toBe(1);
-
     parent.pause();
     child.pause();
     a(1);
     child.resume(); // parent still paused -> the chain stays suspended
     expect(runs).toBe(1);
-
     parent.resume(); // chain now fully unpaused -> the child catches up
     expect(runs).toBe(2);
   });
 });
-
 describe("loom coverage", () => {
   it("records every built-in channel and excludes internal nodes", () => {
     const m = meter([
@@ -1904,19 +1675,15 @@ describe("loom coverage", () => {
       events.create,
       events.dispose,
     ]);
-
     const a = state(1); // create
     const c = computed(() => a() * 2); // create
     const e = effect(() => {
       c();
     }); // create + run -> read + compute
     a(5); // write -> flush -> effect run
-
     const hidden = state(0, { internal: true }); // internal create (not counted)
     hidden(1); // internal write (not counted)
-
     e(); // dispose
-
     const f = m.read();
     expect(f["loom:create"]?.count).toBe(3); // a, c, e (hidden excluded)
     expect(f["loom:write"]?.count).toBe(1); // a(5) (hidden's write excluded)
@@ -1927,7 +1694,6 @@ describe("loom coverage", () => {
     expect(f["loom:dispose"]?.count).toBe(1); // e disposed
     m.stop();
   });
-
   it("disposes child effects when the parent re-runs", () => {
     const outer = state(0);
     const inner = state(0);
@@ -1944,10 +1710,8 @@ describe("loom coverage", () => {
       });
     });
     expect(childRuns).toBe(1);
-
     inner(1); // child re-runs
     expect(childRuns).toBe(2);
-
     outer(1); // parent re-runs -> previous child disposed, a fresh one created
     expect(childCleanups).toBeGreaterThan(0);
     const before = childRuns;
@@ -1955,7 +1719,6 @@ describe("loom coverage", () => {
     expect(childRuns).toBe(before + 1);
     stop();
   });
-
   it("covers props() option combinations", () => {
     const keep: unknown[] = [];
     keep.push(props({ a: 9001 })); // no options
@@ -1969,7 +1732,6 @@ describe("loom coverage", () => {
     expect(byVal(9004)?.label).toBe("fd.d"); // internal flag + label prefix
     expect(keep).toHaveLength(4);
   });
-
   it("now() falls back to Date.now when performance is missing at load", async () => {
     // The clock is resolved once at module load, so the fallback needs a fresh module instance
     // imported while `performance` is absent — deleting it at runtime wouldn't be seen.
@@ -1994,7 +1756,6 @@ describe("loom coverage", () => {
       vi.resetModules();
     }
   });
-
   it("trigger re-runs subscribers after an in-place mutation", () => {
     const list = state<number[]>([]);
     let seen = 0;
@@ -2007,7 +1768,6 @@ describe("loom coverage", () => {
     expect(seen).toBe(1);
     stop();
   });
-
   it("recomputes computeds lazily through a conditional dependency", () => {
     const toggle = state(true);
     const a = state(1);
@@ -2029,7 +1789,6 @@ describe("loom coverage", () => {
     expect(out).toBe(6);
     stop();
   });
-
   it("orders multiple queued effects deterministically", () => {
     const a = state(0);
     const order: number[] = [];
@@ -2052,7 +1811,6 @@ describe("loom coverage", () => {
     s2();
     s3();
   });
-
   it("inspect exposes the graph", () => {
     const a = state(1, { label: "a" });
     const c = computed(() => a() + 1);
@@ -2063,7 +1821,6 @@ describe("loom coverage", () => {
     stop();
   });
 });
-
 describe("loom coverage — operators and edges", () => {
   it("creates and updates a source under a meter", () => {
     const m = meter([events.create]);
@@ -2074,7 +1831,6 @@ describe("loom coverage — operators and edges", () => {
     }, 0);
     expect(m.read()["loom:create"]?.count).toBe(1); // source create counted
     m.stop();
-
     let seen = -1;
     const stop = effect(() => {
       seen = s();
@@ -2084,12 +1840,10 @@ describe("loom coverage — operators and edges", () => {
     expect(seen).toBe(1);
     push?.(1); // same value -> sourceSet dedupe
     expect(seen).toBe(1);
-
     stop(); // unobserved
     push?.(2); // the disconnected producer's late callback is retired
     expect(s()).toBe(1); // unobserved reads retain the last accepted value
   });
-
   it("flushes once after a nested batch", () => {
     const a = state(0);
     let runs = 0;
@@ -2108,19 +1862,16 @@ describe("loom coverage — operators and edges", () => {
     expect(runs).toBe(1); // single flush for the whole nested batch
     stop();
   });
-
   it("ignores a second meter stop and reports node metadata", () => {
     const m = meter([events.write]);
     m.stop();
     m.stop(); // idempotent
-
     const target = { tag: "host" };
     const s = effect(() => {}, { label: "with-target", target });
     const node = inspect().nodes.find((n) => n.label === "with-target");
     expect(node?.target).toBe(target);
     s();
   });
-
   it("exposes deps and subs ids in inspect snapshots", () => {
     const a = state(1, { label: "dep-a" });
     const c = computed(() => a() + 1, { label: "dep-c" });
@@ -2133,7 +1884,6 @@ describe("loom coverage — operators and edges", () => {
     stop();
   });
 });
-
 describe("loom deferred effects", () => {
   // A manual scheduler: capture the drain so the test fires it deterministically (no real timers).
   let fire: ((hasBudget: () => boolean) => void) | null = null;
@@ -2157,7 +1907,6 @@ describe("loom deferred effects", () => {
       f(() => true);
     }
   });
-
   it("a throwing deferred effect neither wedges the lane nor goes quiet", () => {
     vi.useFakeTimers();
     const a = state(0);
@@ -2178,14 +1927,12 @@ describe("loom deferred effects", () => {
       { defer: true },
     );
     ran.length = 0;
-
     a(1); // both queue; A throws during the drain
     fire?.(() => true);
     // B still ran — the drain survived A's throw...
     expect(ran).toEqual(["B"]);
     // ...and the error stays loud: rethrown on a fresh task (window.onerror territory).
     expect(() => vi.runAllTimers()).toThrow("deferred boom");
-
     // The lane is not wedged: A re-arms and runs on the next change.
     boom = false;
     a(2);
@@ -2195,7 +1942,6 @@ describe("loom deferred effects", () => {
     stopA();
     stopB();
   });
-
   it("runs the first pass synchronously but defers re-runs, coalesced to the latest value", () => {
     const a = state(0);
     const seen: number[] = [];
@@ -2210,7 +1956,6 @@ describe("loom deferred effects", () => {
     expect(seen).toEqual([0, 3]); // one re-run, coalesced — saw the latest value, skipped 1 and 2
     stop();
   });
-
   it("the scheduler controls timing — a synchronous scheduler makes deferred effects run at once", () => {
     configure({
       deferScheduler: (drain) => {
@@ -2225,7 +1970,6 @@ describe("loom deferred effects", () => {
     expect(seen).toEqual([0, 1]); // ran synchronously because the scheduler ran the drain inline
     stop();
   });
-
   it("uses the default maxStale (200), overridable per effect", () => {
     let captured = -1;
     configure({
@@ -2247,7 +1991,6 @@ describe("loom deferred effects", () => {
     stopA();
     stopB();
   });
-
   it("suspends with its scope: pause skips the drain, resume re-runs it", () => {
     const a = state(0);
     const seen: number[] = [];
@@ -2263,7 +2006,6 @@ describe("loom deferred effects", () => {
     expect(seen).toEqual([0, 1]); // ran on resume
     s.stop();
   });
-
   it("a stopped deferred effect is dropped from the queue before it drains", () => {
     const a = state(0);
     const seen: number[] = [];
@@ -2273,7 +2015,6 @@ describe("loom deferred effects", () => {
     fire?.(() => true);
     expect(seen).toEqual([0]); // the pending re-run never happened
   });
-
   it("processes only what fits the budget and reschedules the rest", () => {
     const signals = [state(0), state(0), state(0)];
     const ran: number[] = [];
@@ -2296,7 +2037,6 @@ describe("loom deferred effects", () => {
     expect(ran).toEqual([0, 1, 2]); // the leftover ran next time
     for (const s of stops) s();
   });
-
   it("a budget-exhausted leftover reschedules with the time remaining, not a fresh maxStale", () => {
     let captured = -1;
     configure({
@@ -2322,7 +2062,6 @@ describe("loom deferred effects", () => {
       clock.mockRestore();
     }
   });
-
   it("ignores stopped entries when selecting the next leftover deadline", () => {
     const timeouts: number[] = [];
     configure({
@@ -2342,26 +2081,23 @@ describe("loom deferred effects", () => {
       defer: true,
       maxStale: 200,
     });
-
     soon(1);
     later(1);
     expect(timeouts).toEqual([50]);
     stopSoon();
     fire?.(() => false);
-
     expect(timeouts).toHaveLength(2);
     expect(timeouts[1]).toBeGreaterThan(190);
     fire?.(() => true);
     stopLater();
   });
 });
-
 describe("loom scope bookkeeping", () => {
   // Regression for the audit finding: manually stopping an effect inside a long-lived scope must
   // release the EffectNode so it can be GC'd, not retain it in scope.effects until the scope stops.
   // The marker is reachable only through the effect's fn closure, so it survives a forced GC iff the
   // node is still retained. stopEffect now swap-removes from scope.effects, so it's collectable.
-  // Needs a real forced GC (the `test` script sets NODE_OPTIONS=--expose-gc); skip rather than run a
+  // Needs a real forced GC (the `test` script passes --execArgv=--expose-gc); skip rather than run a
   // non-deterministic assertion when vitest is invoked without it (e.g. a bare `npx vitest run`).
   it.skipIf(typeof globalThis.gc !== "function")(
     "releases a manually-stopped effect from its long-lived scope's bookkeeping",
@@ -2382,7 +2118,6 @@ describe("loom scope bookkeeping", () => {
     },
   );
 });
-
 describe("writable (derived writable)", () => {
   it("reads through read (tracked) and writes through write — rest-args arity", () => {
     const domain = state<string | null>(null, {
@@ -2404,7 +2139,6 @@ describe("writable (derived writable)", () => {
     expect(seen).toEqual(["Cards", "All"]);
     stop();
   });
-
   it("writing undefined IS a write (state()'s own contract)", () => {
     const cell = state<string | undefined>("set", {
       label: "test.writable.undef",

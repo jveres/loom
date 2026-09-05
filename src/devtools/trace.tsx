@@ -1,15 +1,5 @@
-// Trace tab: a live, newest-on-top causal trace of reactive events, read from the loom:write and/or
-// loom:read channels' *samples* views (each channel ring holds the last 1024). Each event carries
-// its source — the effect/computed that read or wrote the signal — so a row reads "X — by Y". A header
-// selector picks which types stream (writes, reads, or all interleaved by timestamp); pause freezes
-// it, clear empties it, the filter narrows by signal name, hovering a row outlines the DOM node(s) the
-// signal drives, and tapping a name jumps to it in the Graph. Driven off the panel heartbeat (in the
-// deferred lane), it drains the selected ring(s) into a capped, newest-first log rendered via the vlist.
-// Seams: the panel calls buildTracePane / showTrace / setTraceActive / setTraceLiveDot /
-// setTraceLocate / setTraceWindow / teardownTrace; the stats heartbeat calls renderTrace.
-import { onTap } from "loom/dom";
-import { scrollFade } from "loom/dom/scroll-fade";
-import { type VirtualList, virtualList } from "loom/dom/virtual-list";
+import { onTap } from "loom/events";
+import { scrollFade } from "loom/motion";
 import {
   events,
   inspect,
@@ -19,6 +9,7 @@ import {
   sampleOf,
   type WriteSample,
 } from "loom/observe";
+import { type VirtualList, virtualList } from "loom/virtual-list";
 import { formatValue, valueClass } from "./format.js";
 import { clearGraphHighlight, highlightSignal } from "./graph.js";
 import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
@@ -26,7 +17,6 @@ import { ICON_CLEAR, ICON_PAUSE, ICON_PLAY, icon } from "./icons.js";
 const TRACE_ROW_H = 22; // uniform row height (must match the .li-tr CSS)
 const VALUE_MAX = 200; // cap a recorded value's text so a giant string can't bloat the DOM/tooltip
 let windowSize = 1000; // how many events the log keeps; set from the inspector menu
-
 // The stream modes, in menu order. The <option>s and the type both derive from this, so they can't
 // drift; isTraceMode guards the change handler's string back into the union.
 const TRACE_MODES = ["writes", "reads", "all"] as const;
@@ -34,7 +24,6 @@ type TraceMode = (typeof TRACE_MODES)[number];
 function isTraceMode(value: string): value is TraceMode {
   return (TRACE_MODES as readonly string[]).includes(value);
 }
-
 type TraceRow = {
   readonly seq: number; // unique, monotonic — the vlist key (the log shifts as it prepends)
   readonly id: number; // the signal id — for hover-highlighting the DOM nodes it drives
@@ -48,7 +37,6 @@ type TraceRow = {
   readonly srcText: string; // "by <source>" — who read/wrote it; "" when external/none
   readonly full: string; // untruncated line, for the hover title
 };
-
 let traceVList: VirtualList<TraceRow> | null = null;
 let writeMeter: Meter | null = null;
 let readMeter: Meter | null = null;
@@ -67,18 +55,15 @@ let rowSeq = 0; // monotonic key source
 let lastTopSeq = -1; // seq of the row that was the top before the last update (new-arrivals boundary)
 let lastHoverId = -1; // signal id currently hover-highlighted (avoids re-snapshotting within a row)
 let onLocate: ((id: number) => void) | null = null; // jump-to-graph, wired by the panel
-
 // Wire the "click a name to jump to it in the Graph" action (set by the panel, which owns tab state).
 export function setTraceLocate(fn: (id: number) => void): void {
   onLocate = fn;
 }
-
 // The panel owns the live dot (it lives in the Trace tab); reflect the current state on it.
 export function setTraceLiveDot(el: HTMLElement | null): void {
   liveDot = el;
   updateLiveDot();
 }
-
 // The Trace tab became (in)active (tab shown AND panel not minimized). The meters are attached only
 // while active — detaching them drops the channels' samples count, so the core stops recording read/
 // write detail entirely (zero hot-path cost) when the trace isn't on screen. Same idea as the stats
@@ -94,7 +79,6 @@ export function setTraceActive(active: boolean): void {
   }
   updateLiveDot();
 }
-
 // Hidden when the tab isn't shown; a hollow ring when paused; a pulsing dot when live.
 function updateLiveDot(): void {
   if (!liveDot) return;
@@ -106,28 +90,23 @@ function updateLiveDot(): void {
       ? "Paused"
       : "Live — capturing";
 }
-
 export function buildTracePane(): HTMLElement {
   applyMode(); // resets state; meters attach only once the tab goes active (setTraceActive)
-
   traceVList = virtualList<TraceRow>({
     rowHeight: TRACE_ROW_H,
     key: (r) => r.seq,
     render: trRender,
   });
-
   pauseBtn = (
     <button type="button" class="li-tr-btn" title="Pause / resume the trace" />
   ) as HTMLButtonElement;
   pauseBtn.append(icon(ICON_PAUSE, 12));
   onTap(pauseBtn, () => setPaused(!tracePaused)); // tap, not click — click is dropped under load on iOS
-
   const clearBtn = (
     <button type="button" class="li-tr-btn" title="Clear the trace" />
   ) as HTMLButtonElement;
   clearBtn.append(icon(ICON_CLEAR, 12));
   onTap(clearBtn, () => clearLog());
-
   const modeSel = (
     <select class="li-tr-mode" title="Which events to stream">
       {TRACE_MODES.map((m) => (
@@ -140,7 +119,6 @@ export function buildTracePane(): HTMLElement {
     if (isTraceMode(modeSel.value)) traceMode = modeSel.value;
     applyMode();
   });
-
   const filter = (
     <input
       type="text"
@@ -159,7 +137,6 @@ export function buildTracePane(): HTMLElement {
       : [];
     applyView();
   });
-
   traceScroll = <div class="li-tr-scroll" />;
   traceScroll.append(traceVList.el);
   traceFade = scrollFade(traceScroll, { transition: 120 }); // same edge fade as the panel body
@@ -203,7 +180,6 @@ export function buildTracePane(): HTMLElement {
   ) as HTMLElement;
   return traceRoot;
 }
-
 // Attach the samples meters the current mode needs (writes always carry detail; reads are the
 // high-frequency firehose, metered only when selected). Each samples meter bumps the channel's
 // samples count, which is what unlocks detail recording in the core.
@@ -219,7 +195,6 @@ function detachMeters(): void {
   readMeter?.stop();
   readMeter = null;
 }
-
 // Mode changed: swap the meter set (only while active — detached panes stay zero-cost) and re-filter
 // the view to the new kind(s). The accumulated log is kept — the selector filters, it doesn't wipe.
 function applyMode(): void {
@@ -229,7 +204,6 @@ function applyMode(): void {
   applyView();
   renderTrace();
 }
-
 // Empty the trace (both windows) — useful to start a clean capture before reproducing something.
 function clearLog(): void {
   traceLog = [];
@@ -237,7 +211,6 @@ function clearLog(): void {
   lastTopSeq = -1;
   applyView();
 }
-
 // Set how many events the log keeps (the window). Exposed for the inspector menu.
 export function setTraceWindow(n: number): void {
   windowSize = n;
@@ -245,7 +218,6 @@ export function setTraceWindow(n: number): void {
   if (filterLog.length > n) filterLog.length = n;
   applyView();
 }
-
 // Drain the selected ring(s) into the log (newest-first) and re-window. A no-op while paused.
 export function renderTrace(): void {
   if (tracePaused || traceVList === null) return;
@@ -286,7 +258,6 @@ export function renderTrace(): void {
   lastTopSeq = newTop !== prevTop ? prevTop : -1;
   applyView();
 }
-
 // Tab shown: re-window for the now-visible pane (the vlist no-ops reconciles while hidden), then once
 // more next frame — the first reconcile can race the layout of the just-un-hidden pane, which would
 // otherwise leave the top rows blank until a scroll nudged it.
@@ -295,7 +266,6 @@ export function showTrace(): void {
   applyView();
   requestAnimationFrame(() => traceVList?.refresh());
 }
-
 export function teardownTrace(): void {
   detachMeters();
   traceVList = null;
@@ -317,7 +287,6 @@ export function teardownTrace(): void {
   lastHoverId = -1;
   onLocate = null;
 }
-
 function setPaused(paused: boolean): void {
   tracePaused = paused;
   pauseBtn?.replaceChildren(icon(paused ? ICON_PLAY : ICON_PAUSE, 12));
@@ -325,7 +294,6 @@ function setPaused(paused: boolean): void {
   traceRoot?.classList.toggle("li-tr-paused", paused);
   if (!paused) renderTrace(); // resume: catch up immediately
 }
-
 // Re-window with the active filter applied (a name substring match).
 function applyView(): void {
   const base = traceFilter ? filterLog : traceLog;
@@ -337,7 +305,6 @@ function applyView(): void {
         ),
   );
 }
-
 function makeRow(
   s: Readonly<Record<string, unknown>>,
   kind: "read" | "write",
@@ -381,14 +348,12 @@ function makeRow(
     full: `${name}: ${prevText} → ${nextText} ${srcText || "(external)"}`,
   };
 }
-
 // id → label, so an event shows its signal/source name. Labels are immutable per node, so the map
 // persists across drains and is re-snapshotted — a full inspect() walk — at most once per drain,
 // and only when an event references an id it hasn't seen (a node created since the last snapshot).
 // A retained entry keeps naming a node after it's disposed; a never-seen id falls back to `#id`.
 const labels = new Map<number, string>();
 let labelsFresh = false; // has the current drain already re-snapshotted?
-
 function labelOf(id: number): string {
   const hit = labels.get(id);
   if (hit !== undefined) return hit;
@@ -400,7 +365,6 @@ function labelOf(id: number): string {
   }
   return `#${id}`;
 }
-
 function trRender(item: TraceRow, reuse: HTMLElement | null): HTMLElement {
   const row = reuse ?? trCreateRow();
   const kind = row.children[0] as HTMLElement;
@@ -432,7 +396,6 @@ function trRender(item: TraceRow, reuse: HTMLElement | null): HTMLElement {
   row.classList.toggle("li-tr-mark", item.seq === lastTopSeq); // new-arrivals boundary
   return row;
 }
-
 function trCreateRow(): HTMLElement {
   return (
     <div class="li-tr">
@@ -448,7 +411,6 @@ function trCreateRow(): HTMLElement {
     </div>
   ) as HTMLElement;
 }
-
 // Wall-clock minute:second.millis of the event — enough to order/correlate within a session.
 function trTime(t: number): string {
   if (!t) return "";

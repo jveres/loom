@@ -1,7 +1,7 @@
 /** @jsxImportSource loom/html */
+import { html, isHtml, renderToString, unsafeHtml } from "loom/html";
+import { Fragment, jsx, jsxDEV, jsxs } from "loom/html/jsx-dev-runtime";
 import { describe, expect, it, vi } from "vitest";
-import { html, isHtml, renderToString, unsafeHtml } from "./index.js";
-import { Fragment, jsx, jsxDEV, jsxs } from "./jsx-runtime.js";
 
 describe("loom HTML JSX runtime", () => {
   it("exports automatic JSX runtime helpers", () => {
@@ -10,7 +10,6 @@ describe("loom HTML JSX runtime", () => {
     expect(typeof jsxDEV).toBe("function");
     expect(typeof Fragment).toBe("function");
   });
-
   it("renders escaped static HTML from JSX", () => {
     const title = "<Hello>";
     const out = (
@@ -19,20 +18,16 @@ describe("loom HTML JSX runtime", () => {
         <input disabled value="Ada" />
       </article>
     );
-
     expect(renderToString(out)).toBe(
       '<article class="card active"><h1>&lt;Hello&gt;</h1><input disabled value="Ada"></article>',
     );
   });
-
   it("supports function components and fragments", () => {
     let receivedKey: unknown = "unset";
-
     function Item(props: { name: string }) {
       receivedKey = "key" in props ? props.key : undefined;
       return <li>{props.name}</li>;
     }
-
     const items = (
       <>
         <Item name="Ada" />
@@ -40,19 +35,15 @@ describe("loom HTML JSX runtime", () => {
       </>
     );
     const out = <ul>{items}</ul>;
-
     expect(renderToString(out)).toBe("<ul><li>Ada</li><li>Grace</li></ul>");
     expect(receivedKey).toBeUndefined();
   });
-
   it("supports html templates and trusted unsafeHtml HTML", () => {
     const out = html`<main>${unsafeHtml("<strong>safe</strong>")} ${"<script>"}</main>`;
-
     expect(renderToString(out)).toBe(
       "<main><strong>safe</strong> &lt;script&gt;</main>",
     );
   });
-
   it("serializes safe attributes and drops unsafe ones", () => {
     const out = (
       <form
@@ -63,12 +54,10 @@ describe("loom HTML JSX runtime", () => {
         Link
       </form>
     );
-
     expect(renderToString(out)).toBe(
       '<form style="color:red;font-size:12px">Link</form>',
     );
   });
-
   it("drops URL schemes disguised with control characters the browser strips", () => {
     // Browsers strip ASCII tab/newline/CR from anywhere in a URL and trim leading C0 controls, so
     // these all resolve to `javascript:` in the browser and must be dropped, not just the plain form.
@@ -84,7 +73,6 @@ describe("loom HTML JSX runtime", () => {
       '<a href="/path?a=1&amp;b=2"></a>',
     );
   });
-
   it("jsxDEV warns on likely-bug attribute drops but stays silent on by-design ones", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
@@ -106,7 +94,6 @@ describe("loom HTML JSX runtime", () => {
       warn.mockRestore();
     }
   });
-
   it("renders via jsx/jsxs directly and on the null-props/void paths", () => {
     expect(renderToString(jsx("p", { children: "hi" }))).toBe("<p>hi</p>");
     expect(
@@ -115,18 +102,15 @@ describe("loom HTML JSX runtime", () => {
     expect(renderToString(jsx("br", null))).toBe("<br>"); // void, no props
     expect(renderToString(jsx("div", null))).toBe("<div></div>");
   });
-
   it("throws on an invalid tag name", () => {
     expect(() => jsx("bad tag", null)).toThrow(/Invalid HTML tag name/);
   });
-
   it("skips inherited props", () => {
     const props = Object.assign(Object.create({ inherited: "x" }), {
       id: "own",
     });
     expect(renderToString(jsx("div", props))).toBe('<div id="own"></div>');
   });
-
   it("drops nullish, false, event, dangerous, and malformed attributes", () => {
     const props: Record<string, unknown> = {
       id: null,
@@ -145,7 +129,6 @@ describe("loom HTML JSX runtime", () => {
     });
     expect(renderToString(jsx("div", props))).toBe('<div keep="ok"></div>');
   });
-
   it("maps className/htmlFor and renders boolean attributes", () => {
     expect(
       renderToString(
@@ -158,13 +141,11 @@ describe("loom HTML JSX runtime", () => {
       ),
     ).toBe("<input disabled>");
   });
-
   it("keeps safe URL attributes and a namespaced one", () => {
     expect(
       renderToString(jsx("a", { href: "/ok" } as Record<string, unknown>)),
     ).toBe('<a href="/ok"></a>');
   });
-
   it("normalizes a class object map and drops empty array items", () => {
     expect(
       renderToString(
@@ -180,7 +161,6 @@ describe("loom HTML JSX runtime", () => {
       ),
     ).toBe('<div class="a"></div>');
   });
-
   it("serializes styles: kebab-cases, keeps custom props, drops unsafe", () => {
     const out = jsx("div", {
       style: {
@@ -196,7 +176,6 @@ describe("loom HTML JSX runtime", () => {
       '<div style="background-color:red;--gap:4px"></div>',
     );
   });
-
   it("matches DOM initial semantics for reads and ARIA booleans", () => {
     const out = jsx("button", {
       "aria-pressed": false,
@@ -204,16 +183,13 @@ describe("loom HTML JSX runtime", () => {
       style: { color: () => "red" },
       title: () => "ready",
     });
-
     expect(renderToString(out)).toBe(
       '<button aria-pressed="false" class="active" style="color:red" title="ready"></button>',
     );
   });
-
   it("accepts only fully branded Html values", () => {
     const trusted = unsafeHtml("<b>ok</b>");
     expect(isHtml(trusted)).toBe(true);
-
     const malformed = Object.assign(Object.create(null), {
       [Symbol.for("loom.html")]: true,
       value: "<b>bad</b>",

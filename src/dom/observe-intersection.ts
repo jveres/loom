@@ -1,3 +1,5 @@
+import { failSetup } from "../core/lifetime.js";
+import { untrack } from "../core/tracking.js";
 // observeIntersection(el, cb, options?) — viewport/root intersection with node lifetime: the
 // callback runs on the IntersectionObserver clock (including the spec's initial delivery on
 // attach) and detaches when the node is torn down. Returns a Stop for early manual detach.
@@ -5,12 +7,13 @@
 // Pooling: observers with the same root/rootMargin/threshold are shared and routed per target.
 // Viewport pools use a normal Map; custom roots use a WeakMap so pooling never extends root lifetime.
 import type { Stop } from "../loom.js";
+import { nodeLifetime } from "./lifetime.js";
 import { once } from "./once.js";
-import { onUnmount } from "./ownership-base.js";
 
 export type IntersectionCallback = (entry: IntersectionObserverEntry) => void;
 
-export interface IntersectionOptions {
+export interface ObserveIntersectionOptions {
+  readonly signal?: AbortSignal;
   readonly root?: Element | Document | null;
   readonly rootMargin?: string;
   readonly threshold?: number | readonly number[];
@@ -21,7 +24,7 @@ interface Pool {
   readonly watched: Map<Element, Set<IntersectionCallback>>;
 }
 
-const viewportPools = new Map<string, Pool>();
+const viewportPools = new WeakMap<object, Map<string, Pool>>();
 const rootedPools = new WeakMap<Element | Document, Map<string, Pool>>();
 
 interface NormalizedOptions {
@@ -46,7 +49,9 @@ function normalizeMargin(value = "0px"): string {
   return `${top} ${right} ${bottom} ${left}`;
 }
 
-function normalizeOptions(options?: IntersectionOptions): NormalizedOptions {
+function normalizeOptions(
+  options?: ObserveIntersectionOptions,
+): NormalizedOptions {
   const raw = options?.threshold;
   const values = (typeof raw === "number" ? [raw] : raw ? [...raw] : [0]).sort(
     (a, b) => a - b,
@@ -64,8 +69,18 @@ function poolKey(options: NormalizedOptions): string {
   return `${options.rootMargin}|${Array.isArray(threshold) ? threshold.join(",") : threshold}`;
 }
 
-function poolsFor(root: Element | Document | null): Map<string, Pool> {
-  if (root === null) return viewportPools;
+function poolsFor(
+  root: Element | Document | null,
+  realm: object,
+): Map<string, Pool> {
+  if (root === null) {
+    let pools = viewportPools.get(realm);
+    if (!pools) {
+      pools = new Map();
+      viewportPools.set(realm, pools);
+    }
+    return pools;
+  }
   let pools = rootedPools.get(root);
   if (!pools) {
     pools = new Map();
@@ -85,12 +100,14 @@ function pooled(
   let pool = pools.get(key);
   if (!pool) {
     const watched = new Map<Element, Set<IntersectionCallback>>();
-    const observer = new IntersectionObserver(
+    const realm = el.ownerDocument.defaultView ?? globalThis;
+    const observer = new (realm as typeof globalThis).IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           const callbacks = watched.get(entry.target);
           if (!callbacks) continue;
-          for (const fn of callbacks) fn(entry);
+          for (const fn of [...callbacks])
+            if (callbacks.has(fn)) untrack(() => fn(entry));
         }
       },
       {
@@ -108,13 +125,14 @@ function pooled(
     pool.watched.set(el, callbacks);
     pool.observer.observe(el);
   }
-  callbacks.add(cb);
+  const deliver: IntersectionCallback = (entry) => cb(entry);
+  callbacks.add(deliver);
   return once(() => {
     const current = pools.get(key);
     if (!current) return;
     const set = current.watched.get(el);
     if (!set) return;
-    set.delete(cb);
+    set.delete(deliver);
     if (set.size === 0) {
       current.watched.delete(el);
       current.observer.unobserve(el);
@@ -130,11 +148,17 @@ function pooled(
 export function observeIntersection(
   el: Element,
   cb: IntersectionCallback,
-  options?: IntersectionOptions,
+  options?: ObserveIntersectionOptions,
 ): Stop {
+  const life = nodeLifetime(el, options?.signal);
+  if (!life.active) return life.stop;
   const root = options?.root ?? null;
   const normalized = normalizeOptions(options);
-  const pools = poolsFor(root);
-  const stop = pooled(el, cb, root, pools, poolKey(normalized), normalized);
-  return onUnmount(el, stop);
+  const pools = poolsFor(root, el.ownerDocument.defaultView ?? globalThis);
+  try {
+    life.add(pooled(el, cb, root, pools, poolKey(normalized), normalized));
+  } catch (error) {
+    failSetup(life, error);
+  }
+  return life.stop;
 }

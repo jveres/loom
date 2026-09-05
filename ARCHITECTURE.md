@@ -6,10 +6,15 @@ modules can share types without expanding those entrypoints.
 
 ## Module boundaries
 
+Canonical family entrypoints curate the operations described in the
+[API index](docs/api.md). Shared implementation stays internal.
+
 | Module | Responsibility |
 | --- | --- |
 | `src/index.ts` | Public reactive primitives and helper exports. |
 | `src/loom.ts` | Reactive nodes, tracking context, scheduler, computed recovery, and scope operations that coordinate effect queues. |
+| `src/core/tracking.ts` | Small untrack callback hook; active tracking state stays local to the reactive engine. |
+| `src/core/lifetime.ts` | Terminal manual/signal lifetime and all-cleanup-before-error behavior. |
 | `src/core/graph.ts` | Vendored dependency-graph algorithm; preserve its upstream control flow. |
 | `src/core/scope-ownership.ts` | Scope/resource types, indexed removal, pause counts, terminal resource stop, and resource traversal. |
 | `src/core/errors.ts` | Rethrow one failure unchanged; aggregate multiple disposal failures. |
@@ -26,15 +31,15 @@ they coordinate scheduler state. This keeps ownership traversal independent
 without adding a runtime import cycle or an injected scheduler abstraction.
 
 The deferred lane, inspection, async helpers, and devtools remain optional.
-The graph algorithm is unchanged by the refactor. Bundle checks cover minimal
+The graph algorithm is unchanged by the consolidation. Bundle checks cover minimal
 core, inspection/deferred combinations, minimal DOM, and standalone windowing.
 
 ## Ownership and disposal
 
 An effect can belong to an ambient scope and, when created inside another
 effect, to that effect's rerun lifetime. DOM bindings clear the parent-effect
-context before construction and register with their owning node. They still
-participate in an ambient scope. `untrack()` clears reactive tracking and
+context before construction and register with their owning node. They do not inherit the ambient scope. Scope metadata can label a binding
+without controlling its lifetime. `untrack()` clears reactive tracking and
 parent-effect ownership; it does not escape the ambient scope.
 
 Scope pause counts include paused ancestors. Independently paused descendants
@@ -50,7 +55,7 @@ subscriptions still retain shared producers.
 
 Node ownership performs descendant-first subtree disposal. A resource group
 provides collective teardown while retaining granular removal: stopped entries
-leave the arena immediately, including bindings stopped through their scope.
+leave the arena immediately, including bindings stopped through their returned `Stop`.
 Registration ordinals remain independent of array slots so removal cannot alter
 ordered group cleanup.
 
@@ -73,8 +78,8 @@ counter restarts at zero, so callers must discard untracked caches for retired
 paths separately. Typed keyed-state schemas constrain string keys and values;
 `value()` stores functions literally and `factory()` creates custom states.
 
-Keyed-list item reads, key selection, and row rendering run during reconciliation;
-reads in a renderer can become structural dependencies. Use node-owned bindings
+Keyed-list item reads and key selection track during reconciliation. Renderers
+and item-update callbacks run untracked and cannot add structural dependencies. Use node-owned bindings
 for ongoing row updates. Optional `update(node, item, previous)` callbacks run
 untracked when an existing key receives an item that differs by strict equality.
 Without that callback, existing rows retain their original bindings and the
@@ -100,7 +105,7 @@ content. Failed passes remain retryable.
 
 ## Verification and history
 
-The [refactor plan](REFACTOR_PLAN.md) records each stage and its checks.
+The [refactor plan](docs/refactor-plan.md) records each stage and its checks.
 [Benchmark documentation](bench/README.md) describes workloads, reproduction,
 measured gains, and limits. Keep benchmark history there rather than embedding
 one-machine timing claims in runtime comments.

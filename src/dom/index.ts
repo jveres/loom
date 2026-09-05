@@ -1,3 +1,4 @@
+import { untrack } from "../core/tracking.js";
 import { cssPropName } from "../jsx-props.js";
 import {
   type CleanupEffectFn,
@@ -6,25 +7,23 @@ import {
   type EffectFn,
   type EffectNode,
   type EffectOptions,
-  effect,
   type Read,
   type State,
   type Stop,
-  stopEffectNode,
-  untrack,
 } from "../loom.js";
-import { attrRead, classRead, styleRead } from "./element-reads.js";
 import {
   type EachOptions,
   type ListOptions,
   type LoomKey,
   reconcileKeyed,
 } from "./keyed-reconcile.js";
+import { nodeLifetime } from "./lifetime.js";
 import { onMount } from "./on-mount.js";
-import { dispose, onUnmount } from "./ownership.js";
+import { dispose } from "./ownership.js";
 import {
   own,
   ownResource,
+  ownStoppableResource,
   removeNodes,
   withConstructionRollback,
 } from "./ownership-base.js";
@@ -52,9 +51,6 @@ export type Child =
 // expose no structure. Build them with the factories; never hand-construct. `DynamicChild` is also a
 // member of {@link Child}.
 declare const BINDING: unique symbol;
-export type AttrBinding = { readonly [BINDING]: "attr" };
-export type ClassBinding = { readonly [BINDING]: "class" };
-export type StyleBinding = { readonly [BINDING]: "style" };
 export type DynamicChild = { readonly [BINDING]: "dynamic" };
 
 // The real shapes behind those handles, private to this module.
@@ -73,22 +69,10 @@ interface SlotDescriptor {
 // (not a double cast), kept here so no other call site reaches across the seam.
 const brand = <T extends object>(descriptor: object): T => descriptor as T;
 
-type ClassProp =
-  | string
-  | ClassBinding
-  | ClassMap
-  | null
-  | undefined
-  | readonly ClassProp[];
+type ClassProp = string | ClassMap | null | undefined | readonly ClassProp[];
 type ClassMap = Record<string, unknown>;
 type StyleMap = Record<string, unknown>;
-type StyleProp =
-  | string
-  | StyleMap
-  | StyleBinding
-  | null
-  | undefined
-  | readonly StyleProp[];
+type StyleProp = string | StyleMap | null | undefined | readonly StyleProp[];
 
 // An element with an inline `style` — both HTMLElement and SVGElement satisfy this, so style
 // bindings state it rather than a false HTMLElement claim (a truly style-less Element would throw).
@@ -103,6 +87,10 @@ export type ElementProps = Record<string, unknown> & {
   className?: ClassProp;
   key?: string | number;
   style?: StyleProp;
+  ontap?: never;
+  onTap?: never;
+  onDoublePress?: never;
+  ondoublepress?: never;
 };
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -422,104 +410,43 @@ export function text(read: Read<unknown>, options?: EffectOptions): Text {
   return node;
 }
 
-/**
- * The attribute as a signal — direction by first argument and arity:
- * `attr(name, read)` returns a JSX descriptor; `attr(el, name)` returns a reactive
- * `Read<string | null>` of the attribute's current value; `attr(el, name, read, options?)` binds
- * `read()` to the attribute, node-owned. Writes coerce like JSX attributes (nullish/false removes,
- * true sets empty). `options` relabels the binding or marks it `internal`.
- */
-export function attr(name: string, read: Read<unknown>): AttrBinding;
-export function attr(el: Element, name: string): Read<string | null>;
-export function attr(
+/** Options for a node-owned reactive binding. */
+export interface BindingOptions extends EffectOptions {
+  readonly signal?: AbortSignal;
+}
+
+/** Bind an attribute to a tracked read; nullish/false removes it. */
+export function bindAttr(
   el: Element,
   name: string,
   read: Read<unknown>,
-  options?: EffectOptions,
-): void;
-export function attr(
-  a: string | Element,
-  b: Read<unknown> | string,
-  read?: Read<unknown>,
-  options?: EffectOptions,
-): AttrBinding | Read<string | null> | undefined {
-  if (typeof a === "string") {
-    return brand<AttrBinding>({
-      kind: "attr",
-      name: a,
-      read: b as Read<unknown>,
-    } satisfies PropBinding);
-  }
-  const name = b as string;
-  if (read === undefined) return attrRead(a, name);
-  applyAttrBinding(a, name, read, options);
-  return undefined;
+  options?: BindingOptions,
+): Stop {
+  return applyAttrBinding(el, name, read, options);
 }
 
-/**
- * A class as a boolean signal — direction by first argument and arity:
- * `classed(name, read)` returns a JSX descriptor; `classed(el, name)` returns a reactive
- * `Read<boolean>` of the class's presence; `classed(el, name, read, options?)` toggles the class
- * from `read()`, node-owned.
- */
-export function classed(name: string, read: Read<unknown>): ClassBinding;
-export function classed(el: Element, name: string): Read<boolean>;
-export function classed(
+/** Bind one class token to the truthiness of a tracked read. */
+export function bindClass(
   el: Element,
   name: string,
   read: Read<unknown>,
-  options?: EffectOptions,
-): void;
-export function classed(
-  a: string | Element,
-  b: Read<unknown> | string,
-  read?: Read<unknown>,
-  options?: EffectOptions,
-): ClassBinding | Read<boolean> | undefined {
-  if (typeof a === "string") {
-    return brand<ClassBinding>({
-      kind: "class",
-      name: a,
-      read: b as Read<unknown>,
-    } satisfies PropBinding);
-  }
-  const name = b as string;
-  if (read === undefined) return classRead(a, name);
-  bindClass(a, { kind: "class", name, read }, options);
-  return undefined;
+  options?: BindingOptions,
+): Stop {
+  return installClassBinding(el, { kind: "class", name, read }, options);
 }
 
-/**
- * An inline style property as a signal — direction by first argument and arity:
- * `style(name, read)` returns a JSX descriptor; `style(el, prop)` returns a reactive
- * `Read<string>` of the inline value (empty string when unset); `style(el, prop, read, options?)`
- * binds `read()` to the property, node-owned. Property names accept camelCase or kebab-case.
- */
-export function style(name: string, read: Read<unknown>): StyleBinding;
-export function style(el: Element, prop: string): Read<string>;
-export function style(
-  el: Element,
-  prop: string,
+/** Bind an inline style property to a tracked read. */
+export function bindStyle(
+  el: StyledElement,
+  name: string,
   read: Read<unknown>,
-  options?: EffectOptions,
-): void;
-export function style(
-  a: string | Element,
-  b: Read<unknown> | string,
-  read?: Read<unknown>,
-  options?: EffectOptions,
-): StyleBinding | Read<string> | undefined {
-  if (typeof a === "string") {
-    return brand<StyleBinding>({
-      kind: "style",
-      name: a,
-      read: b as Read<unknown>,
-    } satisfies PropBinding);
-  }
-  const prop = cssPropName(b as string);
-  if (read === undefined) return styleRead(a, prop);
-  bindStyle(a, { kind: "style", name: prop, read }, options);
-  return undefined;
+  options?: BindingOptions,
+): Stop {
+  return installStyleBinding(
+    el,
+    { kind: "style", name: cssPropName(name), read },
+    options,
+  );
 }
 
 export function list<T>(
@@ -527,28 +454,28 @@ export function list<T>(
   read: State<readonly T[]> | Read<readonly T[]>,
   options: ListOptions<NoInfer<T>>,
 ): Stop {
+  if (options.signal?.aborted) return () => {};
   const nodes = new Map<LoomKey, Element>();
   const updates = options.update
     ? { update: options.update, items: new Map<LoomKey, T>() }
     : undefined;
-  const stop = untrack(() =>
-    effect(
-      () => {
-        const shouldReorder = options.reorder?.() !== false;
-        const items = read();
-        reconcileKeyed(
-          container,
-          null,
-          items,
-          nodes,
-          options.key,
-          options.render,
-          shouldReorder,
-          updates,
-        );
-      },
-      { label: "dom.list", target: container },
-    ),
+  const stop = bind(
+    container,
+    () => {
+      const shouldReorder = options.reorder?.() !== false;
+      const items = read();
+      reconcileKeyed(
+        container,
+        null,
+        items,
+        nodes,
+        options.key,
+        options.render,
+        shouldReorder,
+        updates,
+      );
+    },
+    { label: "dom.list" },
   );
 
   const stopList = (): void => {
@@ -563,7 +490,9 @@ export function list<T>(
     }
     removeNodes(outgoing, errors);
   };
-  return onUnmount(container, stopList);
+  const life = nodeLifetime(container, options.signal);
+  life.add(stopList);
+  return life.stop;
 }
 
 // Single-branch slot: an effect keyed off `key()`. On a key change the previous subtree is removed —
@@ -695,131 +624,17 @@ export function each<T>(
   } satisfies SlotDescriptor);
 }
 
-/**
- * Suspend every node-owned reactive binding in a subtree: bindings stay subscribed but do not run
- * while paused; resume() delivers one catch-up run to anything that changed. Pause nests. Only
- * effect-backed disposers suspend (a manual onUnmount(fn) teardown has nothing to pause).
- */
-// px: a pointerup within this distance of the pointerdown counts as a tap, not a drag/scroll.
-const TAP_SLOP = 10;
-
-/**
- * Bind a robust tap handler. Unlike `click`, this is not dropped by iOS Safari when the DOM mutates
- * mid-gesture, because it is built from raw pointer events rather than a hit-test-synthesized click.
- * `handler` fires on pointerup when the release is the same pointer as the press and within
- * {@link TAP_SLOP} px of it (so a drag or scroll does not trigger it). Use the `ontap` JSX prop,
- * which routes here; this export is for imperative call sites (e.g. the inspector).
- */
-/** The tap's HANDLE: whether a tap was just handled — the window in
- *  which the browser's own synthesized click is the tap's ghost, so a
- *  click handler kept for keyboard activation can step aside. */
-export interface TapVoice {
-  /** True within `ms` (default {@link GHOST_CLICK_MS}) of the last handled tap. */
-  recent(ms?: number): boolean;
-}
-
-/** How long after a handled tap the platform's synthesized click still arrives (iOS Safari
- * delivers it well after pointerup). */
-export const GHOST_CLICK_MS = 600;
-
-export function onTap(
-  node: Element,
-  handler: (event: PointerEvent) => void,
-): TapVoice {
-  let id = -1;
-  let x = 0;
-  let y = 0;
-  let tappedAt = Number.NEGATIVE_INFINITY;
-  node.addEventListener("pointerdown", (event) => {
-    const pointer = event as PointerEvent;
-    id = pointer.pointerId;
-    x = pointer.clientX;
-    y = pointer.clientY;
-  });
-  node.addEventListener("pointerup", (event) => {
-    const pointer = event as PointerEvent;
-    if (pointer.pointerId !== id) return;
-    id = -1;
-    const dx = pointer.clientX - x;
-    const dy = pointer.clientY - y;
-    if (dx * dx + dy * dy <= TAP_SLOP * TAP_SLOP) {
-      tappedAt = performance.now();
-      handler(pointer);
-    }
-  });
-  node.addEventListener("pointercancel", () => {
-    id = -1;
-  });
-  return {
-    recent: (ms = GHOST_CLICK_MS) => performance.now() - tappedAt < ms,
-  };
-}
-
-/**
- * A pointer-grammar DOUBLE press: two taps (per {@link onTap} — same pointer, within the slop, no
- * drag) within `within` ms (default 350) on the same node. The dblclick substitute for touch —
- * iOS never synthesizes dblclick from taps (it zooms instead). The pair resets after firing, so a
- * third tap starts fresh; a drag or a cancel between two taps is not a tap and breaks the pair.
- */
-export function onDoublePress(
-  node: Element,
-  handler: (event: PointerEvent) => void,
-  options: { readonly within?: number } = {},
-): void {
-  const within = options.within ?? 350;
-  let last = Number.NEGATIVE_INFINITY;
-  onTap(node, (event) => {
-    const now = performance.now();
-    if (now - last < within) {
-      last = Number.NEGATIVE_INFINITY;
-      handler(event);
-    } else {
-      last = now;
-    }
-  });
-}
-
-/**
- * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
- * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
- * leaving). This is the allocation-light default and intentionally returns no manual stop; use
- * {@link bindManual} when the binding must end before the node's lifetime. Options merge over the
- * target default, so `{ target: other }` can re-attribute.
- */
+/** Install a tracked DOM effect with node ownership and explicit early teardown. */
 export function bind(
   node: Node,
   fn: CleanupEffectFn,
-  options?: EffectOptions,
-): void;
-export function bind(node: Node, fn: EffectFn, options?: EffectOptions): void;
-export function bind(node: Node, fn: EffectFn, options?: EffectOptions): void {
-  // A view binding has one lifetime: its node. Keep it on the allocation-light
-  // ownership path instead of manufacturing a manual stop handle and a
-  // RegisteredStop wrapper that almost every caller discards.
-  ownResource(node, domEffect(fn, "dom.bind", node, options));
-}
-
-/**
- * A node-owned binding with an explicit early-stop handle. Most views want
- * {@link bind}; use this only when the binding must end before its node dies.
- */
-export function bindManual(
-  node: Node,
-  fn: CleanupEffectFn,
-  options?: EffectOptions,
+  options?: BindingOptions,
 ): Stop;
-export function bindManual(
-  node: Node,
-  fn: EffectFn,
-  options?: EffectOptions,
-): Stop;
-export function bindManual(
-  node: Node,
-  fn: EffectFn,
-  options?: EffectOptions,
-): Stop {
+export function bind(node: Node, fn: EffectFn, options?: BindingOptions): Stop;
+export function bind(node: Node, fn: EffectFn, options?: BindingOptions): Stop {
+  if (options?.signal?.aborted) return () => {};
   const handle = domEffect(fn, "dom.bind", node, options);
-  return onUnmount(node, () => stopEffectNode(handle));
+  return ownStoppableResource(node, handle, options?.signal);
 }
 
 function applyProps(
@@ -844,10 +659,6 @@ function applyProps(
           if (htmlElement) (node as HTMLElement).className = next;
           else node.setAttribute("class", next);
         }
-      } else if (!classApplied && isClassBinding(value)) {
-        // The new node cannot already have this class. Skip a DOM read before installing the
-        // reactive binding (the direct classed(existingNode, ...) form still reads its baseline).
-        bindClass(node, brand<PropBinding>(value), undefined, false);
       } else {
         applyClassProp(node, value as ClassProp);
       }
@@ -876,17 +687,20 @@ function applyProps(
       own(node, value as Stop);
       continue;
     }
-    if (isAttrBinding(value)) {
-      const binding = brand<PropBinding>(value);
-      applyAttrBinding(node, binding.name, binding.read);
-      continue;
-    }
-    if ((name === "ontap" || name === "onTap") && typeof value === "function") {
-      onTap(node, value as (event: PointerEvent) => void);
-      continue;
+    if (
+      name === "ontap" ||
+      name === "onTap" ||
+      name.toLowerCase() === "ondoublepress"
+    ) {
+      throw new TypeError("Install tap behavior from loom/events.");
     }
     if (name.startsWith("on") && typeof value === "function") {
-      node.addEventListener(eventName(name), value as EventListener);
+      const type = eventName(name);
+      const listener = (event: Event): void => {
+        untrack(() => (value as EventListener)(event));
+      };
+      node.addEventListener(type, listener);
+      own(node, () => node.removeEventListener(type, listener));
       continue;
     }
     if (isFormControlProperty(node, name)) {
@@ -990,10 +804,6 @@ function applyClassProp(node: Element, value: ClassProp): void {
     appendClassName(node, value);
     return;
   }
-  if (isClassBinding(value)) {
-    bindClass(node, brand<PropBinding>(value));
-    return;
-  }
   if (!isPlainRecord(value)) return;
   for (const name in value) {
     if (!Object.hasOwn(value, name)) continue;
@@ -1024,10 +834,6 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     node.setAttribute("style", value);
     return;
   }
-  if (isStyleBinding(value)) {
-    bindStyle(node, brand<PropBinding>(value));
-    return;
-  }
   if (!isPlainRecord(value)) return;
   const styleDecl = (node as StyledElement).style;
   for (const name in value) {
@@ -1035,7 +841,7 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     const styleValue = value[name];
     const property = cssPropName(name);
     if (typeof styleValue === "function") {
-      bindStyle(node, {
+      installStyleBinding(node, {
         kind: "style",
         name: property,
         read: styleValue as Read<unknown>,
@@ -1048,33 +854,31 @@ function applyStyleProp(node: Element, value: StyleProp): void {
 
 function applyClassMapValue(node: Element, name: string, value: unknown): void {
   if (typeof value === "function") {
-    bindClass(node, { kind: "class", name, read: value as Read<unknown> });
+    installClassBinding(node, {
+      kind: "class",
+      name,
+      read: value as Read<unknown>,
+    });
   } else if (value) {
     node.classList.add(name);
   }
 }
 
-function bindClass(
+function installClassBinding(
   node: Element,
   binding: PropBinding,
-  options?: EffectOptions,
-  initial?: boolean,
-): void {
-  let previous =
-    initial === undefined ? hasClassName(node, binding.name) : initial;
-  ownResource(
+  options?: BindingOptions,
+): Stop {
+  let previous = hasClassName(node, binding.name);
+  return bind(
     node,
-    (options === undefined ? domBindingEffect : domEffect)(
-      () => {
-        const next = Boolean(binding.read());
-        if (next === previous) return;
-        previous = next;
-        node.classList.toggle(binding.name, next);
-      },
-      `dom.class.${binding.name}`,
-      node,
-      options,
-    ),
+    () => {
+      const next = Boolean(binding.read());
+      if (next === previous) return;
+      node.classList.toggle(binding.name, next);
+      previous = next;
+    },
+    { label: `dom.class.${binding.name}`, ...options },
   );
 }
 
@@ -1082,9 +886,9 @@ function applyAttrBinding(
   node: Element,
   name: string,
   read: Read<unknown>,
-  options?: EffectOptions,
-): void {
-  bindReactiveValue(
+  options?: BindingOptions,
+): Stop {
+  return bindReactiveValue(
     node,
     `dom.attr.${name}`,
     () => attrValue(name, read()),
@@ -1170,13 +974,13 @@ function applyPropertyBinding(
   );
 }
 
-function bindStyle(
+function installStyleBinding(
   node: Element,
   binding: PropBinding,
-  options?: EffectOptions,
-): void {
+  options?: BindingOptions,
+): Stop {
   const styleDecl = (node as StyledElement).style;
-  bindReactiveValue(
+  return bindReactiveValue(
     node,
     `dom.style.${binding.name}`,
     () => attrValue(binding.name, binding.read()),
@@ -1197,22 +1001,18 @@ function bindReactiveValue<T>(
   read: () => T,
   apply: (value: T) => void,
   initial?: T,
-  options?: EffectOptions,
-): void {
+  options?: BindingOptions,
+): Stop {
   let previous = initial;
-  ownResource(
+  return bind(
     node,
-    domEffect(
-      () => {
-        const next = read();
-        if (next === previous) return;
-        previous = next;
-        apply(next);
-      },
-      label,
-      node,
-      options,
-    ),
+    () => {
+      const next = read();
+      if (next === previous) return;
+      apply(next);
+      previous = next;
+    },
+    { label, ...options },
   );
 }
 
@@ -1246,72 +1046,14 @@ function eventName(name: string): string {
   return event === "doubleclick" ? "dblclick" : event;
 }
 
-function isAttrBinding(value: unknown): value is AttrBinding {
-  return isBinding(value, "attr");
-}
-
-function isClassBinding(value: unknown): value is ClassBinding {
-  return isBinding(value, "class");
-}
-
-function isStyleBinding(value: unknown): value is StyleBinding {
-  return isBinding(value, "style");
-}
-
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isBinding<TKind extends "attr" | "class" | "style">(
-  value: unknown,
-  kind: TKind,
-): value is {
-  readonly kind: TKind;
-  readonly name: string;
-  readonly read: Read<unknown>;
-} {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { readonly kind?: unknown }).kind === kind &&
-    typeof (value as { readonly name?: unknown }).name === "string" &&
-    typeof (value as { readonly read?: unknown }).read === "function"
-  );
-}
-
 export { type BindValueOptions, bindValue } from "./bind-value.js";
-export { type CaretPoint, caretAtPoint } from "./caret-at-point.js";
-export { coalesced } from "./coalesced.js";
-export { connected } from "./connected.js";
-export { deadline } from "./deadline.js";
-export {
-  type FoldHeightOptions,
-  foldHeight,
-} from "./fold-height.js";
-export { type FrameRequest, frameCoalesced } from "./frame-coalesced.js";
-export {
-  type HoverClass,
-  type HoverClassOptions,
-  hoverClass,
-} from "./hover-class.js";
-export { focusWithin, hovered } from "./hovered.js";
 export { keyedChild } from "./keyed-child.js";
-export { listen } from "./listen.js";
-export { mediaRead } from "./media-read.js";
 export { type MorphOptions, morph } from "./morph.js";
-export { afterFrames, nextFrame } from "./next-frame.js";
-export {
-  type IntersectionCallback,
-  type IntersectionOptions,
-  observeIntersection,
-} from "./observe-intersection.js";
-export {
-  type MutationsCallback,
-  observeMutation,
-} from "./observe-mutation.js";
-export { observeSize, type SizeCallback } from "./observe-size.js";
-export { type OffsetRect, offsetIn } from "./offset-in.js";
-export { onMount } from "./on-mount.js";
+export { type OnMountOptions, onMount } from "./on-mount.js";
 export {
   dispose,
   onUnmount,
@@ -1321,37 +1063,3 @@ export {
   resourceGroup,
   resume,
 } from "./ownership.js";
-export {
-  codecs,
-  type PersistedOptions,
-  persisted,
-  type StorageSlot,
-  type StorageSlotOptions,
-  storageSlot,
-} from "./persisted.js";
-export { placeAfter, positionOrdered } from "./place.js";
-export {
-  type PointerSessionEndReason,
-  type PointerSessionOptions,
-  startPointerSession,
-} from "./pointer-session.js";
-export { type PressClassOptions, pressClass } from "./press-class.js";
-export { pressed } from "./pressed.js";
-export {
-  nearestScroller,
-  type RevealAxis,
-  type RevealOptions,
-  reveal,
-  type ScrollOptions,
-  scrollCentered,
-  scrollNearest,
-  scrollParent,
-} from "./reveal.js";
-export {
-  type ScrollEdges,
-  type ScrollEdgesOptions,
-  scrollEdges,
-} from "./scroll-edges.js";
-export { type ScrollMemory, scrollMemory } from "./scroll-memory.js";
-export { settleAnimation } from "./settle-animation.js";
-export { settleTransition } from "./settle-transition.js";

@@ -1,5 +1,5 @@
+import { unsafeHtml, withRootAttributes } from "loom/html";
 import { describe, expect, it } from "vitest";
-import { unsafeHtml, withRootAttributes } from "./index.js";
 
 describe("withRootAttributes", () => {
   it('splices serialized attributes into the root tag; nullish drops; presence renders =""; children untouched', () => {
@@ -11,7 +11,6 @@ describe("withRootAttributes", () => {
       '<section class="x" data-b="2 &amp; 3" data-mark=""><p data-a="1">t</p></section>',
     );
   });
-
   it("merges named attributes with the joiner — the new value lands after the old", () => {
     const out = withRootAttributes(
       unsafeHtml('<div style="color: red" class="a">x</div>'),
@@ -22,7 +21,6 @@ describe("withRootAttributes", () => {
       '<div style="color: red; --k: 1" class="a b">x</div>',
     );
   });
-
   it("a merge name absent from the root serializes fresh; a rootless value throws", () => {
     const out = withRootAttributes(
       unsafeHtml("<div>x</div>"),
@@ -33,7 +31,6 @@ describe("withRootAttributes", () => {
     expect(() => withRootAttributes(unsafeHtml("plain"), { a: "1" })).toThrow();
   });
 });
-
 describe("withRootAttributes — the merge key is escaped as a literal", () => {
   it("a merge name with a regex metacharacter merges its own attribute, never a lookalike", () => {
     const out = withRootAttributes(

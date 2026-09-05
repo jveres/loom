@@ -1,5 +1,3 @@
-import "../src/core/defer.js";
-import { bench, describe } from "vitest";
 import {
   computed,
   configure,
@@ -8,16 +6,16 @@ import {
   scope,
   state,
   trigger,
-} from "../src/loom.js";
+} from "loom";
+import "../src/core/defer.js";
+import { bench, describe } from "vitest";
 
 const benchGlobal = globalThis as typeof globalThis & {
   __loomBenchmarkSink?: unknown;
 };
-
 // Focused benches for the hot paths flagged by the API/perf audit. Baselines to measure the fixes
 // against: deferred-queue O(n²), create-only WeakMap registration, trigger/mutate watcher alloc,
 // and deep scope pause/resume ancestor walks.
-
 // 1. Deferred queue — build the queue to N (deferEffect.includes ×N), then one drain (shift ×N).
 describe("deferred queue", () => {
   for (const N of [1000, 10000]) {
@@ -36,7 +34,6 @@ describe("deferred queue", () => {
       for (const s of stops) s();
     });
   }
-
   bench("10k deferred effects: budgeted continuation chunks", () => {
     const pending: Array<(hasBudget: () => boolean) => void> = [];
     configure({
@@ -45,7 +42,7 @@ describe("deferred queue", () => {
         return () => {};
       },
     });
-    const signals = Array.from({ length: 10_000 }, () => state(0));
+    const signals = Array.from({ length: 10000 }, () => state(0));
     const stops = signals.map((signal) =>
       effect(() => void signal(), { defer: true }),
     );
@@ -57,27 +54,25 @@ describe("deferred queue", () => {
     for (const stop of stops) stop();
   });
 });
-
 // 2. Create-only throughput — node creation + the always-on stateNodes/computedNodes/effectNodes.
 describe("create-only", () => {
   bench("create 10k states", () => {
     const out: unknown[] = [];
-    for (let i = 0; i < 10_000; i++) out.push(state(i));
+    for (let i = 0; i < 10000; i++) out.push(state(i));
     benchGlobal.__loomBenchmarkSink = out;
   });
   bench("create 10k computeds", () => {
     const s = state(0);
     const out: unknown[] = [];
-    for (let i = 0; i < 10_000; i++) out.push(computed(() => s()));
+    for (let i = 0; i < 10000; i++) out.push(computed(() => s()));
     benchGlobal.__loomBenchmarkSink = out;
   });
   bench("create 10k effects", () => {
     const s = state(0);
-    const stops = Array.from({ length: 10_000 }, () => effect(() => void s()));
+    const stops = Array.from({ length: 10000 }, () => effect(() => void s()));
     for (const st of stops) st();
   });
 });
-
 // 3. mutate/trigger-heavy object updates — the per-call temporary watcher allocation.
 describe("mutate / trigger", () => {
   bench("mutate 50k object updates", () => {
@@ -86,7 +81,7 @@ describe("mutate / trigger", () => {
     const stop = effect(() => {
       sink = obj().n;
     });
-    for (let i = 0; i < 50_000; i++)
+    for (let i = 0; i < 50000; i++)
       mutate(obj, (o) => {
         o.n = i;
       });
@@ -96,11 +91,10 @@ describe("mutate / trigger", () => {
   bench("trigger 50k", () => {
     const obj = state({ n: 0 });
     const stop = effect(() => void obj());
-    for (let i = 0; i < 50_000; i++) trigger(obj);
+    for (let i = 0; i < 50000; i++) trigger(obj);
     stop();
   });
 });
-
 // 4. Deep scope pause/resume — scopePaused ancestor walk (notify-while-paused) + flushScope.
 describe("deep scope pause/resume", () => {
   bench("depth 50: dirty-while-paused + resume x300", () => {

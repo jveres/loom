@@ -14,9 +14,11 @@ export interface VirtualList<T> {
     /** Scroll so the row at `index` is centered in the viewport. */
     scrollToIndex(index: number): void;
     /** Detach listeners and clear mounted rows. */
-    destroy(): void;
+    stop(): void;
 }
 export interface VirtualListOptions<T> {
+    readonly signal?: AbortSignal;
+    readonly document?: Document;
     /** Uniform row height in pixels. */
     readonly rowHeight: number;
     /** Stable identity for an item, so a row can be reused across windows. */

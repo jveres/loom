@@ -1,2 +1,5 @@
 import type { Stop } from "../loom.js";
-export declare function onMount(node: Node, fn: (node: Node) => void): Stop;
+export interface OnMountOptions {
+    readonly signal?: AbortSignal;
+}
+export declare function onMount(node: Node, fn: (node: Node) => void, options?: OnMountOptions): Stop;

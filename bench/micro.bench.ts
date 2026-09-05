@@ -1,12 +1,11 @@
+import { computed, effect, state } from "loom";
 import { bench, describe } from "vitest";
-import { computed, effect, state } from "../src/loom.js";
 
 // Store results on globalThis so V8 cannot prove the benchmark's work is unobservable and fold the
 // loops away. A module-local impossible guard is not a sufficient black box for an optimizing JIT.
 const benchGlobal = globalThis as typeof globalThis & {
   __loomBenchmarkSink?: unknown;
 };
-
 // Isolates the per-call accessor cost (read entry, write entry) away from the chaos workload.
 describe("state accessor throughput", () => {
   // Rotate through independent closures with runtime-derived values. A single constant signal lets
@@ -16,7 +15,7 @@ describe("state accessor throughput", () => {
   );
   bench("read x100k (no sub)", () => {
     let x = 0;
-    for (let i = 0; i < 100_000; i++) {
+    for (let i = 0; i < 100000; i++) {
       const read = accessors[i & 1023] as (typeof accessors)[number];
       x += read();
     }
@@ -24,7 +23,7 @@ describe("state accessor throughput", () => {
   });
   bench("write x100k", () => {
     const salt = performance.now() | 0;
-    for (let i = 0; i < 100_000; i++) {
+    for (let i = 0; i < 100000; i++) {
       const write = accessors[i & 1023] as (typeof accessors)[number];
       write(i ^ salt);
     }
@@ -40,7 +39,7 @@ describe("state accessor throughput", () => {
     sink = d() as number;
   });
   bench("write->effect x50k", () => {
-    for (let i = 0; i < 50_000; i++) a(i);
+    for (let i = 0; i < 50000; i++) a(i);
     benchGlobal.__loomBenchmarkSink = sink;
   });
 });

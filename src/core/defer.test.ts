@@ -1,5 +1,5 @@
+import { configure, effect, scope, state } from "loom";
 import { describe, expect, it, vi } from "vitest";
-import { configure, effect, scope, state } from "../loom.js";
 import "./defer.js";
 
 describe("deferred synchronous scheduling", () => {
@@ -13,7 +13,6 @@ describe("deferred synchronous scheduling", () => {
     const shared = state(0);
     let parentRuns = 0;
     let childRuns = 0;
-
     const stop = effect(
       () => {
         // Subscribe the child first, making propagation encounter it before the parent. The
@@ -30,7 +29,6 @@ describe("deferred synchronous scheduling", () => {
       },
       { defer: true },
     );
-
     try {
       expect({ parentRuns, childRuns }).toEqual({
         parentRuns: 1,
@@ -46,7 +44,6 @@ describe("deferred synchronous scheduling", () => {
       configure(previous);
     }
   });
-
   it("notifies every sibling before an inline scheduler can commit their shared state", () => {
     const previous = configure({
       deferScheduler: (drain) => {
@@ -59,7 +56,6 @@ describe("deferred synchronous scheduling", () => {
     const right: number[] = [];
     const stopLeft = effect(() => left.push(shared()), { defer: true });
     const stopRight = effect(() => right.push(shared()), { defer: true });
-
     try {
       shared(1);
       expect(left).toEqual([0, 1]);
@@ -70,7 +66,6 @@ describe("deferred synchronous scheduling", () => {
       configure(previous);
     }
   });
-
   it("yields a zero-budget inline continuation instead of rescheduling recursively", async () => {
     vi.useFakeTimers();
     let schedules = 0;
@@ -84,14 +79,11 @@ describe("deferred synchronous scheduling", () => {
     const value = state(0);
     const seen: number[] = [];
     const stop = effect(() => seen.push(value()), { defer: true });
-
     try {
       value(1);
       expect(schedules).toBe(1);
       expect(seen).toEqual([0]);
-
       await vi.runOnlyPendingTimersAsync();
-
       expect(schedules).toBe(2);
       expect(seen).toEqual([0, 1]);
     } finally {
@@ -100,7 +92,6 @@ describe("deferred synchronous scheduling", () => {
       vi.useRealTimers();
     }
   });
-
   it("drains a long cascading update without recursive scheduler entry", () => {
     const previous = configure({
       deferScheduler: (drain) => {
@@ -108,10 +99,9 @@ describe("deferred synchronous scheduling", () => {
         return () => {};
       },
     });
-    const length = 3_000;
+    const length = 3000;
     const values = Array.from({ length }, () => state(0));
     const stops: Array<() => void> = [];
-
     try {
       for (let index = 0; index < length - 1; index++) {
         const current = values[index] as ReturnType<typeof state<number>>;
@@ -125,7 +115,6 @@ describe("deferred synchronous scheduling", () => {
           ),
         );
       }
-
       expect(() => {
         (values[0] as ReturnType<typeof state<number>>)(1);
       }).not.toThrow();
@@ -135,7 +124,6 @@ describe("deferred synchronous scheduling", () => {
       configure(previous);
     }
   });
-
   it("does not skip a sibling removed from a resumed scope during enqueue", () => {
     const previous = configure({
       deferScheduler: (drain) => {
@@ -164,13 +152,11 @@ describe("deferred synchronous scheduling", () => {
         { defer: true },
       );
     });
-
     try {
       owner.pause();
       a(1);
       b(1);
       owner.resume();
-
       expect({ aRuns, bRuns }).toEqual({ aRuns: 2, bRuns: 2 });
     } finally {
       owner.stop();

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
+import { findScroller, reveal } from "loom/layout";
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { nearestScroller, reveal, scrollParent } from "./index.js";
 
 // happy-dom has no layout: rects and scroll metrics are stubbed.
 const rect = (el: Element, top: number, bottom: number): void => {
@@ -24,11 +25,9 @@ const scrollBox = (el: HTMLElement, slack: boolean): void => {
   });
   Object.defineProperty(el, "clientHeight", { value: 100, configurable: true });
 };
-
 afterEach(() => {
   document.body.replaceChildren();
 });
-
 describe("reveal", () => {
   it("scrollParent stops at the body; nearestScroller wants slack", () => {
     const outer = document.createElement("div");
@@ -38,14 +37,16 @@ describe("reveal", () => {
     outer.append(inner);
     document.body.append(outer);
     document.body.style.overflowY = "auto";
-    expect(scrollParent(leaf)).toBeNull();
-
+    expect(findScroller(leaf, {})).toBeNull();
     scrollBox(inner, false);
     scrollBox(outer, true);
-    expect(scrollParent(leaf)).toBe(inner);
-    expect(nearestScroller(leaf)).toBe(outer); // inner has no slack
+    expect(findScroller(leaf, {})).toBe(inner);
+    expect(
+      findScroller(leaf, {
+        requireOverflow: true,
+      }),
+    ).toBe(outer); // inner has no slack
   });
-
   it("scrolls the BOX only, by the minimal 'nearest' amount, and centers on request", () => {
     const box = document.createElement("div");
     const row = document.createElement("div");
@@ -54,22 +55,18 @@ describe("reveal", () => {
     scrollBox(box, true);
     box.scrollTop = 50;
     rect(box, 0, 100);
-
     rect(row, 120, 140); // below the bottom edge
     expect(reveal(row)).toBe(true);
     expect(box.scrollTop).toBe(90);
-
     rect(row, -30, -10); // above the top edge
     reveal(row);
     expect(box.scrollTop).toBe(60);
-
     rect(row, 20, 40); // visible: nearest does nothing
     reveal(row);
     expect(box.scrollTop).toBe(60);
     reveal(row, { align: "center" });
     expect(box.scrollTop).toBe(40);
   });
-
   it("ifHidden leaves any visible sliver alone; a selector picks the scroller; no scroller = no move", () => {
     const box = document.createElement("div");
     box.className = "pane";
@@ -85,13 +82,11 @@ describe("reveal", () => {
     rect(row, 100, 300); // fully hidden
     reveal(row, { ifHidden: true, scroller: ".pane" });
     expect(box.scrollTop).toBe(110);
-
     const loose = document.createElement("div");
     document.body.append(loose);
     expect(reveal(loose)).toBe(false);
   });
 });
-
 describe("reveal on the x axis (Aug 26 — a tab strip)", () => {
   const rectX = (el: Element, left: number, right: number): void => {
     Object.defineProperty(el, "getBoundingClientRect", {
@@ -120,9 +115,18 @@ describe("reveal on the x axis (Aug 26 — a tab strip)", () => {
       value: 100,
       configurable: true,
     });
-    expect(scrollParent(tab)).toBeNull(); // y: not a scroller
-    expect(scrollParent(tab, "x")).toBe(strip);
-    expect(nearestScroller(tab, "x")).toBe(strip);
+    expect(findScroller(tab, {})).toBeNull(); // y: not a scroller
+    expect(
+      findScroller(tab, {
+        axis: "x",
+      }),
+    ).toBe(strip);
+    expect(
+      findScroller(tab, {
+        axis: "x",
+        requireOverflow: true,
+      }),
+    ).toBe(strip);
     rectX(strip, 0, 100);
     rectX(tab, 90, 130); // clipped on the right by 30
     strip.scrollLeft = 0;

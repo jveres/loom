@@ -1,10 +1,11 @@
-import { type Read } from "../loom.js";
+import type { Read } from "../loom.js";
 /** Called untracked for a reused key whose item changed by reference/value (===). */
 export type ListUpdate<T> = (node: Element, item: T, previous: T) => void;
 export interface EachOptions<T> {
     readonly update?: ListUpdate<T>;
 }
 export interface ListOptions<T> extends EachOptions<T> {
+    readonly signal?: AbortSignal;
     readonly key: (item: T) => string | number;
     readonly render: (item: T, key: string) => Element;
     readonly reorder?: Read<boolean>;

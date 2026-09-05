@@ -1,5 +1,6 @@
+import { effect, state } from "loom";
+import { weakMemo } from "loom/model";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { effect, state, weakMemo } from "./index.js";
 
 describe("weakMemo", () => {
   it("computes once per key object and recomputes when the version moves", () => {
@@ -16,7 +17,6 @@ describe("weakMemo", () => {
     expect(memo(a)).toBe(2);
     expect(compute).toHaveBeenCalledTimes(3);
   });
-
   it("reads the version UNTRACKED — a lookup inside an effect never subscribes it", () => {
     const version = state(0);
     const memo = weakMemo((key: { n: number }) => key.n, version);
@@ -30,7 +30,6 @@ describe("weakMemo", () => {
     version(2);
     expect(runs).toBe(1);
   });
-
   it("works without a version — a plain per-object memo", () => {
     const compute = vi.fn((key: object) => Object.keys(key).length);
     const memo = weakMemo(compute);
@@ -39,7 +38,6 @@ describe("weakMemo", () => {
     memo(key);
     expect(compute).toHaveBeenCalledTimes(1);
   });
-
   it("never subscribes callers to reads made during cache computation", () => {
     const input = state(1);
     const version = state(0);
@@ -52,14 +50,12 @@ describe("weakMemo", () => {
       seen.push(memo(key));
     });
     onTestFinished(stop);
-
     input(2);
     version(1);
     expect(seen).toEqual([1]);
     refresh(1);
     input(3);
     refresh(2);
-
     expect(seen).toEqual([1, 2, 2]);
   });
 });

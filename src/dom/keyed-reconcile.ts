@@ -1,4 +1,5 @@
-import { type Read, untrack } from "../loom.js";
+import { untrack } from "../core/tracking.js";
+import type { Read } from "../loom.js";
 import { removeNodes, withConstructionRollback } from "./ownership-base.js";
 import { positionOrdered } from "./place.js";
 
@@ -10,6 +11,7 @@ export interface EachOptions<T> {
 }
 
 export interface ListOptions<T> extends EachOptions<T> {
+  readonly signal?: AbortSignal;
   readonly key: (item: T) => string | number;
   readonly render: (item: T, key: string) => Element;
   readonly reorder?: Read<boolean>;
@@ -52,7 +54,7 @@ export function reconcileKeyed<T>(
         let node = nodes.get(k);
         if (node === undefined) {
           const keyText = String(k);
-          node = render(items[index] as T, keyText);
+          node = untrack(() => render(items[index] as T, keyText));
           created.set(k, node);
           node.setAttribute("data-loom-key", keyText);
         } else if (updates && items[index] !== updates.items.get(k)) {

@@ -1,30 +1,3 @@
-// The REVEAL law: scroll the BOX only. `scrollIntoView` scrolls EVERY
-// scrollable ancestor, and any ancestor with slack yanks the page —
-// with the browser zoomed the window itself gains scroll range, and
-// selecting a row scrolled the whole app away. These helpers touch one
-// scroller's scroll position and nothing else.
-//
-// - scrollParent(el, axis?): the nearest overflow auto/scroll ancestor
-//   on the axis (y default), never the body or the document (the page
-//   is never a reveal target).
-// - nearestScroller(el, axis?): the nearest scroll ancestor WITH slack
-//   — the box a reveal can meaningfully move; null when nothing above
-//   scrolls, and then NOT scrolling is the law (a caller that must
-//   degrade to the window does so knowingly).
-// - scrollNearest(box, el, options?): scrollIntoView's "nearest" — the
-//   minimal scroll that shows el (taller-than-box aligns its nearer
-//   edge), with `margin` px of clearance (a fade mask, a sticky
-//   header) and an optional smooth `behavior`.
-// - scrollCentered(box, el, options?): land the eye — el's middle at
-//   the box's.
-// - reveal(el, options): the composed verb — `scroller` (an element, a
-//   closest() selector, or the nearest with slack), `align` ("nearest"
-//   default, "center"), `ifHidden` (only when NO sliver of el shows in
-//   the scrollport — a visible element must never move; a
-//   taller-than-viewport one would otherwise snap on every reveal),
-//   `axis` ("y" default, "x" for a strip), `margin`, `behavior`.
-//   Returns whether a scroller was found (false = nothing moved).
-
 export type RevealAxis = "x" | "y";
 
 export interface ScrollOptions {
@@ -41,29 +14,34 @@ export interface RevealOptions extends ScrollOptions {
   readonly ifHidden?: boolean;
 }
 
-export function scrollParent(
-  el: Element,
-  axis: RevealAxis = "y",
-): HTMLElement | null {
-  const body = el.ownerDocument.body;
-  for (let p = el.parentElement; p && p !== body; p = p.parentElement) {
-    const style = getComputedStyle(p);
-    const overflow = axis === "x" ? style.overflowX : style.overflowY;
-    if (overflow === "auto" || overflow === "scroll") return p;
-  }
-  return null;
+export interface FindScrollerOptions {
+  readonly axis?: RevealAxis;
+  readonly requireOverflow?: boolean;
 }
 
-export function nearestScroller(
+export function findScroller(
   el: Element,
-  axis: RevealAxis = "y",
+  options: FindScrollerOptions = {},
 ): HTMLElement | null {
-  for (let box = scrollParent(el, axis); box; box = scrollParent(box, axis)) {
-    const slack =
-      axis === "x"
-        ? box.scrollWidth > box.clientWidth
-        : box.scrollHeight > box.clientHeight;
-    if (slack) return box;
+  const body = el.ownerDocument.body;
+  const axis = options.axis ?? "y";
+  const realm = el.ownerDocument.defaultView ?? globalThis;
+  for (
+    let parent = el.parentElement;
+    parent && parent !== body;
+    parent = parent.parentElement
+  ) {
+    const style = realm.getComputedStyle(parent);
+    const overflow = axis === "x" ? style.overflowX : style.overflowY;
+    if (overflow !== "auto" && overflow !== "scroll") continue;
+    if (
+      options.requireOverflow &&
+      !(axis === "x"
+        ? parent.scrollWidth > parent.clientWidth
+        : parent.scrollHeight > parent.clientHeight)
+    )
+      continue;
+    return parent;
   }
   return null;
 }
@@ -110,7 +88,7 @@ const scrollBy = (
   else box.scrollTop += delta;
 };
 
-export function scrollNearest(
+function scrollNearest(
   box: HTMLElement,
   el: Element,
   options: ScrollOptions = {},
@@ -139,7 +117,7 @@ export function scrollNearest(
   }
 }
 
-export function scrollCentered(
+function scrollCentered(
   box: HTMLElement,
   el: Element,
   options: ScrollOptions = {},
@@ -159,7 +137,7 @@ export function reveal(el: Element, options: RevealOptions = {}): boolean {
   const box =
     typeof options.scroller === "string"
       ? el.closest<HTMLElement>(options.scroller)
-      : (options.scroller ?? nearestScroller(el, axis));
+      : (options.scroller ?? findScroller(el, { axis, requireOverflow: true }));
   if (!box) return false;
   if (options.ifHidden) {
     const { start, end, boxStart, boxEnd } = edges(box, el, axis, 0);

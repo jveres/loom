@@ -4,12 +4,6 @@
 // opt-in surface at `loom/observe`. The implementation lives in ./loom.ts; this file just curates
 // what the default import exposes.
 
-export {
-  type KeyedStates,
-  keyedStates,
-  type TypedKeyedStates,
-} from "./keyed-states.js";
-export { lens } from "./lens.js";
 export type {
   CleanupEffectFn,
   ConfigureOptions,
@@ -45,10 +39,3 @@ export {
   watch,
   writable,
 } from "./loom.js";
-export {
-  type Revisions,
-  type RevisionsOptions,
-  revisions,
-} from "./revisions.js";
-export { runtimeSlot } from "./runtime-slot.js";
-export { weakMemo } from "./weak-memo.js";

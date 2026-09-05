@@ -1,0 +1,21 @@
+{
+  "loom": 6000,
+  "loom/model": 3456,
+  "loom/dom": 9984,
+  "loom/browser": 6144,
+  "loom/events": 2304,
+  "loom/layout": 2560,
+  "loom/motion": 6400,
+  "loom/schedule": 3456,
+  "loom/storage": 3456,
+  "loom/virtual-list": 2100,
+  "loom/async": 3328,
+  "loom/defer": 3200,
+  "loom/observe": 4608,
+  "loom/devtools": 29952,
+  "loom/html": 1792,
+  "loom/jsx-runtime": 6144,
+  "loom/jsx-dev-runtime": 6144,
+  "loom/html/jsx-runtime": 1536,
+  "loom/html/jsx-dev-runtime": 1536
+}

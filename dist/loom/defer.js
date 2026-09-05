@@ -1,4 +1,4 @@
-import { a as e, u as t } from "./loom-C1mIDkOL.js";
+import { a as e, d as t } from "./loom-B6598vHo.js";
 //#region src/core/defer.ts
 var n = () => performance.now(), r = 1, i = 2, a = [], o = [], s = 0, c = !1, l = Infinity, u, d = !1, f = !1, p;
 function m(e) {

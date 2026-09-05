@@ -3,27 +3,23 @@ import { type EachOptions, type ListOptions } from "./keyed-reconcile.js";
 export type { EachOptions, ListOptions, ListUpdate, } from "./keyed-reconcile.js";
 export type Child = Node | Read<unknown> | DynamicChild | string | number | boolean | null | undefined | readonly Child[];
 declare const BINDING: unique symbol;
-export type AttrBinding = {
-    readonly [BINDING]: "attr";
-};
-export type ClassBinding = {
-    readonly [BINDING]: "class";
-};
-export type StyleBinding = {
-    readonly [BINDING]: "style";
-};
 export type DynamicChild = {
     readonly [BINDING]: "dynamic";
 };
-type ClassProp = string | ClassBinding | ClassMap | null | undefined | readonly ClassProp[];
+type ClassProp = string | ClassMap | null | undefined | readonly ClassProp[];
 type ClassMap = Record<string, unknown>;
 type StyleMap = Record<string, unknown>;
-type StyleProp = string | StyleMap | StyleBinding | null | undefined | readonly StyleProp[];
+type StyleProp = string | StyleMap | null | undefined | readonly StyleProp[];
+type StyledElement = Element & ElementCSSInlineStyle;
 export type ElementProps = Record<string, unknown> & {
     class?: ClassProp;
     className?: ClassProp;
     key?: string | number;
     style?: StyleProp;
+    ontap?: never;
+    onTap?: never;
+    onDoublePress?: never;
+    ondoublepress?: never;
 };
 declare const SVG_TAG_LIST: readonly ["svg", "g", "defs", "symbol", "use", "switch", "foreignObject", "image", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "textPath", "linearGradient", "radialGradient", "stop", "clipPath", "mask", "pattern", "marker", "filter", "feGaussianBlur", "feOffset", "feBlend", "feColorMatrix", "feComposite", "feFlood", "feMerge", "feMergeNode", "feMorphology", "feDropShadow", "feImage", "feTile", "feTurbulence", "feDisplacementMap"];
 export type SvgTagName = (typeof SVG_TAG_LIST)[number];
@@ -54,34 +50,16 @@ export declare function replaceChildren(parent: Node & ParentNode, ...children: 
 export declare function svgElement<K extends keyof SVGElementTagNameMap>(tag: K, props?: ElementProps | null, children?: Child): SVGElementTagNameMap[K];
 export declare function svgElement(tag: string, props?: ElementProps | null, children?: Child): SVGElement;
 export declare function text(read: Read<unknown>, options?: EffectOptions): Text;
-/**
- * The attribute as a signal — direction by first argument and arity:
- * `attr(name, read)` returns a JSX descriptor; `attr(el, name)` returns a reactive
- * `Read<string | null>` of the attribute's current value; `attr(el, name, read, options?)` binds
- * `read()` to the attribute, node-owned. Writes coerce like JSX attributes (nullish/false removes,
- * true sets empty). `options` relabels the binding or marks it `internal`.
- */
-export declare function attr(name: string, read: Read<unknown>): AttrBinding;
-export declare function attr(el: Element, name: string): Read<string | null>;
-export declare function attr(el: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
-/**
- * A class as a boolean signal — direction by first argument and arity:
- * `classed(name, read)` returns a JSX descriptor; `classed(el, name)` returns a reactive
- * `Read<boolean>` of the class's presence; `classed(el, name, read, options?)` toggles the class
- * from `read()`, node-owned.
- */
-export declare function classed(name: string, read: Read<unknown>): ClassBinding;
-export declare function classed(el: Element, name: string): Read<boolean>;
-export declare function classed(el: Element, name: string, read: Read<unknown>, options?: EffectOptions): void;
-/**
- * An inline style property as a signal — direction by first argument and arity:
- * `style(name, read)` returns a JSX descriptor; `style(el, prop)` returns a reactive
- * `Read<string>` of the inline value (empty string when unset); `style(el, prop, read, options?)`
- * binds `read()` to the property, node-owned. Property names accept camelCase or kebab-case.
- */
-export declare function style(name: string, read: Read<unknown>): StyleBinding;
-export declare function style(el: Element, prop: string): Read<string>;
-export declare function style(el: Element, prop: string, read: Read<unknown>, options?: EffectOptions): void;
+/** Options for a node-owned reactive binding. */
+export interface BindingOptions extends EffectOptions {
+    readonly signal?: AbortSignal;
+}
+/** Bind an attribute to a tracked read; nullish/false removes it. */
+export declare function bindAttr(el: Element, name: string, read: Read<unknown>, options?: BindingOptions): Stop;
+/** Bind one class token to the truthiness of a tracked read. */
+export declare function bindClass(el: Element, name: string, read: Read<unknown>, options?: BindingOptions): Stop;
+/** Bind an inline style property to a tracked read. */
+export declare function bindStyle(el: StyledElement, name: string, read: Read<unknown>, options?: BindingOptions): Stop;
 export declare function list<T>(container: Element, read: State<readonly T[]> | Read<readonly T[]>, options: ListOptions<NoInfer<T>>): Stop;
 /**
  * Conditional subtree, keyed on the truthiness of `cond`. Renders `render()` while truthy and the
@@ -107,75 +85,11 @@ export declare function match(selector: Read<string | number>, cases: Readonly<R
  * element.
  */
 export declare function each<T>(items: State<readonly T[]> | Read<readonly T[]>, render: (item: NoInfer<T>, key: string) => Element, key: (item: NoInfer<T>) => string | number, options?: EachOptions<NoInfer<T>>): Child;
-/**
- * Bind a robust tap handler. Unlike `click`, this is not dropped by iOS Safari when the DOM mutates
- * mid-gesture, because it is built from raw pointer events rather than a hit-test-synthesized click.
- * `handler` fires on pointerup when the release is the same pointer as the press and within
- * {@link TAP_SLOP} px of it (so a drag or scroll does not trigger it). Use the `ontap` JSX prop,
- * which routes here; this export is for imperative call sites (e.g. the inspector).
- */
-/** The tap's HANDLE: whether a tap was just handled — the window in
- *  which the browser's own synthesized click is the tap's ghost, so a
- *  click handler kept for keyboard activation can step aside. */
-export interface TapVoice {
-    /** True within `ms` (default {@link GHOST_CLICK_MS}) of the last handled tap. */
-    recent(ms?: number): boolean;
-}
-/** How long after a handled tap the platform's synthesized click still arrives (iOS Safari
- * delivers it well after pointerup). */
-export declare const GHOST_CLICK_MS = 600;
-export declare function onTap(node: Element, handler: (event: PointerEvent) => void): TapVoice;
-/**
- * A pointer-grammar DOUBLE press: two taps (per {@link onTap} — same pointer, within the slop, no
- * drag) within `within` ms (default 350) on the same node. The dblclick substitute for touch —
- * iOS never synthesizes dblclick from taps (it zooms instead). The pair resets after firing, so a
- * third tap starts fresh; a drag or a cancel between two taps is not a tap and breaks the pair.
- */
-export declare function onDoublePress(node: Element, handler: (event: PointerEvent) => void, options?: {
-    readonly within?: number;
-}): void;
-/**
- * Reactive DOM state that dies with this node: an `effect(fn)` that is target-attributed to the
- * node (inspector hover/highlight) and disposed with it (`remove()`, `dispose()`, a keyed row
- * leaving). This is the allocation-light default and intentionally returns no manual stop; use
- * {@link bindManual} when the binding must end before the node's lifetime. Options merge over the
- * target default, so `{ target: other }` can re-attribute.
- */
-export declare function bind(node: Node, fn: CleanupEffectFn, options?: EffectOptions): void;
-export declare function bind(node: Node, fn: EffectFn, options?: EffectOptions): void;
-/**
- * A node-owned binding with an explicit early-stop handle. Most views want
- * {@link bind}; use this only when the binding must end before its node dies.
- */
-export declare function bindManual(node: Node, fn: CleanupEffectFn, options?: EffectOptions): Stop;
-export declare function bindManual(node: Node, fn: EffectFn, options?: EffectOptions): Stop;
+/** Install a tracked DOM effect with node ownership and explicit early teardown. */
+export declare function bind(node: Node, fn: CleanupEffectFn, options?: BindingOptions): Stop;
+export declare function bind(node: Node, fn: EffectFn, options?: BindingOptions): Stop;
 export { type BindValueOptions, bindValue } from "./bind-value.js";
-export { type CaretPoint, caretAtPoint } from "./caret-at-point.js";
-export { coalesced } from "./coalesced.js";
-export { connected } from "./connected.js";
-export { deadline } from "./deadline.js";
-export { type FoldHeightOptions, foldHeight, } from "./fold-height.js";
-export { type FrameRequest, frameCoalesced } from "./frame-coalesced.js";
-export { type HoverClass, type HoverClassOptions, hoverClass, } from "./hover-class.js";
-export { focusWithin, hovered } from "./hovered.js";
 export { keyedChild } from "./keyed-child.js";
-export { listen } from "./listen.js";
-export { mediaRead } from "./media-read.js";
 export { type MorphOptions, morph } from "./morph.js";
-export { afterFrames, nextFrame } from "./next-frame.js";
-export { type IntersectionCallback, type IntersectionOptions, observeIntersection, } from "./observe-intersection.js";
-export { type MutationsCallback, observeMutation, } from "./observe-mutation.js";
-export { observeSize, type SizeCallback } from "./observe-size.js";
-export { type OffsetRect, offsetIn } from "./offset-in.js";
-export { onMount } from "./on-mount.js";
+export { type OnMountOptions, onMount } from "./on-mount.js";
 export { dispose, onUnmount, pause, type ResourceGroup, remove, resourceGroup, resume, } from "./ownership.js";
-export { codecs, type PersistedOptions, persisted, type StorageSlot, type StorageSlotOptions, storageSlot, } from "./persisted.js";
-export { placeAfter, positionOrdered } from "./place.js";
-export { type PointerSessionEndReason, type PointerSessionOptions, startPointerSession, } from "./pointer-session.js";
-export { type PressClassOptions, pressClass } from "./press-class.js";
-export { pressed } from "./pressed.js";
-export { nearestScroller, type RevealAxis, type RevealOptions, reveal, type ScrollOptions, scrollCentered, scrollNearest, scrollParent, } from "./reveal.js";
-export { type ScrollEdges, type ScrollEdgesOptions, scrollEdges, } from "./scroll-edges.js";
-export { type ScrollMemory, scrollMemory } from "./scroll-memory.js";
-export { settleAnimation } from "./settle-animation.js";
-export { settleTransition } from "./settle-transition.js";

@@ -1,0 +1,122 @@
+{
+  "loom": [
+    "batch",
+    "computed",
+    "configure",
+    "effect",
+    "mutate",
+    "poll",
+    "props",
+    "scope",
+    "source",
+    "state",
+    "trigger",
+    "untrack",
+    "update",
+    "watch",
+    "writable"
+  ],
+  "loom/model": ["keyedStates", "lens", "revisions", "weakMemo"],
+  "loom/dom": [
+    "bind",
+    "bindAttr",
+    "bindClass",
+    "bindStyle",
+    "bindValue",
+    "dispose",
+    "each",
+    "h",
+    "keyedChild",
+    "list",
+    "match",
+    "morph",
+    "onMount",
+    "onUnmount",
+    "pause",
+    "remove",
+    "replaceChildren",
+    "resourceGroup",
+    "resume",
+    "svgElement",
+    "template",
+    "text",
+    "when"
+  ],
+  "loom/browser": [
+    "attrRead",
+    "classRead",
+    "connected",
+    "focusWithin",
+    "hovered",
+    "mediaRead",
+    "observeIntersection",
+    "observeMutation",
+    "observeSize",
+    "pressed",
+    "scrollEdges",
+    "styleRead"
+  ],
+  "loom/events": [
+    "hoverClass",
+    "listen",
+    "onDoubleTap",
+    "onTap",
+    "pressClass",
+    "startPointerSession"
+  ],
+  "loom/layout": [
+    "caretAtPoint",
+    "findScroller",
+    "offsetIn",
+    "placeAfter",
+    "positionOrdered",
+    "reveal",
+    "scrollMemory"
+  ],
+  "loom/motion": [
+    "afterAnimation",
+    "afterTransition",
+    "heightFold",
+    "scrollFade"
+  ],
+  "loom/schedule": [
+    "afterFrames",
+    "eventOrTimeout",
+    "frameCoalescer",
+    "microtaskCoalescer",
+    "watchSettled"
+  ],
+  "loom/storage": ["bindStorage", "codecs", "storageSlot"],
+  "loom/virtual-list": ["virtualList"],
+  "loom/async": ["pending", "resource"],
+  "loom/defer": [],
+  "loom/observe": [
+    "channel",
+    "events",
+    "inspect",
+    "inspectResources",
+    "meter",
+    "sampleOf"
+  ],
+  "loom/devtools": [
+    "inspectorMounted",
+    "mountInspector",
+    "toggleInspector",
+    "unmountInspector"
+  ],
+  "loom/html": [
+    "attributeOf",
+    "escapeAttribute",
+    "escapeText",
+    "html",
+    "isHtml",
+    "renderToString",
+    "serializeAttributes",
+    "unsafeHtml",
+    "withRootAttributes"
+  ],
+  "loom/jsx-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"],
+  "loom/jsx-dev-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"],
+  "loom/html/jsx-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"],
+  "loom/html/jsx-dev-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"]
+}

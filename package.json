@@ -20,11 +20,13 @@
   "files": [
     "dist",
     "src",
+    "docs",
     "README.md",
+    "ARCHITECTURE.md",
     "LICENSE"
   ],
   "scripts": {
-    "test": "NODE_OPTIONS=--expose-gc vitest run",
+    "test": "vitest run --execArgv=--expose-gc",
     "check": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
@@ -33,12 +35,54 @@
     "build": "vite build --config vite.loom.config.ts && rm -rf dist/types && tsc -p tsconfig.build.json",
     "build:demo": "vite build",
     "size": "pnpm run build && node scripts/size.mjs",
-    "samples": "node scripts/samples.mjs"
+    "samples": "node scripts/samples.mjs",
+    "check:api": "node scripts/check-api.mjs",
+    "check:package": "node scripts/check-package.mjs"
   },
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
       "default": "./dist/loom/loom.js"
+    },
+    "./model": {
+      "types": "./dist/types/model.d.ts",
+      "default": "./dist/loom/model.js"
+    },
+    "./dom": {
+      "types": "./dist/types/dom/index.d.ts",
+      "default": "./dist/loom/dom.js"
+    },
+    "./browser": {
+      "types": "./dist/types/browser.d.ts",
+      "default": "./dist/loom/browser.js"
+    },
+    "./events": {
+      "types": "./dist/types/events.d.ts",
+      "default": "./dist/loom/events.js"
+    },
+    "./layout": {
+      "types": "./dist/types/layout.d.ts",
+      "default": "./dist/loom/layout.js"
+    },
+    "./motion": {
+      "types": "./dist/types/motion.d.ts",
+      "default": "./dist/loom/motion.js"
+    },
+    "./schedule": {
+      "types": "./dist/types/schedule.d.ts",
+      "default": "./dist/loom/schedule.js"
+    },
+    "./storage": {
+      "types": "./dist/types/storage.d.ts",
+      "default": "./dist/loom/storage.js"
+    },
+    "./virtual-list": {
+      "types": "./dist/types/dom/virtual-list.d.ts",
+      "default": "./dist/loom/virtual-list.js"
+    },
+    "./async": {
+      "types": "./dist/types/async/index.d.ts",
+      "default": "./dist/loom/async.js"
     },
     "./defer": {
       "types": "./dist/types/core/defer.d.ts",
@@ -48,33 +92,13 @@
       "types": "./dist/types/observe.d.ts",
       "default": "./dist/loom/observe.js"
     },
-    "./async": {
-      "types": "./dist/types/async/index.d.ts",
-      "default": "./dist/loom/async.js"
-    },
-    "./settle": {
-      "types": "./dist/types/settle.d.ts",
-      "default": "./dist/loom/settle.js"
-    },
-    "./dom": {
-      "types": "./dist/types/dom/index.d.ts",
-      "default": "./dist/loom/dom.js"
-    },
-    "./dom/virtual-list": {
-      "types": "./dist/types/dom/virtual-list.d.ts",
-      "default": "./dist/loom/dom/virtual-list.js"
-    },
-    "./dom/scroll-fade": {
-      "types": "./dist/types/dom/scroll-fade.d.ts",
-      "default": "./dist/loom/dom/scroll-fade.js"
-    },
-    "./dom/reveal": {
-      "types": "./dist/types/dom/reveal.d.ts",
-      "default": "./dist/loom/dom/reveal.js"
-    },
     "./devtools": {
       "types": "./dist/types/devtools/index.d.ts",
       "default": "./dist/loom/devtools.js"
+    },
+    "./html": {
+      "types": "./dist/types/html/index.d.ts",
+      "default": "./dist/loom/html.js"
     },
     "./jsx-runtime": {
       "types": "./dist/types/dom/jsx-runtime.d.ts",
@@ -83,10 +107,6 @@
     "./jsx-dev-runtime": {
       "types": "./dist/types/dom/jsx-runtime.d.ts",
       "default": "./dist/loom/jsx-runtime.js"
-    },
-    "./html": {
-      "types": "./dist/types/html/index.d.ts",
-      "default": "./dist/loom/html.js"
     },
     "./html/jsx-runtime": {
       "types": "./dist/types/html/jsx-runtime.d.ts",

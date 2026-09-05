@@ -10,9 +10,7 @@ import { buildChunkStates } from "./workload.js";
 const BLOCKS = 50; // 150 chunk states
 const WARMUP = 1;
 const RUNS = 5;
-
 type Engine = (container: HTMLElement, html: string) => void;
-
 // djb2, as in markdown-viewer's hash-skip layer.
 function hash(text: string): number {
   let value = 5381;
@@ -21,18 +19,15 @@ function hash(text: string): number {
   }
   return value >>> 0;
 }
-
 const idiomorphFull: Engine = (container, html) => {
   Idiomorph.morph(container, html, { morphStyle: "innerHTML" });
 };
-
 const loomFull: Engine = (container, html) => {
   // same tag as the live container — loom's morph replaces the root on a tag mismatch
   const temp = document.createElement("article");
   temp.innerHTML = html;
   morph(container, temp);
 };
-
 // markdown-viewer's streaming layer, engine-agnostic: hash top-level blocks,
 // hand only the changed one(s) to the engine. `blockMorph` patches one
 // existing block to match its replacement.
@@ -61,15 +56,12 @@ function skipLayer(blockMorph: (old: Element, next: Element) => void): Engine {
     hashes.set(container, nextHashes);
   };
 }
-
 const idiomorphSkip: Engine = skipLayer((old, next) => {
   Idiomorph.morph(old, next, { morphStyle: "outerHTML" });
 });
-
 const loomSkip: Engine = skipLayer((old, next) => {
   morph(old, next);
 });
-
 // The migration shape: skip-layer + a protected streaming cursor injected by an "enhancer" after
 // every chunk (markdown-viewer's data-morph-ignore contract) — the cursor must survive each morph.
 const protectCursor = (element: Element): boolean =>
@@ -92,15 +84,17 @@ const loomSkipCursor: Engine = (container, html) => {
 const skipLayerCursor: Engine = skipLayer((old, next) => {
   morph(old, next, { skip: protectCursor });
 });
-
-const engines: Array<{ name: string; run: Engine; cursor?: boolean }> = [
+const engines: Array<{
+  name: string;
+  run: Engine;
+  cursor?: boolean;
+}> = [
   { name: "idiomorph full", run: idiomorphFull },
   { name: "loom full", run: loomFull },
   { name: "idiomorph + skip-layer", run: idiomorphSkip },
   { name: "loom + skip-layer", run: loomSkip },
   { name: "loom + skip-layer + cursor", run: loomSkipCursor, cursor: true },
 ];
-
 function runEngine(engine: Engine, states: string[], cursor = false): number {
   const arena = document.getElementById("arena") as HTMLElement;
   const container = document.createElement("article");
@@ -123,16 +117,17 @@ function runEngine(engine: Engine, states: string[], cursor = false): number {
   arena.replaceChildren();
   return total;
 }
-
 function median(samples: number[]): number {
   const sorted = samples.slice().sort((a, b) => a - b);
   return sorted[sorted.length >> 1] as number;
 }
-
 async function runAll(): Promise<void> {
   const status = document.getElementById("status") as HTMLElement;
   const states = buildChunkStates(BLOCKS);
-  const results: Array<{ name: string; medianMs: number }> = [];
+  const results: Array<{
+    name: string;
+    medianMs: number;
+  }> = [];
   for (const { name, run, cursor } of engines) {
     status.textContent = `running ${name}…`;
     await new Promise((resolve) => setTimeout(resolve, 30));
@@ -154,7 +149,6 @@ async function runAll(): Promise<void> {
   (document.getElementById("results-json") as HTMLElement).textContent =
     JSON.stringify(results);
 }
-
 (document.getElementById("run") as HTMLButtonElement).addEventListener(
   "click",
   () =>

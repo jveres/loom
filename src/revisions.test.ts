@@ -1,19 +1,17 @@
+import { batch, computed, effect, scope, state } from "loom";
+import { revisions } from "loom/model";
 import { describe, expect, it, onTestFinished } from "vitest";
-import { batch, computed, effect, scope, state } from "./loom.js";
-import { revisions } from "./revisions.js";
 
 describe("revisions", () => {
   it("rejects an empty separator before ancestor traversal", () => {
     expect(() => revisions({ separator: "" })).toThrow(RangeError);
   });
-
   it("prunes only matching idle paths and reports retained size", () => {
     const bus = revisions();
     bus.read("old.a");
     bus.read("old.b");
     bus.read("keep");
     bus.invalidate("old.a");
-
     expect(bus.prune("old.")).toBe(2);
     expect(bus.size).toBe(1);
     expect(bus.read("old.a")).toBe(0);
@@ -21,7 +19,6 @@ describe("revisions", () => {
     expect(bus.prune()).toBe(1);
     expect(bus.size).toBe(0);
   });
-
   it("keeps direct, computed, and paused subscribers on their original cells", () => {
     const bus = revisions();
     const direct: number[] = [];
@@ -44,14 +41,12 @@ describe("revisions", () => {
     });
     onTestFinished(sleeper.stop);
     sleeper.pause();
-
     expect(bus.prune()).toBe(0);
     batch(() => {
       bus.invalidate("direct", "derived", "paused");
       expect(bus.prune()).toBe(0);
     });
     sleeper.resume();
-
     expect(direct).toEqual([0, 1]);
     expect(derived).toEqual([0, 1]);
     expect(paused).toEqual([0, 1]);
@@ -59,7 +54,6 @@ describe("revisions", () => {
     sleeper.stop();
     expect(bus.prune()).toBe(3);
   });
-
   it("pruning does not subscribe its caller and can release abandoned branches", () => {
     const bus = revisions();
     const branch = state(true);
@@ -73,12 +67,10 @@ describe("revisions", () => {
       prunes++;
     });
     onTestFinished(stop);
-
     bus.invalidate("left");
     expect(prunes).toBe(1);
     branch(false);
     expect(bus.prune()).toBe(1);
-
     expect(bus.size).toBe(1);
     expect(bus.prune()).toBe(0);
   });
@@ -104,19 +96,15 @@ describe("revisions", () => {
       }),
     ];
     expect(runs).toEqual({ root: 1, a: 1, ab: 1, ax: 1 });
-
     bus.invalidate("a.b.c");
     expect(runs).toEqual({ root: 2, a: 2, ab: 2, ax: 1 });
-
     bus.invalidate("a.x");
     expect(runs).toEqual({ root: 3, a: 3, ab: 2, ax: 2 });
-
     // A subtree clear touching several leaves runs each dependent once.
     bus.invalidate("a.b.c", "a.b.d", "a.x");
     expect(runs).toEqual({ root: 4, a: 4, ab: 3, ax: 3 });
     for (const stop of stops) stop();
   });
-
   it("the one-key form: read('') / invalidate('')", () => {
     const bus = revisions();
     let runs = 0;
@@ -129,7 +117,6 @@ describe("revisions", () => {
     expect(runs).toBe(3);
     stop();
   });
-
   it("honours a custom separator", () => {
     const bus = revisions({ separator: "/" });
     let runs = 0;

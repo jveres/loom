@@ -1,6 +1,7 @@
 import type { Stop } from "../loom.js";
 export type PointerSessionEndReason = "pointerup" | "pointercancel" | "lostpointercapture" | "stopped";
 export interface PointerSessionOptions {
+    readonly signal?: AbortSignal;
     /** Receives matching pointer moves while the session is active. */
     readonly move: (event: PointerEvent) => void;
     /** Runs once, after listeners and capture have been released. */

@@ -12,7 +12,15 @@ import {
   source,
   untrack,
 } from "loom";
-import { attr, bind, type Child, text, when } from "loom/dom";
+import {
+  bind,
+  bindAttr,
+  type Child,
+  pause,
+  resume,
+  text,
+  when,
+} from "loom/dom";
 import {
   events,
   type FlushSample,
@@ -34,21 +42,20 @@ const GAUGE_ARC = GAUGE_C * 0.75; // 270° gauge
 const POLL_MS = 120;
 const POLL_S = POLL_MS / 1000;
 const LAG_MS = 200;
-
 /* ---- module state ---- */
 // Set by wireStats so renderActiveTab() can read the active tab + minimized state without importing it.
 let activeTabFn: () => TabId | undefined = () => undefined;
 let isMinimizedFn: () => boolean = () => false;
-
 let heartbeat: Polled<number> | null = null;
 let lagTimer: ReturnType<typeof setInterval> | null = null;
 let rafHandle: number | null = null;
 // The stats tab's scope: paused when its tab isn't the active one (so a hidden subtree does no work).
+let statsRoot: HTMLElement | null = null;
+let statsPaused = false;
 let statsScope: Scope | null = null;
 // Advances every tick — the heartbeat's changing value, so every pulse() binding re-runs per poll;
 // the value-dedup leaves the display:none-hidden Info bindings asleep until that tab is shown.
 let metricSeq = 0;
-
 // A pull-based meter on the runtime's built-in `events`; poll() drains it every tick for the
 // smoothed per-second rates. The meter is a scope resource, so minimizing detaches it.
 let metricsMeter: Meter | null = null; // count view: the per-channel rates
@@ -62,7 +69,6 @@ let createRate = 0;
 let disposeRate = 0;
 let lastFlushBatch = 0;
 let lastFlushMs = 0;
-
 // Frame rate / frame times (rAF), main-thread lag (timer), web-vitals (PerformanceObserver).
 let fps = 0;
 let fpsReady = false;
@@ -75,20 +81,17 @@ let lag = 0;
 let lagPeak = 0;
 let lagExpected = 0;
 let lagWasHidden = false; // tab was hidden during the current inter-tick interval (see startMetrics)
-
 let clsSource: Read<number> | null = null;
 let lcpSource: Read<number> | null = null;
 let inpSource: Read<number> | null = null;
 let longTasksSource: Read<number> | null = null;
 let heapSource: Polled<number> | null = null;
-
 // Derived health, recomputed each poll; the gauge / FPS / label bindings read these.
 let score = 100;
 let healthKey = "";
 let healthLabel = "";
 let healthReady = false;
 let fpsKey = "";
-
 // Live resource census, recomputed once per poll while the Info tab is visible.
 let nodeStates = 0;
 let nodeComputeds = 0;
@@ -98,14 +101,12 @@ let nodeSources = 0;
 let nodeScopes = 0;
 let nodeChannels = 0;
 let nodeUnread = 0;
-
 /* ---- binding helpers ---- */
 // Read a lazy web-vital source's value; reading it inside a binding is what wires its
 // PerformanceObserver on first use. 0 while the source isn't created yet.
 function vital(src: Read<number> | null): number {
   return src?.() ?? 0;
 }
-
 // Read the heartbeat (so the binding re-runs each poll) then return the current value.
 function pulse<T>(read: () => T): () => T {
   return () => {
@@ -115,7 +116,7 @@ function pulse<T>(read: () => T): () => T {
 }
 // The two heartbeat-driven binding shapes, PANEL_OPTS pre-applied.
 function pulsedAttr(el: Element, name: string, read: () => string): void {
-  attr(el, name, pulse(read), PANEL_OPTS);
+  bindAttr(el, name, pulse(read), PANEL_OPTS);
 }
 function pulsedText(read: () => string): Text {
   return text(pulse(read), PANEL_OPTS);
@@ -123,33 +124,31 @@ function pulsedText(read: () => string): Text {
 /* ---- formatting + web-vital sources ---- */
 const ema = (prev: number, delta: number): number =>
   prev * 0.6 + (delta / POLL_S) * 0.4;
-
 function fmtRate(n: number): string {
   const r = Math.round(n);
   if (r >= 10000) return `${Math.round(r / 1000)}k`;
   if (r >= 1000) return `${(r / 1000).toFixed(1)}k`;
   return String(r);
 }
-
-function health(f: number): { key: string; label: string; score: number } {
+function health(f: number): {
+  key: string;
+  label: string;
+  score: number;
+} {
   const s = Math.round(100 * Math.max(0, Math.min(1, f / 55)));
   if (s >= 70) return { key: "ok", label: "healthy", score: s };
   if (s >= 40) return { key: "warn", label: "strained", score: s };
   return { key: "bad", label: "overloaded", score: s };
 }
-
 function frameColor(ms: number): string {
   const f = 1000 / ms;
   return f >= 55 ? "h-ok" : f >= 30 ? "h-warn" : "h-bad";
 }
-
 function vitalColor(v: number, good: number, ni: number): string {
   if (!v) return "";
   return v <= good ? "h-ok" : v <= ni ? "h-warn" : "h-bad";
 }
-
 /* --- web-vitals as lazy sources: each wires a PerformanceObserver while observed --- */
-
 // Wraps the shared scaffolding (feature guard, try/catch, disconnect) around a PerformanceObserver
 // source. `build(set)` creates per-connection state, constructs the observer, calls observe(), and
 // returns it; a throw (e.g. unsupported entry type) degrades to a no-op source.
@@ -166,7 +165,6 @@ function observerSource(
     }
   };
 }
-
 // Cumulative layout shift — the worst session window (matches Chrome's CLS, not a running total).
 const connectCls = observerSource((set) => {
   let win = 0;
@@ -194,7 +192,6 @@ const connectCls = observerSource((set) => {
   obs.observe({ type: "layout-shift", buffered: true });
   return obs;
 });
-
 // Largest contentful paint (ms) — latest candidate.
 const connectLcp = observerSource((set) => {
   const obs = new PerformanceObserver((list) => {
@@ -205,7 +202,6 @@ const connectLcp = observerSource((set) => {
   obs.observe({ type: "largest-contentful-paint", buffered: true });
   return obs;
 });
-
 // Interaction to next paint (ms) — worst interaction latency so far.
 const connectInp = observerSource((set) => {
   let worst = 0;
@@ -229,13 +225,11 @@ const connectInp = observerSource((set) => {
   obs.observe({ type: "first-input", buffered: true });
   return obs;
 });
-
 // Whether the Long Tasks API exists (Chrome/FF yes, Safari/WebKit no). Lets the "blocked" row
 // distinguish a genuine 0 ms (no blocking — good) from "unsupported" (—).
 const LONGTASKS_SUPPORTED =
   typeof PerformanceObserver === "function" &&
   PerformanceObserver.supportedEntryTypes?.includes("longtask") === true;
-
 // Total main-thread blocking time (sum of long-task durations) — the standardized cousin of the
 // `lag` probe. Unsupported in Safari/WebKit, where the row reads "—".
 const connectLongTasks = observerSource((set) => {
@@ -247,7 +241,6 @@ const connectLongTasks = observerSource((set) => {
   obs.observe({ type: "longtask", buffered: true });
   return obs;
 });
-
 /* ---- SVG widgets ---- */
 // The health gauge's arc + number. Until the first FPS sample arrives (`healthReady`) we show a
 // loading skeleton; `when` swaps it for the live, score-bound arc once — keeping the conditional in
@@ -325,7 +318,6 @@ function buildGauge(): HTMLElement {
     </svg>
   );
 }
-
 function buildHisto(): HTMLElement {
   const bars: Element[] = [];
   for (let i = 0; i < FRAME_N; i++) {
@@ -364,7 +356,6 @@ function buildHisto(): HTMLElement {
   bind(el, paint, PANEL_OPTS);
   return el;
 }
-
 /* ---- stats tab ---- */
 function stat(
   label: string,
@@ -383,7 +374,6 @@ function stat(
     </div>
   );
 }
-
 // Hover descriptions for each stat label.
 const TIP = {
   fps: "Frames per second, averaged over ~0.5s windows.",
@@ -422,14 +412,12 @@ const TIP = {
   unread:
     "States/computeds nothing currently reads (no subscribers). Some are normal; a count that keeps climbing under steady state suggests leaked signals.",
 } as const;
-
 function buildStatsPane(): HTMLElement {
   const fpsValue = <span class="li-perfh-fps" />;
   fpsValue.append(
     pulsedText(() => (fpsReady ? `${Math.round(fps)} fps` : "— fps")),
   );
   pulsedAttr(fpsValue, "class", () => `li-perfh-fps ${fpsKey}`);
-
   const hlabel = <div class="li-hlabel" title={TIP.health} />;
   hlabel.append(
     pulsedText(() => (fpsReady ? healthLabel.toUpperCase() : "LOADING")),
@@ -437,7 +425,6 @@ function buildStatsPane(): HTMLElement {
   pulsedAttr(hlabel, "class", () =>
     healthReady ? `li-hlabel h-${healthKey}` : "li-hlabel",
   );
-
   const side = (
     <div class="li-hstats">
       {hlabel}
@@ -499,7 +486,6 @@ function buildStatsPane(): HTMLElement {
       TIP.inp,
     ),
   );
-
   return (
     <div class="li-pane">
       <div class="li-perfh">
@@ -558,7 +544,6 @@ function buildStatsPane(): HTMLElement {
     </div>
   );
 }
-
 function vitalStat(
   label: string,
   get: () => string,
@@ -570,11 +555,19 @@ function vitalStat(
   if (val) pulsedAttr(val, "class", () => `li-stat-v ${color()}`);
   return row;
 }
-
-function heapMem(): { usedJSHeapSize: number } | undefined {
-  return (performance as { memory?: { usedJSHeapSize: number } }).memory;
+function heapMem():
+  | {
+      usedJSHeapSize: number;
+    }
+  | undefined {
+  return (
+    performance as {
+      memory?: {
+        usedJSHeapSize: number;
+      };
+    }
+  ).memory;
 }
-
 function buildHeapStat(): HTMLElement {
   // Heap drifts slowly, so it's a poll() source (created in wireStats) sampled every 5s.
   return stat(
@@ -587,7 +580,6 @@ function buildHeapStat(): HTMLElement {
     TIP.heap,
   );
 }
-
 /* ---- metrics loop ---- */
 function pollTick(): number {
   const frame = metricsMeter?.read();
@@ -621,12 +613,10 @@ function pollTick(): number {
     healthReady = true;
     fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
   }
-
   // The sequence advances every tick so the value bindings re-render. The heavy per-tab refresh is
   // split into renderActiveTab() and driven off the critical path.
   return ++metricSeq;
 }
-
 // The active tab's heavy refresh — the node census (stats), the graph reconcile, or draining the
 // trace ring(s). Run via a deferred effect (see wireStats) so it yields to the app under load:
 // idle-first, ~POLL_MS floor. Only the visible tab does work, and the graph self-throttles to ~3/s.
@@ -650,14 +640,12 @@ function renderActiveTab(): void {
     renderTrace(); // drain the trace ring(s) into the log
   }
 }
-
 // Mark that the tab went hidden. This fires even while the lag timer is throttled/frozen, so the flag
 // is already set when the catch-up tick runs on return — independent of whether that tick or the
 // visibilitychange-to-visible event arrives first.
 function onLagVisibility(): void {
   if (document.hidden) lagWasHidden = true;
 }
-
 function startMetrics(): void {
   // The reactive-pipeline rates come from a pull-based meter on the runtime's built-in `events`,
   // created inside the panel's scope (see wireStats) so minimizing detaches it. Web vitals
@@ -685,7 +673,6 @@ function startMetrics(): void {
     if (lag > lagPeak) lagPeak = lag;
   }, LAG_MS);
   document.addEventListener("visibilitychange", onLagVisibility);
-
   lastFrameT = 0;
   const onFrame = (t: number): void => {
     rafHandle = requestAnimationFrame(onFrame);
@@ -708,9 +695,7 @@ function startMetrics(): void {
   };
   rafHandle = requestAnimationFrame(onFrame);
 }
-
 /* ---- seams the panel drives ---- */
-
 // Wire the metrics subsystem. Called inside the panel's scope so the meter + heartbeat become its
 // resources (detach on minimize); the web-vital sources + the Info pane go in a nested scope that
 // pauses when the Info tab isn't active. Returns the Info pane.
@@ -755,18 +740,25 @@ export function wireStats(opts: {
     },
     { ...PANEL_OPTS, defer: true, maxStale: POLL_MS },
   );
+  statsRoot = statsPane;
+  statsPaused = false;
   startMetrics();
   return statsPane;
 }
-
 export function pauseStats(): void {
   statsScope?.pause();
+  if (statsRoot && !statsPaused) {
+    statsPaused = true;
+    pause(statsRoot);
+  }
 }
-
 export function resumeStats(): void {
   statsScope?.resume();
+  if (statsRoot && statsPaused) {
+    statsPaused = false;
+    resume(statsRoot);
+  }
 }
-
 // Tear down the metrics subsystem and reset its state (from unmountInspector).
 export function stopStats(): void {
   metricsMeter?.stop();
@@ -785,6 +777,8 @@ export function stopStats(): void {
   // all down (and any future resource added inside), so they need no individual teardown here.
   statsScope?.stop();
   statsScope = null;
+  statsRoot = null;
+  statsPaused = false;
   heapSource = clsSource = lcpSource = inpSource = longTasksSource = null;
   metricSeq = 0;
   readRate = writeRate = computedRate = effectRate = flushRate = 0;

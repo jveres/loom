@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
-
+import { morph } from "loom/dom";
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { morph } from "./morph.js";
 
 const el = (html: string): Element => {
   const host = document.createElement("div");
   host.innerHTML = html.trim();
   return host.firstElementChild as Element;
 };
-
 describe("morph", () => {
   it("patches text and attributes in place, keeping identity", () => {
     const from = el(`<section class="a"><h1>Old</h1><p>Body</p></section>`);
@@ -23,13 +22,11 @@ describe("morph", () => {
     expect(from.className).toBe("b");
     expect(from.id).toBe("x");
   });
-
   it("removes dropped attributes", () => {
     const from = el(`<div class="a" data-x="1"></div>`);
     morph(from, el(`<div class="a"></div>`));
     expect(from.hasAttribute("data-x")).toBe(false);
   });
-
   it("replaces when the tag changes", () => {
     const from = el(`<div>old</div>`);
     const host = document.createElement("main");
@@ -38,7 +35,6 @@ describe("morph", () => {
     expect(result.tagName).toBe("SPAN");
     expect(host.firstElementChild).toBe(result);
   });
-
   it("adds and removes children positionally", () => {
     const from = el(`<ul><li>a</li><li>b</li></ul>`);
     morph(from, el(`<ul><li>a</li><li>b</li><li>c</li></ul>`));
@@ -47,7 +43,6 @@ describe("morph", () => {
     expect(from.children.length).toBe(1);
     expect(from.textContent).toBe("a");
   });
-
   it("preserves an untouched sibling subtree (iframe identity)", () => {
     const from = el(
       `<section><h1>Title</h1><iframe src="https://example.com/embed"></iframe></section>`,
@@ -62,7 +57,6 @@ describe("morph", () => {
     expect(from.querySelector("iframe")).toBe(iframe);
     expect(from.querySelector("h1")?.textContent).toBe("Retitled");
   });
-
   it("matches keyed children across reorders", () => {
     const from = el(
       `<div><p data-id="a">A</p><p data-id="b">B</p><p data-id="c">C</p></div>`,
@@ -80,7 +74,6 @@ describe("morph", () => {
     expect(a?.textContent).toBe("A");
     expect(b?.textContent).toBe("B");
   });
-
   it("does not steal a keyed node for a different key", () => {
     const from = el(`<div><p data-id="a">A</p></div>`);
     const a = from.firstElementChild;
@@ -90,7 +83,6 @@ describe("morph", () => {
     expect(from.firstElementChild).not.toBe(a);
     expect(from.textContent).toBe("Z");
   });
-
   it("syncs form values but never the focused element", () => {
     const from = el(`<form><input value="old"><input value="keep"></form>`);
     const [first, second] = Array.from(
@@ -105,7 +97,6 @@ describe("morph", () => {
     expect(second?.value).toBe("user-typing");
     from.remove();
   });
-
   it("adopts (not corrupts) a keyed element whose tag changed", () => {
     const key = (element: Element): string | null =>
       element.getAttribute("data-key");
@@ -114,7 +105,6 @@ describe("morph", () => {
     expect(from.children).toHaveLength(1);
     expect(from.innerHTML).toBe(`<p data-key="a">new</p>`);
   });
-
   it("a removed keyed node does not block reuse of later siblings", () => {
     const key = (element: Element): string | null =>
       element.getAttribute("data-key");
@@ -126,7 +116,6 @@ describe("morph", () => {
     expect(from.querySelector("article")).toBe(kept); // identity preserved
     expect(from.children).toHaveLength(1);
   });
-
   it("never unchecks a focused radio through its group sibling", () => {
     const from = el(
       `<form><input type="radio" name="g" id="r1"><input type="radio" name="g" id="r2"></form>`,
@@ -144,7 +133,6 @@ describe("morph", () => {
     expect(r1.checked).toBe(true); // the user's in-progress choice wins
     from.remove();
   });
-
   it("syncs multi-select selection per option", () => {
     const from = el(
       `<select multiple><option value="a">a</option><option value="b">b</option><option value="c">c</option></select>`,
@@ -160,7 +148,6 @@ describe("morph", () => {
       .map((option) => option.value);
     expect(selected).toEqual(["b", "c"]);
   });
-
   it("throws on duplicate keys, like list()/each()", () => {
     const key = (element: Element): string | null =>
       element.getAttribute("data-key");
@@ -172,7 +159,6 @@ describe("morph", () => {
     const dupNew = el(`<div><i data-key="x"></i><i data-key="x"></i></div>`);
     expect(() => morph(from, dupNew, { key })).toThrow(/Duplicate morph key/);
   });
-
   it("skip: leaves matched elements untouched and keeps unmatched ones", () => {
     const skip = (element: Element): boolean =>
       element.hasAttribute("data-morph-ignore");
@@ -188,21 +174,18 @@ describe("morph", () => {
     expect(pre?.className).toBe("hl"); // untouched
     expect(pre?.innerHTML).toBe("<span>enhanced</span>");
     expect(from.querySelector("p")?.textContent).toBe("b");
-
     // unmatched skipped element (an injected streaming cursor): kept, not removed
     const host = el(`<div><p>text</p><span data-morph-ignore>▍</span></div>`);
     morph(host, el(`<div><p>text more</p></div>`), { skip });
     expect(host.querySelector("span")?.textContent).toBe("▍");
     expect(host.querySelector("p")?.textContent).toBe("text more");
   });
-
   it("skip accepts a selector string shorthand", () => {
     const host = el(`<div><p>text</p><span data-chrome>UI</span></div>`);
     morph(host, el(`<div><p>text more</p></div>`), { skip: "[data-chrome]" });
     expect(host.querySelector("span")?.textContent).toBe("UI");
     expect(host.querySelector("p")?.textContent).toBe("text more");
   });
-
   it("skip: a MID-LIST injected node never blocks its later siblings", () => {
     // The injected node exists only in the live tree — as a positional
     // candidate it failed every match against the new tree's siblings, so

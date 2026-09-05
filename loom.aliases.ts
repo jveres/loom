@@ -1,39 +1,14 @@
 import { resolve } from "node:path";
-
-// While developing Loom itself, its own bare `loom` / `loom/*` imports (devtools, the demo, the JSX
-// runtime) must resolve to the TypeScript source, not the published `dist` the `exports` map points at.
-// These aliases feed the dev server, the test runner, and the library build so all three read `src`.
-const r = (p: string): string => resolve(import.meta.dirname, p);
-
-export const loomAliases = [
-  { find: /^loom$/, replacement: r("src/index.ts") },
-  { find: /^loom\/observe$/, replacement: r("src/observe.ts") },
-  { find: /^loom\/async$/, replacement: r("src/async/index.ts") },
-  { find: /^loom\/settle$/, replacement: r("src/settle.ts") },
-  { find: /^loom\/dom$/, replacement: r("src/dom/index.ts") },
-  {
-    find: /^loom\/defer$/,
-    replacement: r("src/core/defer.ts"),
+import { loomEntries } from "./loom.entries.js";
+export const loomAliases = Object.entries(loomEntries).flatMap(
+  ([name, source]) => {
+    const path = name === "loom" ? "loom" : `loom/${name}`;
+    const names = name.endsWith("jsx-runtime")
+      ? [path, path.replace("jsx-runtime", "jsx-dev-runtime")]
+      : [path];
+    return names.map((name) => ({
+      find: new RegExp(`^${name}$`),
+      replacement: resolve(import.meta.dirname, source),
+    }));
   },
-  {
-    find: /^loom\/dom\/virtual-list$/,
-    replacement: r("src/dom/virtual-list.ts"),
-  },
-  {
-    find: /^loom\/dom\/scroll-fade$/,
-    replacement: r("src/dom/scroll-fade.ts"),
-  },
-  { find: /^loom\/dom\/reveal$/, replacement: r("src/dom/reveal.ts") },
-  { find: /^loom\/devtools$/, replacement: r("src/devtools/index.ts") },
-  { find: /^loom\/html$/, replacement: r("src/html/index.ts") },
-  { find: /^loom\/jsx-runtime$/, replacement: r("src/dom/jsx-runtime.ts") },
-  { find: /^loom\/jsx-dev-runtime$/, replacement: r("src/dom/jsx-runtime.ts") },
-  {
-    find: /^loom\/html\/jsx-runtime$/,
-    replacement: r("src/html/jsx-runtime.ts"),
-  },
-  {
-    find: /^loom\/html\/jsx-dev-runtime$/,
-    replacement: r("src/html/jsx-runtime.ts"),
-  },
-];
+);

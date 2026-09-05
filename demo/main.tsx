@@ -14,16 +14,15 @@ import {
 } from "loom";
 import { mountInspector, toggleInspector } from "loom/devtools";
 import { dispose, list } from "loom/dom";
+import { onTap } from "loom/events";
 import "./styles.css";
 
 // Inspection is opt-in (off by default = zero cost). Enable it before creating any nodes — when the
 // inspector is wanted — so even the initial cards show up in its census. ?noinspect leaves it off.
 const inspectorEnabled = !location.search.includes("noinspect");
 configure({ inspect: inspectorEnabled });
-
 type Tone = 0 | 1 | 2 | 3 | 4;
 type ThemeMode = "auto" | "dark" | "light";
-
 interface CardModel {
   title: string;
   section: string;
@@ -36,12 +35,10 @@ interface CardModel {
   hot: boolean;
   liked: boolean;
 }
-
 interface Card {
   readonly id: number;
   readonly model: Props<CardModel>;
 }
-
 const titles = [
   "Introducing the new project board",
   "Edge regions roll out worldwide",
@@ -56,7 +53,6 @@ const titles = [
   "Caches become the new index",
   "Typed APIs reshape product surfaces",
 ] as const;
-
 const sections = [
   "Announcements",
   "Releases",
@@ -69,7 +65,6 @@ const sections = [
   "Tooling",
   "Reliability",
 ] as const;
-
 const sources = [
   "Lena Park",
   "Ivan Mehta",
@@ -82,7 +77,6 @@ const sources = [
   "Mira Chen",
   "Iris Sloan",
 ] as const;
-
 const settings = props(
   {
     running: false,
@@ -95,7 +89,6 @@ const settings = props(
   { label: "settings" },
 );
 const metrics = props({ checks: "idle" }, { label: "metrics" });
-
 let nextCardId = 0;
 const initialCards = Array.from({ length: 12 }, () => makeCard());
 const cards = state<readonly Card[]>(initialCards, { label: "cards" });
@@ -110,16 +103,13 @@ const selected = computed(
   },
   { label: "selected" },
 );
-
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app root.");
-
 const board = <section class={["grid", { xform: settings.transform }]} />;
 let boardLayoutQueued = false;
 let boardColumnWidth = -1;
 let boardRowHeight = 0;
 let checksFeedbackTimer = 0;
-
 app.replaceChildren(
   <div class={["shell", { chaos: settings.running }]}>
     <header class="bar">
@@ -130,22 +120,22 @@ app.replaceChildren(
         type="button"
         class={["primary", { on: settings.running }]}
         aria-pressed={settings.running}
-        // ontap, not onclick: iOS Safari drops the synthesized click when the DOM mutates mid-tap
-        // (which the chaos does every frame); the tap synth uses raw pointer events, so it survives.
-        ontap={() => {
-          const next = !settings.running();
-          settings.running(next);
-          if (next) {
-            chaosStart = performance.now(); // reset the counter when chaos starts
-            chaosSeconds(0);
-          }
-        }}
+        onMount={(node) =>
+          onTap(node as Element, () => {
+            const next = !settings.running();
+            settings.running(next);
+            if (next) {
+              chaosStart = performance.now(); // reset the counter when chaos starts
+              chaosSeconds(0);
+            }
+          })
+        }
       >
         {() =>
           settings.running() ? `Stop chaos · ${chaosSeconds()}s` : "Start chaos"
         }
       </button>
-      {rangeControl("viewers", settings.viewers, 0, 5_000, 50)}
+      {rangeControl("viewers", settings.viewers, 0, 5000, 50)}
       {rangeControl("events / viewer s", settings.eventRate, 0, 12, 1)}
       {rangeControl("edits / s", settings.edits, 0, 180, 3)}
       <span class="break" />
@@ -181,13 +171,11 @@ app.replaceChildren(
     </div>
   </div>,
 );
-
 list(board, cards, {
   key: (card) => card.id,
   render: renderCard,
   reorder: () => !settings.transform(),
 });
-
 // Selection highlight via a single binding instead of one per card: rather than every card reading
 // selectedId() in its class (N subscribers, re-run on every selection change), one effect moves a
 // data-selected marker between the affected cards. Re-reads cards() so it re-locates after the list
@@ -204,21 +192,17 @@ effect(
   },
   { target: board },
 );
-
 effect(() => {
   cards();
   settings.transform();
   queueBoardLayout();
 });
-
 effect(() => {
   const theme = settings.theme();
   if (theme === "auto") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme", theme);
 });
-
 window.addEventListener("resize", queueBoardLayout);
-
 effect(() => {
   // Read both signals once, not per card: selectedId() inside .some() re-reads it on every
   // iteration (N tracked reads, N trace events) for the same value.
@@ -232,14 +216,11 @@ effect(() => {
     untrack(() => selectedId(items[0]?.id ?? 0));
   }
 });
-
 let lastFrame = performance.now();
 let editBudget = 0;
 let chaosStart = 0; // performance.now() when chaos last started; drives the button's seconds counter
 let rng = 0x1eed;
-
 requestAnimationFrame(frame);
-
 // Diagnostic: load with ?noinspect to run the demo without the dev inspector.
 if (inspectorEnabled) mountInspector();
 // Ctrl+Cmd+L shows/hides the inspector (KeyL is layout-independent).
@@ -249,7 +230,6 @@ window.addEventListener("keydown", (event) => {
     toggleInspector();
   }
 });
-
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
@@ -260,10 +240,9 @@ function frame(now: number): void {
   }
   requestAnimationFrame(frame);
 }
-
 function tick(dt: number): void {
   const trafficOps = Math.min(
-    2_000,
+    2000,
     Math.floor(settings.viewers() * settings.eventRate() * dt),
   );
   editBudget += settings.edits() * dt;
@@ -275,7 +254,6 @@ function tick(dt: number): void {
     }
   });
 }
-
 function renderCard(card: Card): Element {
   const model = card.model;
   return (
@@ -292,7 +270,7 @@ function renderCard(card: Card): Element {
         <button
           type="button"
           class="card-title-button"
-          ontap={() => selectedId(card.id)}
+          onMount={(node) => onTap(node as Element, () => selectedId(card.id))}
         >
           {model.title}
         </button>
@@ -319,21 +297,24 @@ function renderCard(card: Card): Element {
     </article>
   );
 }
-
 function metricButton(
   keyName: string,
   glyph: string,
   read: () => unknown,
   active?: () => boolean,
-  onTap?: () => void,
+  onActivate?: () => void,
 ): Element {
   const cls = ["metric", keyName, active ? { liked: active } : undefined];
   const glyphEl = <span class="glyph">{glyph}</span>;
   const valueEl = <span class="value">{read}</span>;
   // Interactive metrics (likes) are real buttons; plain readouts (views) are spans, so they don't
   // show a clickable cursor for an action that doesn't exist.
-  return onTap ? (
-    <button type="button" class={cls} ontap={onTap}>
+  return onActivate ? (
+    <button
+      type="button"
+      class={cls}
+      onMount={(node) => onTap(node as Element, onActivate)}
+    >
       {glyphEl}
       {valueEl}
     </button>
@@ -344,7 +325,6 @@ function metricButton(
     </span>
   );
 }
-
 function queueBoardLayout(): void {
   if (boardLayoutQueued) return;
   boardLayoutQueued = true;
@@ -353,7 +333,6 @@ function queueBoardLayout(): void {
     layoutBoard();
   });
 }
-
 function layoutBoard(): void {
   const nodes = [...board.children].filter(
     (node): node is HTMLElement => node instanceof HTMLElement,
@@ -368,7 +347,6 @@ function layoutBoard(): void {
     }
     return;
   }
-
   const width = board.clientWidth;
   if (width <= 0) return;
   const gap = 14;
@@ -380,7 +358,6 @@ function layoutBoard(): void {
     boardColumnWidth = columnWidth;
     boardRowHeight = 0;
   }
-
   for (const node of nodes) {
     if (node.style.width !== widthText) node.style.width = widthText;
   }
@@ -406,18 +383,15 @@ function layoutBoard(): void {
   const height = rows ? `${rows * rowHeight + (rows - 1) * gap}px` : "0px";
   if (board.style.height !== height) board.style.height = height;
 }
-
 function cycleTheme(): void {
   const theme = settings.theme();
   settings.theme(
     theme === "auto" ? "dark" : theme === "dark" ? "light" : "auto",
   );
 }
-
 function toneName(tone: Tone): string {
   return ["violet", "blue", "amber", "rose", "green"][tone] as string;
 }
-
 function selectedPanel(): Element {
   return (
     <section class="panel selected-panel">
@@ -442,7 +416,6 @@ function selectedPanel(): Element {
     </section>
   );
 }
-
 function rangeControl(
   label: string,
   value: State<number>,
@@ -478,7 +451,6 @@ function rangeControl(
   );
   return ctl;
 }
-
 function command(
   label: string | (() => string),
   run: () => void,
@@ -488,13 +460,12 @@ function command(
     <button
       type="button"
       class={["ghost", active ? { on: active } : undefined]}
-      ontap={run}
+      onMount={(node) => onTap(node as Element, run)}
     >
       {label}
     </button>
   );
 }
-
 function makeCard(): Card {
   const id = nextCardId++;
   const model: CardModel = {
@@ -503,7 +474,7 @@ function makeCard(): Card {
     source: sources[id % sources.length] as string,
     tone: (id % 5) as Tone,
     likes: 40 + id * 7,
-    views: 9_000 + id * 1_700,
+    views: 9000 + id * 1700,
     readers: id % 34,
     trend: id % 80,
     hot: id % 5 === 0,
@@ -514,7 +485,6 @@ function makeCard(): Card {
     model: props(model, { label: `card ${id}` }),
   };
 }
-
 function applyTraffic(card: Card): void {
   const model = card.model;
   const roll = random();
@@ -527,7 +497,6 @@ function applyTraffic(card: Card): void {
     );
   else if (model.hot()) update(model.trend, (value) => value + amount);
 }
-
 function applyEdit(): void {
   const roll = random();
   if (roll < 0.48) editRandom();
@@ -535,7 +504,6 @@ function applyEdit(): void {
   else if (roll < 0.84) shuffleCards();
   else toggleCardHot(randomCard());
 }
-
 function editRandom(): void {
   const card = randomCard();
   const model = card.model;
@@ -543,7 +511,6 @@ function editRandom(): void {
   model.title(title);
   update(model.tone, (tone) => ((tone + 1) % 5) as Tone);
 }
-
 function insertCard(): void {
   const card = makeCard();
   const next = [card, ...cards()].slice(0, 80);
@@ -553,34 +520,28 @@ function insertCard(): void {
     selectedId(card.id);
   });
 }
-
 function shuffleCards(): void {
   const next = shuffled(cards());
   setCards(next);
 }
-
 function burst(): void {
   batch(() => {
-    for (let index = 0; index < 1_000; index++) applyTraffic(randomCard());
+    for (let index = 0; index < 1000; index++) applyTraffic(randomCard());
   });
 }
-
 function toggleSelectedHot(): void {
   const card = selected();
   if (card) toggleCardHot(card);
 }
-
 function likeCard(card: Card): void {
   const liked = card.model.liked();
   update(card.model.likes, (value) => value + (liked ? -1 : 1));
   card.model.liked(!liked);
 }
-
 function likeSelected(): void {
   const card = selected();
   if (card) likeCard(card);
 }
-
 function removeSelected(): void {
   const card = selected();
   const current = cards();
@@ -592,11 +553,9 @@ function removeSelected(): void {
     selectedId(next[0]?.id ?? 0);
   });
 }
-
 function toggleCardHot(card: Card): void {
   card.model.hot(!card.model.hot());
 }
-
 function runChecks(): void {
   try {
     const count = state(0);
@@ -611,7 +570,6 @@ function runChecks(): void {
     });
     assertEqual(seen, 4, "batch/computed failed");
     stop();
-
     let cleanups = 0;
     const cleanupStop = effect(() => {
       return () => {
@@ -620,11 +578,9 @@ function runChecks(): void {
     });
     cleanupStop();
     assertEqual(cleanups, 1, "cleanup failed");
-
     const model = props({ value: 0 });
     model.value(7);
     assertEqual(model.value(), 7, "props failed");
-
     const objectState = state({ count: 0 });
     let objectSeen = 0;
     const stopObject = effect(() => {
@@ -638,7 +594,6 @@ function runChecks(): void {
     });
     assertEqual(objectSeen, 2, "mutate failed");
     stopObject();
-
     const tracked = state(0);
     const ignored = state(0);
     let runs = 0;
@@ -652,8 +607,10 @@ function runChecks(): void {
     tracked(1);
     assertEqual(runs, 2, "untrack tracking failed");
     stopUntrack();
-
-    type Row = { readonly id: number; readonly label: string };
+    type Row = {
+      readonly id: number;
+      readonly label: string;
+    };
     const host = document.createElement("div");
     const rows = state<readonly Row[]>([{ id: 1, label: "a" }]);
     const stopList = list<Row>(host, rows, {
@@ -668,7 +625,6 @@ function runChecks(): void {
     assertEqual(host.textContent, "ba", "list patch failed");
     stopList();
     assertEqual(host.childNodes.length, 0, "list cleanup failed");
-
     const active = state(false);
     const label = state("off");
     const node = (
@@ -683,7 +639,6 @@ function runChecks(): void {
     assertEqual(node.getAttribute("aria-pressed"), "true", "jsx attr failed");
     assertEqual(node.classList.contains("active"), true, "jsx class failed");
     dispose(node);
-
     showChecksFeedback(
       "pass · state, computed, batch, cleanup, props, trigger, mutate, untrack, list, jsx",
     );
@@ -693,7 +648,6 @@ function runChecks(): void {
     );
   }
 }
-
 function assertEqual(
   actual: unknown,
   expected: unknown,
@@ -701,31 +655,26 @@ function assertEqual(
 ): void {
   if (actual !== expected) throw new Error(message);
 }
-
 function showChecksFeedback(message: string): void {
   if (checksFeedbackTimer !== 0) window.clearTimeout(checksFeedbackTimer);
   metrics.checks(message);
   checksFeedbackTimer = window.setTimeout(() => {
     metrics.checks("idle");
     checksFeedbackTimer = 0;
-  }, 2_400);
+  }, 2400);
 }
-
 function setCards(next: readonly Card[]): void {
   cards([...next]);
 }
-
 function randomCard(): Card {
   const current = untrack(() => cards());
   return pick(current, Math.floor(random() * current.length));
 }
-
 function pick<T>(items: readonly T[], index: number): T {
   const item = items[index % items.length];
   if (item === undefined) throw new Error("Cannot pick from an empty list.");
   return item;
 }
-
 function shuffled<T>(items: readonly T[]): T[] {
   const next = [...items];
   for (let index = next.length - 1; index > 0; index--) {
@@ -736,14 +685,12 @@ function shuffled<T>(items: readonly T[]): T[] {
   }
   return next;
 }
-
 function compact(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}m`;
-  if (value >= 1_000) return `${Math.round(value / 100) / 10}k`;
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}m`;
+  if (value >= 1000) return `${Math.round(value / 100) / 10}k`;
   return String(value);
 }
-
 function random(): number {
   rng = (rng * 1664525 + 1013904223) >>> 0;
-  return rng / 0x1_0000_0000;
+  return rng / 4294967296;
 }

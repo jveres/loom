@@ -1,3 +1,4 @@
+import { untrack } from "../core/tracking.js";
 // Async addon (the `loom/async` entrypoint): a minimal reactive resource on top of the core
 // primitives. Deliberately not Solid 2.0's graph-status async — no transitions, no optimistic
 // lanes; just fine-grained value/loading/error reads with stale-response protection.
@@ -12,7 +13,6 @@ import {
   type Stop,
   state,
   trigger,
-  untrack,
 } from "../loom.js";
 
 export interface Resource<T> {

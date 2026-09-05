@@ -20,7 +20,9 @@ const require = createRequire(import.meta.url);
 const viteRequire = createRequire(require.resolve("vite/package.json"));
 const { buildSync } = viteRequire("esbuild");
 
-const root = fileURLToPath(new URL("..", import.meta.url));
+const root =
+  process.env.LOOM_PACKAGE_ROOT ??
+  fileURLToPath(new URL("..", import.meta.url));
 
 // App source → gzip budget in bytes. The minimal app is the headline number: the cost of
 // state/computed/effect alone (engine + signals + channel gates + deferred lane; no meter ring
@@ -70,7 +72,8 @@ const APPS = [
     // Like the deferred lane, observation installs its core hooks at module evaluation. A bare
     // import must therefore survive production tree-shaking even when none of its exports are read.
     name: "minimal + observe hooks",
-    budget: 3600,
+    // The tracking split avoids loading the engine in standalone platform helpers.
+    budget: 3664,
     minDelta: 300,
     baselineSource: `
       import { configure, state } from "loom";
@@ -96,21 +99,22 @@ const APPS = [
     `,
   },
   {
-    // Quiet-period observation is opt-in: apps that do not import loom/settle keep timer and
+    // Quiet-period observation is opt-in: apps that do not import loom/schedule keep timer and
     // settlement-control code out of the default reactive bundle.
-    name: "minimal + settle",
+    name: "minimal + watchSettled",
     budget: 4000,
     source: `
       import { state } from "loom";
-      import { settle } from "loom/settle";
+      import { watchSettled } from "loom/schedule";
       const query = state("");
-      settle(query, (value) => console.log(value), 200);
+      watchSettled(query, (value) => console.log(value), { delayMs: 200 });
       query("loom");
     `,
   },
   {
     name: "minimal dom (h+text)",
     // Includes allocation-free default binding metadata and node-local ownership for large mounts.
+    // Uniform Stop/signal ownership and untracked callbacks: see docs/api-measurements.md.
     budget: 6000,
     source: `
       import { state } from "loom";
@@ -125,7 +129,7 @@ const APPS = [
     name: "standalone virtual list",
     budget: 2100,
     source: `
-      import { virtualList } from "loom/dom/virtual-list";
+      import { virtualList } from "loom/virtual-list";
       const view = virtualList({
         rowHeight: 20,
         key: (item) => item,

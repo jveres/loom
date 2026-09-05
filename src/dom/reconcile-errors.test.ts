@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
-import { expect, it, onTestFinished, vi } from "vitest";
-import { type Read, state } from "../loom.js";
+import { state } from "loom";
 import {
   bind,
   each,
@@ -11,10 +10,12 @@ import {
   remove,
   resourceGroup,
   when,
-} from "./index.js";
+} from "loom/dom";
+// @vitest-environment happy-dom
+import { expect, it, onTestFinished, vi } from "vitest";
+import type { Read } from "../loom.js";
 
 type Kind = "list" | "each";
-
 function mount(
   kind: Kind,
   rows: Read<readonly number[]>,
@@ -35,12 +36,10 @@ function mount(
   onTestFinished(stop);
   return { root, stop };
 }
-
 it.each<Kind>(["list", "each"])(
   "%s validates all keys before rendering",
   (kind) => {
     const rendered: number[] = [];
-
     expect(() =>
       mount(
         kind,
@@ -51,18 +50,15 @@ it.each<Kind>(["list", "each"])(
         },
       ),
     ).toThrow("Duplicate Loom key");
-
     expect(rendered).toEqual([]);
   },
 );
-
 it.each<Kind>(["list", "each"])(
   "%s releases rows a failing renderer never returns",
   (kind) => {
     const tick = state(0);
     const created: Element[] = [];
     const cleaned: number[] = [];
-
     expect(() =>
       mount(
         kind,
@@ -82,12 +78,10 @@ it.each<Kind>(["list", "each"])(
       ),
     ).toThrow("renderer failed");
     tick(1);
-
     expect(created.map((row) => row.textContent)).toEqual(["0", "0"]);
     expect(cleaned.sort()).toEqual([1, 2]);
   },
 );
-
 it.each<Kind>(["list", "each"])(
   "%s preserves live rows after failed additions and can retry",
   (kind) => {
@@ -105,10 +99,8 @@ it.each<Kind>(["list", "each"])(
       return row;
     });
     const first = root.firstElementChild;
-
     expect(() => rows([1, 2, 3])).toThrow("renderer failed");
     tick(1);
-
     expect(root.children.length).toBe(1);
     expect(root.firstElementChild).toBe(first);
     expect(created.map((row) => row.textContent)).toEqual([
@@ -125,7 +117,6 @@ it.each<Kind>(["list", "each"])(
     ]);
   },
 );
-
 it.each<Kind>(["list", "each"])(
   "%s cleans up additions after insertion fails",
   (kind) => {
@@ -143,20 +134,17 @@ it.each<Kind>(["list", "each"])(
     const insert = vi.spyOn(root, "insertBefore").mockImplementationOnce(() => {
       throw new DOMException("insertion failed", "HierarchyRequestError");
     });
-
     expect(() => rows([1, 2])).toThrow("insertion failed");
     insert.mockRestore();
     tick(1);
     expect(created.map((row) => row.textContent)).toEqual(["1:1", "2:0"]);
     rows([1, 2]);
-
     expect([...root.children].map((row) => row.textContent)).toEqual([
       "1:1",
       "2:1",
     ]);
   },
 );
-
 it.each<Kind>(["list", "each"])(
   "%s completes stale-row removal despite cleanup failures",
   (kind) => {
@@ -170,12 +158,10 @@ it.each<Kind>(["list", "each"])(
       });
       return row;
     });
-
     expect(() => rows([3])).toThrow("cleanup failed");
     expect([...root.children].map((row) => row.textContent)).toEqual(["3"]);
     expect(cleaned).toEqual([1, 2]);
     rows([1, 3]);
-
     expect([...root.children].map((row) => row.textContent)).toEqual([
       "1",
       "3",
@@ -184,7 +170,6 @@ it.each<Kind>(["list", "each"])(
     expect(() => rows([])).toThrow("cleanup failed");
   },
 );
-
 it("list stop attempts every cleanup and remains terminal after a failure", () => {
   const rows = state<readonly number[]>([1, 2]);
   const cleaned: number[] = [];
@@ -196,15 +181,12 @@ it("list stop attempts every cleanup and remains terminal after a failure", () =
     });
     return row;
   });
-
   expect(stop).toThrow("cleanup failed");
   stop();
   rows([3]);
-
   expect(cleaned).toEqual([1, 2]);
   expect(root.children.length).toBe(0);
 });
-
 it("conditional branches preserve the old branch and release failed construction", () => {
   const selected = state("old");
   const tick = state(0);
@@ -224,10 +206,8 @@ it("conditional branches preserve the old branch and release failed construction
     }),
   );
   onTestFinished(() => remove(root));
-
   expect(() => selected("next")).toThrow("branch failed");
   tick(1);
-
   expect(root.textContent).toBe("old:1");
   expect(abandoned[0]?.textContent).toBe("next:0");
   fail = false;
@@ -235,7 +215,6 @@ it("conditional branches preserve the old branch and release failed construction
   selected("next");
   expect(root.textContent).toBe("next:1");
 });
-
 it("conditional swaps finish removal and retain the new branch after cleanup fails", () => {
   const open = state(true);
   const cleaned: number[] = [];
@@ -257,18 +236,14 @@ it("conditional swaps finish removal and retain the new branch after cleanup fai
     ),
   );
   onTestFinished(() => remove(root));
-
   expect(() => open(false)).toThrow("cleanup failed");
-
   expect(cleaned).toEqual([1, 2]);
   expect(root.textContent).toBe("closed");
 });
-
 it("construction rollback composes with resource groups and nested slots", () => {
   const tick = state(0);
   const created: Element[] = [];
   const cleaned: string[] = [];
-
   expect(() =>
     resourceGroup(() =>
       mount(
@@ -297,11 +272,9 @@ it("construction rollback composes with resource groups and nested slots", () =>
     ),
   ).toThrow("outer failed");
   tick(1);
-
   expect(created.map((node) => node.textContent)).toEqual(["0", "0"]);
   expect(cleaned).toEqual(["nested"]);
 });
-
 it("allows a public resource group inside a list renderer", () => {
   const tick = state(0);
   const { root, stop } = mount(
@@ -309,15 +282,12 @@ it("allows a public resource group inside a list renderer", () => {
     () => [1],
     () => resourceGroup(() => h("span", null, tick)).value,
   );
-
   tick(1);
   expect(root.textContent).toBe("1");
   stop();
   tick(2);
-
   expect(root.children.length).toBe(0);
 });
-
 it("reports both construction and rollback errors after all resources stop", () => {
   const tick = state(0);
   const created: Element[] = [];
@@ -325,7 +295,6 @@ it("reports both construction and rollback errors after all resources stop", () 
   const failure = new Error("render failed");
   const cleanupFailure = new Error("cleanup failed");
   let caught: unknown;
-
   try {
     mount(
       "list",
@@ -345,13 +314,11 @@ it("reports both construction and rollback errors after all resources stop", () 
     caught = error;
   }
   tick(1);
-
   expect(caught).toBeInstanceOf(AggregateError);
   expect((caught as AggregateError).errors).toEqual([failure, cleanupFailure]);
   expect(cleaned.sort()).toEqual([1, 2]);
   expect(created.map((node) => node.textContent)).toEqual(["0", "0"]);
 });
-
 it("conditional insertion failure releases the staged branch and preserves the old one", () => {
   const open = state(false);
   const tick = state(0);
@@ -372,11 +339,9 @@ it("conditional insertion failure releases the staged branch and preserves the o
   const insert = vi.spyOn(root, "insertBefore").mockImplementationOnce(() => {
     throw new DOMException("insertion failed", "HierarchyRequestError");
   });
-
   expect(() => open(true)).toThrow("insertion failed");
   insert.mockRestore();
   tick(1);
-
   expect(root.textContent).toBe("old");
   expect(staged?.textContent).toBe("0");
   open(false);

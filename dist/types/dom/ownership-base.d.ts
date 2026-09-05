@@ -13,6 +13,8 @@ export declare function installOwnedResourceDriver(driver: OwnedResourceDriver):
 export declare function own(node: Node, stop: OwnershipStop): void;
 /** Register a raw resource without allocating a public/manual stop handle. */
 export declare function ownResource(node: Node, resource: OwnedResource): void;
+/** A manually stoppable raw binding still participates in DOM pause/resume. */
+export declare function ownStoppableResource(node: Node, resource: OwnedResource, signal?: AbortSignal): OwnershipStop;
 /** @internal Release resources created by a failed synchronous render, including
  * nodes the renderer never returned. Nested renders share a rollback journal;
  * successful construction leaves lifetime management with the owning nodes. */

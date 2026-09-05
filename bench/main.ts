@@ -34,7 +34,6 @@ const adjectives = [
   "expensive",
   "fancy",
 ] as const;
-
 const colors = [
   "red",
   "yellow",
@@ -47,7 +46,6 @@ const colors = [
   "black",
   "orange",
 ] as const;
-
 const nouns = [
   "table",
   "chair",
@@ -63,29 +61,24 @@ const nouns = [
   "mouse",
   "keyboard",
 ] as const;
-
 const cloneRow = template(
   "tr",
 )`<tr><td class="col-md-1"></td><td class="col-md-4"><a></a></td><td class="col-md-1"><a class="remove">x</a></td><td class="col-md-6"></td></tr>`;
-
 interface DataRow {
   id: number;
   label: string;
 }
-
 interface LoomRow {
   readonly id: number;
   readonly label: State<string>;
   element?: HTMLTableRowElement;
 }
-
 interface VanillaRow {
   id: number;
   label: string;
   element?: HTMLTableRowElement;
   anchor?: HTMLAnchorElement;
 }
-
 interface BenchImplementation {
   readonly name: string;
   create(count: number): void;
@@ -96,23 +89,19 @@ interface BenchImplementation {
   removeNth(index: number): void;
   clear(): void;
 }
-
 interface Operation {
   readonly name: string;
   setup(implementation: BenchImplementation): void;
   action(implementation: BenchImplementation): void;
 }
-
 interface SplitTiming {
   readonly script: number;
   readonly layout: number;
   readonly total: number;
 }
-
 let seed = 1;
 let nextId = 1;
 let busy = false;
-
 const tbody = getElement("tbody", HTMLTableSectionElement);
 const runButton = getElement("run", HTMLButtonElement);
 const profileButton = getElement("profile", HTMLButtonElement);
@@ -127,54 +116,51 @@ const resultsBody = getElement("res", HTMLTableSectionElement);
 const resultsTitle = getElement("result-title", HTMLElement);
 const referenceBody = getElement("refbody", HTMLTableSectionElement);
 const noteNode = getElement("note", HTMLElement);
-
 const operations: readonly Operation[] = [
   {
     name: "create 1k",
     setup: (implementation) => implementation.clear(),
-    action: (implementation) => implementation.create(1_000),
+    action: (implementation) => implementation.create(1000),
   },
   {
     name: "create 10k",
     setup: (implementation) => implementation.clear(),
-    action: (implementation) => implementation.create(10_000),
+    action: (implementation) => implementation.create(10000),
   },
   {
     name: "append 1k",
-    setup: (implementation) => implementation.create(1_000),
-    action: (implementation) => implementation.append(1_000),
+    setup: (implementation) => implementation.create(1000),
+    action: (implementation) => implementation.append(1000),
   },
   {
     name: "update 10th",
-    setup: (implementation) => implementation.create(1_000),
+    setup: (implementation) => implementation.create(1000),
     action: (implementation) => implementation.updateEvery10(),
   },
   {
     name: "swap rows",
-    setup: (implementation) => implementation.create(1_000),
+    setup: (implementation) => implementation.create(1000),
     action: (implementation) => implementation.swap(),
   },
   {
     name: "select row",
-    setup: (implementation) => implementation.create(1_000),
+    setup: (implementation) => implementation.create(1000),
     action: (implementation) => implementation.selectNth(500),
   },
   {
     name: "remove row",
-    setup: (implementation) => implementation.create(1_000),
+    setup: (implementation) => implementation.create(1000),
     action: (implementation) => implementation.removeNth(500),
   },
   {
     name: "clear 1k",
-    setup: (implementation) => implementation.create(1_000),
+    setup: (implementation) => implementation.create(1000),
     action: (implementation) => implementation.clear(),
   },
 ];
-
 let loomRows: LoomRow[] = [];
 let loomSelected: LoomRow | undefined;
 let loomGroups: Array<ResourceGroup<void>> = [];
-
 const loomImplementation: BenchImplementation = {
   name: "Loom",
   create(count) {
@@ -202,7 +188,6 @@ const loomImplementation: BenchImplementation = {
     const leftNode = left?.element;
     const rightNode = right?.element;
     if (!left || !right || !leftNode || !rightNode) return;
-
     const afterLeft = leftNode.nextSibling;
     tbody.insertBefore(leftNode, rightNode);
     tbody.insertBefore(rightNode, afterLeft);
@@ -216,7 +201,6 @@ const loomImplementation: BenchImplementation = {
   removeNth(index) {
     const row = loomRows[index];
     if (!row) return;
-
     const node = row.element;
     if (loomSelected === row) loomSelected = undefined;
     if (node) remove(node);
@@ -226,10 +210,8 @@ const loomImplementation: BenchImplementation = {
     clearLoomRows();
   },
 };
-
 let vanillaRows: VanillaRow[] = [];
 let vanillaSelected: VanillaRow | undefined;
-
 const vanillaImplementation: BenchImplementation = {
   name: "Vanilla",
   create(count) {
@@ -258,7 +240,6 @@ const vanillaImplementation: BenchImplementation = {
     const leftElement = left?.element;
     const rightElement = right?.element;
     if (!left || !right || !leftElement || !rightElement) return;
-
     const afterLeft = leftElement.nextSibling;
     tbody.insertBefore(leftElement, rightElement);
     tbody.insertBefore(rightElement, afterLeft);
@@ -272,7 +253,6 @@ const vanillaImplementation: BenchImplementation = {
   removeNth(index) {
     const row = vanillaRows[index];
     if (!row) return;
-
     row.element?.remove();
     vanillaRows = vanillaRows.filter((item) => item !== row);
     if (vanillaSelected === row) vanillaSelected = undefined;
@@ -283,14 +263,11 @@ const vanillaImplementation: BenchImplementation = {
     vanillaSelected = undefined;
   },
 };
-
 runButton.addEventListener("click", () => void runBenchmark());
 profileButton.addEventListener("click", () => void profilePatchLayout());
-create1kButton.addEventListener("click", () =>
-  loomImplementation.create(1_000),
-);
+create1kButton.addEventListener("click", () => loomImplementation.create(1000));
 create10kButton.addEventListener("click", () =>
-  loomImplementation.create(10_000),
+  loomImplementation.create(10000),
 );
 updateButton.addEventListener("click", () =>
   loomImplementation.updateEvery10(),
@@ -298,18 +275,15 @@ updateButton.addEventListener("click", () =>
 swapButton.addEventListener("click", () => loomImplementation.swap());
 clearButton.addEventListener("click", () => loomImplementation.clear());
 implementationNode.textContent = "Loom (manual)";
-
 function makeLoomRow(row: DataRow): LoomRow {
   return {
     id: row.id,
     label: state(row.label),
   };
 }
-
 function makeVanillaRow(row: DataRow): VanillaRow {
   return { id: row.id, label: row.label };
 }
-
 function renderLoomRow(row: LoomRow): HTMLTableRowElement {
   const tableRow = cloneRow();
   tableRow.setAttribute("data-loom-key", String(row.id));
@@ -325,12 +299,10 @@ function renderLoomRow(row: LoomRow): HTMLTableRowElement {
   );
   return tableRow;
 }
-
 function renderVanillaRow(row: VanillaRow): HTMLTableRowElement {
   const tableRow = cloneRow();
   tableRow.setAttribute("data-loom-key", String(row.id));
   row.element = tableRow;
-
   const idCell = tableRow.cells[0] as HTMLTableCellElement;
   const labelLink = tableRow.cells[1]?.firstElementChild as HTMLAnchorElement;
   const removeLink = tableRow.cells[2]?.firstElementChild as HTMLAnchorElement;
@@ -343,32 +315,27 @@ function renderVanillaRow(row: VanillaRow): HTMLTableRowElement {
   );
   return tableRow;
 }
-
 function selectLoomRow(row: LoomRow): void {
   if (loomSelected === row) return;
   loomSelected?.element?.classList.remove("danger");
   row.element?.classList.add("danger");
   loomSelected = row;
 }
-
 function selectVanillaRow(row: VanillaRow): void {
   vanillaSelected?.element?.classList.remove("danger");
   row.element?.classList.add("danger");
   vanillaSelected = row;
 }
-
 function mountVanillaRows(): void {
   tbody.textContent = "";
   const fragment = document.createDocumentFragment();
   for (const row of vanillaRows) fragment.append(renderVanillaRow(row));
   tbody.append(fragment);
 }
-
 function mountLoomRows(rows: readonly LoomRow[]): void {
   tbody.textContent = "";
   appendLoomRows(rows);
 }
-
 function appendLoomRows(rows: readonly LoomRow[]): void {
   loomGroups.push(
     resourceGroup(() => {
@@ -378,7 +345,6 @@ function appendLoomRows(rows: readonly LoomRow[]): void {
     }),
   );
 }
-
 function clearLoomRows(): void {
   for (const group of loomGroups) group.dispose();
   loomGroups = [];
@@ -386,7 +352,6 @@ function clearLoomRows(): void {
   loomRows = [];
   loomSelected = undefined;
 }
-
 function buildData(count: number): DataRow[] {
   const rows: DataRow[] = new Array<DataRow>(count);
   for (let index = 0; index < count; index++) {
@@ -397,16 +362,13 @@ function buildData(count: number): DataRow[] {
   }
   return rows;
 }
-
 function pick(values: readonly string[]): string {
   return values[random(values.length)] ?? values[0] ?? "";
 }
-
 function random(max: number): number {
   seed = (seed * 1103515245 + 12345) & 0x7fffffff;
   return seed % max;
 }
-
 async function runBenchmark(): Promise<void> {
   if (busy) return;
   busy = true;
@@ -414,7 +376,6 @@ async function runBenchmark(): Promise<void> {
   loomImplementation.clear();
   vanillaImplementation.clear();
   await afterPaint();
-
   const { loom, vanilla, ratios } = await runComparison(setStatus);
   vanillaImplementation.clear();
   renderResults(loom, vanilla, ratios);
@@ -422,14 +383,12 @@ async function runBenchmark(): Promise<void> {
   setButtonsDisabled(false);
   busy = false;
 }
-
 async function profilePatchLayout(): Promise<void> {
   if (busy) return;
   busy = true;
   setButtonsDisabled(true);
   loomImplementation.clear();
   await afterPaint();
-
   const split = await runSplitSuite(setStatus);
   loomImplementation.clear();
   renderSplitResults(split);
@@ -437,7 +396,6 @@ async function profilePatchLayout(): Promise<void> {
   setButtonsDisabled(false);
   busy = false;
 }
-
 async function runComparison(status: (message: string) => void): Promise<{
   loom: Map<string, number>;
   vanilla: Map<string, number>;
@@ -457,7 +415,6 @@ async function runComparison(status: (message: string) => void): Promise<{
   }
   return { loom, vanilla, ratios };
 }
-
 async function runSplitSuite(
   status: (message: string) => void,
 ): Promise<Map<string, SplitTiming>> {
@@ -476,13 +433,16 @@ async function runSplitSuite(
   await afterPaint();
   return results;
 }
-
 async function timeComparison(
   operation: Operation,
   operationIndex: number,
   warmups = 4,
   samples = 12,
-): Promise<{ loom: number; vanilla: number; ratio: number | undefined }> {
+): Promise<{
+  loom: number;
+  vanilla: number;
+  ratio: number | undefined;
+}> {
   const loom: number[] = [];
   const vanilla: number[] = [];
   const ratios: number[] = [];
@@ -525,7 +485,6 @@ async function timeComparison(
       : undefined;
   return { loom: loomMedian, vanilla: vanillaMedian, ratio };
 }
-
 async function timeSplit(
   setup: () => void,
   action: () => void,
@@ -536,20 +495,17 @@ async function timeSplit(
   for (let index = 0; index < runs + 1; index++) {
     setup();
     await afterPaint();
-
     const scriptStart = performance.now();
     action();
     const scriptEnd = performance.now();
     void tbody.offsetHeight;
     const layoutEnd = performance.now();
     await afterPaint();
-
     if (index > 0) {
       script.push(scriptEnd - scriptStart);
       layout.push(layoutEnd - scriptEnd);
     }
   }
-
   const scriptMedian = median(script);
   const layoutMedian = median(layout);
   return {
@@ -558,7 +514,6 @@ async function timeSplit(
     total: scriptMedian + layoutMedian,
   };
 }
-
 function renderResults(
   loom: ReadonlyMap<string, number>,
   vanilla: ReadonlyMap<string, number>,
@@ -580,9 +535,7 @@ function renderResults(
       ratio === undefined
         ? `<td class="ratio">&mdash;</td>`
         : `<td class="ratio ${ratioClass(ratio)}">${ratio.toFixed(2)}x</td>`;
-    return `<tr><td>${name}</td><td>${format(loomTime)}</td><td>${format(
-      vanillaTime,
-    )}</td>${cell}</tr>`;
+    return `<tr><td>${name}</td><td>${format(loomTime)}</td><td>${format(vanillaTime)}</td>${cell}</tr>`;
   });
   const logRatios = measured.flatMap(({ ratio }) =>
     ratio === undefined ? [] : [Math.log(ratio)],
@@ -596,14 +549,9 @@ function renderResults(
   const meanCell =
     meanRatio === undefined
       ? `<td class="ratio"><b>&mdash;</b></td>`
-      : `<td class="ratio ${ratioClass(meanRatio)}"><b>${meanRatio.toFixed(
-          2,
-        )}x</b></td>`;
+      : `<td class="ratio ${ratioClass(meanRatio)}"><b>${meanRatio.toFixed(2)}x</b></td>`;
   const excluded = measured.length - logRatios.length;
-
-  resultsBody.innerHTML = `<tr><th>operation</th><th>Loom script</th><th>Vanilla script</th><th>paired Loom/van</th></tr>${rows.join(
-    "",
-  )}<tr><td><b>geo-mean ratio</b></td><td></td><td></td>${meanCell}</tr>`;
+  resultsBody.innerHTML = `<tr><th>operation</th><th>Loom script</th><th>Vanilla script</th><th>paired Loom/van</th></tr>${rows.join("")}<tr><td><b>geo-mean ratio</b></td><td></td><td></td>${meanCell}</tr>`;
   referenceBody.innerHTML = "";
   noteNode.innerHTML =
     "Loom vs a hand-written vanilla keyed baseline using the same cloned row skeleton. " +
@@ -615,7 +563,6 @@ function renderResults(
         "excluded from the geo-mean."
       : "");
 }
-
 function renderSplitResults(split: ReadonlyMap<string, SplitTiming>): void {
   resultsTitle.textContent = "Results - median script/layout ms";
   const rows = operations.map((operation) => {
@@ -623,25 +570,15 @@ function renderSplitResults(split: ReadonlyMap<string, SplitTiming>): void {
     const total = timing.total || 1;
     const scriptPercent = (timing.script / total) * 100;
     const layoutPercent = (timing.layout / total) * 100;
-    return `<tr><td>${operation.name}</td><td>${format(
-      timing.script,
-    )}</td><td>${format(timing.layout)}</td><td>${format(
-      timing.total,
-    )}</td><td>${scriptPercent.toFixed(0)}% / ${layoutPercent.toFixed(
-      0,
-    )}%</td></tr>`;
+    return `<tr><td>${operation.name}</td><td>${format(timing.script)}</td><td>${format(timing.layout)}</td><td>${format(timing.total)}</td><td>${scriptPercent.toFixed(0)}% / ${layoutPercent.toFixed(0)}%</td></tr>`;
   });
-
-  resultsBody.innerHTML = `<tr><th>operation</th><th>Loom script</th><th>forced layout</th><th>total</th><th>script/layout</th></tr>${rows.join(
-    "",
-  )}`;
+  resultsBody.innerHTML = `<tr><th>operation</th><th>Loom script</th><th>forced layout</th><th>total</th><th>script/layout</th></tr>${rows.join("")}`;
   referenceBody.innerHTML = "";
   noteNode.innerHTML =
     "Patch/layout mode times Loom synchronous work, then reads tbody.offsetHeight " +
     "to force style and layout. If Loom script dominates, reconciliation is the " +
     "bottleneck. If forced layout dominates, browser layout is.";
 }
-
 function requiredResult(
   results: ReadonlyMap<string, number>,
   name: string,
@@ -650,7 +587,6 @@ function requiredResult(
   if (value === undefined) throw new Error(`Missing result for ${name}.`);
   return value;
 }
-
 function requiredSplit(
   results: ReadonlyMap<string, SplitTiming>,
   name: string,
@@ -659,22 +595,18 @@ function requiredSplit(
   if (value === undefined) throw new Error(`Missing split result for ${name}.`);
   return value;
 }
-
 function ratioClass(value: number): string {
   if (value <= 1.3) return "good";
   if (value <= 2) return "ok";
   return "bad";
 }
-
 function format(value: number): string {
   return value.toFixed(1);
 }
-
 function median(values: number[]): number {
   values.sort((left, right) => left - right);
   return values[Math.floor(values.length / 2)] ?? 0;
 }
-
 function afterPaint(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
@@ -688,17 +620,19 @@ function afterPaint(): Promise<void> {
     });
   });
 }
-
 function setStatus(message: string): void {
   statusNode.textContent = message;
 }
-
 function setButtonsDisabled(disabled: boolean): void {
   runButton.disabled = disabled;
   profileButton.disabled = disabled;
 }
-
-function getElement<T extends HTMLElement>(id: string, ctor: { new (): T }): T {
+function getElement<T extends HTMLElement>(
+  id: string,
+  ctor: {
+    new (): T;
+  },
+): T {
   const element = document.getElementById(id);
   if (!(element instanceof ctor)) {
     throw new Error(`Missing #${id}.`);

@@ -1,3 +1,4 @@
+import { untrack } from "../core/tracking.js";
 // onMount(el, fn) — the mount hook, with an explicit timing contract: `fn` runs once, on a
 // microtask after the task that inserted the element — inserted and measurable (layout on
 // demand), **not yet painted** — so measure-then-classify work causes no flash. The `onMount`
@@ -71,7 +72,16 @@ function enqueue(
   return pool;
 }
 
-export function onMount(node: Node, fn: (node: Node) => void): Stop {
+export interface OnMountOptions {
+  readonly signal?: AbortSignal;
+}
+
+export function onMount(
+  node: Node,
+  fn: (node: Node) => void,
+  options?: OnMountOptions,
+): Stop {
+  if (options?.signal?.aborted) return () => {};
   let cancelled = false;
   let pendingPool: DocumentPool | undefined;
   let release: Stop = () => undefined;
@@ -79,7 +89,7 @@ export function onMount(node: Node, fn: (node: Node) => void): Stop {
     if (cancelled) return;
     cancelled = true; // once
     try {
-      fn(n);
+      untrack(() => fn(n));
     } finally {
       // A successful (or throwing) one-shot no longer needs to be retained by its mounted node.
       release();
@@ -92,6 +102,7 @@ export function onMount(node: Node, fn: (node: Node) => void): Stop {
   });
   const cancel = (): void => {
     cancelled = true;
+    options?.signal?.removeEventListener("abort", release);
     const fns = pendingPool?.pending.get(node);
     if (fns) {
       fns.delete(run);
@@ -106,5 +117,6 @@ export function onMount(node: Node, fn: (node: Node) => void): Stop {
   };
   // A node torn down the Loom way before it ever mounts must not pin the transient observer.
   release = onUnmount(node, cancel);
+  options?.signal?.addEventListener("abort", release, { once: true });
   return release;
 }

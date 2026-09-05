@@ -1,3 +1,4 @@
+import { untrack } from "./core/tracking.js";
 // lens(source, key) — the derived writable over ONE MEMBER of a record
 // or tuple signal: reads through `source()[key]` (tracked — a binding
 // subscribes through the source), writes a COPY of the source with the
@@ -5,7 +6,7 @@
 // the whole record re-runs; an equal member is a no-op write). Form
 // fields over a settings record, the halves of a pair — the three-line
 // writable recipe, keyed.
-import { type State, untrack, writable } from "./loom.js";
+import { type State, writable } from "./loom.js";
 
 export function lens<T extends object, K extends keyof T>(
   source: State<T>,

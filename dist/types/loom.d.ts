@@ -144,6 +144,8 @@ export declare function writable<T>(read: () => T, write: (next: T) => void): St
  * from that connection are ignored after teardown returns.
  */
 export declare function source<T>(connect: SourceConnect<T>, initial: T, options?: NodeOptions): Read<T>;
+/** @internal Install manually owned work without inheriting a scope or effect. */
+export declare function detached<T>(run: () => T): T;
 /** @internal A cached producer belongs to its subscribers, not its first
  * caller's scope. Creation also avoids inheriting that caller's inspect options. */
 export declare function sharedSource<T>(connect: SourceConnect<T>, initial: T, options?: NodeOptions): Read<T>;

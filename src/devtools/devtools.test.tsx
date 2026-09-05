@@ -1,17 +1,19 @@
 // @vitest-environment happy-dom
-// Smoke coverage for the inspector lifecycle: the ~2k-line devtools tree has
-// exactly four public seams, and the costly failure mode is a teardown leak —
-// mount → unmount must return the page and the reactive world to rest.
-import { afterEach, describe, expect, it } from "vitest";
-import { inspect, inspectResources } from "../core/inspect.js";
-import { configure, state } from "../loom.js";
-import { PANEL_ID } from "./css.js";
+
+import { configure, state } from "loom";
 import {
   inspectorMounted,
   mountInspector,
   toggleInspector,
   unmountInspector,
-} from "./index.js";
+} from "loom/devtools";
+import { inspect, inspectResources } from "loom/observe";
+// @vitest-environment happy-dom
+// Smoke coverage for the inspector lifecycle: the ~2k-line devtools tree has
+// exactly four public seams, and the costly failure mode is a teardown leak —
+// mount → unmount must return the page and the reactive world to rest.
+import { afterEach, describe, expect, it } from "vitest";
+import { PANEL_ID } from "./css.js";
 
 describe("loom/devtools", () => {
   afterEach(() => {
@@ -23,12 +25,10 @@ describe("loom/devtools", () => {
     mountInspector();
     expect(inspectorMounted()).toBe(true);
     expect(document.getElementById(PANEL_ID)).not.toBeNull();
-
     unmountInspector();
     expect(inspectorMounted()).toBe(false);
     expect(document.getElementById(PANEL_ID)).toBeNull();
   });
-
   it("toggle flips mount state; teardown leaves no live scopes behind", () => {
     const rest = inspectResources().scopes;
     toggleInspector();
@@ -38,7 +38,6 @@ describe("loom/devtools", () => {
     // The inspector's own scope must not survive its unmount.
     expect(inspectResources().scopes).toBe(rest);
   });
-
   it("remounts after unmount (module state fully reset)", () => {
     mountInspector();
     unmountInspector();
@@ -47,7 +46,6 @@ describe("loom/devtools", () => {
     expect(document.getElementById(PANEL_ID)).not.toBeNull();
     unmountInspector();
   });
-
   it("keeps the selection lock balanced when a second panel gesture takes over", () => {
     mountInspector();
     const panel = document.getElementById(PANEL_ID);
@@ -61,24 +59,20 @@ describe("loom/devtools", () => {
         releasePointerCapture: { configurable: true, value: () => {} },
       });
     }
-
     bar.dispatchEvent(
       new PointerEvent("pointerdown", { pointerId: 1, bubbles: true }),
     );
     expect(document.body.style.userSelect).toBe("none");
-
     resize.dispatchEvent(
       new PointerEvent("pointerdown", { pointerId: 2, bubbles: true }),
     );
     expect(document.body.style.userSelect).toBe("none");
     expect(bar.style.cursor).toBe("");
-
     resize.dispatchEvent(
       new PointerEvent("pointerup", { pointerId: 2, bubbles: true }),
     );
     expect(document.body.style.userSelect).toBe("");
   });
-
   it("restores the inspection setting that existed before mounting", () => {
     configure({ inspect: false });
     mountInspector();
@@ -88,7 +82,6 @@ describe("loom/devtools", () => {
     expect(
       inspect().nodes.some((node) => node.label === "after-disabled-inspector"),
     ).toBe(false);
-
     configure({ inspect: true });
     mountInspector();
     unmountInspector();

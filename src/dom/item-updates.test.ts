@@ -1,11 +1,16 @@
 // @vitest-environment happy-dom
+import { state } from "loom";
+import { bind, each, h, list, remove } from "loom/dom";
+// @vitest-environment happy-dom
 import { expect, it, onTestFinished, vi } from "vitest";
-import { type Read, state } from "../loom.js";
-import { bind, each, h, type ListUpdate, list, remove } from "./index.js";
+import type { Read } from "../loom.js";
+import type { ListUpdate } from "./index.js";
 
-type Row = { id: number; text: string };
+type Row = {
+  id: number;
+  text: string;
+};
 type Kind = "list" | "each";
-
 function mount(
   kind: Kind,
   rows: Read<readonly Row[]>,
@@ -27,7 +32,6 @@ function mount(
   onTestFinished(() => remove(root));
   return root;
 }
-
 it.each<Kind>(["list", "each"])(
   "%s updates immutable replacements while preserving DOM and focus",
   (kind) => {
@@ -42,9 +46,7 @@ it.each<Kind>(["list", "each"])(
     const input = root.firstElementChild as HTMLInputElement;
     input.focus();
     const replacement = { id: 1, text: "updated" };
-
     rows([replacement, second]);
-
     expect(root.firstElementChild).toBe(input);
     expect(document.activeElement).toBe(input);
     expect(input.value).toBe("updated");
@@ -55,7 +57,6 @@ it.each<Kind>(["list", "each"])(
     expect(update).toHaveBeenCalledTimes(1);
   },
 );
-
 it.each<Kind>(["list", "each"])(
   "%s leaves replacement handling opt-in",
   (kind) => {
@@ -67,7 +68,6 @@ it.each<Kind>(["list", "each"])(
     expect(render).toHaveBeenCalledTimes(1);
   },
 );
-
 it.each<Kind>(["list", "each"])(
   "%s runs updates untracked and forgets removed items",
   (kind) => {
@@ -99,7 +99,6 @@ it.each<Kind>(["list", "each"])(
     expect(update).toHaveBeenCalledTimes(1);
   },
 );
-
 it.each<Kind>(["list", "each"])(
   "%s retains the previous baseline after an update throws and releases staged bindings",
   (kind) => {
@@ -128,7 +127,6 @@ it.each<Kind>(["list", "each"])(
       update,
     );
     const original = root.firstElementChild;
-
     expect(() => rows([added, replacement])).toThrow("update failed");
     tick(1);
     expect(root.children.length).toBe(1);
@@ -136,14 +134,12 @@ it.each<Kind>(["list", "each"])(
     expect(created.map((node) => node.textContent)).toEqual(["1:1", "2:0"]);
     fail = false;
     rows([added, replacement]);
-
     expect(root.children.length).toBe(2);
     expect(root.lastElementChild).toBe(original);
     expect(update).toHaveBeenLastCalledWith(original, replacement, first);
     expect(original?.getAttribute("title")).toBe("next");
   },
 );
-
 it.each<Kind>(["list", "each"])(
   "%s validates duplicate keys before calling updates",
   (kind) => {
@@ -159,7 +155,6 @@ it.each<Kind>(["list", "each"])(
     expect(update).not.toHaveBeenCalled();
   },
 );
-
 function checkUpdateTypes() {
   const rows = state<readonly Row[]>([]);
   each(

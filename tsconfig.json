@@ -11,14 +11,18 @@
     "moduleResolution": "bundler",
     "paths": {
       "loom": ["./src/index.ts"],
-      "loom/observe": ["./src/observe.ts"],
-      "loom/async": ["./src/async/index.ts"],
-      "loom/settle": ["./src/settle.ts"],
+      "loom/model": ["./src/model.ts"],
       "loom/dom": ["./src/dom/index.ts"],
+      "loom/browser": ["./src/browser.ts"],
+      "loom/events": ["./src/events.ts"],
+      "loom/layout": ["./src/layout.ts"],
+      "loom/motion": ["./src/motion.ts"],
+      "loom/schedule": ["./src/schedule.ts"],
+      "loom/storage": ["./src/storage.ts"],
+      "loom/virtual-list": ["./src/dom/virtual-list.ts"],
+      "loom/async": ["./src/async/index.ts"],
       "loom/defer": ["./src/core/defer.ts"],
-      "loom/dom/virtual-list": ["./src/dom/virtual-list.ts"],
-      "loom/dom/reveal": ["./src/dom/reveal.ts"],
-      "loom/dom/scroll-fade": ["./src/dom/scroll-fade.ts"],
+      "loom/observe": ["./src/observe.ts"],
       "loom/devtools": ["./src/devtools/index.ts"],
       "loom/html": ["./src/html/index.ts"],
       "loom/jsx-runtime": ["./src/dom/jsx-runtime.ts"],
@@ -47,6 +51,7 @@
     "src/**/*.tsx",
     "bench/**/*.ts",
     "demo/**/*.ts",
-    "demo/**/*.tsx"
+    "demo/**/*.tsx",
+    "api/**/*.ts"
   ]
 }

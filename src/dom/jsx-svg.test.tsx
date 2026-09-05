@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
+import { state } from "loom";
+import { svgElement } from "loom/dom";
+// @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { state } from "../loom.js";
-import { svgElement } from "./index.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-
 describe("JSX SVG", () => {
   it("builds namespaced SVG trees from JSX", () => {
     const svg = (
@@ -25,7 +25,6 @@ describe("JSX SVG", () => {
         </g>
       </svg>
     );
-
     expect(svg.namespaceURI).toBe(SVG_NS);
     expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
     const circle = svg.querySelector("circle");
@@ -33,7 +32,6 @@ describe("JSX SVG", () => {
     expect(circle?.getAttribute("stroke-width")).toBe("2");
     expect(svg.querySelector("g")?.getAttribute("class")).toBe("layer");
   });
-
   it("supports reactive SVG attribute bindings from JSX", () => {
     const dash = state("0 100");
     const svg = (
@@ -46,7 +44,6 @@ describe("JSX SVG", () => {
     dash("50 100");
     expect(circle?.getAttribute("stroke-dasharray")).toBe("50 100");
   });
-
   it("creates shared HTML/SVG tag names with an explicit SVG namespace", () => {
     const label = state("first");
     const clicked = vi.fn();
@@ -63,7 +60,6 @@ describe("JSX SVG", () => {
       svgElement("style", null, "circle { fill: red; }"),
       svgElement("script", { type: "application/ecmascript" }),
     ]);
-
     for (const selector of ["title", "a", "style", "script"]) {
       expect(svg.querySelector(selector)?.namespaceURI).toBe(SVG_NS);
     }
@@ -74,7 +70,6 @@ describe("JSX SVG", () => {
     svg.querySelector("a")?.dispatchEvent(new MouseEvent("click"));
     expect(clicked).toHaveBeenCalledTimes(1);
   });
-
   it("keeps shared names HTML outside SVG and below foreignObject", () => {
     const htmlTitle = <title>Document title</title>;
     const svg = (
@@ -87,7 +82,6 @@ describe("JSX SVG", () => {
     expect(htmlTitle.namespaceURI).not.toBe(SVG_NS);
     expect(svg.querySelector("a")?.namespaceURI).not.toBe(SVG_NS);
   });
-
   it("contextually types lowercase and camelCase event props", () => {
     const input = (
       <input
@@ -111,7 +105,6 @@ describe("JSX SVG", () => {
     );
     expect(input.tagName).toBe("INPUT");
   });
-
   it("types every HTMLElementTagNameMap tag and only runtime-supported SVG tags", () => {
     // Derived IntrinsicElements: tags never hand-listed before now compile with
     // precise element types (this test's value is the typecheck itself).

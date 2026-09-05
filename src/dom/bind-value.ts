@@ -1,94 +1,67 @@
-// bindValue(el, cell) — focus-guarded two-way value binding for form
-// controls: writes the cell on input, follows the cell into
-// el.value, and NEVER overwrites the focused element (morph's law,
-// now for bindings — a reactive echo mid-typing destroys the edit
-// and the caret). The latest suppressed value applies when focus
-// leaves, even when the cell does not change again. Node-owned: the
-// effect and listeners die with the element.
-import { domEffect, type State } from "../loom.js";
-import { own, ownResource } from "./ownership-base.js";
+import { failSetup } from "../core/lifetime.js";
+import { untrack } from "../core/tracking.js";
+import { domEffect, type State, type Stop, stopEffectNode } from "../loom.js";
+import { nodeLifetime } from "./lifetime.js";
+import { ownResource } from "./ownership-base.js";
 
 export interface BindValueOptions {
-  /** The bound property: "value" (default) or "checked" — the
-   *  checkbox/radio twin, a State<boolean> over `change`. */
   readonly property?: "value" | "checked";
+  readonly signal?: AbortSignal;
 }
-
 export function bindValue(
   el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
   cell: State<string>,
-  options?: { readonly property?: "value" },
-): void;
+  options?: BindValueOptions & { readonly property?: "value" },
+): Stop;
 export function bindValue(
   el: HTMLInputElement,
   cell: State<boolean>,
-  options: { readonly property: "checked" },
-): void;
+  options: BindValueOptions & { readonly property: "checked" },
+): Stop;
 export function bindValue(
   el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
   cell: State<string> | State<boolean>,
   options: BindValueOptions = {},
-): void {
-  if (options.property === "checked") {
-    bindChecked(el as HTMLInputElement, cell as State<boolean>);
-    return;
-  }
-  const textCell = cell as State<string>;
-  let latest = el.value;
+): Stop {
+  const life = nodeLifetime(el, options.signal);
+  if (!life.active) return life.stop;
+  const checked = options.property === "checked";
+  const readDOM = (): string | boolean =>
+    checked ? (el as HTMLInputElement).checked : el.value;
+  let latest = readDOM();
   const sync = (): void => {
-    if (el.value !== latest) el.value = latest;
+    if (!life.active || readDOM() === latest) return;
+    if (checked) (el as HTMLInputElement).checked = latest as boolean;
+    else el.value = latest as string;
   };
   const write = (): void => {
-    latest = el.value;
-    textCell(el.value);
+    if (!life.active) return;
+    latest = readDOM();
+    untrack(() => {
+      if (checked) (cell as State<boolean>)(latest as boolean);
+      else (cell as State<string>)(latest as string);
+    });
   };
+  const event = checked ? "change" : "input";
   el.addEventListener("blur", sync);
-  el.addEventListener("input", write);
-  own(el, () => {
+  el.addEventListener(event, write);
+  life.add(() => {
     el.removeEventListener("blur", sync);
-    el.removeEventListener("input", write);
+    el.removeEventListener(event, write);
   });
-  // bind()'s own recipe, spelled here to keep the barrel acyclic.
-  ownResource(
-    el,
-    domEffect(
+  try {
+    const handle = domEffect(
       () => {
-        latest = textCell();
-        if (document.activeElement !== el) sync();
+        latest = cell();
+        if (el.ownerDocument.activeElement !== el) sync();
       },
       "dom.bindValue",
       el,
-    ),
-  );
-}
-
-// The checked half: `change` is the checkbox's commit event (input
-// fires too, but change is the one that never double-fires across
-// engines); the focus guard keeps a keyboard toggle-in-progress honest.
-function bindChecked(el: HTMLInputElement, cell: State<boolean>): void {
-  let latest = el.checked;
-  const sync = (): void => {
-    if (el.checked !== latest) el.checked = latest;
-  };
-  const write = (): void => {
-    latest = el.checked;
-    cell(el.checked);
-  };
-  el.addEventListener("blur", sync);
-  el.addEventListener("change", write);
-  own(el, () => {
-    el.removeEventListener("blur", sync);
-    el.removeEventListener("change", write);
-  });
-  ownResource(
-    el,
-    domEffect(
-      () => {
-        latest = cell();
-        if (document.activeElement !== el) sync();
-      },
-      "dom.bindValue.checked",
-      el,
-    ),
-  );
+    );
+    ownResource(el, handle);
+    life.add(() => stopEffectNode(handle));
+  } catch (error) {
+    failSetup(life, error);
+  }
+  return life.stop;
 }

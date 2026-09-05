@@ -1,0 +1,20 @@
+/** Canonical source entrypoints shared by builds and local resolution. */
+export const loomEntries = {
+  loom: "src/index.ts",
+  model: "src/model.ts",
+  dom: "src/dom/index.ts",
+  browser: "src/browser.ts",
+  events: "src/events.ts",
+  layout: "src/layout.ts",
+  motion: "src/motion.ts",
+  schedule: "src/schedule.ts",
+  storage: "src/storage.ts",
+  "virtual-list": "src/dom/virtual-list.ts",
+  async: "src/async/index.ts",
+  defer: "src/core/defer.ts",
+  observe: "src/observe.ts",
+  devtools: "src/devtools/index.ts",
+  html: "src/html/index.ts",
+  "jsx-runtime": "src/dom/jsx-runtime.ts",
+  "html/jsx-runtime": "src/html/jsx-runtime.ts",
+} as const;

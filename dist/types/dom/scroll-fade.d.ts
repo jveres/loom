@@ -1,4 +1,5 @@
 export interface ScrollFadeOptions {
+    readonly signal?: AbortSignal;
     /** Fade length in px (default 14). */
     readonly size?: number;
     /** Scroll axis to fade (default "y"). */

@@ -1,5 +1,5 @@
+import { computed, configure, effect, scope, source, state } from "loom";
 import { expect, it, onTestFinished } from "vitest";
-import { computed, configure, effect, scope, source, state } from "./loom.js";
 
 it("rethrows an initial computed failure until a dependency changes", () => {
   const ready = state(false);
@@ -8,22 +8,18 @@ it("rethrows an initial computed failure until a dependency changes", () => {
     if (!ready()) throw failure;
     return 42;
   });
-
   expect(value).toThrow(failure);
   expect(value).toThrow(failure);
   ready(true);
   expect(value()).toBe(42);
 });
-
 it("preserves thrown undefined instead of treating it as a cached value", () => {
   const value = computed(() => {
     throw undefined;
   });
-
   expect(value).toThrow();
   expect(value).toThrow();
 });
-
 it("recovers an effect whose first computed read fails under a boundary", () => {
   const errors: unknown[] = [];
   const previous = configure({ onError: (error) => errors.push(error) });
@@ -41,13 +37,10 @@ it("recovers an effect whose first computed read fails under a boundary", () => 
     seen.push(value());
   });
   onTestFinished(stop);
-
   ready(true);
-
   expect(errors).toEqual([failure]);
   expect(seen).toEqual([42]);
 });
-
 it.each([
   { handled: false, nested: false },
   { handled: false, nested: true },
@@ -85,19 +78,16 @@ it.each([
       });
     });
     onTestFinished(owner.stop);
-
     if (handled) expect(() => input(1)).not.toThrow();
     else expect(() => input(1)).toThrow(failure);
     expect(value).toThrow(failure);
     if (handled) expect(sibling).toEqual([0, 1]);
     input(2);
-
     expect(errors).toEqual(handled ? [failure] : []);
     expect(seen).toEqual(nested ? [10, 14] : [0, 4]);
     expect(sibling.at(-1)).toBe(2);
   },
 );
-
 it("delivers recovery even when the result equals the last successful value", () => {
   const previous = configure({ onError: () => {} });
   onTestFinished(() => {
@@ -113,13 +103,10 @@ it("delivers recovery even when the result equals the last successful value", ()
     seen.push(value());
   });
   onTestFinished(stop);
-
   invalid(true);
   invalid(false);
-
   expect(seen).toEqual([42, 42]);
 });
-
 it("disconnects dependencies after an unhandled initial effect failure", () => {
   const previous = configure({ onError: undefined });
   onTestFinished(() => {
@@ -136,12 +123,9 @@ it("disconnects dependencies after an unhandled initial effect failure", () => {
     external();
     throw new Error("failed");
   });
-
   expect(() => effect(() => value())).toThrow("failed");
-
   expect(connected).toBe(false);
 });
-
 it("invalidates a computed fallback after the failed dependency recovers", () => {
   const ready = state(false);
   const value = computed(() => {
@@ -160,12 +144,9 @@ it("invalidates a computed fallback after the failed dependency recovers", () =>
     seen.push(display());
   });
   onTestFinished(stop);
-
   ready(true);
-
   expect(seen).toEqual(["fallback", "loaded"]);
 });
-
 it("releases obsolete producer dependencies during failed reevaluation", () => {
   const previous = configure({ onError: () => {} });
   onTestFinished(() => {
@@ -188,11 +169,9 @@ it("releases obsolete producer dependencies during failed reevaluation", () => {
     seen.push(value());
   });
   onTestFinished(stop);
-
   invalid(true);
   expect(connected).toBe(false);
   invalid(false);
-
   expect(connected).toBe(true);
   expect(seen).toEqual([42, 42]);
   stop();

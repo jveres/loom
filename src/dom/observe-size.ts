@@ -1,92 +1,83 @@
-// observeSize(el, cb, options?) — sized observation with the same lifetime treatment events get: the
-// callback runs on the element's ResizeObserver clock (including the spec's initial delivery on
-// attach, so consumers get their first measurement without a manual call) and is torn down with
-// the node — `remove()`/`dispose()`/a keyed row leaving detach it automatically, the forgotten
-// `ro.disconnect()` class of leak gone by construction. Returns a Stop for early manual detach.
-//
-// One ResizeObserver serves each element's own window, avoiding cross-realm delivery for
-// popup and iframe elements. With nothing observed, the realm's observer is disconnected
-// and removed from the registry so it no longer retains that window.
+import { failSetup } from "../core/lifetime.js";
+import { untrack } from "../core/tracking.js";
 import type { Stop } from "../loom.js";
-import { once } from "./once.js";
-import { onUnmount } from "./ownership-base.js";
+import { nodeLifetime } from "./lifetime.js";
 
 export type SizeCallback = (entry: ResizeObserverEntry) => void;
-
-interface RealmSeat {
-  observer: ResizeObserver;
-  /** Observed elements in this realm — zero disconnects the observer
-   *  and drops the seat. */
-  elements: number;
+export interface ObserveSizeOptions extends ResizeObserverOptions {
+  readonly signal?: AbortSignal;
 }
-
-interface Watch {
-  callbacks: Set<SizeCallback>;
-  seat: RealmSeat;
-  realm: object;
+interface Pool {
+  readonly observer: ResizeObserver;
+  readonly watched: Map<Element, Set<SizeCallback>>;
 }
+const realms = new WeakMap<object, Map<ResizeObserverBoxOptions, Pool>>();
 
-const watched = new Map<Element, Watch>();
-const realms = new Map<object, RealmSeat>();
-
-function deliver(entries: ResizeObserverEntry[]): void {
-  for (const entry of entries) {
-    const watch = watched.get(entry.target);
-    if (!watch) continue;
-    for (const cb of watch.callbacks) cb(entry);
+/** @internal Connection-owned observation, independent of node disposal. */
+export function connectSize(
+  el: Element,
+  callback: SizeCallback,
+  options?: ResizeObserverOptions,
+): Stop {
+  const realm = el.ownerDocument.defaultView ?? globalThis;
+  const box = options?.box ?? "content-box";
+  let pools = realms.get(realm);
+  if (!pools) {
+    pools = new Map();
+    realms.set(realm, pools);
   }
-}
-
-function seatFor(realm: object): RealmSeat {
-  let seat = realms.get(realm);
-  if (!seat) {
-    const RO =
-      (realm as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver ??
-      ResizeObserver;
-    seat = { observer: new RO(deliver), elements: 0 };
-    realms.set(realm, seat);
+  let pool = pools.get(box);
+  if (!pool) {
+    const watched = new Map<Element, Set<SizeCallback>>();
+    const RO = (realm as typeof globalThis).ResizeObserver;
+    const observer = new RO((entries) => {
+      for (const entry of entries) {
+        const callbacks = watched.get(entry.target);
+        if (!callbacks) continue;
+        for (const fn of [...callbacks])
+          if (callbacks.has(fn)) untrack(() => fn(entry));
+      }
+    });
+    pool = { observer, watched };
+    pools.set(box, pool);
   }
-  return seat;
+  let callbacks = pool.watched.get(el);
+  if (!callbacks) {
+    callbacks = new Set();
+    pool.observer.observe(el, { box });
+    pool.watched.set(el, callbacks);
+  }
+  // A wrapper gives duplicate registrations independent teardown.
+  const deliver: SizeCallback = (entry) => callback(entry);
+  callbacks.add(deliver);
+  let active = true;
+  return () => {
+    if (!active) return;
+    active = false;
+    callbacks.delete(deliver);
+    if (callbacks.size !== 0) return;
+    pool.watched.delete(el);
+    pool.observer.unobserve(el);
+    if (pool.watched.size === 0) {
+      pool.observer.disconnect();
+      pools.delete(box);
+      if (pools.size === 0) realms.delete(realm);
+    }
+  };
 }
 
 export function observeSize(
   el: Element,
-  cb: SizeCallback,
-  options?: ResizeObserverOptions,
+  callback: SizeCallback,
+  options?: ObserveSizeOptions,
 ): Stop {
-  let watch = watched.get(el);
-  if (!watch) {
-    const realm: object = el.ownerDocument?.defaultView ?? globalThis;
-    const seat = seatFor(realm);
-    seat.elements += 1;
-    watch = { callbacks: new Set(), seat, realm };
-    watched.set(el, watch);
-    seat.observer.observe(el, options);
-  } else if (options) {
-    // A realm's observer holds ONE observation per element, so an
-    // explicit box wins over whatever the element was observed with:
-    // re-observing replaces the options (and re-fires the spec's
-    // initial delivery — size reads are idempotent). Padding-only
-    // changes are invisible on the default content-box; a consumer
-    // measuring border boxes must observe { box: "border-box" }.
-    watch.seat.observer.unobserve(el);
-    watch.seat.observer.observe(el, options);
-  }
-  const { callbacks, seat, realm } = watch;
-  callbacks.add(cb);
-  const stop = once(() => {
-    const current = watched.get(el);
-    if (!current) return;
-    current.callbacks.delete(cb);
-    if (current.callbacks.size === 0) {
-      watched.delete(el);
-      seat.observer.unobserve(el);
-      seat.elements -= 1;
-      if (seat.elements === 0) {
-        seat.observer.disconnect();
-        realms.delete(realm);
-      }
+  const life = nodeLifetime(el, options?.signal);
+  if (life.active) {
+    try {
+      life.add(connectSize(el, callback, options));
+    } catch (error) {
+      failSetup(life, error);
     }
-  });
-  return onUnmount(el, stop);
+  }
+  return life.stop;
 }

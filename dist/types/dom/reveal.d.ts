@@ -11,8 +11,9 @@ export interface RevealOptions extends ScrollOptions {
     readonly align?: "nearest" | "center";
     readonly ifHidden?: boolean;
 }
-export declare function scrollParent(el: Element, axis?: RevealAxis): HTMLElement | null;
-export declare function nearestScroller(el: Element, axis?: RevealAxis): HTMLElement | null;
-export declare function scrollNearest(box: HTMLElement, el: Element, options?: ScrollOptions): void;
-export declare function scrollCentered(box: HTMLElement, el: Element, options?: ScrollOptions): void;
+export interface FindScrollerOptions {
+    readonly axis?: RevealAxis;
+    readonly requireOverflow?: boolean;
+}
+export declare function findScroller(el: Element, options?: FindScrollerOptions): HTMLElement | null;
 export declare function reveal(el: Element, options?: RevealOptions): boolean;

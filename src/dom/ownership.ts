@@ -14,7 +14,16 @@ installOwnedResourceDriver({
   onStop: (resource, release) => {
     const node = resource as EffectNode;
     if (node.flags === 0) release();
-    else node.releaseOwnership = release;
+    else {
+      const previous = node.releaseOwnership;
+      node.releaseOwnership =
+        previous === undefined
+          ? release
+          : () => {
+              previous();
+              release();
+            };
+    }
   },
   stop: (resource) => stopEffectNode(resource as EffectNode),
   pause: (resource) => {

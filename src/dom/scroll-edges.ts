@@ -5,9 +5,9 @@
 // chevrons). Subscriber-counted: the scroll listener and the observers
 // exist only while observed. Box and content changes resync (a resize,
 // rows added or removed) through loom's pooled observers.
-import { type Read, source } from "../loom.js";
-import { observeMutation } from "./observe-mutation.js";
-import { observeSize } from "./observe-size.js";
+import { type Read, sharedSource } from "../loom.js";
+import { connectMutation } from "./observe-mutation.js";
+import { connectSize } from "./observe-size.js";
 
 export interface ScrollEdges {
   readonly start: boolean;
@@ -29,7 +29,7 @@ export function scrollEdges(
 ): Read<ScrollEdges> {
   const horizontal = options.axis === "x";
   const epsilon = options.epsilon ?? 4;
-  return source<ScrollEdges>((set) => {
+  return sharedSource<ScrollEdges>((set) => {
     let current = NONE;
     const sync = (): void => {
       const scrolled = horizontal ? el.scrollLeft : el.scrollTop;
@@ -45,8 +45,8 @@ export function scrollEdges(
       set(next);
     };
     el.addEventListener("scroll", sync, { passive: true });
-    const stopSize = observeSize(el, sync);
-    const stopContent = observeMutation(el, sync, {
+    const stopSize = connectSize(el, sync);
+    const stopContent = connectMutation(el, sync, {
       childList: true,
       subtree: true,
       characterData: true,

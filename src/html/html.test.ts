@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
   escapeAttribute,
   escapeText,
@@ -7,7 +6,8 @@ import {
   renderToString,
   serializeAttributes,
   unsafeHtml,
-} from "./index.js";
+} from "loom/html";
+import { describe, expect, it } from "vitest";
 
 describe("loom html", () => {
   it("unsafeHtml wraps a string and stringifies", () => {
@@ -17,14 +17,12 @@ describe("loom html", () => {
     expect(r.toString()).toBe("<b>x</b>");
     expect(`${r}`).toBe("<b>x</b>");
   });
-
   it("isHtml rejects non-Html values", () => {
     expect(isHtml(null)).toBe(false);
     expect(isHtml("text")).toBe(false);
     expect(isHtml({})).toBe(false);
     expect(isHtml({ value: 1 })).toBe(false); // value is not a string
   });
-
   it("renderToString handles every child kind", () => {
     expect(renderToString(null)).toBe("");
     expect(renderToString(undefined)).toBe("");
@@ -37,13 +35,11 @@ describe("loom html", () => {
       "a1<y>z",
     );
   });
-
   it("html template interpolates and escapes values", () => {
     const name = "<script>";
     const out = html`<p>${name}</p>${unsafeHtml("<hr>")}`;
     expect(out.value).toBe("<p>&lt;script&gt;</p><hr>");
   });
-
   it("html tolerates more values than template strings", () => {
     // Calling html() directly with a short strings array exercises the
     // defensive `?? ""` fallbacks (unreachable via real tagged templates).
@@ -52,14 +48,12 @@ describe("loom html", () => {
     const empty = [] as unknown as TemplateStringsArray;
     expect(html(empty).value).toBe("");
   });
-
   it("escapeText / escapeAttribute cover all entities", () => {
     expect(escapeText(`&<>"'`)).toBe("&amp;&lt;&gt;&quot;&#39;");
     expect(escapeAttribute(`&<>"'`)).toBe("&amp;&lt;&gt;&quot;&#39;");
     expect(escapeText("plain text")).toBe("plain text");
   });
 });
-
 describe("serializeAttributes", () => {
   it("renders with the JSX rule: leading-space join, bare booleans, drops, escaping", () => {
     expect(

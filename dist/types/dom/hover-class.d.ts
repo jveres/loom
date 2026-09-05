@@ -1,4 +1,5 @@
 export interface HoverClassOptions {
+    readonly signal?: AbortSignal;
     /** The class. Default "is-hover". */
     readonly name?: string;
     /** Which element(s) wear the costume for this pointerover — null
@@ -10,6 +11,7 @@ export interface HoverClassOptions {
     readonly capture?: boolean;
 }
 export interface HoverClass {
+    readonly stop: () => void;
     /** Dress `next` (and undress the rest); null undresses everything. */
     set(next: Element | readonly Element[] | null): void;
     /** The elements wearing the costume now. */

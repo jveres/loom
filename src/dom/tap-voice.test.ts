@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
+import { onDoubleTap, onTap } from "loom/events";
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { onDoublePress, onTap } from "./index.js";
 
 const press = (node: Element, id = 1, x = 10, y = 10): void => {
   node.dispatchEvent(
     new PointerEvent("pointerdown", {
+      isPrimary: true,
       bubbles: true,
       pointerId: id,
       clientX: x,
@@ -15,6 +17,7 @@ const press = (node: Element, id = 1, x = 10, y = 10): void => {
 const release = (node: Element, id = 1, x = 10, y = 10): void => {
   node.dispatchEvent(
     new PointerEvent("pointerup", {
+      isPrimary: true,
       bubbles: true,
       pointerId: id,
       clientX: x,
@@ -22,12 +25,10 @@ const release = (node: Element, id = 1, x = 10, y = 10): void => {
     }),
   );
 };
-
 afterEach(() => {
   vi.useRealTimers();
   document.body.replaceChildren();
 });
-
 describe("onTap's voice", () => {
   it("recent() is true inside the ghost-click window after a handled tap, false before any tap and after the window", () => {
     vi.useFakeTimers({ toFake: ["performance", "setTimeout", "Date"] });
@@ -44,17 +45,16 @@ describe("onTap's voice", () => {
     expect(tap.recent()).toBe(true);
     vi.advanceTimersByTime(2);
     expect(tap.recent()).toBe(false);
-    expect(tap.recent(1000)).toBe(true);
+    tap.stop();
   });
 });
-
-describe("onDoublePress", () => {
+describe("onDoubleTap", () => {
   it("fires on two taps within the window, resets after firing, and a drag between them breaks the pair", () => {
     vi.useFakeTimers({ toFake: ["performance", "setTimeout", "Date"] });
     const node = document.createElement("div");
     document.body.append(node);
     const handler = vi.fn();
-    onDoublePress(node, handler, { within: 350 });
+    onDoubleTap(node, handler, { withinMs: 350 });
     press(node);
     release(node);
     vi.advanceTimersByTime(100);

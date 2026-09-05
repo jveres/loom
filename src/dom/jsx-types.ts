@@ -117,8 +117,6 @@ type SharedProps<TElement extends Element> = ElementProps &
     onUnmount?: () => void;
     onunmount?: () => void;
     // Robust tap (press+release within slop; a drag or scroll does not trigger it).
-    onTap?: (event: PointerEvent) => void;
-    ontap?: (event: PointerEvent) => void;
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;
   };

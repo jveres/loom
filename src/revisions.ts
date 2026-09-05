@@ -1,3 +1,4 @@
+import { untrack } from "./core/tracking.js";
 // revisions(options?) — a keyed revision bus with ANCESTOR-PATH
 // semantics: `read(path)` is a tracked read of the path's revision
 // (a lazily created counter per path), `invalidate(...paths)` bumps
@@ -14,7 +15,6 @@ import {
   type NodeOptions,
   type State,
   state,
-  untrack,
   update,
 } from "./loom.js";
 

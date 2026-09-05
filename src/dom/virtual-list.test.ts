@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
+import { onUnmount } from "loom/dom";
+import { type ListSource, virtualList } from "loom/virtual-list";
+// @vitest-environment happy-dom
 import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { onUnmount } from "./index.js";
-import { type ListSource, virtualList } from "./virtual-list.js";
 
 const ROW = 10;
 const VIEW = 100;
-
 // Mount a vlist inside a scroller with stubbed geometry (happy-dom does no
 // layout): the scroller viewport is VIEW px tall and `scrolled` px into the
 // list — the two rects are what reconcile() derives the window from.
@@ -37,7 +37,6 @@ function mount(
     [...vl.el.children].filter((c) => c.textContent !== "") as HTMLElement[];
   return { vl, scroller, rows, setScroll: (px: number) => (scrolled = px) };
 }
-
 describe("virtualList", () => {
   it("skips source reads within a scroll window but refresh and setItems remain explicit", () => {
     const frames: FrameRequestCallback[] = [];
@@ -47,7 +46,7 @@ describe("virtualList", () => {
     });
     const { vl, scroller, setScroll, rows } = mount();
     onTestFinished(() => {
-      vl.destroy();
+      vl.stop();
       scroller.remove();
     });
     let generation = 0;
@@ -56,7 +55,6 @@ describe("virtualList", () => {
     setScroll(1);
     vl.setItems(source);
     at.mockClear();
-
     setScroll(2);
     scroller.dispatchEvent(new Event("scroll"));
     frames.shift()?.(0);
@@ -64,7 +62,6 @@ describe("virtualList", () => {
     expect(rows().map((row) => row.textContent)).toEqual(
       Array.from({ length: 11 }, (_, i) => String(i)),
     );
-
     generation = 1000;
     vl.refresh();
     expect(at).toHaveBeenCalledTimes(11);
@@ -81,7 +78,6 @@ describe("virtualList", () => {
     expect(at).toHaveBeenCalledTimes(11);
     expect(rows()[0]?.textContent).toBe("2001");
   });
-
   it("does not cache a failed scroll pass", () => {
     const frames: FrameRequestCallback[] = [];
     vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((fn) => {
@@ -96,7 +92,7 @@ describe("virtualList", () => {
       return row;
     });
     onTestFinished(() => {
-      vl.destroy();
+      vl.stop();
       scroller.remove();
     });
     vl.setItems(Array.from({ length: 100 }, (_, i) => i));
@@ -116,21 +112,18 @@ describe("virtualList", () => {
     vl.setItems(Array.from({ length: 1000 }, (_, i) => i));
     expect(rows().length).toBe(VIEW / ROW); // 10 of 1000
     expect(rows()[0]?.textContent).toBe("0");
-    vl.destroy();
+    vl.stop();
   });
-
   it("windows follow scroll and reuse row elements", () => {
     const { vl, rows, setScroll } = mount();
     const items = Array.from({ length: 1000 }, (_, i) => i);
     vl.setItems(items);
     const firstWindow = rows();
-
     setScroll(500); // rows 50..59
     vl.refresh();
     const texts = rows().map((r) => r.textContent);
     expect(texts[0]).toBe("50");
     expect(texts.length).toBe(10);
-
     // Same items re-set: identical keys keep identical elements (reuse).
     setScroll(0);
     vl.setItems(items);
@@ -138,9 +131,8 @@ describe("virtualList", () => {
     expect(again[0]).not.toBe(firstWindow[0]); // 0 was evicted at 500 and rebuilt…
     vl.setItems(items);
     expect(rows()[0]).toBe(again[0]); // …but a re-render in place reuses it
-    vl.destroy();
+    vl.stop();
   });
-
   it("accepts a lazy ListSource and skips undefined holes", () => {
     const { vl, rows } = mount();
     const source: ListSource<number> = {
@@ -151,18 +143,16 @@ describe("virtualList", () => {
     const texts = rows().map((r) => r.textContent);
     expect(texts).not.toContain("3"); // hole skipped, no crash
     expect(texts).toContain("4");
-    vl.destroy();
+    vl.stop();
   });
-
   it("destroy clears rows and survives further calls", () => {
     const { vl, rows } = mount();
     vl.setItems([1, 2, 3]);
     expect(rows().length).toBe(3);
-    vl.destroy();
+    vl.stop();
     expect(vl.el.children.length).toBe(0);
     vl.refresh(); // must not throw after destroy
   });
-
   it("does not rerender unchanged stationary rows during refresh or scroll", () => {
     let renders = 0;
     const { vl, setScroll } = mount(0, (n, reuse) => {
@@ -173,16 +163,13 @@ describe("virtualList", () => {
     });
     vl.setItems(Array.from({ length: 100 }, (_, i) => i));
     expect(renders).toBe(10);
-
     vl.refresh();
     expect(renders).toBe(10);
-
     setScroll(10); // rows 1..10: only the entering row needs rendering
     vl.refresh();
     expect(renders).toBe(11);
-    vl.destroy();
+    vl.stop();
   });
-
   it("disposes owned row lifecycles on replacement, eviction, and destroy", () => {
     const disposed: number[] = [];
     let replace = false;
@@ -195,19 +182,16 @@ describe("virtualList", () => {
     });
     const items = Array.from({ length: 100 }, (_, i) => i);
     vl.setItems(items);
-
     replace = true;
     vl.setItems(items);
     expect(disposed).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-
     replace = false;
     setScroll(500);
     vl.refresh();
     expect(disposed).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     ]);
-
-    vl.destroy();
+    vl.stop();
     expect(disposed).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 50, 51, 52,
       53, 54, 55, 56, 57, 58, 59,

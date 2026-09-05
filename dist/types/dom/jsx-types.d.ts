@@ -97,8 +97,6 @@ type SharedProps<TElement extends Element> = ElementProps & EventProps<TElement>
     onmount?: (node: Node) => void;
     onUnmount?: () => void;
     onunmount?: () => void;
-    onTap?: (event: PointerEvent) => void;
-    ontap?: (event: PointerEvent) => void;
     [name: `aria-${string}`]: unknown;
     [name: `data-${string}`]: unknown;
 };

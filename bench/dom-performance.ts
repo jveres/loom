@@ -1,3 +1,4 @@
+import { scope, state } from "loom";
 import {
   bind,
   each,
@@ -6,16 +7,14 @@ import {
   onUnmount,
   remove,
   resourceGroup,
-} from "../src/dom/index.js";
-import { virtualList } from "../src/dom/virtual-list.js";
-import { scope, state } from "../src/loom.js";
-import { revisions } from "../src/revisions.js";
+} from "loom/dom";
+import { revisions } from "loom/model";
+import { virtualList } from "loom/virtual-list";
 
 interface Fixture {
   run(): void;
   stop(): void;
 }
-
 function keyed(mode: string, regions = 0): Fixture {
   const original = Array.from(
     { length: regions === 0 ? 1000 : 100 },
@@ -64,7 +63,6 @@ function keyed(mode: string, regions = 0): Fixture {
     },
   };
 }
-
 function windowed(mode: string): Fixture {
   const host = h("div", { style: "height:400px;overflow:auto" });
   const view = virtualList<number>({
@@ -110,12 +108,11 @@ function windowed(mode: string): Fixture {
       frame?.(performance.now());
     },
     stop() {
-      view.destroy();
+      view.stop();
       remove(host);
     },
   };
 }
-
 function groupFixture(): Fixture {
   return {
     run() {
@@ -136,7 +133,6 @@ function groupFixture(): Fixture {
     stop() {},
   };
 }
-
 function revisionFixture(): Fixture {
   return {
     run() {
@@ -149,7 +145,6 @@ function revisionFixture(): Fixture {
     stop() {},
   };
 }
-
 /** Browser microbenchmarks: fixture setup is excluded; each keyed operation is an out-and-back pair. */
 export async function runBenchmarks(samples = 9, iterations = 100) {
   const cases: [string, () => Fixture][] = [
@@ -195,7 +190,6 @@ export async function runBenchmarks(samples = 9, iterations = 100) {
   }
   return { browser: navigator.userAgent, samples, iterations, results };
 }
-
 function retentionFixture(scoped: boolean) {
   const refs: WeakRef<Node>[] = [];
   let owner: ReturnType<typeof scope> | undefined;
@@ -218,16 +212,18 @@ function retentionFixture(scoped: boolean) {
     return host;
   });
   for (const node of [...group.value.children]) {
-    if (scoped) node.remove();
-    else remove(node);
+    remove(node);
   }
   owner?.stop();
   return { group, refs };
 }
-
 /** Run with Chromium --js-flags=--expose-gc; the live group must not retain removed nodes. */
 export async function measureRetention(scoped = false) {
-  const collect = (globalThis as typeof globalThis & { gc?: () => void }).gc;
+  const collect = (
+    globalThis as typeof globalThis & {
+      gc?: () => void;
+    }
+  ).gc;
   if (!collect) throw new Error("Run Chromium with --js-flags=--expose-gc.");
   const { group, refs } = retentionFixture(scoped);
   for (let i = 0; i < 3; i++) {
@@ -237,4 +233,44 @@ export async function measureRetention(scoped = false) {
   const retained = refs.filter((ref) => ref.deref() !== undefined).length;
   group.dispose();
   return { removed: refs.length, retainedWhileGroupLive: retained };
+}
+
+/** Construction + explicit node teardown, including uniform binding stop cost. */
+export async function runConstructionBenchmarks(samples = 15, count = 1000) {
+  const results = [];
+  for (const scoped of [false, true]) {
+    const run = () => {
+      const nodes: HTMLElement[] = [];
+      const build = () => {
+        for (let i = 0; i < count; i++) {
+          const node = h("span");
+          bind(node, () => {
+            node.textContent = String(i);
+          });
+          nodes.push(node);
+        }
+      };
+      const owner = scoped ? scope(build) : undefined;
+      if (!scoped) build();
+      for (const node of nodes) remove(node);
+      owner?.stop();
+    };
+    for (let i = 0; i < 20; i++) run();
+    const times = [];
+    for (let i = 0; i < samples; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const start = performance.now();
+      for (let j = 0; j < 10; j++) run();
+      times.push((performance.now() - start) / 10);
+    }
+    times.sort((a, b) => a - b);
+    results.push({
+      scoped,
+      count,
+      medianMs: times[Math.floor(samples / 2)],
+      minMs: times[0],
+      maxMs: times[samples - 1],
+    });
+  }
+  return results;
 }
