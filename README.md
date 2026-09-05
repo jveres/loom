@@ -364,8 +364,9 @@ function record(key: string): void {
 object, held weakly, recomputed when `version` (any `Read`) moves. Where
 `computed` memoizes one value and `keyedStates` keys by string, this is the
 shape for "the measured outset of THIS element, until the document
-changes". The version is read untracked at each call — a lookup, never a
-subscription.
+changes". Both the computation and version read run untracked, so cache
+misses and hits never subscribe the caller. Changes are checked lazily on
+the next lookup; use `computed()` when consumers need reactive invalidation.
 
 ```ts
 import { state, weakMemo } from "loom";
@@ -382,10 +383,12 @@ closure:
 
 - `keyedStates(options?)` — identity-keyed state that survives rebuilds:
   a pane torn down and rebuilt around the same entity asks
-  `cell("fold:" + id, false)` and gets the cell it had. Cells are created
-  on first touch, seeded with the authored default; a factory initial
-  (`cell(key, () => persisted(...))`) supplies any State-shaped cell, so a
-  persisted one composes. `prune(match)` drops a dying identity's cells (a
+  `value("fold:" + id, false)` and gets the cell it had. Cells are created
+  on first touch. `value(key, initial)` stores a literal value, including
+  functions; `factory(key, () => persisted(...))` supplies a custom state.
+  `keyedStates<Schema>()` fixes each string key's value type. The untyped
+  form retains the deprecated `cell()` API for existing callers.
+  `prune(match)` drops a dying identity's cells (a
   string matches keys containing it, a predicate decides per key) and
   returns the count; `has(key)` asks without creating.
 - `revisions(options?)` — a keyed revision bus with ancestor-path
@@ -395,7 +398,13 @@ closure:
   reader of `"a.b"` re-runs for writes at `"a.b"` or `"a.b.c"`, never for
   `"a.x"`; a root reader re-runs for everything. The one-key "document
   version" is `read("")` / `invalidate("")`. `separator` changes the path
-  grammar.
+  grammar and must be nonempty. `size` reports retained path cells;
+  `prune(match?)` drops unsubscribed paths, matching a substring, a
+  predicate, or all paths when omitted. Active, computed, and paused
+  subscriptions keep their cells. Pruning runs untracked. A pruned path
+  starts at zero when read again, so prune retired paths only: untracked
+  memo caches and externally stored revision numbers aren't subscriptions
+  and must be discarded separately.
 - `runtimeSlot(name, init)` — one value per runtime for a name, whatever
   module instance asks: keyed by `Symbol.for` on `globalThis`, so a module
   duplicated by HMR or a dual-bundle page still shares the registry (an
@@ -404,10 +413,10 @@ closure:
 ```ts
 import { effect, keyedStates, revisions, runtimeSlot } from "loom";
 
-const view = keyedStates({ label: "view" });
-const fold = view.cell("fold:intro", false);
+const view = keyedStates<Record<`fold:${string}`, boolean>>({ label: "view" });
+const fold = view.value("fold:intro", false);
 fold(true);
-view.cell("fold:intro", false)() === true; // the rebuilt pane's ask
+view.value("fold:intro", false)() === true; // the rebuilt pane's ask
 
 const doc = revisions({ label: "doc" });
 effect(() => {
@@ -1153,7 +1162,7 @@ import { reveal, scrollMemory } from "loom/dom";
 const pane = document.querySelector<HTMLElement>(".pane");
 const view = keyedStates({ label: "view" });
 if (pane) {
-  const memory = scrollMemory(pane, (key) => view.cell(`scroll:${key}`, 0));
+  const memory = scrollMemory(pane, (key) => view.value(`scroll:${key}`, 0));
   const show = (key: string, content: Node): void => {
     pane.replaceChildren(content);
     memory.restore(key);
@@ -1857,13 +1866,36 @@ const rows = state<readonly Row[]>([]);
 across updates. Reach for `list(container, …)` instead when you already hold the
 container element (or need the `reorder` option).
 
-Both `each` and `list` render a row **once per key** — like the conditional
-helpers, they reconcile structure, not row contents. A row whose key is unchanged
-is reused as-is; its `render` does not re-run when the item behind that key is
-replaced. So make the row model expose Loom reads/signals and pass those reads into
-bindings (`{row.title}`, `class={{ done: row.done }}`), or, if a row is a
-static snapshot, fold the fields it shows into the `key` so a changed field
-produces a new key and rebuilds the row.
+Both `each` and `list` render a row **once per key**. With stable row models,
+pass the model's signals into bindings (`{row.title}`, `class={{ done: row.done }}`).
+For immutable rows, provide `update(node, item, previous)` to change a reused
+element without replacing it:
+
+```ts
+const rows = state<readonly { id: string; title: string }[]>([]);
+const render = (row: { title: string }) => h("li", null, row.title);
+const key = (row: { id: string }) => row.id;
+const update = (node: Element, row: { title: string }) => {
+  node.textContent = row.title;
+};
+
+const inline = h("ul", null, each(rows, render, key, { update }));
+// Or, with an existing container:
+list(container, rows, { key, render, update });
+```
+
+The callback runs untracked only when a reused key's item differs by `===`
+comparison. Initial rows and reorders of unchanged items don't call it.
+Without `update`, replacement items leave existing row contents unchanged and
+Loom doesn't retain previous items. Mutating an item in place doesn't call
+`update`; use row signals or replace the item.
+
+If an update, render, or placement fails, newly staged resources are released
+and previous item values remain available for retry. Arbitrary DOM writes and
+other callback side effects aren't rolled back, so make updates safe to repeat.
+The callback must update the supplied element in place; use Loom's child
+replacement helpers when replacing descendants that own bindings. If old-row
+cleanup throws after placement, the new items are already committed.
 
 `when`, `match`, and `each` must each be placed as a child of a Loom element
 (that is what wires the slot); they are not standalone mount points.

@@ -939,6 +939,23 @@ export function poll<T>(
   return Object.assign((): T => signal(), { stop });
 }
 
+/** Internal cold-path query for plain state cells; does not subscribe the caller. */
+export function hasStateSubscribers<T>(source: State<T>): boolean {
+  const sub = createWatcherNode();
+  const previous = setActiveSub(sub);
+  try {
+    source();
+    const first = sub.deps?.dep.subs;
+    return (
+      first !== undefined && (first.sub !== sub || first.nextSub !== undefined)
+    );
+  } finally {
+    restoreActiveSub(previous);
+    sub.flags = 0;
+    disposeDeps(sub);
+  }
+}
+
 export function trigger<T>(source: State<T>): void {
   // Discover every dependency read by the public accessor. This intentionally uses the same path
   // with and without inspection, and also supports derived writable/read adapters that touch more

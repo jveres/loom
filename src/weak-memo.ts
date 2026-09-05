@@ -3,7 +3,7 @@
 // when `version` (any Read — a revision counter, a document version)
 // moves. computed() memoizes one value; keyedStates keys by string;
 // this is the shape for "the border outset of THIS element, until the
-// document changes". The version is read UNTRACKED at each call — a
+// document changes". Both computation and version reads are UNTRACKED — a
 // lookup, never a subscription — so the memo is invalidated lazily and
 // costs no effect.
 import { type Read, untrack } from "./loom.js";
@@ -25,7 +25,7 @@ export function weakMemo<K extends object, V>(
       }
     }
     if (cache.has(key)) return cache.get(key) as V;
-    const value = compute(key);
+    const value = untrack(() => compute(key));
     cache.set(key, value);
     return value;
   };

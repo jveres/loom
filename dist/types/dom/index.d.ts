@@ -23,7 +23,12 @@ export type ElementProps = Record<string, unknown> & {
     key?: string | number;
     style?: StyleProp;
 };
-export interface ListOptions<T> {
+/** Called untracked for a reused key whose item changed by reference/value (===). */
+export type ListUpdate<T> = (node: Element, item: T, previous: T) => void;
+export interface EachOptions<T> {
+    readonly update?: ListUpdate<T>;
+}
+export interface ListOptions<T> extends EachOptions<T> {
     readonly key: (item: T) => string | number;
     readonly render: (item: T, key: string) => Element;
     readonly reorder?: Read<boolean>;
@@ -85,7 +90,7 @@ export declare function classed(el: Element, name: string, read: Read<unknown>, 
 export declare function style(name: string, read: Read<unknown>): StyleBinding;
 export declare function style(el: Element, prop: string): Read<string>;
 export declare function style(el: Element, prop: string, read: Read<unknown>, options?: EffectOptions): void;
-export declare function list<T>(container: Element, read: Read<readonly T[]>, options: ListOptions<T>): Stop;
+export declare function list<T>(container: Element, read: State<readonly T[]> | Read<readonly T[]>, options: ListOptions<NoInfer<T>>): Stop;
 /**
  * Conditional subtree, keyed on the truthiness of `cond`. Renders `render()` while truthy and the
  * optional `fallback()` while falsy, rebuilding **only when the truthiness flips** — so a `cond` whose
@@ -109,7 +114,7 @@ export declare function match(selector: Read<string | number>, cases: Readonly<R
  * `list()`, it reorders by key and throws on a duplicate key. Place the result as a child of a Loom
  * element.
  */
-export declare function each<T>(items: State<readonly T[]> | Read<readonly T[]>, render: (item: NoInfer<T>, key: string) => Element, key: (item: NoInfer<T>) => string | number): Child;
+export declare function each<T>(items: State<readonly T[]> | Read<readonly T[]>, render: (item: NoInfer<T>, key: string) => Element, key: (item: NoInfer<T>) => string | number, options?: EachOptions<NoInfer<T>>): Child;
 /**
  * Bind a robust tap handler. Unlike `click`, this is not dropped by iOS Safari when the DOM mutates
  * mid-gesture, because it is built from raw pointer events rather than a hit-test-synthesized click.

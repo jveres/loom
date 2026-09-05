@@ -94,13 +94,25 @@ export type ElementProps = Record<string, unknown> & {
   style?: StyleProp;
 };
 
-export interface ListOptions<T> {
+/** Called untracked for a reused key whose item changed by reference/value (===). */
+export type ListUpdate<T> = (node: Element, item: T, previous: T) => void;
+
+export interface EachOptions<T> {
+  readonly update?: ListUpdate<T>;
+}
+
+export interface ListOptions<T> extends EachOptions<T> {
   readonly key: (item: T) => string | number;
   readonly render: (item: T, key: string) => Element;
   readonly reorder?: Read<boolean>;
 }
 
 type LoomKey = string | number;
+
+interface RowUpdates<T> {
+  readonly update: ListUpdate<T>;
+  readonly items: Map<LoomKey, T>;
+}
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 // SVG-only tag names — elements that must be created in the SVG namespace. Tags shared with
@@ -529,6 +541,7 @@ function reconcileKeyed<T>(
   key: (item: T) => LoomKey,
   render: (item: T, key: string) => Element,
   reorder = true,
+  updates?: RowUpdates<T>,
 ): void {
   const seen = new Set<LoomKey>();
   const keys = new Array<LoomKey>(items.length);
@@ -551,6 +564,11 @@ function reconcileKeyed<T>(
           node = render(items[index] as T, keyText);
           created.set(k, node);
           node.setAttribute("data-loom-key", keyText);
+        } else if (updates && items[index] !== updates.items.get(k)) {
+          const current = items[index] as T;
+          const previous = updates.items.get(k) as T;
+          const existing = node;
+          untrack(() => updates.update(existing, current, previous));
         }
         ordered[index] = node;
       }
@@ -574,11 +592,17 @@ function reconcileKeyed<T>(
   });
 
   for (const [k, node] of created) nodes.set(k, node);
+  if (updates) {
+    for (let index = 0; index < items.length; index++) {
+      updates.items.set(keys[index] as LoomKey, items[index] as T);
+    }
+  }
   if (seen.size !== nodes.size) {
     const outgoing: Element[] = [];
     for (const [k, node] of nodes) {
       if (seen.has(k)) continue;
       nodes.delete(k);
+      updates?.items.delete(k);
       outgoing.push(node);
     }
     removeNodes(outgoing);
@@ -587,10 +611,13 @@ function reconcileKeyed<T>(
 
 export function list<T>(
   container: Element,
-  read: Read<readonly T[]>,
-  options: ListOptions<T>,
+  read: State<readonly T[]> | Read<readonly T[]>,
+  options: ListOptions<NoInfer<T>>,
 ): Stop {
   const nodes = new Map<LoomKey, Element>();
+  const updates = options.update
+    ? { update: options.update, items: new Map<LoomKey, T>() }
+    : undefined;
   const stop = untrack(() =>
     effect(
       () => {
@@ -604,6 +631,7 @@ export function list<T>(
           options.key,
           options.render,
           shouldReorder,
+          updates,
         );
       },
       { label: "dom.list", target: container },
@@ -613,6 +641,7 @@ export function list<T>(
   const stopList = (): void => {
     const outgoing = [...nodes.values()];
     nodes.clear();
+    updates?.items.clear();
     const errors: unknown[] = [];
     try {
       stop();
@@ -721,17 +750,30 @@ export function each<T>(
   items: State<readonly T[]> | Read<readonly T[]>,
   render: (item: NoInfer<T>, key: string) => Element,
   key: (item: NoInfer<T>) => string | number,
+  options: EachOptions<NoInfer<T>> = {},
 ): Child {
   return brand<DynamicChild>({
     __loomDynamic: true,
     mount(anchor) {
       const nodes = new Map<LoomKey, Element>();
+      const updates = options.update
+        ? { update: options.update, items: new Map<LoomKey, T>() }
+        : undefined;
       return domEffect(
         () => {
           const values = items();
           const parent = anchor.parentNode;
           if (parent)
-            reconcileKeyed(parent, anchor, values, nodes, key, render);
+            reconcileKeyed(
+              parent,
+              anchor,
+              values,
+              nodes,
+              key,
+              render,
+              true,
+              updates,
+            );
         },
         "dom.each",
         slotTarget(anchor),

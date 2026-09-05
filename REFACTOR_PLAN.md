@@ -54,18 +54,18 @@ scope-owned producers cannot reconnect outside their owner's active lifetime.
 
 ## 4. Public helper contracts
 
-Status: pending. Resolve API details before implementation and record the final
-choices below. Preserve existing callers through additive APIs where practical.
+Status: complete. Additive APIs preserve existing callers; final contracts and
+verification are recorded below.
 
-- [ ] Give `list()` and `each()` consistent same-key item update support while
+- [x] Give `list()` and `each()` consistent same-key item update support while
       retaining the stable-model fast path.
-- [ ] Run `weakMemo()` computation untracked, matching its imperative contract.
-- [ ] Add typed keys or a schema for `keyedStates()`; separate factory creation
+- [x] Run `weakMemo()` computation untracked, matching its imperative contract.
+- [x] Add typed keys or a schema for `keyedStates()`; separate factory creation
       from ordinary function-valued state.
-- [ ] Reject empty revision separators.
-- [ ] Add revision retention controls without splitting actively observed paths
+- [x] Reject empty revision separators.
+- [x] Add revision retention controls without splitting actively observed paths
       into independent cells.
-- [ ] Add behavioral tests, compile-time API checks, and usage documentation.
+- [x] Add behavioral tests, compile-time API checks, and usage documentation.
 
 Acceptance: immutable item replacement can update without rebuilding DOM;
 memo tracking is consistent; keyed values retain type safety; invalid revision
@@ -171,8 +171,38 @@ Record completed work, commands, results, and outstanding limitations here.
   pause/stop, paused connection guards, ignored retired callbacks, and terminal
   reconnection guards. Other browser engines were not run.
 
+- Stage 4 completed on September 5, 2026. Added 18 behavioral regressions across
+  the helper tests and `src/dom/item-updates.test.ts`, plus compile-time checks
+  for schema keys, value/factory types, and inferred row-update arguments.
+- Both keyed DOM APIs accept optional `update(node, item, previous)`. Reused
+  keys call it untracked when the item differs by `===`; initial rows and
+  unchanged-item reorders skip it. Previous-item storage exists only when an
+  update callback is supplied. `each` accepts options as its fourth argument.
+  `list` now infers row types from state accessors as `each` already did.
+- Item baselines commit after placement and before old-row cleanup. A failed
+  update, render, or placement preserves the previous baseline for retry and
+  releases staged resources. Callback side effects and arbitrary DOM writes
+  aren't transactional; update callbacks must be safe to repeat.
+- `weakMemo` runs both computation and version reads untracked. Explicit
+  `keyedStates().value()` stores functions literally; `.factory()` creates
+  custom states once. `keyedStates<Schema>()` constrains string keys and values.
+  The unschematized API retains deprecated `.cell()` compatibility.
+- Revisions reject empty separators and expose `size` and untracked
+  `prune(match?)`. A temporary internal graph probe prevents pruning cells
+  with subscribers, including computed and paused subscriptions, without
+  adding bookkeeping to every state. Pruned counters restart at zero;
+  callers must separately discard untracked caches that reference retired paths.
+- Stage 4 verification: project and direct test-file TypeScript checks, lint,
+  `pnpm test` (56 files, 520 tests), build, and `git diff --check` passed.
+  All eight size budgets pass: minimal core 2,906 B gzip, full core 5,248 B,
+  minimal DOM 5,680 B. Tracked distribution files regenerated.
+- Chromium 152 passed ten checks covering both list APIs: immutable replacement
+  and reordering preserve focus and DOM identity, update reads are untracked,
+  failed updates release staged bindings, and retries receive the last committed
+  item. Other browser engines were not run.
+
 ## Next steps
 
-Stages 2 and 3 are complete. Continue with stage 4: clarify
-keyed-list replacement and keyed-state typing APIs; fix imperative memo tracking
-and revision separator validation; define safe revision retention controls.
+Stages 1–4 are complete. Continue with stage 5: establish representative workload
+baselines before changing keyed reconciliation, virtual scrolling, or resource
+retention. Keep only optimizations supported by measurements.

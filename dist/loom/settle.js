@@ -1,7 +1,7 @@
-import { C as e, E as t, O as n, v as r } from "./loom-DrVvSGMZ.js";
+import { D as e, k as t, w as n, y as r } from "./loom-C5QAXuAo.js";
 //#region src/settle.ts
 var i = (e, t) => e === t;
-function a(e, a, o, s) {
+function a(n, a, o, s) {
 	if (!Number.isFinite(o) || o < 0) throw RangeError("settle() delay must be a finite, non-negative number.");
 	let c = s?.equals ?? i, l = !0, u, d, f, p = !1, m = !1, h = !1, g, _ = () => {
 		g !== void 0 && (clearTimeout(g), g = void 0);
@@ -10,15 +10,15 @@ function a(e, a, o, s) {
 	}, y = () => {
 		if (h || m || !p) return;
 		_(), p = !1;
-		let e = f, n = d;
-		d = e, t(() => a(e, n));
+		let t = f, n = d;
+		d = t, e(() => a(t, n));
 	}, b = () => {
 		_(), g = setTimeout(() => {
 			g = void 0, y();
 		}, o);
-	}, x = n(() => {
-		let t = e();
-		return l && (l = !1, u = t, d = t), t;
+	}, x = t(() => {
+		let e = n();
+		return l && (l = !1, u = e, d = e), e;
 	}, (e) => {
 		let t = c(e, u);
 		if (u = e, t) {
@@ -49,8 +49,8 @@ function a(e, a, o, s) {
 		flush: y
 	};
 }
-function o(n, o, s) {
-	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = e(t(n), l), f = a(n, (e) => d(e), o, s), p = !1, m = !1, h = r({
+function o(t, o, s) {
+	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = n(e(t), l), f = a(t, (e) => d(e), o, s), p = !1, m = !1, h = r({
 		pause: () => {
 			m = !0;
 		},
@@ -65,8 +65,8 @@ function o(n, o, s) {
 		flush: () => {
 			if (p || m) return;
 			f.flush();
-			let e = t(n);
-			u(e, t(() => d())) || d(e);
+			let n = e(t);
+			u(n, e(() => d())) || d(n);
 		},
 		stop: () => {
 			p = !0, f.stop(), h();
@@ -76,12 +76,12 @@ function o(n, o, s) {
 var s = (e) => {
 	if (!Number.isFinite(e) || e < 0) throw RangeError("quiet delay must be a finite, non-negative number.");
 };
-function c(e, n, i) {
+function c(t, n, i) {
 	s(n);
 	let a = n, o = !1, c = !1, l = !1, u, d = () => {
 		u !== void 0 && (clearTimeout(u), u = void 0);
 	}, f = () => {
-		l || c || !o || (d(), o = !1, t(e));
+		l || c || !o || (d(), o = !1, e(t));
 	}, p = () => {
 		d(), u = setTimeout(() => {
 			u = void 0, f();

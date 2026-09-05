@@ -8,13 +8,25 @@
 // "document version") is `read("")`/`invalidate("")`.
 //
 // Paths with no cell cost nothing to invalidate (no reader, no work).
-import { batch, type NodeOptions, type State, state, update } from "./loom.js";
+import {
+  batch,
+  hasStateSubscribers,
+  type NodeOptions,
+  type State,
+  state,
+  untrack,
+  update,
+} from "./loom.js";
 
 export interface Revisions {
   /** Tracked read of `path`'s revision — subscribes the caller. */
   read(path: string): number;
   /** Bump `paths` and their ancestors; one batch, each cell once. */
   invalidate(...paths: readonly string[]): void;
+  /** Retained path cells, including cells without subscribers. */
+  readonly size: number;
+  /** Drop matching unsubscribed paths (all by default). Recreated counters start at zero. */
+  prune(match?: string | ((path: string) => boolean)): number;
 }
 
 export interface RevisionsOptions extends NodeOptions {
@@ -24,6 +36,8 @@ export interface RevisionsOptions extends NodeOptions {
 
 export function revisions(options: RevisionsOptions = {}): Revisions {
   const separator = options.separator ?? ".";
+  if (separator.length === 0)
+    throw new RangeError("Revision separator must not be empty.");
   const cells = new Map<string, State<number>>();
   const cell = (path: string): State<number> => {
     let found = cells.get(path);
@@ -48,6 +62,25 @@ export function revisions(options: RevisionsOptions = {}): Revisions {
     }
   };
   return {
+    get size() {
+      return cells.size;
+    },
+    prune(match) {
+      return untrack(() => {
+        const test =
+          typeof match === "string"
+            ? (path: string): boolean => path.includes(match)
+            : (match ?? (() => true));
+        let dropped = 0;
+        for (const [path, found] of cells) {
+          if (test(path) && !hasStateSubscribers(found)) {
+            cells.delete(path);
+            dropped++;
+          }
+        }
+        return dropped;
+      });
+    },
     read: (path) => cell(path)(),
     invalidate(...paths) {
       const affected = new Set<string>();

@@ -205,6 +205,8 @@ export type Polled<T> = Read<T> & {
  * Push-style producers want {@link source}; async request/response wants `resource` (loom/async).
  */
 export declare function poll<T>(sample: () => T, ms: number, options?: NodeOptions): Polled<T>;
+/** Internal cold-path query for plain state cells; does not subscribe the caller. */
+export declare function hasStateSubscribers<T>(source: State<T>): boolean;
 export declare function trigger<T>(source: State<T>): void;
 export declare function untrack<T>(fn: () => T): T;
 /**

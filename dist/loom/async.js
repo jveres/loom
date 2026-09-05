@@ -1,26 +1,26 @@
-import { C as e, E as t, T as n, c as r, n as i } from "./loom-DrVvSGMZ.js";
+import { D as e, E as t, c as n, n as r, w as i } from "./loom-C5QAXuAo.js";
 //#region src/async/index.ts
 function a(a, o) {
-	let s = e(void 0, o), c = e(!0, o), l = e(!1, o), u = e(void 0, o), d = e(0, o), f = r(() => {
+	let s = i(void 0, o), c = i(!0, o), l = i(!1, o), u = i(void 0, o), d = i(0, o), f = n(() => {
 		d();
-		let e = !0, n = new AbortController();
+		let t = !0, n = new AbortController();
 		c(!0);
-		let r = t(() => s()), o;
+		let i = e(() => s()), o;
 		try {
-			o = a(r, n.signal);
+			o = a(i, n.signal);
 		} catch (e) {
 			o = Promise.reject(e);
 		}
-		return o.then((t) => {
-			e && i(() => {
-				s(t), u(void 0), c(!1), l(!0);
+		return o.then((e) => {
+			t && r(() => {
+				s(e), u(void 0), c(!1), l(!0);
 			});
-		}, (t) => {
-			e && i(() => {
-				u(t), c(!1);
+		}, (e) => {
+			t && r(() => {
+				u(e), c(!1);
 			});
 		}), () => {
-			e = !1, n.abort();
+			t = !1, n.abort();
 		};
 	}, o);
 	return Object.assign(() => s(), {
@@ -28,7 +28,7 @@ function a(a, o) {
 		ready: () => l(),
 		error: () => u(),
 		refresh: () => {
-			n(d);
+			t(d);
 		},
 		stop: f
 	});

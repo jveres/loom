@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { effect, state, weakMemo } from "./index.js";
 
 describe("weakMemo", () => {
@@ -38,5 +38,28 @@ describe("weakMemo", () => {
     memo(key);
     memo(key);
     expect(compute).toHaveBeenCalledTimes(1);
+  });
+
+  it("never subscribes callers to reads made during cache computation", () => {
+    const input = state(1);
+    const version = state(0);
+    const refresh = state(0);
+    const memo = weakMemo(() => input(), version);
+    const key = {};
+    const seen: number[] = [];
+    const stop = effect(() => {
+      refresh();
+      seen.push(memo(key));
+    });
+    onTestFinished(stop);
+
+    input(2);
+    version(1);
+    expect(seen).toEqual([1]);
+    refresh(1);
+    input(3);
+    refresh(2);
+
+    expect(seen).toEqual([1, 2, 2]);
   });
 });

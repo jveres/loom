@@ -1,4 +1,4 @@
-import { d as e, f as t, p as n, t as r, u as i, v as a } from "./loom-DrVvSGMZ.js";
+import { d as e, f as t, m as n, p as r, t as i, y as a } from "./loom-C5QAXuAo.js";
 //#region src/core/channels.ts
 var o = /* @__PURE__ */ new Map(), s = { record(e, t, n, r, i, a) {
 	e.seq++;
@@ -33,9 +33,9 @@ var u = l("loom:read", 1024, [
 ]), f = l("loom:compute"), p = l("loom:effect"), m = l("loom:flush", 8, ["batchSize", "durationMs"]), h = l("loom:create"), g = l("loom:dispose"), _ = 0, v = 0, y = !1, b = /* @__PURE__ */ new Map(), x = typeof FinalizationRegistry > "u" ? void 0 : new FinalizationRegistry((e) => {
 	b.delete(e);
 });
-function S(e, t, i) {
+function S(e, t, r) {
 	if (!y) return;
-	let a = n(r(), i), o = ++_, s = {
+	let a = n(i(), r), o = ++_, s = {
 		id: o,
 		disposed: !1,
 		internal: a?.internal === !0,
@@ -46,7 +46,7 @@ function S(e, t, i) {
 	};
 	return e.meta = s, b.set(o, new WeakRef(e)), x?.register(e, o), s;
 }
-i({
+e({
 	register: S,
 	unregister(e) {
 		b.delete(e);
@@ -86,23 +86,23 @@ function T(e) {
 	return { nodes: n };
 }
 function E() {
-	let e = 0, n = 0, r = 0, i = 0, a = 0, s = 0;
-	for (let [t, o] of b) {
+	let e = 0, t = 0, n = 0, i = 0, a = 0, s = 0;
+	for (let [r, o] of b) {
 		let c = o.deref();
 		if (c === void 0) {
-			b.delete(t);
+			b.delete(r);
 			continue;
 		}
 		let l = c.meta;
-		!l || l.internal || (l.kind === "computed" ? (n++, c.subs === void 0 && s++) : l.kind === "effect" ? (r++, l.target !== void 0 && i++) : "connect" in c ? a++ : (e++, c.subs === void 0 && s++));
+		!l || l.internal || (l.kind === "computed" ? (t++, c.subs === void 0 && s++) : l.kind === "effect" ? (n++, l.target !== void 0 && i++) : "connect" in c ? a++ : (e++, c.subs === void 0 && s++));
 	}
 	return {
 		states: e,
-		computeds: n,
-		effects: r,
+		computeds: t,
+		effects: n,
 		targetedEffects: i,
 		sources: a,
-		scopes: t(),
+		scopes: r(),
 		channels: o.size,
 		unread: s
 	};
@@ -179,7 +179,7 @@ function F(e, t, n, r, i, a) {
 }
 s.record = F;
 var I = typeof performance > "u" ? Date.now : () => performance.now();
-e({
+t({
 	create(e) {
 		h.meters !== 0 && e?.internal !== !0 && h.seq++;
 	},

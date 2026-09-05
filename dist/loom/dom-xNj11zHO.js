@@ -1,4 +1,4 @@
-import { C as e, E as t, O as n, S as r, c as i, h as a, o, r as s, s as c, w as l, x as u, y as d } from "./loom-DrVvSGMZ.js";
+import { C as e, D as t, S as n, T as r, b as i, c as a, g as o, k as s, o as c, r as l, s as u, w as d } from "./loom-C5QAXuAo.js";
 import { settle as f } from "./settle.js";
 import { t as p } from "./jsx-props-sAPN8GVq.js";
 import { a as m, c as h, d as ee, i as g, n as te, o as ne, r as _, t as re, u as ie } from "./ownership-base-B9jrYyAc.js";
@@ -43,7 +43,7 @@ function C(e, t) {
 	return w(ae, e, t, () => ue(e, t));
 }
 function ue(e, t) {
-	return u((n) => (n(e.getAttribute(t)), le(e, t, n)), e.getAttribute(t));
+	return n((n) => (n(e.getAttribute(t)), le(e, t, n)), e.getAttribute(t));
 }
 function w(e, t, n, r) {
 	let i = e.get(t);
@@ -55,13 +55,13 @@ var de = /* @__PURE__ */ new WeakMap(), fe = /* @__PURE__ */ new WeakMap();
 function pe(e, t) {
 	return w(de, e, t, () => {
 		let n = C(e, "class");
-		return s(() => (n(), e.classList.contains(t)));
+		return l(() => (n(), e.classList.contains(t)));
 	});
 }
 function me(e, t) {
 	return w(fe, e, t, () => {
 		let n = C(e, "style");
-		return s(() => (n(), e.style.getPropertyValue(t)));
+		return l(() => (n(), e.style.getPropertyValue(t)));
 	});
 }
 //#endregion
@@ -117,12 +117,12 @@ function T(e, t) {
 //#endregion
 //#region src/dom/ownership.ts
 te({
-	stop: (e) => l(e),
+	stop: (e) => r(e),
 	pause: (e) => {
-		a(e);
+		o(e);
 	},
 	resume: (e) => {
-		d(e);
+		i(e);
 	},
 	requiresOrderedStop: (e) => e.cleanup !== void 0
 });
@@ -190,7 +190,7 @@ function Se(e, t, n = {}) {
 	};
 	e.addEventListener("blur", a), e.addEventListener("input", o), g(e, () => {
 		e.removeEventListener("blur", a), e.removeEventListener("input", o);
-	}), m(e, c(() => {
+	}), m(e, u(() => {
 		i = r(), document.activeElement !== e && a();
 	}, "dom.bindValue", e));
 }
@@ -202,7 +202,7 @@ function Ce(e, t) {
 	};
 	e.addEventListener("blur", r), e.addEventListener("change", i), g(e, () => {
 		e.removeEventListener("blur", r), e.removeEventListener("change", i);
-	}), m(e, c(() => {
+	}), m(e, u(() => {
 		n = t(), document.activeElement !== e && r();
 	}, "dom.bindValue.checked", e));
 }
@@ -261,7 +261,7 @@ function ke(e) {
 function Ae(e) {
 	let t = O.get(e);
 	if (t) return t;
-	let n = u((t) => {
+	let r = n((t) => {
 		t(e.isConnected);
 		let n = De(e);
 		if (!n) return () => void 0;
@@ -270,7 +270,7 @@ function Ae(e) {
 			r.watched.delete(e), r.watched.size === 0 && (r.observer?.disconnect(), r.observer = null);
 		};
 	}, e.isConnected);
-	return O.set(e, n), n;
+	return O.set(e, r), r;
 }
 //#endregion
 //#region src/dom/once.ts
@@ -390,7 +390,7 @@ var Re = /* @__PURE__ */ new WeakMap(), ze = /* @__PURE__ */ new WeakMap();
 function Be(e) {
 	let t = Re.get(e);
 	if (t) return t;
-	let n = u((t) => {
+	let r = n((t) => {
 		let n = (e) => {
 			e.pointerType !== "touch" && t(!0);
 		}, r = () => t(!1);
@@ -398,12 +398,12 @@ function Be(e) {
 			e.removeEventListener("pointerenter", n), e.removeEventListener("pointerleave", r), e.removeEventListener("pointercancel", r), t(!1);
 		};
 	}, !1);
-	return Re.set(e, n), n;
+	return Re.set(e, r), r;
 }
 function Ve(e) {
 	let t = ze.get(e);
 	if (t) return t;
-	let n = u((t) => {
+	let r = n((t) => {
 		let n = () => {
 			let n = e.ownerDocument.activeElement;
 			t(n !== null && e.contains(n));
@@ -415,7 +415,7 @@ function Ve(e) {
 			e.removeEventListener("focusin", r), e.removeEventListener("focusout", i), t(!1);
 		};
 	}, !1);
-	return ze.set(e, n), n;
+	return ze.set(e, r), r;
 }
 //#endregion
 //#region src/dom/keyed-child.ts
@@ -711,28 +711,28 @@ function L() {
 		return;
 	}
 }
-function ut(t, r, i = {}) {
-	let a = i.storage ?? L(), o = i.serialize ?? JSON.stringify, s = i.parse ?? JSON.parse, c = r;
-	if (a) try {
-		let e = a.getItem(t);
-		if (e !== null) {
-			let t = s(e);
-			i.validate?.(t) !== !1 && (c = t);
+function ut(e, t, n = {}) {
+	let r = n.storage ?? L(), i = n.serialize ?? JSON.stringify, a = n.parse ?? JSON.parse, o = t;
+	if (r) try {
+		let t = r.getItem(e);
+		if (t !== null) {
+			let e = a(t);
+			n.validate?.(e) !== !1 && (o = e);
 		}
 	} catch {}
-	let l = i.label ?? `persisted:${t}`, u = e(c, i.internal === void 0 ? { label: l } : {
-		label: l,
-		internal: i.internal
+	let c = n.label ?? `persisted:${e}`, l = d(o, n.internal === void 0 ? { label: c } : {
+		label: c,
+		internal: n.internal
 	});
-	if (a) {
-		let e = (e) => {
+	if (r) {
+		let t = (t) => {
 			try {
-				a.setItem(t, o(e));
+				r.setItem(e, i(t));
 			} catch {}
 		};
-		i.settleMs === void 0 ? n(u, e) : f(u, e, i.settleMs, { label: `${l}.settle` });
+		n.settleMs === void 0 ? s(l, t) : f(l, t, n.settleMs, { label: `${c}.settle` });
 	}
-	return u;
+	return l;
 }
 //#endregion
 //#region src/dom/pointer-session.ts
@@ -790,7 +790,7 @@ var R = /* @__PURE__ */ new WeakMap();
 function pt(e) {
 	let t = R.get(e);
 	if (t) return t;
-	let n = u((t) => {
+	let r = n((t) => {
 		let n = -1, r = null, i = (e) => {
 			e.pointerId === n && (n = -1, r?.abort(), r = null, t(!1));
 		}, a = (a) => {
@@ -804,7 +804,7 @@ function pt(e) {
 			e.removeEventListener("pointerdown", a), r?.abort(), r = null, n = -1;
 		};
 	}, !1);
-	return R.set(e, n), n;
+	return R.set(e, r), r;
 }
 //#endregion
 //#region src/dom/scroll-edges.ts
@@ -812,24 +812,24 @@ var z = {
 	start: !1,
 	end: !1
 };
-function mt(e, t = {}) {
-	let n = t.axis === "x", i = t.epsilon ?? 4;
-	return r((t) => {
-		let r = z, a = () => {
-			let a = n ? e.scrollLeft : e.scrollTop, o = n ? e.scrollWidth - e.clientWidth : e.scrollHeight - e.clientHeight, s = {
+function mt(t, n = {}) {
+	let r = n.axis === "x", i = n.epsilon ?? 4;
+	return e((e) => {
+		let n = z, a = () => {
+			let a = r ? t.scrollLeft : t.scrollTop, o = r ? t.scrollWidth - t.clientWidth : t.scrollHeight - t.clientHeight, s = {
 				start: a > i,
 				end: o - a > i
 			};
-			(s.start !== r.start || s.end !== r.end) && (r = s, t(s));
+			(s.start !== n.start || s.end !== n.end) && (n = s, e(s));
 		};
-		e.addEventListener("scroll", a, { passive: !0 });
-		let o = I(e, a), s = N(e, a, {
+		t.addEventListener("scroll", a, { passive: !0 });
+		let o = I(t, a), s = N(t, a, {
 			childList: !0,
 			subtree: !0,
 			characterData: !0
 		});
 		return a(), () => {
-			e.removeEventListener("scroll", a), o(), s();
+			t.removeEventListener("scroll", a), o(), s();
 		};
 	}, z);
 }
@@ -968,7 +968,7 @@ function bt(e, t = null, n) {
 }
 function xt(e, t) {
 	let n = document.createTextNode(""), r = "";
-	return m(n, (t === void 0 ? o : c)(() => {
+	return m(n, (t === void 0 ? c : u)(() => {
 		let t = Zt(e());
 		t !== r && (r = t, n.data = t);
 	}, "dom.text", n, t)), n;
@@ -1011,55 +1011,62 @@ function wt(e, t, n, r) {
 		read: n
 	}, r);
 }
-function Tt(e, t, n, r, i, a, o = !0) {
-	let s = /* @__PURE__ */ new Set(), c = Array(n.length);
-	for (let e = 0; e < n.length; e++) {
-		let t = i(n[e]);
-		if (s.has(t)) throw Error(`Duplicate Loom key "${t}".`);
-		s.add(t), c[e] = t;
+function Tt(e, n, r, i, a, o, s = !0, c) {
+	let l = /* @__PURE__ */ new Set(), u = Array(r.length);
+	for (let e = 0; e < r.length; e++) {
+		let t = a(r[e]);
+		if (l.has(t)) throw Error(`Duplicate Loom key "${t}".`);
+		l.add(t), u[e] = t;
 	}
-	let l = /* @__PURE__ */ new Map(), u = Array(n.length);
+	let d = /* @__PURE__ */ new Map(), f = Array(r.length);
 	ee(() => {
 		try {
-			for (let e = 0; e < n.length; e++) {
-				let t = c[e], i = r.get(t);
-				if (i === void 0) {
-					let r = String(t);
-					i = a(n[e], r), l.set(t, i), i.setAttribute("data-loom-key", r);
+			for (let e = 0; e < r.length; e++) {
+				let n = u[e], a = i.get(n);
+				if (a === void 0) {
+					let t = String(n);
+					a = o(r[e], t), d.set(n, a), a.setAttribute("data-loom-key", t);
+				} else if (c && r[e] !== c.items.get(n)) {
+					let i = r[e], o = c.items.get(n), s = a;
+					t(() => c.update(s, i, o));
 				}
-				u[e] = i;
+				f[e] = a;
 			}
-			if (r.size === 0 && u.length !== 0) {
-				let n = (e.ownerDocument ?? document).createDocumentFragment();
-				for (let e of u) n.appendChild(e);
-				e.insertBefore(n, t);
-			} else if (o) D(e, u, t);
-			else for (let t of u) t.parentNode || e.appendChild(t);
+			if (i.size === 0 && f.length !== 0) {
+				let t = (e.ownerDocument ?? document).createDocumentFragment();
+				for (let e of f) t.appendChild(e);
+				e.insertBefore(t, n);
+			} else if (s) D(e, f, n);
+			else for (let t of f) t.parentNode || e.appendChild(t);
 		} catch (e) {
-			h(l.values(), [e]);
+			h(d.values(), [e]);
 		}
 	});
-	for (let [e, t] of l) r.set(e, t);
-	if (s.size !== r.size) {
+	for (let [e, t] of d) i.set(e, t);
+	if (c) for (let e = 0; e < r.length; e++) c.items.set(u[e], r[e]);
+	if (l.size !== i.size) {
 		let e = [];
-		for (let [t, n] of r) s.has(t) || (r.delete(t), e.push(n));
+		for (let [t, n] of i) l.has(t) || (i.delete(t), c?.items.delete(t), e.push(n));
 		h(e);
 	}
 }
 function Et(e, n, r) {
-	let a = /* @__PURE__ */ new Map(), o = t(() => i(() => {
+	let i = /* @__PURE__ */ new Map(), o = r.update ? {
+		update: r.update,
+		items: /* @__PURE__ */ new Map()
+	} : void 0, s = t(() => a(() => {
 		let t = r.reorder?.() !== !1;
-		Tt(e, null, n(), a, r.key, r.render, t);
+		Tt(e, null, n(), i, r.key, r.render, t, o);
 	}, {
 		label: "dom.list",
 		target: e
 	}));
 	return _(e, () => {
-		let e = [...a.values()];
-		a.clear();
+		let e = [...i.values()];
+		i.clear(), o?.items.clear();
 		let t = [];
 		try {
-			o();
+			s();
 		} catch (e) {
 			t.push(e);
 		}
@@ -1071,7 +1078,7 @@ function Dt(e, n) {
 		__loomDynamic: !0,
 		mount(r) {
 			let i = [], a;
-			return c(() => {
+			return u(() => {
 				let o = e();
 				if (o === a) return;
 				let s = r.parentNode;
@@ -1100,15 +1107,18 @@ function kt(e, t, n) {
 		return r ? r() : null;
 	});
 }
-function At(e, t, n) {
+function At(e, t, n, r = {}) {
 	return V({
 		__loomDynamic: !0,
-		mount(r) {
-			let i = /* @__PURE__ */ new Map();
-			return c(() => {
-				let a = e(), o = r.parentNode;
-				o && Tt(o, r, a, i, n, t);
-			}, "dom.each", zt(r));
+		mount(i) {
+			let a = /* @__PURE__ */ new Map(), o = r.update ? {
+				update: r.update,
+				items: /* @__PURE__ */ new Map()
+			} : void 0;
+			return u(() => {
+				let r = e(), s = i.parentNode;
+				s && Tt(s, i, r, a, n, t, !0, o);
+			}, "dom.each", zt(i));
 		}
 	});
 }
@@ -1136,11 +1146,11 @@ function Mt(e, t, n = {}) {
 	});
 }
 function Nt(e, t, n) {
-	m(e, c(t, "dom.bind", e, n));
+	m(e, u(t, "dom.bind", e, n));
 }
 function Pt(e, t, n) {
-	let r = c(t, "dom.bind", e, n);
-	return _(e, () => l(r));
+	let i = u(t, "dom.bind", e, n);
+	return _(e, () => r(i));
 }
 function Ft(e, t, n) {
 	let r = !1;
@@ -1302,7 +1312,7 @@ function Wt(e, t, n) {
 }
 function K(e, t, n, r) {
 	let i = r === void 0 ? Ht(e, t.name) : r;
-	m(e, (n === void 0 ? o : c)(() => {
+	m(e, (n === void 0 ? c : u)(() => {
 		let n = !!t.read();
 		n !== i && (i = n, e.classList.toggle(t.name, n));
 	}, `dom.class.${t.name}`, e, n));
@@ -1338,7 +1348,7 @@ function Y(e, t, n) {
 }
 function X(e, t, n, r, i, a) {
 	let o = i;
-	m(e, c(() => {
+	m(e, u(() => {
 		let e = n();
 		e !== o && (o = e, r(e));
 	}, t, e, a));
