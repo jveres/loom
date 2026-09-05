@@ -128,6 +128,8 @@ export interface ComputedNode<T> extends NodeBase {
 interface EffectNode extends NodeBase {
   fn: InternalEffectFn;
   cleanup: Stop | undefined;
+  /** Internal group unlink, installed only for effects captured by a DOM resource group. */
+  releaseOwnership?: Stop | undefined;
   // The scope that owns this effect (for collective stop/pause/resume), if any, and this effect's
   // slot in scope.effects — so a manual stop can swap-remove in O(1) instead of leaking the dead node.
   scope?: ScopeNode | undefined;
@@ -1494,6 +1496,11 @@ function stopEffect(this: EffectNode): void {
   const meta = this.meta;
   if (activeSub === this) activeSub = undefined;
   this.flags = 0; // drainDeferred skips flags===0; a still-queued deferred node is compacted next drain
+  const release = this.releaseOwnership;
+  if (release !== undefined) {
+    this.releaseOwnership = undefined;
+    release();
+  }
   if (this.deferred) this.deferredQueued = false;
   const owner = this.scope;
   if (owner !== undefined && !owner.stopped) {

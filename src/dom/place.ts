@@ -33,6 +33,27 @@ export function positionOrdered(
 ): void {
   const n = ordered.length;
   if (n === 0) return;
+  // Unchanged contiguous regions and insertions into them need neither a parent-wide scan nor
+  // LIS storage. Check only present members; new nodes can then be inserted around them.
+  let previous: Node | undefined;
+  let contiguous = true;
+  for (const node of ordered) {
+    if (node.parentNode !== parent) continue;
+    if (previous !== undefined && previous.nextSibling !== node) {
+      contiguous = false;
+      break;
+    }
+    previous = node;
+  }
+  if (contiguous) {
+    let next: Node | null = end;
+    for (let i = n - 1; i >= 0; i--) {
+      const node = ordered[i] as Node;
+      if (node.parentNode !== parent) placeBefore(parent, node, next);
+      next = node;
+    }
+    return;
+  }
   const desired = new Map<Node, number>();
   for (let i = 0; i < n; i++) desired.set(ordered[i] as Node, i);
   // The members' current DOM order, expressed as desired indexes; track whether that order is

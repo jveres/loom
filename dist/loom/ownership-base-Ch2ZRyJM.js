@@ -34,20 +34,31 @@ function o(e, t, n) {
 	if (i?.length === 1) throw i[0];
 	if (i && i.length > 1) throw AggregateError(i, "Multiple Loom DOM disposers failed.");
 }
-function s(e, r) {
-	let i = e, o = i[a];
-	o ? Array.isArray(o) ? o.push(r) : i[a] = [o, r] : i[a] = r;
-	let s = t;
-	s !== void 0 && s.push({
-		owner: e,
-		resource: r,
-		index: s.length
-	});
-	let c = n;
-	c !== void 0 && c.push({
-		owner: e,
-		resource: r,
-		index: c.length
+function s(r, i) {
+	let o = r, s = o[a];
+	s ? Array.isArray(s) ? s.push(i) : o[a] = [s, i] : o[a] = i;
+	let l = t;
+	if (l !== void 0) {
+		let t = {
+			owner: r,
+			resource: i,
+			index: l.nextIndex++,
+			slot: l.entries.length
+		};
+		l.entries.push(t);
+		let n = () => {
+			let e = t.slot;
+			if (e < 0 || (t.slot = -1, l.stopping)) return;
+			let n = l.entries.pop();
+			n !== t && (l.entries[e] = n, n.slot = e);
+		};
+		c(i) ? i.release = n : typeof i != "function" && e?.onStop(i, n);
+	}
+	let u = n;
+	u !== void 0 && u.push({
+		owner: r,
+		resource: i,
+		index: u.length
 	});
 }
 function c(e) {
@@ -105,15 +116,21 @@ function p(e, t = []) {
 function m(e) {
 	if (t !== void 0) throw TypeError("resourceGroup() cannot be nested; use one flat group per replaceable region.");
 	if (Object.prototype.toString.call(e) === "[object AsyncFunction]") throw TypeError("resourceGroup() callbacks must be synchronous.");
-	let n = [];
+	let n = {
+		entries: [],
+		nextIndex: 0,
+		stopping: !1
+	}, r = () => {
+		n.stopping = !0, _(n.entries);
+	};
 	t = n;
-	let r;
+	let i;
 	try {
-		if (r = e(), h(r)) throw Promise.resolve(r).catch(() => void 0), TypeError("resourceGroup() callbacks must be synchronous.");
+		if (i = e(), h(i)) throw Promise.resolve(i).catch(() => void 0), TypeError("resourceGroup() callbacks must be synchronous.");
 	} catch (e) {
 		t = void 0;
 		try {
-			_(n);
+			r();
 		} catch (t) {
 			throw AggregateError([e, t], "Loom resource group creation and cleanup both failed.");
 		}
@@ -121,11 +138,11 @@ function m(e) {
 	} finally {
 		t = void 0;
 	}
-	let i = !0;
+	let a = !0;
 	return {
-		value: r,
+		value: i,
 		dispose: () => {
-			i && (i = !1, _(n));
+			a && (a = !1, r());
 		}
 	};
 }
@@ -171,7 +188,9 @@ function v(e, t) {
 		if (!n.active) return;
 		n.active = !1;
 		let e = n.owner, t = n.stop;
-		n.owner = void 0, n.stop = void 0, e !== void 0 && l(e, n), t?.();
+		n.owner = void 0, n.stop = void 0;
+		let r = n.release;
+		n.release = void 0, r?.(), e !== void 0 && l(e, n), t?.();
 	}, s(e, n), n.dispose;
 }
 function y(t, n) {

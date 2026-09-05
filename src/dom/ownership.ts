@@ -11,6 +11,11 @@ import {
 } from "./ownership-base.js";
 
 installOwnedResourceDriver({
+  onStop: (resource, release) => {
+    const node = resource as EffectNode;
+    if (node.flags === 0) release();
+    else node.releaseOwnership = release;
+  },
   stop: (resource) => stopEffectNode(resource as EffectNode),
   pause: (resource) => {
     pauseEffectNode(resource as EffectNode);

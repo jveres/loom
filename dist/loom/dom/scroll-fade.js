@@ -1,5 +1,5 @@
-import { c as e } from "../loom-C5QAXuAo.js";
-import { t } from "../media-read-CHjb8o0F.js";
+import { c as e } from "../loom-C8RlpOsd.js";
+import { t } from "../media-read-B-sBGW9U.js";
 //#region src/dom/scroll-fade.ts
 var n = 4, r = "(prefers-reduced-motion: reduce)", i = "--loom-scroll-fade-start", a = "--loom-scroll-fade-end", o = /* @__PURE__ */ new WeakSet();
 function s() {

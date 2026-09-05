@@ -1,7 +1,7 @@
-import { C as e, D as t, S as n, T as r, b as i, c as a, g as o, k as s, o as c, r as l, s as u, w as d } from "./loom-C5QAXuAo.js";
+import { C as e, D as t, S as n, T as r, b as i, c as a, g as o, k as s, o as c, r as l, s as u, w as d } from "./loom-C8RlpOsd.js";
 import { settle as f } from "./settle.js";
 import { t as p } from "./jsx-props-sAPN8GVq.js";
-import { a as m, c as h, d as ee, i as g, n as te, o as ne, r as _, t as re, u as ie } from "./ownership-base-B9jrYyAc.js";
+import { a as m, c as h, d as ee, i as g, n as te, o as ne, r as _, t as re, u as ie } from "./ownership-base-Ch2ZRyJM.js";
 //#region src/dom/element-reads.ts
 var ae = /* @__PURE__ */ new WeakMap(), v = /* @__PURE__ */ new Map(), y = null, b = !1;
 function x(e) {
@@ -117,6 +117,10 @@ function T(e, t) {
 //#endregion
 //#region src/dom/ownership.ts
 te({
+	onStop: (e, t) => {
+		let n = e;
+		n.flags === 0 ? t() : n.releaseOwnership = t;
+	},
 	stop: (e) => r(e),
 	pause: (e) => {
 		o(e);
@@ -141,14 +145,15 @@ function E(e, t, n) {
 function D(e, t, n) {
 	let r = t.length;
 	if (r === 0) return;
-	let i = /* @__PURE__ */ new Map();
-	for (let e = 0; e < r; e++) i.set(t[e], e);
-	let a = [], o = [], s = !0;
-	for (let t = e.firstChild; t !== null; t = t.nextSibling) {
-		let e = i.get(t);
-		e !== void 0 && (e < (a[a.length - 1] ?? -1) && (s = !1), a.push(e), o.push(t));
+	let i, a = !0;
+	for (let n of t) if (n.parentNode === e) {
+		if (i !== void 0 && i.nextSibling !== n) {
+			a = !1;
+			break;
+		}
+		i = n;
 	}
-	if (s) {
+	if (a) {
 		let i = n;
 		for (let n = r - 1; n >= 0; n--) {
 			let r = t[n];
@@ -156,20 +161,35 @@ function D(e, t, n) {
 		}
 		return;
 	}
-	let c = /* @__PURE__ */ new Set(), l = [], u = [], d = Array(a.length).fill(-1);
-	for (let e = 0; e < a.length; e++) {
-		let t = a[e], n = 0, r = u.length;
+	let o = /* @__PURE__ */ new Map();
+	for (let e = 0; e < r; e++) o.set(t[e], e);
+	let s = [], c = [], l = !0;
+	for (let t = e.firstChild; t !== null; t = t.nextSibling) {
+		let e = o.get(t);
+		e !== void 0 && (e < (s[s.length - 1] ?? -1) && (l = !1), s.push(e), c.push(t));
+	}
+	if (l) {
+		let i = n;
+		for (let n = r - 1; n >= 0; n--) {
+			let r = t[n];
+			r.parentNode !== e && E(e, r, i), i = r;
+		}
+		return;
+	}
+	let u = /* @__PURE__ */ new Set(), d = [], f = [], p = Array(s.length).fill(-1);
+	for (let e = 0; e < s.length; e++) {
+		let t = s[e], n = 0, r = f.length;
 		for (; n < r;) {
 			let e = n + r >> 1;
-			u[e] < t ? n = e + 1 : r = e;
+			f[e] < t ? n = e + 1 : r = e;
 		}
-		n > 0 && (d[e] = l[n - 1]), l[n] = e, u[n] = t;
+		n > 0 && (p[e] = d[n - 1]), d[n] = e, f[n] = t;
 	}
-	for (let e = l.length > 0 ? l[l.length - 1] : -1; e >= 0; e = d[e]) c.add(o[e]);
-	let f = n;
+	for (let e = d.length > 0 ? d[d.length - 1] : -1; e >= 0; e = p[e]) u.add(c[e]);
+	let m = n;
 	for (let n = r - 1; n >= 0; n--) {
 		let r = t[n];
-		c.has(r) || E(e, r, f), f = r;
+		u.has(r) || E(e, r, m), m = r;
 	}
 }
 function xe(e, t) {

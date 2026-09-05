@@ -1,0 +1,391 @@
+{
+  "date": "2026-09-05",
+  "baselineCommit": "b7e3a02",
+  "environment": {
+    "os": "macOS 26.6.2",
+    "architecture": "arm64",
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+  },
+  "runs": [
+    {
+      "baseline": {
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "iterations": 200,
+        "results": [
+          {
+            "maxMs": 0.18300000011920928,
+            "medianMs": 0.165,
+            "minMs": 0.16,
+            "name": "keyed/unchanged"
+          },
+          {
+            "maxMs": 0.19,
+            "medianMs": 0.17900000005960465,
+            "minMs": 0.17400000005960464,
+            "name": "keyed/append"
+          },
+          {
+            "maxMs": 0.19899999976158145,
+            "medianMs": 0.1775,
+            "minMs": 0.17349999994039536,
+            "name": "keyed/prepend"
+          },
+          {
+            "maxMs": 0.19400000005960463,
+            "medianMs": 0.185,
+            "minMs": 0.1825,
+            "name": "keyed/remove"
+          },
+          {
+            "maxMs": 0.25099999994039535,
+            "medianMs": 0.23700000017881392,
+            "minMs": 0.23,
+            "name": "keyed/swap"
+          },
+          {
+            "maxMs": 0.7555000001192093,
+            "medianMs": 0.6965000000596047,
+            "minMs": 0.6879999998211861,
+            "name": "keyed/reverse"
+          },
+          {
+            "maxMs": 0.015499999821186066,
+            "medianMs": 0.014000000059604644,
+            "minMs": 0.01300000011920929,
+            "name": "regions/1"
+          },
+          {
+            "maxMs": 0.07349999994039536,
+            "medianMs": 0.06049999982118606,
+            "minMs": 0.05900000005960464,
+            "name": "regions/20"
+          },
+          {
+            "maxMs": 0.2740000000596046,
+            "medianMs": 0.26,
+            "minMs": 0.25549999982118604,
+            "name": "regions/100"
+          },
+          {
+            "maxMs": 0.0035000002384185792,
+            "medianMs": 0.0029999998211860655,
+            "minMs": 0.0019999998807907105,
+            "name": "virtual/stationary"
+          },
+          {
+            "maxMs": 0.00699999988079071,
+            "medianMs": 0.004000000059604645,
+            "minMs": 0.003499999940395355,
+            "name": "virtual/within"
+          },
+          {
+            "maxMs": 0.03449999988079071,
+            "medianMs": 0.030499999821186067,
+            "minMs": 0.0275,
+            "name": "virtual/boundary"
+          },
+          {
+            "maxMs": 0.5630000001192093,
+            "medianMs": 0.46349999994039537,
+            "minMs": 0.46049999982118606,
+            "name": "group/remove-900-of-1000"
+          },
+          {
+            "maxMs": 0.13549999982118607,
+            "medianMs": 0.12349999994039536,
+            "minMs": 0.1225,
+            "name": "revisions/churn-1000"
+          }
+        ],
+        "samples": 11
+      },
+      "candidate": {
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "iterations": 200,
+        "results": [
+          {
+            "maxMs": 0.11150000005960464,
+            "medianMs": 0.09200000017881392,
+            "minMs": 0.09050000011920928,
+            "name": "keyed/unchanged"
+          },
+          {
+            "maxMs": 0.12199999988079072,
+            "medianMs": 0.10849999994039536,
+            "minMs": 0.105,
+            "name": "keyed/append"
+          },
+          {
+            "maxMs": 0.12,
+            "medianMs": 0.1075,
+            "minMs": 0.10399999976158142,
+            "name": "keyed/prepend"
+          },
+          {
+            "maxMs": 0.1625,
+            "medianMs": 0.155,
+            "minMs": 0.15099999994039537,
+            "name": "keyed/remove"
+          },
+          {
+            "maxMs": 0.25849999994039535,
+            "medianMs": 0.24800000011920928,
+            "minMs": 0.2375,
+            "name": "keyed/swap"
+          },
+          {
+            "maxMs": 0.75,
+            "medianMs": 0.6925,
+            "minMs": 0.6840000000596046,
+            "name": "keyed/reverse"
+          },
+          {
+            "maxMs": 0.015999999940395356,
+            "medianMs": 0.01,
+            "minMs": 0.009000000059604645,
+            "name": "regions/1"
+          },
+          {
+            "maxMs": 0.010999999940395355,
+            "medianMs": 0.01,
+            "minMs": 0.009000000059604645,
+            "name": "regions/20"
+          },
+          {
+            "maxMs": 0.01399999976158142,
+            "medianMs": 0.00949999988079071,
+            "minMs": 0.008999999761581421,
+            "name": "regions/100"
+          },
+          {
+            "maxMs": 0.0025,
+            "medianMs": 0.002000000178813934,
+            "minMs": 0.0014999997615814209,
+            "name": "virtual/stationary"
+          },
+          {
+            "maxMs": 0.003499999940395355,
+            "medianMs": 0.003499999940395355,
+            "minMs": 0.0029999998211860655,
+            "name": "virtual/within"
+          },
+          {
+            "maxMs": 0.04299999982118607,
+            "medianMs": 0.03200000017881394,
+            "minMs": 0.03,
+            "name": "virtual/boundary"
+          },
+          {
+            "maxMs": 0.5035000002384186,
+            "medianMs": 0.4375,
+            "minMs": 0.415,
+            "name": "group/remove-900-of-1000"
+          },
+          {
+            "maxMs": 0.13,
+            "medianMs": 0.12400000005960464,
+            "minMs": 0.12349999994039536,
+            "name": "revisions/churn-1000"
+          }
+        ],
+        "samples": 11
+      }
+    },
+    {
+      "baseline": {
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "iterations": 400,
+        "results": [
+          {
+            "maxMs": 0.18375,
+            "medianMs": 0.16150000005960463,
+            "minMs": 0.15524999991059305,
+            "name": "keyed/unchanged"
+          },
+          {
+            "maxMs": 0.19349999994039535,
+            "medianMs": 0.17799999997019766,
+            "minMs": 0.1717499999701977,
+            "name": "keyed/append"
+          },
+          {
+            "maxMs": 0.18125,
+            "medianMs": 0.17775000005960465,
+            "minMs": 0.1754999999701977,
+            "name": "keyed/prepend"
+          },
+          {
+            "maxMs": 0.18574999988079072,
+            "medianMs": 0.18174999997019767,
+            "minMs": 0.17950000002980232,
+            "name": "keyed/remove"
+          },
+          {
+            "maxMs": 0.2502500000596046,
+            "medianMs": 0.24525000005960465,
+            "minMs": 0.24075000002980232,
+            "name": "keyed/swap"
+          },
+          {
+            "maxMs": 0.6957500000298024,
+            "medianMs": 0.6929999999701977,
+            "minMs": 0.6909999999403954,
+            "name": "keyed/reverse"
+          },
+          {
+            "maxMs": 0.0175,
+            "medianMs": 0.01375,
+            "minMs": 0.013250000029802322,
+            "name": "regions/1"
+          },
+          {
+            "maxMs": 0.06475000008940697,
+            "medianMs": 0.0625,
+            "minMs": 0.06174999997019768,
+            "name": "regions/20"
+          },
+          {
+            "maxMs": 0.277749999910593,
+            "medianMs": 0.2657500000298023,
+            "minMs": 0.26525000005960464,
+            "name": "regions/100"
+          },
+          {
+            "maxMs": 0.0032499998807907103,
+            "medianMs": 0.0027499999105930328,
+            "minMs": 0.0022499999403953553,
+            "name": "virtual/stationary"
+          },
+          {
+            "maxMs": 0.004749999940395355,
+            "medianMs": 0.003999999910593033,
+            "minMs": 0.003499999940395355,
+            "name": "virtual/within"
+          },
+          {
+            "maxMs": 0.035,
+            "medianMs": 0.027999999970197677,
+            "minMs": 0.027000000029802323,
+            "name": "virtual/boundary"
+          },
+          {
+            "maxMs": 0.525,
+            "medianMs": 0.4857499998807907,
+            "minMs": 0.48275000005960467,
+            "name": "group/remove-900-of-1000"
+          },
+          {
+            "maxMs": 0.12849999994039535,
+            "medianMs": 0.12450000002980233,
+            "minMs": 0.12399999991059305,
+            "name": "revisions/churn-1000"
+          }
+        ],
+        "samples": 11
+      },
+      "candidate": {
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "iterations": 400,
+        "results": [
+          {
+            "maxMs": 0.10799999997019769,
+            "medianMs": 0.09200000002980233,
+            "minMs": 0.09049999997019768,
+            "name": "keyed/unchanged"
+          },
+          {
+            "maxMs": 0.11625,
+            "medianMs": 0.11049999997019767,
+            "minMs": 0.1075,
+            "name": "keyed/append"
+          },
+          {
+            "maxMs": 0.11100000008940696,
+            "medianMs": 0.10849999994039536,
+            "minMs": 0.10625,
+            "name": "keyed/prepend"
+          },
+          {
+            "maxMs": 0.15775000005960466,
+            "medianMs": 0.15349999994039534,
+            "minMs": 0.1507499998807907,
+            "name": "keyed/remove"
+          },
+          {
+            "maxMs": 0.2575,
+            "medianMs": 0.24924999997019767,
+            "minMs": 0.2404999999701977,
+            "name": "keyed/swap"
+          },
+          {
+            "maxMs": 0.7195000000298023,
+            "medianMs": 0.688999999910593,
+            "minMs": 0.68625,
+            "name": "keyed/reverse"
+          },
+          {
+            "maxMs": 0.01125,
+            "medianMs": 0.00925000011920929,
+            "minMs": 0.008999999910593033,
+            "name": "regions/1"
+          },
+          {
+            "maxMs": 0.010250000059604645,
+            "medianMs": 0.009500000029802322,
+            "minMs": 0.009000000059604645,
+            "name": "regions/20"
+          },
+          {
+            "maxMs": 0.012000000029802322,
+            "medianMs": 0.00925000011920929,
+            "minMs": 0.008999999910593033,
+            "name": "regions/100"
+          },
+          {
+            "maxMs": 0.0022500000894069673,
+            "medianMs": 0.0020000000298023225,
+            "minMs": 0.0014999999105930327,
+            "name": "virtual/stationary"
+          },
+          {
+            "maxMs": 0.0032500000298023224,
+            "medianMs": 0.0032499998807907103,
+            "minMs": 0.0029999999701976776,
+            "name": "virtual/within"
+          },
+          {
+            "maxMs": 0.04100000008940697,
+            "medianMs": 0.027750000059604644,
+            "minMs": 0.027249999940395356,
+            "name": "virtual/boundary"
+          },
+          {
+            "maxMs": 0.5047499999403954,
+            "medianMs": 0.45099999994039536,
+            "minMs": 0.4394999998807907,
+            "name": "group/remove-900-of-1000"
+          },
+          {
+            "maxMs": 0.12950000002980233,
+            "medianMs": 0.12524999991059305,
+            "minMs": 0.12474999994039536,
+            "name": "revisions/churn-1000"
+          }
+        ],
+        "samples": 11
+      }
+    }
+  ],
+  "retention": {
+    "granularRemoval": {
+      "nodes": 1000,
+      "baselineRetained": 1000,
+      "candidateRetained": 0
+    },
+    "owningScopeStop": {
+      "nodes": 1000,
+      "baselineRetained": 1000,
+      "candidateRetained": 0
+    }
+  }
+}

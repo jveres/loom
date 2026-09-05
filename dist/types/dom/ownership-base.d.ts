@@ -1,6 +1,7 @@
 export type OwnershipStop = () => void;
 export type OwnedResource = object;
 interface OwnedResourceDriver {
+    readonly onStop: (resource: OwnedResource, release: OwnershipStop) => void;
     readonly stop: (resource: OwnedResource) => void;
     readonly pause: (resource: OwnedResource) => void;
     readonly resume: (resource: OwnedResource) => void;

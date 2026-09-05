@@ -75,6 +75,8 @@ export interface ComputedNode<T> extends NodeBase {
 interface EffectNode extends NodeBase {
     fn: InternalEffectFn;
     cleanup: Stop | undefined;
+    /** Internal group unlink, installed only for effects captured by a DOM resource group. */
+    releaseOwnership?: Stop | undefined;
     scope?: ScopeNode | undefined;
     scopeIndex?: number | undefined;
     pausedCount?: number | undefined;

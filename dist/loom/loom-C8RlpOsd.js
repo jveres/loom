@@ -746,20 +746,22 @@ function K() {
 function q() {
 	if (this.flags === 0) return;
 	let e = this.meta;
-	c === this && (c = void 0), this.flags = 0, this.deferred && (this.deferredQueued = !1);
-	let t = this.scope;
-	t !== void 0 && !t.stopped && (j(t.effects, this.scopeIndex ?? -1, (e, t) => {
+	c === this && (c = void 0), this.flags = 0;
+	let t = this.releaseOwnership;
+	t !== void 0 && (this.releaseOwnership = void 0, t()), this.deferred && (this.deferredQueued = !1);
+	let n = this.scope;
+	n !== void 0 && !n.stopped && (j(n.effects, this.scopeIndex ?? -1, (e, t) => {
 		e.scopeIndex = t;
 	}), this.scope = void 0, this.scopeIndex = -1), Q(this);
-	let n = this.subs;
-	n !== void 0 && y(n);
-	let r = !1, i;
+	let r = this.subs;
+	r !== void 0 && y(r);
+	let i = !1, a;
 	if (this.cleanup) try {
 		Z(this);
 	} catch (e) {
-		r = !0, i = e;
+		i = !0, a = e;
 	}
-	e && (e.disposed = !0, p?.unregister(e.id)), m?.dispose(this), r && X(i, this);
+	e && (e.disposed = !0, p?.unregister(e.id)), m?.dispose(this), i && X(a, this);
 }
 function J(e) {
 	return e != null && typeof e.then == "function";

@@ -2,6 +2,7 @@ export type OwnershipStop = () => void;
 export type OwnedResource = object;
 
 interface OwnedResourceDriver {
+  readonly onStop: (resource: OwnedResource, release: OwnershipStop) => void;
   readonly stop: (resource: OwnedResource) => void;
   readonly pause: (resource: OwnedResource) => void;
   readonly resume: (resource: OwnedResource) => void;
@@ -9,7 +10,7 @@ interface OwnedResourceDriver {
 }
 
 let resourceDriver: OwnedResourceDriver | undefined;
-let activeResourceGroup: GroupEntry[] | undefined;
+let activeResourceGroup: ResourceArena | undefined;
 let activeConstruction: GroupEntry[] | undefined;
 
 /** @internal Install operations for raw resources stored by the reactive DOM layer. */
@@ -22,6 +23,7 @@ interface RegisteredStop {
   active: boolean;
   owner: Node | undefined;
   stop: OwnershipStop | undefined;
+  release?: OwnershipStop | undefined;
   dispose: OwnershipStop;
 }
 
@@ -32,6 +34,16 @@ interface GroupEntry {
   readonly owner: Node;
   readonly resource: OwnedEntry;
   readonly index: number;
+}
+
+interface ArenaEntry extends GroupEntry {
+  slot: number;
+}
+
+interface ResourceArena {
+  readonly entries: ArenaEntry[];
+  nextIndex: number;
+  stopping: boolean;
 }
 
 // Store ownership on the node itself. A private symbol keeps the slot invisible to normal DOM
@@ -99,7 +111,27 @@ function addOwned(node: Node, entry: OwnedEntry): void {
   else target[OWNED] = [owned, entry];
   const group = activeResourceGroup;
   if (group !== undefined) {
-    group.push({ owner: node, resource: entry, index: group.length });
+    const captured: ArenaEntry = {
+      owner: node,
+      resource: entry,
+      index: group.nextIndex++,
+      slot: group.entries.length,
+    };
+    group.entries.push(captured);
+    const release = (): void => {
+      const slot = captured.slot;
+      if (slot < 0) return;
+      captured.slot = -1;
+      if (group.stopping) return;
+      const last = group.entries.pop() as ArenaEntry;
+      if (last !== captured) {
+        group.entries[slot] = last;
+        last.slot = slot;
+      }
+    };
+    if (isRegisteredStop(entry)) entry.release = release;
+    else if (typeof entry !== "function")
+      resourceDriver?.onStop(entry, release);
   }
   const construction = activeConstruction;
   if (construction !== undefined) {
@@ -216,8 +248,12 @@ export function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T> {
   if (Object.prototype.toString.call(fn) === "[object AsyncFunction]") {
     throw new TypeError("resourceGroup() callbacks must be synchronous.");
   }
-  const resources: GroupEntry[] = [];
-  activeResourceGroup = resources;
+  const arena: ResourceArena = { entries: [], nextIndex: 0, stopping: false };
+  const stopArena = (): void => {
+    arena.stopping = true;
+    stopResourceGroup(arena.entries);
+  };
+  activeResourceGroup = arena;
   let value: T;
   try {
     value = fn() as T;
@@ -228,7 +264,7 @@ export function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T> {
   } catch (error) {
     activeResourceGroup = undefined;
     try {
-      stopResourceGroup(resources);
+      stopArena();
     } catch (cleanupError) {
       throw new AggregateError(
         [error, cleanupError],
@@ -245,7 +281,7 @@ export function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T> {
     dispose: () => {
       if (!active) return;
       active = false;
-      stopResourceGroup(resources);
+      stopArena();
     },
   };
 }
@@ -329,6 +365,9 @@ export function onUnmount(node: Node, stop: OwnershipStop): OwnershipStop {
     // before cleanup so a stopped handle does not keep the DOM node or callback alive.
     entry.owner = undefined;
     entry.stop = undefined;
+    const release = entry.release;
+    entry.release = undefined;
+    release?.();
     if (owner !== undefined) unregister(owner, entry);
     current?.();
   };

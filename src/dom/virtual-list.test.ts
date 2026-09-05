@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { onUnmount } from "./index.js";
 import { type ListSource, virtualList } from "./virtual-list.js";
 
@@ -35,10 +35,82 @@ function mount(
   vl.el.getBoundingClientRect = () => ({ top: -scrolled }) as DOMRect;
   const rows = () =>
     [...vl.el.children].filter((c) => c.textContent !== "") as HTMLElement[];
-  return { vl, rows, setScroll: (px: number) => (scrolled = px) };
+  return { vl, scroller, rows, setScroll: (px: number) => (scrolled = px) };
 }
 
 describe("virtualList", () => {
+  it("skips source reads within a scroll window but refresh and setItems remain explicit", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((fn) => {
+      frames.push(fn);
+      return 1;
+    });
+    const { vl, scroller, setScroll, rows } = mount();
+    onTestFinished(() => {
+      vl.destroy();
+      scroller.remove();
+    });
+    let generation = 0;
+    const at = vi.fn((i: number) => generation + i);
+    const source = { length: 1000, at };
+    setScroll(1);
+    vl.setItems(source);
+    at.mockClear();
+
+    setScroll(2);
+    scroller.dispatchEvent(new Event("scroll"));
+    frames.shift()?.(0);
+    expect(at).not.toHaveBeenCalled();
+    expect(rows().map((row) => row.textContent)).toEqual(
+      Array.from({ length: 11 }, (_, i) => String(i)),
+    );
+
+    generation = 1000;
+    vl.refresh();
+    expect(at).toHaveBeenCalledTimes(11);
+    expect(rows()[0]?.textContent).toBe("1000");
+    at.mockClear();
+    generation = 2000;
+    vl.setItems(source);
+    expect(at).toHaveBeenCalledTimes(11);
+    expect(rows()[0]?.textContent).toBe("2000");
+    at.mockClear();
+    setScroll(11);
+    scroller.dispatchEvent(new Event("scroll"));
+    frames.shift()?.(0);
+    expect(at).toHaveBeenCalledTimes(11);
+    expect(rows()[0]?.textContent).toBe("2001");
+  });
+
+  it("does not cache a failed scroll pass", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((fn) => {
+      frames.push(fn);
+      return 1;
+    });
+    let fail = false;
+    const { vl, scroller, setScroll, rows } = mount(0, (n, reuse) => {
+      if (fail) throw new Error("row failed");
+      const row = reuse ?? document.createElement("div");
+      row.textContent = String(n);
+      return row;
+    });
+    onTestFinished(() => {
+      vl.destroy();
+      scroller.remove();
+    });
+    vl.setItems(Array.from({ length: 100 }, (_, i) => i));
+    setScroll(100);
+    fail = true;
+    scroller.dispatchEvent(new Event("scroll"));
+    expect(() => frames.shift()?.(0)).toThrow("row failed");
+    fail = false;
+    scroller.dispatchEvent(new Event("scroll"));
+    frames.shift()?.(0);
+    expect(rows().map((row) => row.textContent)).toEqual(
+      Array.from({ length: 10 }, (_, i) => String(i + 10)),
+    );
+  });
   it("mounts only the visible window, not the whole list", () => {
     const { vl, rows } = mount();
     vl.setItems(Array.from({ length: 1000 }, (_, i) => i));

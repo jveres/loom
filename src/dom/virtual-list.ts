@@ -66,6 +66,9 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
   let scroller: HTMLElement | null = null;
   let raf = 0;
   let revision = 0;
+  let windowStart = -1;
+  let windowEnd = -1;
+  let windowRevision = -1;
 
   const throwDisposalErrors = (errors: unknown[]): void => {
     if (errors.length === 1) throw errors[0];
@@ -77,7 +80,7 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
     }
   };
 
-  const reconcile = (): void => {
+  const reconcile = (force = true): void => {
     const sp = scroller;
     if (!sp) return;
     const vh = sp.clientHeight;
@@ -90,6 +93,15 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
     if (start < 0) start = 0;
     let end = Math.ceil((offset + vh) / h) + overscan;
     if (end > total) end = total;
+    if (
+      !force &&
+      start === windowStart &&
+      end === windowEnd &&
+      revision === windowRevision
+    )
+      return;
+    // Only a completed pass can be skipped. Failed rendering must remain retryable.
+    windowRevision = -1;
     const live = new Set<string | number>();
     const disposalErrors: unknown[] = [];
     for (let i = start; i < end; i++) {
@@ -137,13 +149,16 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
         }
       }
     throwDisposalErrors(disposalErrors);
+    windowStart = start;
+    windowEnd = end;
+    windowRevision = revision;
   };
 
   const schedule = (): void => {
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
-      reconcile();
+      reconcile(false);
     });
   };
 

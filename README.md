@@ -1489,6 +1489,10 @@ Scrolling only calls `render` for entering or index-changed rows. Calling
 `setItems()` starts a new source revision and updates every visible row. Row
 replacement, eviction, and `destroy()` run Loom subtree disposal, so rows built
 with `text()` or other Loom DOM bindings don't leave detached live effects.
+Scroll events that keep the same window and source revision skip source access.
+Geometry is still checked on each pass. `refresh()` scans the source and its
+keys even when the bounds are unchanged; use `setItems()` to notify the list
+when existing keys have changed content.
 
 #### Ownership & disposal
 
@@ -1545,10 +1549,11 @@ mounted.value.remove();
 `resourceGroup()` supplements node ownership; it doesn't replace it. You can
 still call Loom's `remove(node)` for a granular removal inside the group.
 Disposing the group later is idempotent for resources that already stopped.
-Use one group per independently replaced region so the arena doesn't retain
-removed nodes longer than that region's lifetime. Construction must finish in
-the callback: an async callback is rejected, and nesting one resource group in
-another is an error.
+Granular removal and manual `onUnmount` stops unlink their entries from the
+group immediately; owning-scope stops also unlink stopped bindings. Remaining
+cleanup preserves descendant-first and registration order. Use one group per
+independently replaced region. Construction must finish in the callback: an
+async callback is rejected, and nesting one resource group in another is an error.
 
 One more ownership rule, easy to hit without noticing: an effect created
 **while another effect is running** links to it as a child and is disposed on

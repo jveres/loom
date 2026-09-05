@@ -73,16 +73,17 @@ grammar fails immediately.
 
 ## 5. Performance and retention
 
-Status: pending. Measure before optimizing; retain changes only with evidence.
+Status: complete. Browser measurements support the retained changes; detailed
+workloads, limitations, and reproduction steps are in [bench/README.md](bench/README.md).
 
-- [ ] Benchmark unchanged, append, prepend, removal, and reorder workloads.
-- [ ] Benchmark multiple keyed regions sharing one parent.
-- [ ] Benchmark virtual scrolling within and across window boundaries.
-- [ ] Measure revision-path churn and granular removal within resource groups.
-- [ ] Evaluate region-bounded scans and prefix/suffix fast paths while retaining
+- [x] Benchmark unchanged, append, prepend, removal, and reorder workloads.
+- [x] Benchmark multiple keyed regions sharing one parent.
+- [x] Benchmark virtual scrolling within and across window boundaries.
+- [x] Measure revision-path churn and granular removal within resource groups.
+- [x] Evaluate region-bounded scans and prefix/suffix fast paths while retaining
       LIS for genuine reorders.
-- [ ] Evaluate unchanged-window early exits and layout-read costs.
-- [ ] Release stopped resource-group entries without changing cleanup order.
+- [x] Evaluate unchanged-window early exits and layout-read costs.
+- [x] Release stopped resource-group entries without changing cleanup order.
 
 Acceptance: demonstrate runtime, allocation, or retention improvements without
 regressing DOM identity, cleanup ordering, or representative benchmarks.
@@ -201,8 +202,44 @@ Record completed work, commands, results, and outstanding limitations here.
   failed updates release staged bindings, and retries receive the last committed
   item. Other browser engines were not run.
 
+- Stage 4 committed and pushed as `b7e3a02` on September 5, 2026.
+- Stage 5 completed on September 5, 2026. The benchmark harness compares a
+  separate checkout of `b7e3a02` with the candidate in Chromium 152. Two runs
+  use 11 samples of 200 and 400 iterations; setup is outside timed regions.
+  [Raw summaries](bench/results/dom-stage5.json) retain both comparisons.
+- A contiguous-member check skips placement-map allocation and parent-wide
+  scans for unchanged regions and insertions. The existing LIS fallback remains
+  for reorders and interleaved unmanaged siblings. More complex cached bounds
+  and partial prefix/suffix trimming were deferred after evaluating their
+  additional invariants around externally moved nodes.
+- In the 400-iteration run, unchanged 1,000-row pairs improve 43%, append/prepend
+  38–39%, and middle removal 15%. Updating one 100-row region among 100 sibling
+  regions improves 96.5% (0.26575 to 0.00925 ms per pair). Reverse remains close
+  to baseline. Swap medians increase 1.6–4.6% across the two runs with overlapping
+  sample ranges; no reorder speedup or precise regression bound is claimed.
+- Successful scroll passes cache their bounds/revision and skip source traversal
+  when unchanged. Geometry reads remain on every pass; explicit `refresh()`
+  still scans keys, `setItems()` refreshes content, and failed passes retry.
+  Stationary and within-window medians improve 27% and 19%; crossing a boundary
+  remains close to baseline. These are reconciliation timings, with frame
+  scheduling pumped synchronously; separate real-scroll checks also pass.
+- Resource groups unlink stopped entries in constant time while preserving a
+  separate registration ordinal. Raw grouped effects unlink on owning-scope stop
+  too. Forced-GC checks for both removal and scope stop reduce retained nodes
+  from 1,000 to zero while the group remains live. Create/remove/dispose workload
+  improves 7% in the 400-iteration run. Revision churn remains close to baseline
+  and pruning leaves zero retained counters; no further revision changes made.
+- Stage 5 verification: nine new tests, including exhaustive minimum-move checks
+  for all 120 five-row permutations. `pnpm test` passes 57 files and 529 tests;
+  type checking, lint, build, and `git diff --check` pass. All eight bundle budgets
+  pass: minimal core 2,929 B gzip, full core 5,271 B, minimal DOM 5,854 B,
+  standalone virtual list 1,445 B. Tracked distribution files regenerated.
+- Seven Chromium checks pass for focus/identity preservation on insertion and
+  reorder in both keyed APIs, real scroll events within/across virtual windows,
+  and explicit lazy-source refresh. Other browser engines were not run.
+
 ## Next steps
 
-Stages 1–4 are complete. Continue with stage 5: establish representative workload
-baselines before changing keyed reconciliation, virtual scrolling, or resource
-retention. Keep only optimizations supported by measurements.
+Stages 1–5 are complete. Continue with stage 6: extract cohesive ownership and
+reconciliation internals around the tested lifecycle invariants, consolidate
+error-handling helpers, and clean up stale runtime comments and documentation.
