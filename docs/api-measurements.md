@@ -143,4 +143,6 @@ including popup and iframe contexts. Both Chromium retention scenarios pass.
 WebKit lacks `Element.moveBefore`; its reorder checks verify identity and input
 values, while focus and selection preservation require native atomic moves.
 Native Safari is not separately tested. The maintained `markdown-viewer` consumer
-is being migrated to the v0.6.0 GitHub tag as part of this release.
+is migrated to the v0.6.0 GitHub tag in commit `4baed95`; its lockfile pins
+release commit `e1e3c5e`. The installed release passes all 910 viewer tests and
+three stress scenarios, as well as type checks and the package build.

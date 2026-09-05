@@ -408,8 +408,8 @@ Consumer migration validates the target design; it does not dictate old API shap
 - [x] Migrate demo, devtools, tests, and benchmarks directly to canonical APIs.
 - [x] Provide direct migration edits for `markdown-viewer`. Its candidate
       migration passes 910 tests, three stress scenarios, type checks, build,
-      and browser streaming checks. Resolve and commit its GitHub tag dependency
-      after publishing v0.6.0.
+      and browser streaming checks. Commit `4baed95` pins the published v0.6.0
+      GitHub tag and locks its release commit `e1e3c5e`.
 - [x] Rewrite README examples, architecture contracts, API indexes, generated
       declaration documentation, and package import examples for the target only.
 - [x] Publish an old-to-new migration guide as documentation, with no executable
