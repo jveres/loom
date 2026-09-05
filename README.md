@@ -232,7 +232,8 @@ pnpm run dev
 ```
 
 Open `/demo/` for the UI demo or `/bench/` for browser workloads. Rebuild `dist`
-after source changes. See [architecture](ARCHITECTURE.md), the
+after source changes. `pnpm run build:demo` writes to `dist/demo`, preserving
+the library output. See [architecture](ARCHITECTURE.md), the
 [implementation plan](docs/api-consolidation-plan.md), and
 [measurement notes](docs/api-measurements.md) for design and verification details.
 

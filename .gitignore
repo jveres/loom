@@ -2,3 +2,4 @@ node_modules/
 .vite-temp/
 coverage/
 *.tsbuildinfo
+dist/demo/

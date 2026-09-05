@@ -44,7 +44,7 @@ jobs:
       - name: dist is up to date
         run: |
           pnpm run build
-          if ! git diff --exit-code -- dist; then
+          if [ -n "$(git status --porcelain -- dist)" ]; then
             echo "::error::dist is stale — run 'pnpm run build' and commit the dist/ changes"
             exit 1
           fi

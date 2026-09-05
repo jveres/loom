@@ -35,6 +35,15 @@ try {
       { cwd: root, encoding: "utf8" },
     ),
   );
+  const packedPaths = packed[0].files.map((file) => file.path);
+  assert(
+    packedPaths.includes("docs/migration.md"),
+    "The package must include migration documentation",
+  );
+  assert(
+    !packedPaths.some((path) => path.startsWith("dist/demo/")),
+    "Demo output must not ship in the library",
+  );
   const installed = join(dir, "node_modules", "loom");
   mkdirSync(installed, { recursive: true });
   execFileSync("tar", [
