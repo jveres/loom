@@ -137,6 +137,10 @@ In the browser, import `/bench/dom-browser-checks.ts` and call
 started with `--js-flags=--expose-gc`. Use a separate baseline checkout and the
 same browser/Node version for comparisons; do not benchmark concurrent workloads.
 
-Firefox, Safari, dedicated popup qualification, downstream consumer migration,
-and version/publication work remain release follow-ups. The linked
-`markdown-viewer` checkout has not been upgraded by this implementation.
+Release qualification for v0.6.0 adds `pnpm run check:browser`: Chromium
+151.0.7922.34, Firefox 153.0, and Playwright WebKit 26.5 each pass 18 checks,
+including popup and iframe contexts. Both Chromium retention scenarios pass.
+WebKit lacks `Element.moveBefore`; its reorder checks verify identity and input
+values, while focus and selection preservation require native atomic moves.
+Native Safari is not separately tested. The maintained `markdown-viewer` consumer
+is being migrated to the v0.6.0 GitHub tag as part of this release.

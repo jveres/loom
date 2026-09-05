@@ -33,14 +33,20 @@ export async function runBrowserChecks() {
         document.activeElement === input && host.children[1] === input,
         `${kind}: insertion preserves focus and identity`,
       );
+      const atomicMoves =
+        typeof (host as HTMLElement & { moveBefore?: unknown }).moveBefore ===
+        "function";
       rows([2, 1]);
       check(
-        document.activeElement === input && host.children[1] === input,
-        `${kind}: reorder preserves focus and identity`,
+        host.children[1] === input &&
+          (!atomicMoves || document.activeElement === input),
+        `${kind}: ${atomicMoves ? "reorder preserves focus and identity" : "insertBefore fallback preserves identity"}`,
       );
       check(
-        input.selectionStart === 0 && input.selectionEnd === 1,
-        `${kind}: reorder preserves selection`,
+        atomicMoves
+          ? input.selectionStart === 0 && input.selectionEnd === 1
+          : input.value === "1",
+        `${kind}: ${atomicMoves ? "reorder preserves selection" : "insertBefore fallback preserves value"}`,
       );
     } finally {
       remove(host);

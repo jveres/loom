@@ -31,6 +31,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Install browser test engines
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Browser lifecycle matrix
+        run: pnpm run check:browser
+
       - name: Bundle-size budgets
         run: pnpm size
       - name: Public API and packed package

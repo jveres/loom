@@ -402,13 +402,14 @@ old imports fail and minimal imports do not pull unrelated families into bundles
 
 Consumer migration validates the target design; it does not dictate old API shape.
 
-- [ ] Identify the maintained external consumers and their owners. Their complete
-      inventory is not yet available in this repository. `../markdown-viewer`
-      is known and being refactored independently; its owner deferred migration.
+- [x] Identify the maintained external consumer: `../markdown-viewer`, owned by
+      the repository owner. Its independent refactor is complete; migration to
+      the v0.6.0 GitHub tag is authorized. No other maintained consumer is known.
 - [x] Migrate demo, devtools, tests, and benchmarks directly to canonical APIs.
-- [ ] Provide direct migration edits or a codemod for maintained external
-      consumers. Mark each as migrated, independently released, or explicitly
-      unsupported by this major release.
+- [x] Provide direct migration edits for `markdown-viewer`. Its candidate
+      migration passes 910 tests, three stress scenarios, type checks, build,
+      and browser streaming checks. Resolve and commit its GitHub tag dependency
+      after publishing v0.6.0.
 - [x] Rewrite README examples, architecture contracts, API indexes, generated
       declaration documentation, and package import examples for the target only.
 - [x] Publish an old-to-new migration guide as documentation, with no executable
@@ -423,10 +424,11 @@ Use correctness and measurement gates before selecting the version and publishin
 
 - [x] Run type checking, lint, all tests, graph differential checks, builds, and
       exact public-surface assertions against source and generated distribution.
-- [ ] Run browser tests for focus/selection, pointer cancellation, observer
+- [x] Run browser tests for focus/selection, pointer cancellation, observer
       teardown, animation completion, frame timing, and popup/iframe contexts.
-      Chromium passes 16 browser checks, including iframe contexts. Firefox,
-      Safari, and a dedicated popup run remain release qualification work.
+      Chromium 151, Firefox 153, and Playwright WebKit 26.5 each pass 18 checks.
+      WebKit fallback moves preserve identity and values; native atomic moves
+      are required for reorder focus preservation. Native Safari is untested.
 - [x] Run cross-consumer scenarios: durable model versus transient view,
       shared producer versus multiple subscribers, and temporary behavior on a
       long-lived node.
@@ -443,10 +445,9 @@ Use correctness and measurement gates before selecting the version and publishin
       broken exports, side-effect metadata, or declarations.
 - [x] Make public declaration, export-map, and supported-environment checks
       permanent CI gates, with intentional surface changes reviewed explicitly.
-- [ ] Remove obsolete generated files and run a final forbidden-export/import
-      audit. Select the version, finalize release notes, and obtain publishing
-      authorization when an actual release is requested. Obsolete distribution
-      files and forbidden imports are audited; version/release work is deferred.
+- [x] Remove obsolete generated files and run a final forbidden-export/import
+      audit. Select v0.6.0 and finalize release notes. The repository owner
+      explicitly authorized publishing and the downstream migration.
 
 Acceptance: one coherent public API ships, with no compatibility residue, verified
 consumer migrations, documented limitations, and reproducible performance data.

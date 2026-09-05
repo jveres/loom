@@ -48,7 +48,7 @@ according to subscriptions; the creating scope does not own the producer.
 
 ### Reactivity and models
 
-`effect` returns a stop; `scope` returns a value and lifecycle operations. A
+`effect` returns a stop; `scope` returns lifecycle operations. A
 public `source` retains core scope semantics, while browser-read producers use
 subscriber ownership. `poll` returns a read with a stop. `props` exposes object
 field state, and `writable` composes a read and write projection.

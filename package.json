@@ -1,6 +1,6 @@
 {
   "name": "loom",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "A tiny runtime reactive UI core.",
@@ -38,7 +38,8 @@
     "size": "pnpm run build && node scripts/size.mjs",
     "samples": "node scripts/samples.mjs",
     "check:api": "node scripts/check-api.mjs",
-    "check:package": "node scripts/check-package.mjs"
+    "check:package": "node scripts/check-package.mjs",
+    "check:browser": "node scripts/check-browser.mjs"
   },
   "exports": {
     ".": {
@@ -125,6 +126,7 @@
     "idiomorph": "^0.7.4",
     "typescript": "7.0.2",
     "vite": "8.2.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "playwright": "1.62.1"
   }
 }
