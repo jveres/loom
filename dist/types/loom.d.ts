@@ -68,6 +68,9 @@ export interface StateNode<T> extends NodeBase {
 export interface ComputedNode<T> extends NodeBase {
     value: T | undefined;
     getter(previousValue?: T): T;
+    failure?: {
+        readonly error: unknown;
+    } | undefined;
 }
 interface EffectNode extends NodeBase {
     fn: InternalEffectFn;

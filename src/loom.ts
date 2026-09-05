@@ -117,6 +117,9 @@ interface SourceNode<T> extends StateNode<T> {
 export interface ComputedNode<T> extends NodeBase {
   value: T | undefined;
   getter(previousValue?: T): T;
+  // A failed evaluation is cached until invalidation, separately from the last
+  // successful value. The wrapper also represents `throw undefined`.
+  failure?: { readonly error: unknown } | undefined;
 }
 
 interface EffectNode extends NodeBase {
@@ -1235,6 +1238,8 @@ function computedOper<T>(this: ComputedNode<T>): T {
     try {
       this.value = this.getter();
       runtimeHooks?.compute(this as ComputedNode<unknown>);
+    } catch (error) {
+      this.failure = { error };
     } finally {
       restoreActiveSub(previous);
       this.flags &= ~RecursedCheck;
@@ -1243,6 +1248,9 @@ function computedOper<T>(this: ComputedNode<T>): T {
 
   const sub = activeSub;
   if (sub !== undefined) trackRead(this, sub);
+  // Subscribe before throwing so a handled failure can recover, and an
+  // unhandled initial effect can release the computed's dependencies.
+  if (this.failure !== undefined) throw this.failure.error;
   return this.value as T;
 }
 
@@ -1256,9 +1264,15 @@ function updateComputed<T>(node: ComputedNode<T>): boolean {
     const oldValue = node.value;
     const newValue = node.getter(oldValue);
     node.value = newValue;
-    const changed = oldValue !== newValue;
+    const changed = node.failure !== undefined || oldValue !== newValue;
+    if (node.failure !== undefined) node.failure = undefined;
     if (changed) runtimeHooks?.compute(node as ComputedNode<unknown>);
     return changed;
+  } catch (error) {
+    node.failure = { error };
+    // Let dependency checking finish normally. Consumers throw on read inside
+    // their effect boundary; subsequent writes can invalidate this node again.
+    return true;
   } finally {
     restoreActiveSub(previous);
     node.flags &= ~RecursedCheck;

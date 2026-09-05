@@ -695,9 +695,15 @@ count(1); // does not throw here; onError fires and `seen` still runs
 ```
 
 The handler is a single global boundary; pass `configure({ onError: undefined })`
-to remove it. It covers effect bodies and their cleanup callbacks. Errors
-raised while *reading* a `computed` still surface at the reader — `onError`
-covers effect runs, the push side of the graph.
+to remove it. It covers effect bodies and their cleanup callbacks, including
+computed failures encountered during an effect update. Reading a failed
+`computed` outside an effect still throws directly to the reader.
+
+A computed caches a thrown error until a dependency invalidates it. Repeated
+reads rethrow that error instead of returning an old value or `undefined`.
+After invalidation, the next evaluation can recover; its getter receives the
+last successful value as `previousValue`. Effects and computed fallbacks that
+read the failed value stay subscribed so they can recover too.
 
 ### DOM and events
 

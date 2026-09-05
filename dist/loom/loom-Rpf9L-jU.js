@@ -616,12 +616,15 @@ function Le() {
 		let e = V(this);
 		try {
 			this.value = this.getter(), m?.compute(this);
+		} catch (e) {
+			this.failure = { error: e };
 		} finally {
 			H(e), this.flags &= -5;
 		}
 	}
 	let n = c;
-	return n !== void 0 && L(this, n), this.value;
+	if (n !== void 0 && L(this, n), this.failure !== void 0) throw this.failure.error;
+	return this.value;
 }
 function U(e) {
 	e.flags & 64 && ze(e), e.depsTail = void 0, e.flags = 5;
@@ -630,8 +633,10 @@ function U(e) {
 		n++;
 		let t = e.value, r = e.getter(t);
 		e.value = r;
-		let i = t !== r;
-		return i && m?.compute(e), i;
+		let i = e.failure !== void 0 || t !== r;
+		return e.failure !== void 0 && (e.failure = void 0), i && m?.compute(e), i;
+	} catch (t) {
+		return e.failure = { error: t }, !0;
 	} finally {
 		H(t), e.flags &= -5, $(e);
 	}
