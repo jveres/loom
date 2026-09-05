@@ -15,7 +15,7 @@ integration; the remaining families are named imports for application code.
 | --- | --- | --- |
 | `loom` | `batch`, `computed`, `configure`, `effect`, `mutate`, `poll`, `props`, `scope`, `source`, `state`, `trigger`, `untrack`, `update`, `watch`, `writable` | [Declarations](../dist/types/index.d.ts) |
 | `loom/model` | `keyedStates`, `lens`, `revisions`, `weakMemo` | [Declarations](../dist/types/model.d.ts) |
-| `loom/dom` | `bind`, `bindAttr`, `bindClass`, `bindStyle`, `bindValue`, `dispose`, `each`, `h`, `keyedChild`, `list`, `match`, `morph`, `onMount`, `onUnmount`, `pause`, `remove`, `replaceChildren`, `resourceGroup`, `resume`, `svgElement`, `template`, `text`, `when` | [Declarations](../dist/types/dom/index.d.ts) |
+| `loom/dom` | `bind`, `bindAttr`, `bindClass`, `bindStyle`, `bindValue`, `dispose`, `each`, `h`, `keyedChild`, `list`, `match`, `morph`, `morphChildren`, `onMount`, `onUnmount`, `pause`, `remove`, `replaceChildren`, `resourceGroup`, `resume`, `svgElement`, `template`, `text`, `when` | [Declarations](../dist/types/dom/index.d.ts) |
 | `loom/browser` | `attrRead`, `classRead`, `connected`, `focusWithin`, `hovered`, `mediaRead`, `observeIntersection`, `observeMutation`, `observeSize`, `pressed`, `scrollEdges`, `styleRead` | [Declarations](../dist/types/browser.d.ts) |
 | `loom/events` | `hoverClass`, `listen`, `onDoubleTap`, `onTap`, `pressClass`, `startPointerSession` | [Declarations](../dist/types/events.d.ts) |
 | `loom/layout` | `caretAtPoint`, `findScroller`, `offsetIn`, `placeAfter`, `positionOrdered`, `reveal`, `scrollMemory` | [Declarations](../dist/types/layout.d.ts) |
@@ -68,8 +68,28 @@ and version without tracking its factory. These utilities have one home in
 `list` owns rows in a container, and `each` supplies an inline dynamic child.
 Both share keyed reconciliation. `when` and `match` select dynamic children.
 `keyedChild` manages one imperative keyed child, and `morph` integrates a static
-DOM tree. Successful placement commits before outgoing cleanup; if cleanup
-throws, a later update does not repeat the successful replacement.
+DOM tree. `morphChildren(parent, snapshot, options)` accepts an array of child
+nodes and returns their matched live nodes. Include existing children to retain
+them without traversing their subtrees; supply detached nodes for changed
+content. This lets an HTML renderer parse only changed fragments while Loom
+owns matching, insertion, removal, and positioning. Each retained child can
+appear only once in the snapshot.
+
+Both morph operations preserve `skip` elements. Unkeyed skipped siblings in both
+trees match by ordinal and tag, so declarative controls retain their live state
+without accumulating duplicates. Unmatched skipped nodes remain before their
+next surviving old sibling, or after managed content when no sibling survives.
+Use explicit keys when controls need identities across reordering. As with
+`morph`, snapshots describe static trees; matched nodes retain their existing
+event handlers and effects.
+
+The complete `loom/dom` family is 10,142 bytes gzipped in v0.7.0, up from
+9,845 bytes in v0.6.0. Its package budget is 10,240 bytes; the added snapshot
+operation and shared protected-node matching account for the increase.
+
+Successful placement in the ownership operations commits before outgoing
+cleanup; if cleanup throws, a later update does not repeat the successful
+replacement.
 
 `onMount` waits for connection, and `onUnmount` registers Loom disposal cleanup.
 `dispose` stops a subtree; `remove` additionally detaches it. `replaceChildren`

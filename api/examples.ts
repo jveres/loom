@@ -71,6 +71,17 @@ export function foreignWindow(view: Window, signal: AbortSignal): void {
   );
 }
 
+/** Stream static blocks while keeping a completed subtree intact. */
+export function reconcileBlocks(
+  host: HTMLElement,
+  completed: Node,
+  changed: Node,
+): Node[] {
+  return dom.morphChildren(host, [completed, changed], {
+    skip: "[data-morph-ignore]",
+  });
+}
+
 function removedAPI(): void {
   // @ts-expect-error a narrowed string codec requires its allowed values
   codecs.string<"dark" | "light">();

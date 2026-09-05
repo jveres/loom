@@ -90,6 +90,6 @@ export declare function bind(node: Node, fn: CleanupEffectFn, options?: BindingO
 export declare function bind(node: Node, fn: EffectFn, options?: BindingOptions): Stop;
 export { type BindValueOptions, bindValue } from "./bind-value.js";
 export { keyedChild } from "./keyed-child.js";
-export { type MorphOptions, morph } from "./morph.js";
+export { type MorphOptions, morph, morphChildren } from "./morph.js";
 export { type OnMountOptions, onMount } from "./on-mount.js";
 export { dispose, onUnmount, pause, type ResourceGroup, remove, resourceGroup, resume, } from "./ownership.js";

@@ -1,12 +1,12 @@
 import { E as e, _ as t, c as n, s as r, x as i } from "./loom-B6598vHo.js";
 import { n as a } from "./tracking-DRP3LNHN.js";
 import { t as o } from "./jsx-props-sAPN8GVq.js";
-import { a as s, d as c, f as l, i as u, l as d, n as f, o as p, r as m, s as ee, t as h } from "./ownership-base-hl0GKMLF.js";
-import { n as g } from "./place-ZwRNX05j.js";
-import { t as te } from "./lifetime-D9QsK10p.js";
-import { t as _ } from "./lifetime-Bc5XQUWH.js";
+import { a as s, d as c, f as l, i as u, l as d, n as f, o as p, r as m, s as h, t as g } from "./ownership-base-hl0GKMLF.js";
+import { n as _ } from "./place-ZwRNX05j.js";
+import { t as v } from "./lifetime-D9QsK10p.js";
+import { t as y } from "./lifetime-Bc5XQUWH.js";
 //#region src/dom/keyed-reconcile.ts
-function v(e, t, n, r, i, o, s = !0, c) {
+function b(e, t, n, r, i, o, s = !0, c) {
 	let u = /* @__PURE__ */ new Set(), f = Array(n.length);
 	for (let e = 0; e < n.length; e++) {
 		let t = i(n[e]);
@@ -31,7 +31,7 @@ function v(e, t, n, r, i, o, s = !0, c) {
 				let n = (e.ownerDocument ?? document).createDocumentFragment();
 				for (let e of m) n.appendChild(e);
 				e.insertBefore(n, t);
-			} else if (s) g(e, m, t);
+			} else if (s) _(e, m, t);
 			else for (let t of m) t.parentNode || e.appendChild(t);
 		} catch (e) {
 			d(p.values(), [e]);
@@ -47,36 +47,36 @@ function v(e, t, n, r, i, o, s = !0, c) {
 }
 //#endregion
 //#region src/dom/on-mount.ts
-var y = /* @__PURE__ */ new WeakMap();
-function b(e) {
+var x = /* @__PURE__ */ new WeakMap();
+function S(e) {
 	return e.nodeType === 9 ? e : e.ownerDocument;
 }
-function ne(e) {
+function C(e) {
 	for (let [t, n] of e.pending) if (t.isConnected) {
 		e.pending.delete(t);
 		for (let e of n) e(t);
 	}
 	e.pending.size === 0 && (e.observer?.disconnect(), e.observer = null);
 }
-function x(e, t) {
-	let n = b(e);
+function ee(e, t) {
+	let n = S(e);
 	if (!n) return;
-	let r = y.get(n);
+	let r = x.get(n);
 	r || (r = {
 		document: n,
 		pending: /* @__PURE__ */ new Map(),
 		observer: null
-	}, y.set(n, r));
+	}, x.set(n, r));
 	let i = r.pending.get(e);
 	return i || (i = /* @__PURE__ */ new Set(), r.pending.set(e, i)), i.add(t), r.observer ??= (() => {
-		let e = new ((n.defaultView?.MutationObserver) ?? globalThis.MutationObserver)(() => ne(r));
+		let e = new ((n.defaultView?.MutationObserver) ?? globalThis.MutationObserver)(() => C(r));
 		return e.observe(n.documentElement ?? n, {
 			childList: !0,
 			subtree: !0
 		}), e;
 	})(), r;
 }
-function S(e, t, n) {
+function w(e, t, n) {
 	if (n?.signal?.aborted) return () => {};
 	let r = !1, i, o = () => void 0, s = (e) => {
 		if (!r) {
@@ -89,7 +89,7 @@ function S(e, t, n) {
 		}
 	};
 	return queueMicrotask(() => {
-		r || (e.isConnected ? s(e) : i = x(e, s));
+		r || (e.isConnected ? s(e) : i = ee(e, s));
 	}), o = m(e, () => {
 		r = !0, n?.signal?.removeEventListener("abort", o);
 		let t = i?.pending.get(e);
@@ -118,16 +118,16 @@ f({
 	},
 	requiresOrderedStop: (e) => e.cleanup !== void 0
 });
-function C(e) {
-	ee(e);
+function T(e) {
+	h(e);
 }
-function re(e) {
+function te(e) {
 	c(e);
 }
 //#endregion
 //#region src/dom/bind-value.ts
-function ie(t, r, i = {}) {
-	let o = _(t, i.signal);
+function ne(t, r, i = {}) {
+	let o = y(t, i.signal);
 	if (!o.active) return o.stop;
 	let c = i.property === "checked", l = () => c ? t.checked : t.value, u = l(), d = () => {
 		!o.active || l() === u || (c ? t.checked = u : t.value = u);
@@ -145,13 +145,13 @@ function ie(t, r, i = {}) {
 		}, "dom.bindValue", t);
 		s(t, i), o.add(() => e(i));
 	} catch (e) {
-		te(o, e);
+		v(o, e);
 	}
 	return o.stop;
 }
 //#endregion
 //#region src/dom/keyed-child.ts
-function ae(e) {
+function re(e) {
 	let t, n = !0;
 	return m(e, () => {
 		n = !1;
@@ -166,14 +166,14 @@ function ae(e) {
 }
 //#endregion
 //#region src/dom/morph.ts
-function w(e, t) {
+function E(e, t) {
 	let n = t.skip;
 	return n === void 0 ? !1 : typeof n == "string" ? e.matches(n) : n(e);
 }
-function T(e, t, n = {}) {
-	return n.skip !== void 0 && w(e, n) ? e : e.tagName === t.tagName ? (E(e, t), oe(e, t), ce(e, t, n), e) : (e.replaceWith(t), t);
+function D(e, t, n = {}) {
+	return e === t || n.skip !== void 0 && E(e, n) ? e : e.tagName === t.tagName ? (ie(e, t), ae(e, t), k(e, t.childNodes, n), e) : (e.replaceWith(t), t);
 }
-function E(e, t) {
+function ie(e, t) {
 	let n = e.attributes;
 	for (let r = n.length - 1; r >= 0; r--) {
 		let i = n[r].name;
@@ -185,12 +185,12 @@ function E(e, t) {
 		e.getAttribute(n.name) !== n.value && e.setAttribute(n.name, n.value);
 	}
 }
-function oe(e, t) {
+function ae(e, t) {
 	let n = e.nodeName;
 	if ((n === "INPUT" || n === "TEXTAREA" || n === "OPTION") && t.nodeName === n && e.ownerDocument.activeElement !== e) {
 		if (n === "INPUT") {
 			let n = e, r = t;
-			n.value !== r.value && (n.value = r.value), n.checked !== r.checked && !se(n) && (n.checked = r.checked);
+			n.value !== r.value && (n.value = r.value), n.checked !== r.checked && !oe(n) && (n.checked = r.checked);
 		} else if (n === "TEXTAREA") {
 			let n = e, r = t;
 			n.value !== r.value && (n.value = r.value);
@@ -200,59 +200,87 @@ function oe(e, t) {
 		}
 	}
 }
-function se(e) {
+function oe(e) {
 	if (e.type !== "radio" || e.name === "") return !1;
 	let t = e.ownerDocument.activeElement;
 	if (t === null || t === e || t.nodeName !== "INPUT") return !1;
 	let n = t;
 	return n.type === "radio" && n.name === e.name && n.form === e.form;
 }
-var D = (e, t) => t.key && e.nodeType === 1 ? t.key(e) : null;
-function ce(e, t, n) {
-	let r = e.firstChild, i = t.firstChild;
-	if (r === null && i === null) return;
-	if (r !== null && i !== null && r.nextSibling === null && i.nextSibling === null && r.nodeType !== 1 && r.nodeType === i.nodeType) {
-		r.nodeValue !== i.nodeValue && (r.nodeValue = i.nodeValue);
-		return;
+var O = (e, t) => t.key && e.nodeType === 1 ? t.key(e) : null;
+function se(e, t, n = {}) {
+	let r;
+	for (let n of t) if (n.parentNode === e) {
+		if (r ??= /* @__PURE__ */ new Set(), r.has(n)) throw Error("Duplicate retained morph child.");
+		r.add(n);
 	}
-	let a = Array.from(e.childNodes), o = /* @__PURE__ */ new Map(), s = /* @__PURE__ */ new Set();
-	if (n.key) for (let e of a) {
-		let t = D(e, n);
+	return k(e, t, n, r);
+}
+function k(e, t, n, r) {
+	let i = e.firstChild, a = t[0] ?? null;
+	if (i === null && a === null) return [];
+	if (i !== null && a !== null && i.nextSibling === null && t.length === 1 && i.nodeType !== 1 && i.nodeType === a.nodeType) return i.nodeValue !== a.nodeValue && (i.nodeValue = a.nodeValue), [i];
+	let o = Array.from(e.childNodes), s = /* @__PURE__ */ new Map(), c = /* @__PURE__ */ new Set();
+	if (n.key) for (let e of o) {
+		let t = O(e, n);
 		if (t !== null) {
-			if (o.has(t)) throw Error(`Duplicate morph key "${t}".`);
-			o.set(t, e), s.add(e);
+			if (s.has(t)) throw Error(`Duplicate morph key "${t}".`);
+			s.set(t, e), c.add(e);
 		}
 	}
-	let c = null;
-	if (n.skip !== void 0) for (let e of a) e.nodeType === 1 && w(e, n) && (c ??= /* @__PURE__ */ new Set(), c.add(e));
-	let l = /* @__PURE__ */ new Set(), u = n.key ? /* @__PURE__ */ new Set() : null, d = [], f = 0;
-	for (let e = i; e !== null; e = e.nextSibling) {
-		let t, r = D(e, n);
-		if (r !== null) {
-			if (u !== null) {
-				if (u.has(r)) throw Error(`Duplicate morph key "${r}".`);
-				u.add(r);
+	let l = null, u = [];
+	if (n.skip !== void 0) for (let e of o) e.nodeType === 1 && E(e, n) && (l ??= /* @__PURE__ */ new Set(), l.add(e), c.has(e) || u.push(e));
+	let d = /* @__PURE__ */ new Set(), f = n.key ? /* @__PURE__ */ new Set() : null, p = [], m = 0, h = 0;
+	for (let i = 0; i < t.length; i++) {
+		let a = t[i], g, _ = O(a, n), v = _ === null && a.nodeType === 1 && E(a, n), y = v ? u[h++] : void 0;
+		if (_ !== null) {
+			if (f !== null) {
+				if (f.has(_)) throw Error(`Duplicate morph key "${_}".`);
+				f.add(_);
 			}
-			let n = o.get(r);
-			n && !l.has(n) && n.tagName === e.tagName && (t = n);
-		} else {
-			for (; f < a.length;) {
-				let e = a[f];
-				if (!l.has(e) && !s.has(e) && !c?.has(e)) break;
-				f++;
+			let e = s.get(_);
+			e && !d.has(e) && e.tagName === a.tagName && (g = e);
+		} else if (a.parentNode === e && !d.has(a)) g = a;
+		else if (v) y?.tagName === a.tagName && !d.has(y) && (g = y);
+		else {
+			for (; m < o.length;) {
+				let e = o[m];
+				if (!d.has(e) && !c.has(e) && !r?.has(e) && !l?.has(e)) break;
+				m++;
 			}
-			let n = a[f];
-			n && n.nodeType === e.nodeType && (n.nodeType !== 1 || n.tagName === e.tagName) && (t = n, f++);
+			let e = o[m];
+			e && e.nodeType === a.nodeType && (e.nodeType !== 1 || e.tagName === a.tagName) && (g = e, m++);
 		}
-		t ? (l.add(t), t.nodeType === 1 ? T(t, e, n) : t.nodeValue !== e.nodeValue && (t.nodeValue = e.nodeValue), d.push(t)) : d.push(e);
+		g ? (d.add(g), g === a || (g.nodeType === 1 ? D(g, a, n) : g.nodeValue !== a.nodeValue && (g.nodeValue = a.nodeValue)), p.push(g)) : p.push(a);
 	}
-	for (let t of a) l.has(t) || t.parentNode !== e || c?.has(t) || e.removeChild(t);
-	g(e, d, null);
+	for (let t of o) d.has(t) || t.parentNode !== e || l?.has(t) || e.removeChild(t);
+	let g = p;
+	if (l !== null) {
+		let e = /* @__PURE__ */ new Map(), t = null;
+		for (let n = o.length - 1; n >= 0; n--) {
+			let r = o[n];
+			if (d.has(r)) t = r;
+			else if (l.has(r)) {
+				let n = e.get(t);
+				n ? n.push(r) : e.set(t, [r]);
+			}
+		}
+		if (e.size > 0) {
+			g = [];
+			for (let t of p) {
+				let n = e.get(t);
+				n && g.push(...n.reverse()), g.push(t);
+			}
+			let t = e.get(null);
+			t && g.push(...t.reverse());
+		}
+	}
+	return _(e, g, null), p;
 }
 //#endregion
 //#region src/dom/index.ts
-var O = (e) => e, k = "http://www.w3.org/2000/svg", le = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
-function ue(e) {
+var A = (e) => e, j = "http://www.w3.org/2000/svg", ce = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
+function le(e) {
 	return (t, ...n) => {
 		if (n.length !== 0 || t.length !== 1) throw TypeError("template() accepts static markup only; bind dynamic values after cloning.");
 		let r = document.createElement("template");
@@ -263,11 +291,11 @@ function ue(e) {
 		return () => i.cloneNode(!0);
 	};
 }
-function de(e, t = null, n) {
-	let r = le.has(e), i = r ? document.createElementNS(k, e) : document.createElement(e);
+function ue(e, t = null, n) {
+	let r = ce.has(e), i = r ? document.createElementNS(j, e) : document.createElement(e);
 	return n !== void 0 && (typeof n == "string" ? i.textContent = n : z(i, n)), t && R(i, t, !r), i;
 }
-function fe(e, ...t) {
+function de(e, ...t) {
 	let n = ((e.nodeType === Node.DOCUMENT_NODE ? e : e.ownerDocument) ?? document).createDocumentFragment(), r = /* @__PURE__ */ new Set(), i = /* @__PURE__ */ new Map(), a = (e) => {
 		if (Array.isArray(e)) {
 			for (let t of e) a(t);
@@ -311,7 +339,7 @@ function fe(e, ...t) {
 			i || e.parentNode?.removeChild(e);
 		}
 		try {
-			h(n);
+			g(n);
 		} catch (e) {
 			t.push(e);
 		}
@@ -330,49 +358,49 @@ function fe(e, ...t) {
 	}
 	let c = [];
 	for (let e of s) try {
-		h(e);
+		g(e);
 	} catch (e) {
 		c.push(e);
 	}
 	if (c.length === 1) throw c[0];
 	if (c.length > 1) throw AggregateError(c, "Multiple Loom DOM child-replacement operations failed.");
 }
-function pe(e, t = null, n) {
-	let r = document.createElementNS(k, e);
+function fe(e, t = null, n) {
+	let r = document.createElementNS(j, e);
 	return n !== void 0 && (typeof n == "string" ? r.textContent = n : z(r, n)), t && R(r, t, !1), r;
 }
-function A(e, t) {
+function M(e, t) {
 	let i = document.createTextNode(""), a = "";
 	return s(i, (t === void 0 ? r : n)(() => {
-		let t = Te(e());
+		let t = Ee(e());
 		t !== a && (a = t, i.data = t);
 	}, "dom.text", i, t)), i;
 }
-function me(e, t, n, r) {
+function pe(e, t, n, r) {
 	return G(e, t, n, r);
 }
-function he(e, t, n, r) {
+function me(e, t, n, r) {
 	return W(e, {
 		kind: "class",
 		name: t,
 		read: n
 	}, r);
 }
-function j(e, t, n, r) {
+function he(e, t, n, r) {
 	return J(e, {
 		kind: "style",
 		name: o(t),
 		read: n
 	}, r);
 }
-function M(e, t, n) {
+function ge(e, t, n) {
 	if (n.signal?.aborted) return () => {};
 	let r = /* @__PURE__ */ new Map(), i = n.update ? {
 		update: n.update,
 		items: /* @__PURE__ */ new Map()
 	} : void 0, a = L(e, () => {
 		let a = n.reorder?.() !== !1;
-		v(e, null, t(), r, n.key, n.render, a, i);
+		b(e, null, t(), r, n.key, n.render, a, i);
 	}, { label: "dom.list" }), o = () => {
 		let e = [...r.values()];
 		r.clear(), i?.items.clear();
@@ -383,11 +411,11 @@ function M(e, t, n) {
 			t.push(e);
 		}
 		d(e, t);
-	}, s = _(e, n.signal);
+	}, s = y(e, n.signal);
 	return s.add(o), s.stop;
 }
 function N(e, t) {
-	return O({
+	return A({
 		__loomDynamic: !0,
 		mount(r) {
 			let i = [], o;
@@ -421,7 +449,7 @@ function F(e, t, n) {
 	});
 }
 function I(e, t, r, i = {}) {
-	return O({
+	return A({
 		__loomDynamic: !0,
 		mount(a) {
 			let o = /* @__PURE__ */ new Map(), s = i.update ? {
@@ -430,7 +458,7 @@ function I(e, t, r, i = {}) {
 			} : void 0;
 			return n(() => {
 				let n = e(), i = a.parentNode;
-				i && v(i, a, n, o, r, t, !0, s);
+				i && b(i, a, n, o, r, t, !0, s);
 			}, "dom.each", V(a));
 		}
 	});
@@ -462,7 +490,7 @@ function R(e, t, n) {
 			continue;
 		}
 		if ((i === "onmount" || i === "onMount") && typeof o == "function") {
-			S(e, o);
+			w(e, o);
 			continue;
 		}
 		if ((i === "onunmount" || i === "onUnmount") && typeof o == "function") {
@@ -471,14 +499,14 @@ function R(e, t, n) {
 		}
 		if (i === "ontap" || i === "onTap" || i.toLowerCase() === "ondoublepress") throw TypeError("Install tap behavior from loom/events.");
 		if (i.startsWith("on") && typeof o == "function") {
-			let t = Ee(i), n = (e) => {
+			let t = De(i), n = (e) => {
 				a(() => o(e));
 			};
 			e.addEventListener(t, n), u(e, () => e.removeEventListener(t, n));
 			continue;
 		}
-		if (Se(e, i)) {
-			typeof o == "function" ? Ce(e, i, o) : q(e, i, o);
+		if (Ce(e, i)) {
+			typeof o == "function" ? we(e, i, o) : q(e, i, o);
 			continue;
 		}
 		if (!(o == null || o === !1 && !Q(i))) {
@@ -486,7 +514,7 @@ function R(e, t, n) {
 				G(e, i, o);
 				continue;
 			}
-			we(e, i, o);
+			Te(e, i, o);
 		}
 	}
 }
@@ -495,13 +523,13 @@ function z(e, t) {
 		for (let n of t) z(e, n);
 		return;
 	}
-	if (ge(t)) {
-		_e(e, t);
+	if (_e(t)) {
+		ve(e, t);
 		return;
 	}
 	if (t != null && t !== !0 && t !== !1) {
 		if (typeof t == "function") {
-			e.appendChild(A(t));
+			e.appendChild(M(t));
 			return;
 		}
 		if (typeof t != "object") {
@@ -522,12 +550,12 @@ function B(e) {
 	let n = e, r = (n.ownerDocument?.defaultView ?? n.defaultView)?.Node;
 	return r !== void 0 && e instanceof r;
 }
-function ge(e) {
+function _e(e) {
 	return typeof e == "object" && !!e && e.__loomDynamic === !0;
 }
-function _e(e, t) {
+function ve(e, t) {
 	let n = document.createComment("loom-slot");
-	e.appendChild(n), s(n, O(t).mount(n));
+	e.appendChild(n), s(n, A(t).mount(n));
 }
 function V(e) {
 	let t = e.parentNode;
@@ -540,19 +568,19 @@ function H(e, t) {
 	}
 	if (t) {
 		if (typeof t == "string") {
-			ve(e, t);
+			ye(e, t);
 			return;
 		}
-		if ($(t)) for (let n in t) Object.hasOwn(t, n) && be(e, n, t[n]);
+		if ($(t)) for (let n in t) Object.hasOwn(t, n) && xe(e, n, t[n]);
 	}
 }
-function ve(e, t) {
+function ye(e, t) {
 	let n = t.trim();
 	if (!n) return;
 	let r = e.getAttribute("class");
 	e.setAttribute("class", r ? `${r} ${n}` : n);
 }
-function ye(e, t) {
+function be(e, t) {
 	let n = e.getAttribute("class");
 	return n ? n.split(/\s+/).includes(t) : !1;
 }
@@ -578,7 +606,7 @@ function U(e, t) {
 		}) : i != null && n.setProperty(a, String(i));
 	}
 }
-function be(e, t, n) {
+function xe(e, t, n) {
 	typeof n == "function" ? W(e, {
 		kind: "class",
 		name: t,
@@ -586,7 +614,7 @@ function be(e, t, n) {
 	}) : n && e.classList.add(t);
 }
 function W(e, t, n) {
-	let r = ye(e, t.name);
+	let r = be(e, t.name);
 	return L(e, () => {
 		let n = !!t.read();
 		n !== r && (e.classList.toggle(t.name, n), r = n);
@@ -598,8 +626,8 @@ function W(e, t, n) {
 function G(e, t, n, r) {
 	return Y(e, `dom.attr.${t}`, () => Z(t, n()), (n) => X(e, t, n), void 0, r);
 }
-var xe = Symbol("form-control-unset");
-function Se(e, t) {
+var Se = Symbol("form-control-unset");
+function Ce(e, t) {
 	if (t !== "checked" && t !== "selected" && t !== "value" || e.namespaceURI !== "http://www.w3.org/1999/xhtml") return !1;
 	let n = e.localName;
 	return t === "checked" ? n === "input" : t === "selected" ? n === "option" : t === "value" && (n === "button" || n === "input" || n === "option" || n === "select" || n === "textarea");
@@ -615,8 +643,8 @@ function q(e, t, n) {
 		(i === "" || e.localName !== "input" || e.getAttribute("type")?.toLowerCase() !== "file") && (r.value = i);
 	} else r[t] = K(t, n);
 }
-function Ce(e, t, n) {
-	Y(e, `dom.prop.${t}`, () => n(), (n) => q(e, t, n), xe);
+function we(e, t, n) {
+	Y(e, `dom.prop.${t}`, () => n(), (n) => q(e, t, n), Se);
 }
 function J(e, t, n) {
 	let r = e.style;
@@ -634,7 +662,7 @@ function Y(e, t, n, r, i, a) {
 		...a
 	});
 }
-function we(e, t, n) {
+function Te(e, t, n) {
 	X(e, t, Z(t, n));
 }
 function X(e, t, n) {
@@ -646,10 +674,10 @@ function Z(e, t) {
 function Q(e) {
 	return e.startsWith("aria-");
 }
-function Te(e) {
+function Ee(e) {
 	return e == null || e === !1 ? "" : String(e);
 }
-function Ee(e) {
+function De(e) {
 	let t = e.slice(2).toLowerCase();
 	return t === "doubleclick" ? "dblclick" : t;
 }
@@ -657,4 +685,4 @@ function $(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
 //#endregion
-export { C as _, I as a, F as c, ue as d, A as f, ie as g, ae as h, j as i, fe as l, T as m, me as n, de as o, P as p, he as r, M as s, L as t, pe as u, re as v, S as y };
+export { ne as _, I as a, w as b, F as c, le as d, M as f, re as g, se as h, he as i, de as l, D as m, pe as n, ue as o, P as p, me as r, ge as s, L as t, fe as u, T as v, te as y };

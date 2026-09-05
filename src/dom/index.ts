@@ -1052,7 +1052,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 export { type BindValueOptions, bindValue } from "./bind-value.js";
 export { keyedChild } from "./keyed-child.js";
-export { type MorphOptions, morph } from "./morph.js";
+export { type MorphOptions, morph, morphChildren } from "./morph.js";
 export { type OnMountOptions, onMount } from "./on-mount.js";
 export {
   dispose,
