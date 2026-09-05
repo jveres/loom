@@ -12,6 +12,12 @@ export declare function installOwnedResourceDriver(driver: OwnedResourceDriver):
 export declare function own(node: Node, stop: OwnershipStop): void;
 /** Register a raw resource without allocating a public/manual stop handle. */
 export declare function ownResource(node: Node, resource: OwnedResource): void;
+/** @internal Release resources created by a failed synchronous render, including
+ * nodes the renderer never returned. Nested renders share a rollback journal;
+ * successful construction leaves lifetime management with the owning nodes. */
+export declare function withConstructionRollback<T>(build: () => T): T;
+/** @internal Remove every node before reporting disposal or insertion failures. */
+export declare function removeNodes(nodes: Iterable<Node>, errors?: unknown[]): void;
 export interface ResourceGroup<T> {
     readonly value: T;
     readonly dispose: OwnershipStop;

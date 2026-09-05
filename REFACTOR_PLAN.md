@@ -25,29 +25,29 @@ recover after valid writes, and handled errors do not abort unrelated effects.
 
 ## 2. DOM construction and teardown
 
-Status: pending. Stop must be terminal and idempotent; teardown must attempt all
+Status: complete. Stop must be terminal and idempotent; teardown must attempt all
 cleanup before reporting failures.
 
-- [ ] Prevalidate keyed-list identities before rendering rows.
-- [ ] Release staged resources when rendering or insertion fails.
-- [ ] Remove stale bookkeeping even when row cleanup throws.
-- [ ] Finish all row removals during list teardown.
-- [ ] Audit `each()` and dynamic branches for equivalent failure paths.
-- [ ] Test abandoned bindings, throwing cleanup, and repeated disposal.
+- [x] Prevalidate keyed-list identities before rendering rows.
+- [x] Release staged resources when rendering or insertion fails.
+- [x] Remove stale bookkeeping even when row cleanup throws.
+- [x] Finish all row removals during list teardown.
+- [x] Audit `each()` and dynamic branches for equivalent failure paths.
+- [x] Test abandoned bindings, throwing cleanup, and repeated disposal.
 
 Acceptance: failed construction leaves no active abandoned bindings; teardown
 leaves no rows or subscriptions behind even when individual cleanups fail.
 
 ## 3. Shared-source ownership
 
-Status: pending. Distinguish shared subscriber-owned producers from producers
+Status: complete. Distinguish shared subscriber-owned producers from producers
 explicitly owned by a scope.
 
-- [ ] Add an internal construction path for shared cached sources.
-- [ ] Prevent scope-owned connections while paused or after terminal stop.
-- [ ] Audit connectivity, attribute, class, style, and other pooled reads.
-- [ ] Document escaped scope-owned source behavior.
-- [ ] Test two independent consumer scopes and terminal reconnection guards.
+- [x] Add an internal construction path for shared cached sources.
+- [x] Prevent scope-owned connections while paused or after terminal stop.
+- [x] Audit connectivity, attribute, class, style, and other pooled reads.
+- [x] Document escaped scope-owned source behavior.
+- [x] Test two independent consumer scopes and terminal reconnection guards.
 
 Acceptance: one consumer cannot disconnect another consumer's shared producer;
 scope-owned producers cannot reconnect outside their owner's active lifetime.
@@ -105,7 +105,7 @@ avoid mixing structural changes into correctness fixes.
 
 Record completed work, commands, results, and outstanding limitations here.
 
-- Stage 1 completed on September 5, 2026. Added 11 regression cases in
+- Stage 1 committed as `b57e268` on September 5, 2026. Added 11 regression cases in
   `src/computed-errors.test.ts`; the initial nine reproduced failures before
   the fix.
 - Error contract: cache the thrown value separately from the last successful
@@ -123,7 +123,56 @@ Record completed work, commands, results, and outstanding limitations here.
 - Later API decisions remain open; no public signature changes are required for
   stage 1.
 
+- Stage 2 completed on September 5, 2026. Added 17 regression cases in
+  `src/dom/reconcile-errors.test.ts`; 13 of the initial 14 cases failed before
+  the fix. The final cases cover nested resource groups, rollback errors, and
+  conditional insertion failure.
+- Construction uses an internal, nestable journal of node-owned resources. It
+  releases abandoned bindings without changing public resource-group nesting.
+  New keyed rows are published only after placement succeeds; stale keys are
+  removed from bookkeeping before running their cleanups.
+- Conditional branches commit the new branch before removing old content.
+  Cleanup failures cannot leave the selected branch missing or prevent sibling
+  teardown. Rollback covers node-owned resources, not arbitrary callback side
+  effects or restoration of partially reordered existing DOM after custom
+  insertion/move implementations throw.
+- Stage 2 verification: `pnpm run check`, direct TypeScript checking of the new
+  test file, `pnpm run lint`, `pnpm test` (53 files, 483 tests),
+  `pnpm run build`, and `git diff --check` passed.
+- All eight bundle budgets pass. Minimal DOM is 5,653 B gzip, up 16 B from
+  stage 1; minimal core remains 2,882 B gzip. Distribution files regenerated.
+- Chromium 152 smoke checks passed for live-row preservation, abandoned binding
+  cleanup, and successful retry in both keyed APIs, plus complete conditional
+  teardown after a throwing disposer. Other browser engines were not run.
+
+- Stage 3 completed on September 5, 2026. Added 19 regression cases across
+  `src/source-ownership.test.ts` and `src/dom/shared-sources.test.ts`; the
+  initial 16 cases all failed before implementation.
+- Internal `sharedSource()` creates subscriber-owned sources without inheriting
+  the first caller's scope or inspection defaults. Connectivity, attribute
+  reads (including derived class/style reads), media queries, hover/focus, and
+  pressed state use it. Uncached `scrollEdges()` and devtools producers remain
+  scope-owned. Public entrypoint signatures are unchanged.
+- Scoped sources check owner pause/stop state before connecting, including
+  reads during another resource's lifecycle callback. Terminal stop releases
+  the source's reference to its scope. Reentrant connection setup disposes an
+  obsolete teardown without overwriting a newer connection.
+- Intentional behavior change: callbacks from a disconnected producer are
+  ignored after teardown returns. Synchronous final teardown values remain
+  supported. The existing meter/source coverage assertion was updated because
+  it previously expected a retired callback to keep changing the value.
+- Shared sources remain connected while subscriptions exist, including paused
+  subscriptions. Stopping the last subscriber disconnects the producer.
+- Stage 3 verification: project and direct test-file TypeScript checks, lint,
+  `pnpm test` (55 files, 502 tests), build, and `git diff --check` passed.
+  All eight size budgets pass: minimal core 2,907 B gzip, full core 5,043 B,
+  minimal DOM 5,680 B. Tracked distribution files regenerated.
+- Chromium 152 checks passed for shared attributes/connectivity across consumer
+  pause/stop, paused connection guards, ignored retired callbacks, and terminal
+  reconnection guards. Other browser engines were not run.
+
 ## Next steps
 
-Start stage 2 with regression cases for failed list construction and throwing
-row cleanup. Apply complete-teardown guarantees to lists and dynamic branches.
+Stages 2 and 3 are complete. Continue with stage 4: clarify
+keyed-list replacement and keyed-state typing APIs; fix imperative memo tracking
+and revision separator validation; define safe revision retention controls.

@@ -18,7 +18,7 @@
 // exist only DURING a press, the pointerdown listener only while the
 // signal is observed (source() connects on first subscriber, disconnects
 // on last) — unused, this module costs nothing.
-import { type Read, source } from "../loom.js";
+import { type Read, sharedSource } from "../loom.js";
 
 // Signal cache: one pooled signal per element, so N readers share one
 // listener set. WeakMap — a forgotten element drops its signal with it.
@@ -27,7 +27,7 @@ const signals = new WeakMap<Element, Read<boolean>>();
 export function pressed(el: Element): Read<boolean> {
   const found = signals.get(el);
   if (found) return found;
-  const signal = source<boolean>((set) => {
+  const signal = sharedSource<boolean>((set) => {
     let active = -1;
     let press: AbortController | null = null;
     const end = (event: Event): void => {

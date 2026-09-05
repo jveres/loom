@@ -10,6 +10,7 @@ interface OwnedResourceDriver {
 
 let resourceDriver: OwnedResourceDriver | undefined;
 let activeResourceGroup: GroupEntry[] | undefined;
+let activeConstruction: GroupEntry[] | undefined;
 
 /** @internal Install operations for raw resources stored by the reactive DOM layer. */
 export function installOwnedResourceDriver(driver: OwnedResourceDriver): void {
@@ -100,6 +101,14 @@ function addOwned(node: Node, entry: OwnedEntry): void {
   if (group !== undefined) {
     group.push({ owner: node, resource: entry, index: group.length });
   }
+  const construction = activeConstruction;
+  if (construction !== undefined) {
+    construction.push({
+      owner: node,
+      resource: entry,
+      index: construction.length,
+    });
+  }
 }
 
 function isRegisteredStop(entry: OwnedEntry): entry is RegisteredStop {
@@ -124,7 +133,7 @@ function unregister(node: Node, entry: RegisteredStop): void {
 
 /** Register a stop that is only driven by ownership (no separately exposed manual stop). */
 export function own(node: Node, stop: OwnershipStop): void {
-  if (activeResourceGroup !== undefined) {
+  if (activeResourceGroup !== undefined || activeConstruction !== undefined) {
     void onUnmount(node, stop);
     return;
   }
@@ -138,6 +147,50 @@ export function own(node: Node, stop: OwnershipStop): void {
 /** Register a raw resource without allocating a public/manual stop handle. */
 export function ownResource(node: Node, resource: OwnedResource): void {
   addOwned(node, resource);
+}
+
+/** @internal Release resources created by a failed synchronous render, including
+ * nodes the renderer never returned. Nested renders share a rollback journal;
+ * successful construction leaves lifetime management with the owning nodes. */
+export function withConstructionRollback<T>(build: () => T): T {
+  const previous = activeConstruction;
+  const resources = previous ?? [];
+  const start = resources.length;
+  activeConstruction = resources;
+  try {
+    return build();
+  } catch (error) {
+    activeConstruction = previous;
+    try {
+      stopResourceGroup(resources.splice(start));
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        "Loom DOM construction and cleanup both failed.",
+      );
+    }
+    throw error;
+  } finally {
+    activeConstruction = previous;
+  }
+}
+
+/** @internal Remove every node before reporting disposal or insertion failures. */
+export function removeNodes(
+  nodes: Iterable<Node>,
+  errors: unknown[] = [],
+): void {
+  for (const node of nodes) {
+    try {
+      remove(node);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) {
+    throw new AggregateError(errors, "Multiple Loom DOM operations failed.");
+  }
 }
 
 export interface ResourceGroup<T> {

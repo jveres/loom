@@ -1,7 +1,7 @@
-import { S as e, T as t, b as n, g as r, i, x as a } from "./loom-Rpf9L-jU.js";
-import { a as o, i as s, n as c, o as l, r as u } from "./observe-uCgSOpnb.js";
-import { C as ee, T as d, _ as te, d as f, g as ne, n as re, r as ie } from "./dom-BYMGtdHg.js";
-import { s as p } from "./ownership-base-D5Jdu92o.js";
+import { C as e, E as t, S as n, b as r, g as i, i as a } from "./loom-DrVvSGMZ.js";
+import { a as o, i as s, n as c, o as l, r as u } from "./observe-VZwnM3zz.js";
+import { C as ee, T as d, _ as te, d as f, g as ne, n as re, r as ie } from "./dom-7_Rsn093.js";
+import { s as p } from "./ownership-base-B9jrYyAc.js";
 import { virtualList as m } from "./dom/virtual-list.js";
 import "./defer.js";
 import { scrollFade as ae } from "./dom/scroll-fade.js";
@@ -872,17 +872,17 @@ function dr(e) {
 		c.effect,
 		c.create,
 		c.dispose
-	]), on = u([c.flush], "samples"), R = r(sr, Yt, _);
-	let i;
-	return nn = n(() => {
-		wn = a(Jn, 0, _), Tn = a(Yn, 0, _), En = a(Xn, 0, _), Dn = a(Qn, 0, _), ar() && (On = r(() => ar()?.usedJSHeapSize ?? 0, 5e3, _)), i = rr();
-	}, _), ie(i, () => {
+	]), on = u([c.flush], "samples"), R = i(sr, Yt, _);
+	let a;
+	return nn = r(() => {
+		wn = n(Jn, 0, _), Tn = n(Yn, 0, _), En = n(Xn, 0, _), Dn = n(Qn, 0, _), ar() && (On = i(() => ar()?.usedJSHeapSize ?? 0, 5e3, _)), a = rr();
+	}, _), ie(a, () => {
 		R?.(), t(cr);
 	}, {
 		..._,
 		defer: !0,
 		maxStale: Yt
-	}), ur(), i;
+	}), ur(), a;
 }
 function fr() {
 	nn?.pause();
@@ -920,7 +920,7 @@ var hr = {
 function Q() {
 	if (!Er) {
 		let e;
-		br = n(() => {
+		br = r(() => {
 			e = {
 				theme: d(`${v}-theme`, "system", {
 					internal: !0,
@@ -1020,14 +1020,14 @@ function Mr(e) {
 }
 function Nr(t) {
 	if (J || typeof document > "u") return;
-	let r = t ?? document.body;
-	if (xr = i({ inspect: !0 }).inspect ?? !1, !document.getElementById("loom-inspector-css")) {
+	let n = t ?? document.body;
+	if (xr = a({ inspect: !0 }).inspect ?? !1, !document.getElementById("loom-inspector-css")) {
 		let e = document.createElement("style");
 		e.id = `${v}-css`, e.textContent = oe, document.head.append(e);
 	}
 	Z = e("stats", _);
-	let a = Q().theme(), o = /* @__PURE__ */ h("span", { class: "li-menu-val" }), s = () => {
-		J?.setAttribute("data-theme", a), _r?.setAttribute("data-theme", a), o.innerHTML = ce(hr[a], 13), c.title = `Theme: ${a} (click to cycle)`;
+	let i = Q().theme(), o = /* @__PURE__ */ h("span", { class: "li-menu-val" }), s = () => {
+		J?.setAttribute("data-theme", i), _r?.setAttribute("data-theme", i), o.innerHTML = ce(hr[i], 13), c.title = `Theme: ${i} (click to cycle)`;
 	}, c = /* @__PURE__ */ g("button", {
 		type: "button",
 		class: "li-menu-item",
@@ -1040,7 +1040,7 @@ function Nr(t) {
 			"light",
 			"dark"
 		];
-		a = e[(e.indexOf(a) + 1) % e.length] ?? "system", Q().theme(a), s();
+		i = e[(e.indexOf(i) + 1) % e.length] ?? "system", Q().theme(i), s();
 	});
 	let l = /* @__PURE__ */ h("div", {
 		class: "li-menu",
@@ -1106,7 +1106,7 @@ function Nr(t) {
 			m
 		]
 	}), pe;
-	X = n(() => {
+	X = r(() => {
 		pe = dr({
 			activeTab: () => Z?.(),
 			isMinimized: () => J?.classList.contains("li-min") ?? !1
@@ -1157,7 +1157,7 @@ function Nr(t) {
 	] }), J.id = v, y && J.classList.add("li-min"), s(), Ar(fe, J), jr(ye, J), vr = (e) => {
 		let t = e.target instanceof Node ? e.target : null;
 		!l.hidden && (t === null || !l.contains(t)) && e.target !== p && ne();
-	}, document.addEventListener("pointerdown", vr), r.append(J), document.body.append(l);
+	}, document.addEventListener("pointerdown", vr), n.append(J), document.body.append(l);
 	let be = Q().size(), xe = Q().pos();
 	if (be && (J.style.width = `${Math.max(240, Math.min(be.width, window.innerWidth - 16))}px`, J.style.height = `${Math.max(160, Math.min(be.height, window.innerHeight - 16))}px`), xe) {
 		let { left: e, top: t } = Or(J, xe.left, xe.top);
@@ -1188,7 +1188,7 @@ function Pr() {
 	if (!(typeof document > "u")) {
 		Sr?.(), Sr = null, mr();
 		for (let e of yr) e();
-		yr.length = 0, X?.stop(), X = null, br?.stop(), br = null, Er = null, vr && document.removeEventListener("pointerdown", vr), vr = null, _r && p(_r), _r = null, J && p(J), J = null, Y = null, Z = null, Cr.clear(), wr = null, dt(), It(), xr !== null && i({ inspect: xr }), xr = null;
+		yr.length = 0, X?.stop(), X = null, br?.stop(), br = null, Er = null, vr && document.removeEventListener("pointerdown", vr), vr = null, _r && p(_r), _r = null, J && p(J), J = null, Y = null, Z = null, Cr.clear(), wr = null, dt(), It(), xr !== null && a({ inspect: xr }), xr = null;
 	}
 }
 function Fr() {

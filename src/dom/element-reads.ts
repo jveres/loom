@@ -7,7 +7,7 @@
 //
 // attrRead/classRead/styleRead are the element forms of attr()/classed()/style() in ./index.ts;
 // class and style reads derive from the class/style attribute signals, deduped by computed().
-import { computed, type Read, source } from "../loom.js";
+import { computed, type Read, sharedSource } from "../loom.js";
 
 // Pooled signals: one per (element, attribute). WeakMap — forgotten elements drop their signals.
 const signals = new WeakMap<Element, Map<string, Read<string | null>>>();
@@ -89,7 +89,7 @@ export function attrRead(el: Element, name: string): Read<string | null> {
 }
 
 function attrSource(el: Element, name: string): Read<string | null> {
-  return source<string | null>((set) => {
+  return sharedSource<string | null>((set) => {
     set(el.getAttribute(name)); // resync: it may have changed while unobserved
     return connectAttribute(el, name, set);
   }, el.getAttribute(name));

@@ -10,7 +10,7 @@
 // The pool is keyed by the raw query string — normalize spellings at
 // the call site if two must share ("(min-width: 600px)" and
 // "(min-width:600px)" are two pool entries).
-import { type Read, source } from "../loom.js";
+import { type Read, sharedSource } from "../loom.js";
 
 const signals = new Map<string, Read<boolean>>();
 
@@ -18,7 +18,7 @@ export function mediaRead(query: string): Read<boolean> {
   let signal = signals.get(query);
   if (!signal) {
     const list = matchMedia(query);
-    signal = source<boolean>((set) => {
+    signal = sharedSource<boolean>((set) => {
       const push = (): void => set(list.matches);
       push(); // resync: it may have changed while unobserved
       list.addEventListener("change", push);

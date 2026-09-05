@@ -112,6 +112,9 @@ interface SourceNode<T> extends StateNode<T> {
   connect: SourceConnect<T>;
   disconnect: Stop | undefined;
   active: boolean;
+  generation: number;
+  scope?: ScopeNode | undefined;
+  stopped?: boolean;
 }
 
 export interface ComputedNode<T> extends NodeBase {
@@ -343,7 +346,10 @@ export function writable<T>(read: () => T, write: (next: T) => void): State<T> {
  * time the source is read inside a live effect/computed (its first subscriber); it wires up the
  * producer — a timer, event listener, `PerformanceObserver`, socket — and returns a teardown
  * run automatically when the last subscriber goes away. Reads while unobserved return the last
- * value (or `initial`). `connect` should push values via `set` asynchronously.
+ * value (or `initial`). `connect` may push a synchronous initial value to resync.
+ * A source created inside a scope cannot connect while that scope is paused or
+ * after it stops. Teardown may publish a final value synchronously; callbacks
+ * from that connection are ignored after teardown returns.
  */
 export function source<T>(
   connect: SourceConnect<T>,
@@ -358,34 +364,81 @@ export function source<T>(
   // subscribers stay linked; resuming reconnects it if anything is still observing.
   const erased = node as SourceNode<unknown>;
   if (activeScope !== undefined) {
+    node.scope = activeScope;
     registerScopeResource({
       pause: () => disconnectSource(erased),
       resume: () => reconnectSource(erased),
-      stop: () => disconnectSource(erased),
+      stop: () => {
+        node.stopped = true;
+        node.scope = undefined;
+        disconnectSource(erased);
+      },
     });
   }
   runtimeHooks?.create(meta);
   return read;
 }
 
-function connectSource<T>(node: SourceNode<T>): void {
-  node.active = true; // set first so a re-entrant read during connect() doesn't connect twice
+/** @internal A cached producer belongs to its subscribers, not its first
+ * caller's scope. Creation also avoids inheriting that caller's inspect options. */
+export function sharedSource<T>(
+  connect: SourceConnect<T>,
+  initial: T,
+  options?: NodeOptions,
+): Read<T> {
+  const previous = activeScope;
+  activeScope = undefined;
   try {
-    node.disconnect = node.connect((value) => sourceSet(node, value));
+    return source(connect, initial, options);
+  } finally {
+    activeScope = previous;
+  }
+}
+
+function connectSource<T>(node: SourceNode<T>): void {
+  if (
+    node.active ||
+    node.stopped ||
+    node.scope?.stopped ||
+    node.scope?.pausedCount
+  )
+    return;
+  const generation = ++node.generation;
+  node.active = true; // set first so a re-entrant read during connect() doesn't connect twice
+  let disconnect: Stop;
+  try {
+    disconnect = node.connect((value) => {
+      if (node.generation === generation) sourceSet(node, value);
+    });
   } catch (error) {
     // connect() failed: leave the source disconnected (not wedged "active" with no teardown) so a
     // later observation can retry, then surface the failure to the reader that triggered it.
-    node.active = false;
+    if (node.generation === generation) {
+      node.active = false;
+      node.generation++;
+    }
     throw error;
   }
+  // A synchronous producer may pause/stop its owner, or trigger a newer
+  // connection, before returning its teardown. Never overwrite the newer one.
+  if (node.active && node.generation === generation)
+    node.disconnect = disconnect;
+  else disconnect();
 }
 
 function disconnectSource(node: SourceNode<unknown>): void {
   if (!node.active) return;
   node.active = false;
+  const generation = node.generation;
   const off = node.disconnect;
   node.disconnect = undefined;
-  off?.();
+  try {
+    off?.();
+  } finally {
+    // A teardown can publish its final value synchronously. Reject its late
+    // callbacks without invalidating a connection started during teardown.
+    if (node.generation === generation) node.generation++;
+  }
 }
 
 function reconnectSource(node: SourceNode<unknown>): void {
@@ -1083,6 +1136,7 @@ function createSourceNode<T>(
     connect,
     disconnect: undefined,
     active: false,
+    generation: 0,
     subs: undefined,
     subsTail: undefined,
     flags: Mutable,
@@ -1188,9 +1242,8 @@ function sourceOper<T>(this: SourceNode<T>): T {
 
   const sub = activeSub;
   if (sub !== undefined) {
-    const first = this.subs === undefined;
     trackRead(this, sub);
-    if (first && !this.active) {
+    if (!this.active) {
       connectSource(this);
       // A connect() that set() a value did so in the middle of this very read —
       // the notification it propagates targets the reader currently running,

@@ -17,7 +17,7 @@
 //
 // Both are source()-backed and pooled per element: listeners exist only
 // while a signal is observed, and N readers share one listener set.
-import { type Read, source } from "../loom.js";
+import { type Read, sharedSource } from "../loom.js";
 
 const hovers = new WeakMap<Element, Read<boolean>>();
 const focuses = new WeakMap<Element, Read<boolean>>();
@@ -25,7 +25,7 @@ const focuses = new WeakMap<Element, Read<boolean>>();
 export function hovered(el: Element): Read<boolean> {
   const found = hovers.get(el);
   if (found) return found;
-  const signal = source<boolean>((set) => {
+  const signal = sharedSource<boolean>((set) => {
     const enter = (event: Event): void => {
       if ((event as PointerEvent).pointerType === "touch") return;
       set(true);
@@ -48,7 +48,7 @@ export function hovered(el: Element): Read<boolean> {
 export function focusWithin(el: Element): Read<boolean> {
   const found = focuses.get(el);
   if (found) return found;
-  const signal = source<boolean>((set) => {
+  const signal = sharedSource<boolean>((set) => {
     const sync = (): void => {
       const active = el.ownerDocument.activeElement;
       set(active !== null && el.contains(active));

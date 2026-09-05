@@ -1,7 +1,7 @@
-import { D as e, S as t, T as n, v as r } from "./loom-Rpf9L-jU.js";
+import { C as e, E as t, O as n, v as r } from "./loom-DrVvSGMZ.js";
 //#region src/settle.ts
 var i = (e, t) => e === t;
-function a(t, a, o, s) {
+function a(e, a, o, s) {
 	if (!Number.isFinite(o) || o < 0) throw RangeError("settle() delay must be a finite, non-negative number.");
 	let c = s?.equals ?? i, l = !0, u, d, f, p = !1, m = !1, h = !1, g, _ = () => {
 		g !== void 0 && (clearTimeout(g), g = void 0);
@@ -10,15 +10,15 @@ function a(t, a, o, s) {
 	}, y = () => {
 		if (h || m || !p) return;
 		_(), p = !1;
-		let e = f, t = d;
-		d = e, n(() => a(e, t));
+		let e = f, n = d;
+		d = e, t(() => a(e, n));
 	}, b = () => {
 		_(), g = setTimeout(() => {
 			g = void 0, y();
 		}, o);
-	}, x = e(() => {
-		let e = t();
-		return l && (l = !1, u = e, d = e), e;
+	}, x = n(() => {
+		let t = e();
+		return l && (l = !1, u = t, d = t), t;
 	}, (e) => {
 		let t = c(e, u);
 		if (u = e, t) {
@@ -49,8 +49,8 @@ function a(t, a, o, s) {
 		flush: y
 	};
 }
-function o(e, o, s) {
-	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = t(n(e), l), f = a(e, (e) => d(e), o, s), p = !1, m = !1, h = r({
+function o(n, o, s) {
+	let { equals: c, ...l } = s ?? {}, u = s?.equals ?? i, d = e(t(n), l), f = a(n, (e) => d(e), o, s), p = !1, m = !1, h = r({
 		pause: () => {
 			m = !0;
 		},
@@ -65,8 +65,8 @@ function o(e, o, s) {
 		flush: () => {
 			if (p || m) return;
 			f.flush();
-			let t = n(e);
-			u(t, n(() => d())) || d(t);
+			let e = t(n);
+			u(e, t(() => d())) || d(e);
 		},
 		stop: () => {
 			p = !0, f.stop(), h();
@@ -76,12 +76,12 @@ function o(e, o, s) {
 var s = (e) => {
 	if (!Number.isFinite(e) || e < 0) throw RangeError("quiet delay must be a finite, non-negative number.");
 };
-function c(e, t, i) {
-	s(t);
-	let a = t, o = !1, c = !1, l = !1, u, d = () => {
+function c(e, n, i) {
+	s(n);
+	let a = n, o = !1, c = !1, l = !1, u, d = () => {
 		u !== void 0 && (clearTimeout(u), u = void 0);
 	}, f = () => {
-		l || c || !o || (d(), o = !1, n(e));
+		l || c || !o || (d(), o = !1, t(e));
 	}, p = () => {
 		d(), u = setTimeout(() => {
 			u = void 0, f();

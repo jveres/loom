@@ -506,6 +506,11 @@ const stop = effect(() => console.log("dark:", darkMode()));
 stop(); // last subscriber gone -> the listener is removed automatically
 ```
 
+Each connection receives its own `set` callback. Once teardown returns, calls
+to that callback are ignored, including late responses after a newer connection
+starts. Teardown may still publish a final value synchronously. Unobserved reads
+retain the last accepted value.
+
 The dev inspector uses both: a `poll()` heartbeat drives its per-tick metric
 math, and the CLS/LCP/INP web vitals are `source()`s whose `PerformanceObserver`s
 connect and disconnect with the panel — no manual teardown. For the request
@@ -601,6 +606,18 @@ a scope is suspended with it too. Pausing the scope clears a `poll()`'s timer
 though its paused subscribers stay linked (resuming reconnects it); stopping the
 scope tears them all down. So a hidden subtree stops not only re-rendering but
 also the timers and observers feeding it.
+
+A scoped source keeps its creation scope as its lifetime owner even when code
+outside that scope reads it. While the owner is paused, new readers receive the
+cached value without reconnecting the producer. Resume reconnects an observed
+source; stop is terminal, so escaped reads keep the last accepted value and
+never reconnect. Create application-wide sources outside component scopes.
+
+Loom's cached DOM reads (`connected`, attribute/class/style reads, `mediaRead`,
+`hovered`, `focusWithin`, and `pressed`) are shared by their subscribers. They
+do not belong to the scope that first requested them: pausing or stopping one
+consumer cannot disconnect another consumer's producer. Paused subscriptions
+remain attached; shared producers disconnect when the last subscription stops.
 
 A scope's second argument sets default options for everything created inside it —
 handy for marking an entire subsystem `internal` (or giving it a shared `label`)
@@ -704,6 +721,18 @@ reads rethrow that error instead of returning an old value or `undefined`.
 After invalidation, the next evaluation can recover; its getter receives the
 last successful value as `previousValue`. Effects and computed fallbacks that
 read the failed value stay subscribed so they can recover too.
+
+Keyed lists validate all keys before rendering rows. If rendering or insertion
+fails, Loom releases newly created node-owned resources, including bindings on
+nodes the renderer never returned. Existing rows remain live. Conditional
+branches build and insert their next content before retiring the previous
+branch, so a rendering failure preserves the previous content.
+
+Row and branch teardown attempts every removal before reporting cleanup
+failures. A single failure is rethrown; multiple failures produce an
+`AggregateError`. A failed list stop remains terminal and can be called again
+safely. These guarantees cover Loom-owned resources; renderer callbacks remain
+responsible for unrelated application side effects.
 
 ### DOM and events
 

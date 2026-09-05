@@ -2086,8 +2086,8 @@ describe("loom coverage — operators and edges", () => {
     expect(seen).toBe(1);
 
     stop(); // unobserved
-    push?.(2); // no subscribers -> set value without propagation
-    expect(s()).toBe(2); // unobserved dirty read returns the latest value
+    push?.(2); // the disconnected producer's late callback is retired
+    expect(s()).toBe(1); // unobserved reads retain the last accepted value
   });
 
   it("flushes once after a nested batch", () => {

@@ -11,7 +11,7 @@
 // batch; registered stays small by construction). Loom's own text updates are characterData and
 // don't wake it; list reorders do. Moves inside shadow roots are invisible to a document-level
 // observer — a node that never leaves its shadow root reports its state at subscribe time.
-import { type Read, source } from "../loom.js";
+import { type Read, sharedSource } from "../loom.js";
 
 // Signal cache: one pooled signal per node, so N readers share one registry entry. WeakMap — a
 // forgotten node drops its signal with it.
@@ -60,7 +60,7 @@ function observerFor(pool: DocumentPool): MutationObserver {
 export function connected(node: Node): Read<boolean> {
   const cached = signals.get(node);
   if (cached) return cached;
-  const read = source<boolean>((set) => {
+  const read = sharedSource<boolean>((set) => {
     set(node.isConnected); // resync: it may have (dis)connected while unobserved
     const document = nodeDocument(node);
     if (!document) return () => undefined;

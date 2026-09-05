@@ -156,9 +156,15 @@ export declare function writable<T>(read: () => T, write: (next: T) => void): St
  * time the source is read inside a live effect/computed (its first subscriber); it wires up the
  * producer — a timer, event listener, `PerformanceObserver`, socket — and returns a teardown
  * run automatically when the last subscriber goes away. Reads while unobserved return the last
- * value (or `initial`). `connect` should push values via `set` asynchronously.
+ * value (or `initial`). `connect` may push a synchronous initial value to resync.
+ * A source created inside a scope cannot connect while that scope is paused or
+ * after it stops. Teardown may publish a final value synchronously; callbacks
+ * from that connection are ignored after teardown returns.
  */
 export declare function source<T>(connect: SourceConnect<T>, initial: T, options?: NodeOptions): Read<T>;
+/** @internal A cached producer belongs to its subscribers, not its first
+ * caller's scope. Creation also avoids inheriting that caller's inspect options. */
+export declare function sharedSource<T>(connect: SourceConnect<T>, initial: T, options?: NodeOptions): Read<T>;
 export declare function computed<T>(getter: (previousValue?: T) => T, options?: NodeOptions): Read<T>;
 export declare function effect<Result>(fn: () => SyncResult<Result>, options?: EffectOptions): Stop;
 /** @internal Create a node-owned DOM effect without linking it to the currently running effect. */

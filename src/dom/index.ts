@@ -15,8 +15,13 @@ import {
 } from "../loom.js";
 import { attrRead, classRead, styleRead } from "./element-reads.js";
 import { onMount } from "./on-mount.js";
-import { dispose, onUnmount, remove } from "./ownership.js";
-import { own, ownResource } from "./ownership-base.js";
+import { dispose, onUnmount } from "./ownership.js";
+import {
+  own,
+  ownResource,
+  removeNodes,
+  withConstructionRollback,
+} from "./ownership-base.js";
 import { positionOrdered } from "./place.js";
 
 export type Child =
@@ -514,63 +519,70 @@ export function style(
   return undefined;
 }
 
-// Shared keyed reconcile for list()/each(): create or reuse each item's element (stamping its
-// `data-loom-key`), collect them in item order, and drop keys that vanished (disposing their owned
-// effects). Positioning the result — into a container's children or around an anchor — is the caller's
-// job, which is the only thing the two entry points differ on.
-function mountKeyed<T>(
+// Validate identities before rendering, stage new resources, then commit placement
+// before retiring old rows. Both keyed APIs share these failure guarantees.
+function reconcileKeyed<T>(
   parent: Node,
   before: Node | null,
   items: readonly T[],
   nodes: Map<LoomKey, Element>,
   key: (item: T) => LoomKey,
   render: (item: T, key: string) => Element,
+  reorder = true,
 ): void {
-  const fragment = (parent.ownerDocument ?? document).createDocumentFragment();
-  for (const item of items) {
-    const k = key(item);
-    if (nodes.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
-    const keyText = String(k);
-    const node = render(item, keyText);
-    node.setAttribute("data-loom-key", keyText);
-    nodes.set(k, node);
-    fragment.appendChild(node);
-  }
-  parent.insertBefore(fragment, before);
-}
-
-function reconcileKeyed<T>(
-  items: readonly T[],
-  nodes: Map<LoomKey, Element>,
-  key: (item: T) => LoomKey,
-  render: (item: T, key: string) => Element,
-): Element[] {
   const seen = new Set<LoomKey>();
-  const ordered = new Array<Element>(items.length);
-  let index = 0;
-  for (const item of items) {
-    const k = key(item);
+  const keys = new Array<LoomKey>(items.length);
+  for (let index = 0; index < items.length; index++) {
+    const k = key(items[index] as T);
     if (seen.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
     seen.add(k);
-    let node = nodes.get(k);
-    if (!node) {
-      const keyText = String(k);
-      node = render(item, keyText);
-      node.setAttribute("data-loom-key", keyText);
-      nodes.set(k, node);
-    }
-    ordered[index++] = node;
+    keys[index] = k;
   }
-  // The overwhelmingly common initial/append/reorder cases retain every known key. The equal
-  // cardinality proves there can be no stale map entry, avoiding a second full hash walk.
+
+  const created = new Map<LoomKey, Element>();
+  const ordered = new Array<Element>(items.length);
+  withConstructionRollback(() => {
+    try {
+      for (let index = 0; index < items.length; index++) {
+        const k = keys[index] as LoomKey;
+        let node = nodes.get(k);
+        if (node === undefined) {
+          const keyText = String(k);
+          node = render(items[index] as T, keyText);
+          created.set(k, node);
+          node.setAttribute("data-loom-key", keyText);
+        }
+        ordered[index] = node;
+      }
+      if (nodes.size === 0 && ordered.length !== 0) {
+        const fragment = (
+          parent.ownerDocument ?? document
+        ).createDocumentFragment();
+        for (const node of ordered) fragment.appendChild(node);
+        parent.insertBefore(fragment, before);
+      } else if (reorder) {
+        positionOrdered(parent, ordered, before);
+      } else {
+        for (const node of ordered) {
+          if (!node.parentNode) parent.appendChild(node);
+        }
+      }
+    } catch (error) {
+      // Existing rows remain owned and live; only staged additions are retired.
+      removeNodes(created.values(), [error]);
+    }
+  });
+
+  for (const [k, node] of created) nodes.set(k, node);
   if (seen.size !== nodes.size) {
+    const outgoing: Element[] = [];
     for (const [k, node] of nodes) {
       if (seen.has(k)) continue;
-      remove(node);
       nodes.delete(k);
+      outgoing.push(node);
     }
+    removeNodes(outgoing);
   }
-  return ordered;
 }
 
 export function list<T>(
@@ -584,40 +596,30 @@ export function list<T>(
       () => {
         const shouldReorder = options.reorder?.() !== false;
         const items = read();
-        if (nodes.size === 0 && items.length !== 0) {
-          mountKeyed(
-            container,
-            null,
-            items,
-            nodes,
-            options.key,
-            options.render,
-          );
-          return;
-        }
-        const ordered = reconcileKeyed(
+        reconcileKeyed(
+          container,
+          null,
           items,
           nodes,
           options.key,
           options.render,
+          shouldReorder,
         );
-        if (shouldReorder) {
-          positionOrdered(container, ordered, null);
-        } else {
-          // Externally positioned: only append the newly created keys, leave the rest in place.
-          for (const node of ordered) {
-            if (!node.parentNode) container.appendChild(node);
-          }
-        }
       },
       { label: "dom.list", target: container },
     ),
   );
 
   const stopList = (): void => {
-    stop();
-    for (const node of nodes.values()) remove(node);
+    const outgoing = [...nodes.values()];
     nodes.clear();
+    const errors: unknown[] = [];
+    try {
+      stop();
+    } catch (error) {
+      errors.push(error);
+    }
+    removeNodes(outgoing, errors);
   };
   return onUnmount(container, stopList);
 }
@@ -638,12 +640,26 @@ function dynamic(
         () => {
           const k = key();
           if (k === currentKey) return;
+          const parent = anchor.parentNode;
+          if (parent === null) return;
+          const next: Node[] = withConstructionRollback(() => {
+            const frag = (
+              parent.ownerDocument ?? document
+            ).createDocumentFragment();
+            try {
+              untrack(() => appendChild(frag, pick(k)));
+              const next = [...frag.childNodes];
+              parent.insertBefore(frag, anchor);
+              return next;
+            } catch (error) {
+              removeNodes([...frag.childNodes], [error]);
+              throw error;
+            }
+          });
+          const outgoing = mounted.filter((node) => !next.includes(node));
+          mounted = next;
           currentKey = k;
-          for (const node of mounted) remove(node);
-          const frag = document.createDocumentFragment();
-          untrack(() => appendChild(frag, pick(k)));
-          mounted = [...frag.childNodes];
-          anchor.parentNode?.insertBefore(frag, anchor);
+          removeNodes(outgoing);
         },
         "dom.dynamic",
         slotTarget(anchor),
@@ -712,9 +728,10 @@ export function each<T>(
       const nodes = new Map<LoomKey, Element>();
       return domEffect(
         () => {
-          const ordered = reconcileKeyed(items(), nodes, key, render);
+          const values = items();
           const parent = anchor.parentNode;
-          if (parent) positionOrdered(parent, ordered, anchor);
+          if (parent)
+            reconcileKeyed(parent, anchor, values, nodes, key, render);
         },
         "dom.each",
         slotTarget(anchor),
