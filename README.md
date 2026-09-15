@@ -8,9 +8,9 @@ Loom is a small reactive UI runtime with callable signals and real DOM nodes.
 It needs no compiler transform and has no runtime dependencies. JSX returns DOM
 nodes; reactive bindings update those nodes in place.
 
-This development branch implements the breaking API consolidation. The package
-version remains `0.5.0` until release selection. Existing consumers must follow
-the [migration guide](docs/migration.md) before adopting this branch.
+The current release is `0.7.0`. Version `0.6.0` introduced the breaking API
+consolidation. If you are upgrading from `0.5.0` or earlier, follow the
+[migration guide](docs/migration.md) to update imports and lifetimes.
 
 ## Start with signals
 
@@ -207,11 +207,10 @@ console.log(output);
 ## Install and develop
 
 Loom is distributed through GitHub with committed ESM bundles and declarations.
-Pin a reviewed commit for reproducible installations. This branch introduces
-breaking changes and has not been published as a release.
+Install the current release from its GitHub tag:
 
 ```sh
-pnpm add github:jveres/loom
+pnpm add github:jveres/loom#v0.7.0
 ```
 
 Development uses TypeScript 7. The shared source-entry map drives local aliases;
