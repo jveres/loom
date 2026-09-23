@@ -8,7 +8,7 @@
 // always. Style with both selectors (`:active, .is-pressed`): the mouse
 // keeps its native semantics, touch gains the guaranteed signal.
 //
-//   classed(el, "is-pressed", pressed(el));
+//   bindClass(el, "is-pressed", pressed(el));
 //
 // Deliberately NO pointer capture — a press that slides off and releases
 // elsewhere must stay a cancel, exactly like a native button (capture
@@ -19,6 +19,7 @@
 // signal is observed (source() connects on first subscriber, disconnects
 // on last) — unused, this module costs nothing.
 import { type Read, sharedSource } from "../loom.js";
+import { trackPress } from "./press-track.js";
 
 // Signal cache: one pooled signal per element, so N readers share one
 // listener set. WeakMap — a forgotten element drops its signal with it.
@@ -28,35 +29,11 @@ export function pressed(el: Element): Read<boolean> {
   const found = signals.get(el);
   if (found) return found;
   const signal = sharedSource<boolean>((set) => {
-    let active = -1;
-    let press: AbortController | null = null;
-    const end = (event: Event): void => {
-      if ((event as PointerEvent).pointerId !== active) return;
-      active = -1;
-      press?.abort();
-      press = null;
-      set(false);
-    };
-    const down = (event: Event): void => {
-      const pointer = event as PointerEvent;
-      // Primary button only, one press at a time — a second finger landing
-      // mid-press neither restarts nor steals the sequence.
-      if (pointer.button !== 0 || active !== -1) return;
-      active = pointer.pointerId;
-      press = new AbortController();
-      const options = { signal: press.signal };
-      const view = el.ownerDocument.defaultView ?? globalThis;
-      view.addEventListener("pointerup", end, options);
-      view.addEventListener("pointercancel", end, options);
-      el.addEventListener("pointerleave", end, options);
-      set(true);
-    };
-    el.addEventListener("pointerdown", down);
+    const stop = trackPress(el, set);
     return () => {
-      el.removeEventListener("pointerdown", down);
-      press?.abort();
-      press = null;
-      active = -1;
+      stop();
+      // A press cut short by losing the last subscriber must not stay lit on reconnect.
+      set(false);
     };
   }, false);
   signals.set(el, signal);

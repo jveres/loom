@@ -4,7 +4,8 @@
 // and outline their DOM node(s) on hover. props() signals fold under a collapsible header; standalone
 // signals at the root. Owns its module state; driven from outside through seams: the panel calls
 // buildGraphPane / showGraph / revealSignal / clearGraphHighlight / teardownGraph, the stats
-// heartbeat calls renderGraphThrottled, and the Trace tab's row hover calls highlightSignal.
+// module's deferred refresh calls renderGraphThrottled, and the Trace tab's rows call
+// highlightSignal / clearGraphHighlight.
 import type { State } from "loom";
 import { type InspectNode, inspect } from "loom/observe";
 import {
@@ -512,4 +513,8 @@ export function teardownGraph(): void {
   graphCollapsed.clear();
   graphById = new Map();
   graphByIdAt = 0;
+  lastGraphRender = 0;
+  gRevealId = -1;
+  gSuppressFlash = false;
+  gGraphJustShown = false;
 }

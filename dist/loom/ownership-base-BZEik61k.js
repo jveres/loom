@@ -1,5 +1,4 @@
-import { n as e } from "./tracking-DRP3LNHN.js";
-import { t } from "./errors-CCHQSfa8.js";
+import { n as e, r as t } from "./tracking-CClsWN0I.js";
 //#region src/dom/ownership-base.ts
 var n, r, i;
 function a(e) {

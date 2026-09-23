@@ -495,6 +495,27 @@ describe("loom core", () => {
     expect(frame["loom:dispose"]?.count).toBe(1);
     m.stop();
   });
+  it("counts source() producer pushes as writes, without the self-write warning", () => {
+    const m = meter([events.write]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const previous = configure({ inspect: true });
+    let push: (value: number) => void = () => {};
+    const feed = source<number>((set) => {
+      set(1); // a connect() resync runs inside the connecting reader
+      push = set;
+      return () => {};
+    }, 0);
+    const stop = effect(() => {
+      feed();
+    });
+    push(2);
+    expect(m.read()["loom:write"]?.count).toBe(2);
+    expect(warn).not.toHaveBeenCalled();
+    stop();
+    configure(previous);
+    warn.mockRestore();
+    m.stop();
+  });
   it("excludes internal nodes from the built-in channels", () => {
     const m = meter([events.write]);
     const visible = state(0);
@@ -1461,6 +1482,27 @@ describe("loom scope edge cases", () => {
     );
     value(1);
     expect(runs).toBe(1);
+  });
+  it("reports every failed cleanup when a scope stops", () => {
+    const owner = scope(() => {
+      for (const message of ["first cleanup failed", "second cleanup failed"]) {
+        effect(() => () => {
+          throw new Error(message);
+        });
+      }
+    });
+    let thrown: unknown;
+    try {
+      owner.stop();
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect(
+      (thrown as AggregateError).errors.map(
+        (error) => (error as Error).message,
+      ),
+    ).toEqual(["first cleanup failed", "second cleanup failed"]);
   });
   it("finishes scope teardown when one effect cleanup throws", () => {
     const value = state(0);

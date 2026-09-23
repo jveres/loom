@@ -121,7 +121,7 @@ For retention checks, start Chromium with `--js-flags=--expose-gc`, then run:
 
 ```js
 await bench.measureRetention();
-await bench.measureRetention(true); // owning-scope stop
+await bench.measureRetention(true); // bindings created inside a scope, removed via remove()
 const checks = await import("/bench/dom-browser-checks.ts");
 await checks.runBrowserChecks();
 ```

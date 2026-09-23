@@ -5,7 +5,7 @@
 // subscriber-counted through source(): with nothing observed the observer is disconnected and this
 // module costs zero.
 //
-// attrRead/classRead/styleRead are the element forms of attr()/classed()/style() in ./index.ts;
+// attrRead/classRead/styleRead are the read-side twins of bindAttr/bindClass/bindStyle in ./index.ts;
 // class and style reads derive from the class/style attribute signals, deduped by computed().
 import { computed, type Read, sharedSource } from "../loom.js";
 

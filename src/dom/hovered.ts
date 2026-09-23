@@ -8,7 +8,7 @@
 // a flash, and contact is touch's voice (pressed()). Where CSS :hover is
 // gated to `@media (hover: hover)`, this signal is the class-driven twin
 // that also serves the pointers that gate cannot see (a stylus, or a
-// trackpad on a touch-primary device): `classed(el, "is-hover",
+// trackpad on a touch-primary device): `bindClass(el, "is-hover",
 // hovered(el))`.
 //
 // focusWithin() mirrors :focus-within: true while el or any descendant

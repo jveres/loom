@@ -1,5 +1,8 @@
 # Loom refactor plan
 
+> Historical record: all six stages were completed on September 5, 2026, before
+> the v0.6.0 API consolidation. Some APIs named here were removed in that release.
+
 Track the architecture review fixes across sessions. Complete correctness work
 before API expansion or performance refactoring. Keep each stage independently
 reviewable, and record verification and decisions here before handing off.

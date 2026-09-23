@@ -4,9 +4,9 @@ import {
   endBatch,
   startBatch,
 } from "alien-signals";
+import type { Props, Stop } from "loom";
 import { batch, effect, props, state } from "loom";
 import { bench, describe } from "vitest";
-import type { Props, Stop } from "../src/loom.js";
 
 type Tone = 0 | 1 | 2 | 3 | 4;
 type Signal<T> = {

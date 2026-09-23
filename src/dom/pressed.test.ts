@@ -38,6 +38,24 @@ describe("pressed", () => {
       el.remove();
     }
   });
+  it("resets when the last reader leaves mid-press", () => {
+    const el = document.createElement("button");
+    document.body.append(el);
+    const read = pressed(el);
+    const stop = effect(() => {
+      read();
+    });
+    el.dispatchEvent(pointer("pointerdown", 4));
+    expect(read()).toBe(true);
+    stop(); // disconnects while the press is still held
+    const seen: boolean[] = [];
+    const again = effect(() => {
+      seen.push(read());
+    });
+    expect(seen).toEqual([false]);
+    again();
+    el.remove();
+  });
   it("ignores secondary buttons, foreign pointers, and second fingers", () => {
     const el = document.createElement("button");
     document.body.append(el);

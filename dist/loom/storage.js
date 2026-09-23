@@ -1,6 +1,6 @@
-import { A as e, o as t } from "./loom-Bu120UNX.js";
-import { n } from "./tracking-DRP3LNHN.js";
-import { n as r, t as i } from "./lifetime-D9QsK10p.js";
+import { n as e } from "./tracking-CClsWN0I.js";
+import { A as t, o as n } from "./loom-BsucpYd_.js";
+import { n as r, t as i } from "./lifetime-KneSZTc9.js";
 //#region src/storage.ts
 function a(e, t) {
 	let n = t.storage ?? c(), r = t.serialize ?? JSON.stringify, i = t.parse;
@@ -77,13 +77,13 @@ function l(a, o, s = {}) {
 	if (!Number.isFinite(c) || c < 0) throw RangeError("Storage delay must be finite and non-negative.");
 	let l = r(s.signal), u = !1, d, f, p = () => {
 		f !== void 0 && clearTimeout(f), f = void 0;
-	}, m = () => !l.active || !u || (p(), u = !1, n(() => o.store(d)));
+	}, m = () => !l.active || !u || (p(), u = !1, e(() => o.store(d)));
 	if (l.add(() => {
 		u = !1, p();
 	}), l.active) try {
-		t(() => {
-			let t = o.load();
-			t !== void 0 && l.active && a(t), l.active && l.add(e(() => a(), (e) => {
+		n(() => {
+			let e = o.load();
+			e !== void 0 && l.active && a(e), l.active && l.add(t(() => a(), (e) => {
 				l.active && (d = e, u = !0, p(), c === 0 ? m() : f = setTimeout(m, c));
 			}));
 		});

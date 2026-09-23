@@ -88,7 +88,7 @@ const APPS = [
     `,
   },
   {
-    // Gates the README claim that loom/async adds ~0.3 kB gzip over the minimal core.
+    // Keeps loom/async a small addition (~0.3 kB gzip) over the minimal core.
     name: "minimal + async (resource)",
     budget: 3700,
     source: `

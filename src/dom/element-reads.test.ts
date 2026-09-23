@@ -82,7 +82,7 @@ describe("attr(el, name) — reactive reads", () => {
     expect(now).toBe("late"); // connect() resync, no mutation event needed
     stop2();
   });
-  it("classed(el, name) reads class presence reactively", async () => {
+  it("classRead(el, name) reads class presence reactively", async () => {
     const el = h("div");
     const seen: boolean[] = [];
     const stop = effect(() => {
@@ -98,7 +98,7 @@ describe("attr(el, name) — reactive reads", () => {
     expect(seen).toEqual([false, true, false]); // deduped by computed()
     stop();
   });
-  it("style(el, prop) reads the inline value reactively", async () => {
+  it("styleRead(el, prop) reads the inline value reactively", async () => {
     const el = h("div");
     const seen: string[] = [];
     const stop = effect(() => {
@@ -109,7 +109,7 @@ describe("attr(el, name) — reactive reads", () => {
     await vi.waitFor(() => expect(seen).toEqual(["", "10px"]));
     stop();
   });
-  it("classed(el, name, read) toggles the class as a node-owned binding", () => {
+  it("bindClass(el, name, read) toggles the class as a node-owned binding", () => {
     const on = state(false);
     const el = h("div");
     bindClass(el, "active", () => on());
@@ -120,7 +120,7 @@ describe("attr(el, name) — reactive reads", () => {
     on(false);
     expect(el.classList.contains("active")).toBe(true);
   });
-  it("style(el, prop, read) binds inline style, camelCase converted", () => {
+  it("bindStyle(el, prop, read) binds inline style, camelCase converted", () => {
     const width = state("10px");
     const el = h("div");
     bindStyle(el, "maxWidth", () => width()); // camelCase prop name

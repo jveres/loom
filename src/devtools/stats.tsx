@@ -1,8 +1,9 @@
 // Stats ("Info") tab + the whole metrics subsystem: the meter-driven reactive-pipeline rates, the
 // rAF frame-rate / lag probes, the web-vital PerformanceObserver sources, the live resource census,
 // and the gauge / histogram widgets. Owns its module state and its own (pausable) scope; the panel
-// drives it through wireStats / pauseStats / resumeStats / stopStats.
+// drives it through wireStats / pauseStats / resumeStats / setStatsMinimized / stopStats.
 import {
+  effect,
   type Polled,
   poll,
   type Read,
@@ -35,11 +36,13 @@ import type { TabId } from "./panel.js";
 import { renderTrace } from "./trace.js";
 
 /* ---- geometry ---- */
-const FRAME_N = 138; // frame-time histogram samples (matches the demo overlay)
+const FRAME_N = 138; // frame-time histogram samples
 const GAUGE_R = 34;
 const GAUGE_C = 2 * Math.PI * GAUGE_R;
 const GAUGE_ARC = GAUGE_C * 0.75; // 270° gauge
 const POLL_MS = 120;
+const FPS_TARGET = 55; // at or above: healthy
+const FPS_STRAINED = 30; // at or above (below target): strained
 const POLL_S = POLL_MS / 1000;
 const LAG_MS = 200;
 /* ---- module state ---- */
@@ -49,12 +52,16 @@ let isMinimizedFn: () => boolean = () => false;
 let heartbeat: Polled<number> | null = null;
 let lagTimer: ReturnType<typeof setInterval> | null = null;
 let rafHandle: number | null = null;
-// The stats tab's scope: paused when its tab isn't the active one (so a hidden subtree does no work).
+// The Info pane's root element, whose DOM bindings pause while the tab is hidden or the panel is
+// collapsed.
 let statsRoot: HTMLElement | null = null;
-let statsPaused = false;
+let statsPaused = false; // hidden tab (pauseStats)
+let statsMinimized = false; // collapsed panel (setStatsMinimized); DOM pauses nest
+// The stats tab's scope: paused when its tab isn't the active one (so a hidden subtree does no work).
 let statsScope: Scope | null = null;
-// Advances every tick — the heartbeat's changing value, so every pulse() binding re-runs per poll;
-// the value-dedup leaves the display:none-hidden Info bindings asleep until that tab is shown.
+// Advances every tick — the heartbeat's changing value, so every pulse() binding re-runs per poll.
+// While the Info tab is hidden (or the panel minimized) its bindings are paused (pauseStats /
+// setStatsMinimized), so they catch up once when shown instead of running every tick.
 let metricSeq = 0;
 // A pull-based meter on the runtime's built-in `events`; poll() drains it every tick for the
 // smoothed per-second rates. The meter is a scope resource, so minimizing detaches it.
@@ -135,14 +142,16 @@ function health(f: number): {
   label: string;
   score: number;
 } {
-  const s = Math.round(100 * Math.max(0, Math.min(1, f / 55)));
+  const s = Math.round(100 * Math.max(0, Math.min(1, f / FPS_TARGET)));
   if (s >= 70) return { key: "ok", label: "healthy", score: s };
   if (s >= 40) return { key: "warn", label: "strained", score: s };
   return { key: "bad", label: "overloaded", score: s };
 }
 function frameColor(ms: number): string {
-  const f = 1000 / ms;
-  return f >= 55 ? "h-ok" : f >= 30 ? "h-warn" : "h-bad";
+  return fpsClass(1000 / ms);
+}
+function fpsClass(fps: number): string {
+  return fps >= FPS_TARGET ? "h-ok" : fps >= FPS_STRAINED ? "h-warn" : "h-bad";
 }
 function vitalColor(v: number, good: number, ni: number): string {
   if (!v) return "";
@@ -364,7 +373,7 @@ function stat(
   title = "",
 ): HTMLElement {
   const val = <span class={`li-stat-v ${cls}`} />;
-  val.append(text(pulse(get), PANEL_OPTS));
+  val.append(pulsedText(get));
   return (
     <div class="li-stat">
       <span class="li-stat-k" title={title}>
@@ -611,7 +620,7 @@ function pollTick(): number {
     healthKey = h.key;
     healthLabel = h.label;
     healthReady = true;
-    fpsKey = fps >= 55 ? "h-ok" : fps >= 30 ? "h-warn" : "h-bad";
+    fpsKey = fpsClass(fps);
   }
   // The sequence advances every tick so the value bindings re-render. The heavy per-tab refresh is
   // split into renderActiveTab() and driven off the critical path.
@@ -731,9 +740,9 @@ export function wireStats(opts: {
   // The heavy per-tab refresh runs in the deferred lane — ticked by the heartbeat but off the
   // critical path (idle-first, ~POLL_MS floor), so under app load it yields instead of competing
   // each frame. untracked so it re-runs only on the tick, not on whatever the render reads. Owned
-  // by the pane node (dies with the panel) and paused with minimize via the ambient scope.
-  bind(
-    statsPane,
+  // by the ambient panel scope (paused on minimize, stopped on unmount) — not by the stats pane,
+  // whose node pause on leaving the Info tab would otherwise freeze the Graph and Trace refresh.
+  effect(
     () => {
       heartbeat?.();
       untrack(renderActiveTab);
@@ -759,6 +768,14 @@ export function resumeStats(): void {
     resume(statsRoot);
   }
 }
+// The panel collapsed or expanded: pause or resume the Info pane's bindings. Independent of the
+// hidden-tab pause above; the two nest.
+export function setStatsMinimized(minimized: boolean): void {
+  if (!statsRoot || statsMinimized === minimized) return;
+  statsMinimized = minimized;
+  if (minimized) pause(statsRoot);
+  else resume(statsRoot);
+}
 // Tear down the metrics subsystem and reset its state (from unmountInspector).
 export function stopStats(): void {
   metricsMeter?.stop();
@@ -779,6 +796,7 @@ export function stopStats(): void {
   statsScope = null;
   statsRoot = null;
   statsPaused = false;
+  statsMinimized = false;
   heapSource = clsSource = lcpSource = inpSource = longTasksSource = null;
   metricSeq = 0;
   readRate = writeRate = computedRate = effectRate = flushRate = 0;

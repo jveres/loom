@@ -13,10 +13,9 @@ import { bench, describe } from "vitest";
 const benchGlobal = globalThis as typeof globalThis & {
   __loomBenchmarkSink?: unknown;
 };
-// Focused benches for the hot paths flagged by the API/perf audit. Baselines to measure the fixes
-// against: deferred-queue O(n²), create-only WeakMap registration, trigger/mutate watcher alloc,
-// and deep scope pause/resume ancestor walks.
-// 1. Deferred queue — build the queue to N (deferEffect.includes ×N), then one drain (shift ×N).
+// Focused workloads for paths that once had scaling problems: the deferred queue, node creation,
+// trigger/mutate, and deep scope pause/resume. Keep them as regression guards.
+// 1. Deferred queue — enqueue N deferred effects, then drain them in one pass or in budgeted chunks.
 describe("deferred queue", () => {
   for (const N of [1000, 10000]) {
     bench(`${N} deferred effects: enqueue all + single drain`, () => {
@@ -54,7 +53,7 @@ describe("deferred queue", () => {
     for (const stop of stops) stop();
   });
 });
-// 2. Create-only throughput — node creation + the always-on stateNodes/computedNodes/effectNodes.
+// 2. Create-only throughput — node creation (and effect stop) with inspection off.
 describe("create-only", () => {
   bench("create 10k states", () => {
     const out: unknown[] = [];
@@ -73,7 +72,7 @@ describe("create-only", () => {
     for (const st of stops) st();
   });
 });
-// 3. mutate/trigger-heavy object updates — the per-call temporary watcher allocation.
+// 3. mutate/trigger-heavy object updates — each call discovers dependencies through a temporary watcher.
 describe("mutate / trigger", () => {
   bench("mutate 50k object updates", () => {
     const obj = state({ n: 0 });
@@ -95,7 +94,7 @@ describe("mutate / trigger", () => {
     stop();
   });
 });
-// 4. Deep scope pause/resume — scopePaused ancestor walk (notify-while-paused) + flushScope.
+// 4. Deep scope pause/resume — writes while a 50-deep scope chain is paused, then resume + flushScope.
 describe("deep scope pause/resume", () => {
   bench("depth 50: dirty-while-paused + resume x300", () => {
     const signals: Array<(v: number) => void> = [];

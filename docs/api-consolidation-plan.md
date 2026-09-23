@@ -5,12 +5,9 @@ consumers to it. The release removes superseded names, signatures, import paths,
 and behaviors. It ships no compatibility barrel, deprecated alias, legacy mode,
 or adapter retained for old callers.
 
-Status: implemented in the isolated `api-consolidation` checkout. Source,
-distribution, repository consumers, documentation, and package verification use
-the canonical surface. External migration, the remaining browser matrix, version
-selection, and publishing are release follow-ups, not completed implementation
-claims. See [measurements](api-measurements.md), [migration](migration.md), and
-[support](support.md).
+Status: completed and released in v0.6.0. This document is a historical record;
+see [release notes](release-0.6.0.md), [measurements](api-measurements.md),
+[migration](migration.md), and [support](support.md) for the current state.
 
 Baseline: September 5, 2026, commit `51df3fb`, package version `0.5.0`.
 The baseline default entrypoint has 20 runtime exports and `loom/dom` has 61.
@@ -550,12 +547,5 @@ The final implementation resolves the remaining design details as follows.
   flag only to the Vitest parent process left two existing checks skipped. The
   final suite runs 546 tests with no skips, including the added binding-retention
   regression.
-- Preserve the linked checkout used by `markdown-viewer`. Implementation and
-  generated distribution live in `/private/tmp/loom-api-consolidation`; adopting
-  this branch in the linked checkout is a separate coordinated upgrade.
-
-## Next steps
-
-Review this branch and coordinate the external consumer upgrade. Complete the
-remaining browser matrix before selecting the release version. Publishing is
-not part of the current implementation request.
+- Preserve the linked checkout used by `markdown-viewer` until its coordinated
+  upgrade (completed; see Stage D).

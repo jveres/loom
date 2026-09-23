@@ -1,51 +1,51 @@
-import { T as e, j as t, k as n, n as r, u as i } from "./loom-Bu120UNX.js";
-import { n as a } from "./tracking-DRP3LNHN.js";
+import { n as e } from "./tracking-CClsWN0I.js";
+import { T as t, j as n, k as r, n as i, u as a } from "./loom-BsucpYd_.js";
 //#region src/keyed-states.ts
-function o(...t) {
-	let n = t[0] ?? {}, r = /* @__PURE__ */ new Map(), i = (e, t) => {
-		let n = r.get(e);
-		if (!n) {
-			let i = a(t);
-			if (typeof i != "function") throw TypeError("Keyed state factory must return a state.");
-			n = i, r.set(e, n);
+function o(...n) {
+	let r = n[0] ?? {}, i = /* @__PURE__ */ new Map(), a = (t, n) => {
+		let r = i.get(t);
+		if (!r) {
+			let a = e(n);
+			if (typeof a != "function") throw TypeError("Keyed state factory must return a state.");
+			r = a, i.set(t, r);
 		}
-		return n;
+		return r;
 	};
 	return {
-		factory: i,
-		value: (t, r) => i(t, () => e(r, {
-			...n,
-			...n.label ? { label: `${n.label}.${t}` } : {}
+		factory: a,
+		value: (e, n) => a(e, () => t(n, {
+			...r,
+			...r.label ? { label: `${r.label}.${e}` } : {}
 		})),
-		prune(e) {
-			let t = typeof e == "string" ? (t) => t.includes(e) : e, n = 0;
-			for (let e of r.keys()) a(() => t(e)) && (r.delete(e), n++);
-			return n;
+		prune(t) {
+			let n = typeof t == "string" ? (e) => e.includes(t) : t, r = 0;
+			for (let t of i.keys()) e(() => n(t)) && (i.delete(t), r++);
+			return r;
 		},
-		has: (e) => r.has(e)
+		has: (e) => i.has(e)
 	};
 }
 //#endregion
 //#region src/lens.ts
-function s(e, n) {
-	return t(() => e()[n], (t) => {
-		let r = a(() => e());
-		if (Object.is(r[n], t)) return;
-		let i = Array.isArray(r) ? r.slice() : { ...r };
-		i[n] = t, e(i);
+function s(t, r) {
+	return n(() => t()[r], (n) => {
+		let i = e(() => t());
+		if (Object.is(i[r], n)) return;
+		let a = Array.isArray(i) ? i.slice() : { ...i };
+		a[r] = n, t(a);
 	});
 }
 //#endregion
 //#region src/revisions.ts
-function c(t = {}) {
-	let o = t.separator ?? ".";
+function c(n = {}) {
+	let o = n.separator ?? ".";
 	if (o.length === 0) throw RangeError("Revision separator must not be empty.");
-	let s = /* @__PURE__ */ new Map(), c = (n) => {
-		let r = s.get(n);
-		return r || (r = e(0, {
-			...t.label ? { label: `${t.label}.${n || "root"}` } : {},
-			...t.internal ? { internal: !0 } : {}
-		}), s.set(n, r)), r;
+	let s = /* @__PURE__ */ new Map(), c = (e) => {
+		let r = s.get(e);
+		return r || (r = t(0, {
+			...n.label ? { label: `${n.label}.${e || "root"}` } : {},
+			...n.internal ? { internal: !0 } : {}
+		}), s.set(e, r)), r;
 	}, l = (e, t) => {
 		let n = e;
 		for (;;) {
@@ -58,10 +58,10 @@ function c(t = {}) {
 		get size() {
 			return s.size;
 		},
-		prune(e) {
-			return a(() => {
-				let t = typeof e == "string" ? (t) => t.includes(e) : e ?? (() => !0), n = 0;
-				for (let [e, r] of s) t(e) && !i(r) && (s.delete(e), n++);
+		prune(t) {
+			return e(() => {
+				let e = typeof t == "string" ? (e) => e.includes(t) : t ?? (() => !0), n = 0;
+				for (let [t, r] of s) e(t) && !a(r) && (s.delete(t), n++);
 				return n;
 			});
 		},
@@ -69,10 +69,10 @@ function c(t = {}) {
 		invalidate(...e) {
 			let t = /* @__PURE__ */ new Set();
 			for (let n of e) l(n, t);
-			r(() => {
+			i(() => {
 				for (let e of t) {
 					let t = s.get(e);
-					t && n(t, (e) => e + 1);
+					t && r(t, (e) => e + 1);
 				}
 			});
 		}
@@ -80,16 +80,16 @@ function c(t = {}) {
 }
 //#endregion
 //#region src/weak-memo.ts
-function l(e, t) {
-	let n = /* @__PURE__ */ new WeakMap(), r, i = !1;
+function l(t, n) {
+	let r = /* @__PURE__ */ new WeakMap(), i, a = !1;
 	return (o) => {
-		if (t) {
-			let e = a(t);
-			(!i || e !== r) && (i = !0, r = e, n = /* @__PURE__ */ new WeakMap());
+		if (n) {
+			let t = e(n);
+			(!a || t !== i) && (a = !0, i = t, r = /* @__PURE__ */ new WeakMap());
 		}
-		if (n.has(o)) return n.get(o);
-		let s = a(() => e(o));
-		return n.set(o, s), s;
+		if (r.has(o)) return r.get(o);
+		let s = e(() => t(o));
+		return r.set(o, s), s;
 	};
 }
 //#endregion

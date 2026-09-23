@@ -12,7 +12,7 @@ import {
   scope,
   state,
 } from "loom";
-import { bind, pause, remove, resume } from "loom/dom";
+import { bind, remove } from "loom/dom";
 import { onTap, startPointerSession } from "loom/events";
 import { scrollFade } from "loom/motion";
 import { bindStorage, codecs, storageSlot } from "loom/storage";
@@ -36,7 +36,13 @@ import {
   loomLogo,
   svgMarkup,
 } from "./icons.js";
-import { pauseStats, resumeStats, stopStats, wireStats } from "./stats.js";
+import {
+  pauseStats,
+  resumeStats,
+  setStatsMinimized,
+  stopStats,
+  wireStats,
+} from "./stats.js";
 import {
   buildTracePane,
   setTraceActive,
@@ -47,7 +53,12 @@ import {
   teardownTrace,
 } from "./trace.js";
 
-type Theme = "system" | "light" | "dark";
+const THEMES = ["system", "light", "dark"] as const;
+type Theme = (typeof THEMES)[number];
+// Panel size floor, and the gap kept between the panel and the viewport edge.
+const MIN_WIDTH = 240;
+const MIN_HEIGHT = 160;
+const EDGE_GAP = 8;
 const THEME_ICONS: Record<Theme, string> = {
   system: ICON_MONITOR,
   light: ICON_SUN,
@@ -68,8 +79,8 @@ let menuEl: HTMLElement | null = null;
 let bodyEl: HTMLElement | null = null;
 let closeMenuOnOutside: ((e: Event) => void) | null = null;
 const scrollFades: Array<() => void> = [];
-// Scopes for collective pause: the whole panel (paused when minimized) and, nested inside it, the
-// stats tab (paused when it isn't the active tab) — so a hidden subtree does no reactive work.
+// The panel scope, paused when minimized (stats.tsx nests the Info tab's own scope inside it, paused
+// when that tab isn't active) — so a hidden subtree does no reactive work.
 let inspectorScope: Scope | null = null;
 let storageAbort: AbortController | null = null;
 let previousInspect: boolean | null = null;
@@ -112,10 +123,7 @@ function panelSignals(): PanelSignals {
   };
   bindStorage(
     created.theme,
-    storageSlot(
-      `${PANEL_ID}-theme`,
-      codecs.string<Theme>(["system", "light", "dark"]),
-    ),
+    storageSlot(`${PANEL_ID}-theme`, codecs.string<Theme>(THEMES)),
     options,
   );
   bindStorage(
@@ -286,18 +294,18 @@ function makeResizable(handle: HTMLElement, target: HTMLElement): void {
       (ev, rect) => {
         const w = snapPx(
           Math.max(
-            240,
+            MIN_WIDTH,
             Math.min(
-              window.innerWidth - rect.left - 8,
+              window.innerWidth - rect.left - EDGE_GAP,
               rect.width + ev.clientX - startX,
             ),
           ),
         );
         const h = snapPx(
           Math.max(
-            160,
+            MIN_HEIGHT,
             Math.min(
-              window.innerHeight - rect.top - 8,
+              window.innerHeight - rect.top - EDGE_GAP,
               rect.height + ev.clientY - startY,
             ),
           ),
@@ -354,8 +362,7 @@ export function mountInspector(target?: Element): void {
     </button>
   ) as HTMLButtonElement;
   onTap(themeItem, (): void => {
-    const order: Theme[] = ["system", "light", "dark"];
-    theme = order[(order.indexOf(theme) + 1) % order.length] ?? "system";
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length] ?? "system";
     panelSignals().theme(theme);
     applyTheme();
   });
@@ -439,13 +446,9 @@ export function mountInspector(target?: Element): void {
     paintMin(isMin);
     panelSignals().min(isMin);
     // Freeze (or thaw) the panel's reactivity while collapsed.
-    if (isMin) {
-      inspectorScope?.pause();
-      pause(statsPane);
-    } else {
-      inspectorScope?.resume();
-      resume(statsPane);
-    }
+    if (isMin) inspectorScope?.pause();
+    else inspectorScope?.resume();
+    setStatsMinimized(isMin);
     setTraceActive(!isMin && ui?.() === "trace"); // detach/re-attach the trace meters with minimize
   });
   const brand = (
@@ -464,7 +467,7 @@ export function mountInspector(target?: Element): void {
   );
   // Build the reactive UI inside the inspector scope so minimizing can pause the whole panel; the
   // stats pane gets its own nested scope so switching tabs pauses just it. The scope's options
-  // mark everything created inside as internal/PANEL_ID — so the heartbeat, vitals, heap timer and
+  // mark everything created inside as internal — so the heartbeat, vitals, heap timer and
   // bindings inherit them without repeating the opts. Resources live in the scope that owns them:
   // the heartbeat in the panel scope (it pauses only on minimize), the vitals + heap timer in the
   // stats scope (they feed only the stats tab, so their observers/timer suspend when it's hidden
@@ -480,7 +483,7 @@ export function mountInspector(target?: Element): void {
   }, PANEL_OPTS);
   if (startMin) {
     inspectorScope.pause();
-    pause(statsPane);
+    setStatsMinimized(true);
   }
   // Panes: Info (stats), Graph, and Trace are each their own module.
   const panes = new Map<TabId, HTMLElement>();
@@ -556,8 +559,8 @@ export function mountInspector(target?: Element): void {
   const savedSize = panelSignals().size();
   const savedPos = panelSignals().pos();
   if (savedSize) {
-    panel.style.width = `${Math.max(240, Math.min(savedSize.width, window.innerWidth - 16))}px`;
-    panel.style.height = `${Math.max(160, Math.min(savedSize.height, window.innerHeight - 16))}px`;
+    panel.style.width = `${Math.max(MIN_WIDTH, Math.min(savedSize.width, window.innerWidth - 2 * EDGE_GAP))}px`;
+    panel.style.height = `${Math.max(MIN_HEIGHT, Math.min(savedSize.height, window.innerHeight - 2 * EDGE_GAP))}px`;
   }
   if (savedPos) {
     const { left, top } = clampOnScreen(panel, savedPos.left, savedPos.top);

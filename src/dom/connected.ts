@@ -12,6 +12,7 @@
 // don't wake it; list reorders do. Moves inside shadow roots are invisible to a document-level
 // observer — a node that never leaves its shadow root reports its state at subscribe time.
 import { type Read, sharedSource } from "../loom.js";
+import { nodeDocument, observeDocumentTree } from "./document-observer.js";
 
 // Signal cache: one pooled signal per node, so N readers share one registry entry. WeakMap — a
 // forgotten node drops its signal with it.
@@ -23,10 +24,6 @@ interface DocumentPool {
 }
 
 const pools = new WeakMap<Document, DocumentPool>();
-
-function nodeDocument(node: Node): Document | null {
-  return node.nodeType === 9 ? (node as Document) : node.ownerDocument;
-}
 
 function poolFor(document: Document): DocumentPool {
   const found = pools.get(document);
@@ -41,20 +38,10 @@ function poolFor(document: Document): DocumentPool {
 }
 
 function observerFor(pool: DocumentPool): MutationObserver {
-  if (pool.observer) return pool.observer;
-  const view = pool.document.defaultView as
-    | (Window & { readonly MutationObserver?: typeof MutationObserver })
-    | null;
-  const Observer = view?.MutationObserver ?? globalThis.MutationObserver;
-  const observer = new Observer(() => {
+  pool.observer ??= observeDocumentTree(pool.document, () => {
     for (const [node, set] of pool.watched) set(node.isConnected);
   });
-  observer.observe(pool.document.documentElement ?? pool.document, {
-    childList: true,
-    subtree: true,
-  });
-  pool.observer = observer;
-  return observer;
+  return pool.observer;
 }
 
 export function connected(node: Node): Read<boolean> {

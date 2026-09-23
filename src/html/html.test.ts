@@ -75,4 +75,16 @@ describe("serializeAttributes", () => {
     );
     expect(serializeAttributes({ x: null })).toBe("");
   });
+  it("applies style arrays like the DOM runtime: in order, a string resetting what came before", () => {
+    expect(
+      serializeAttributes({
+        style: [{ color: "red" }, null, [{ "--gap": 4 }]],
+      }),
+    ).toBe(' style="color:red;--gap:4"');
+    expect(
+      serializeAttributes({
+        style: [{ color: "red" }, "margin: 0", { top: 1 }],
+      }),
+    ).toBe(' style="margin: 0;top:1"');
+  });
 });

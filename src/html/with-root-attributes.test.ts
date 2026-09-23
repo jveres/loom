@@ -21,6 +21,14 @@ describe("withRootAttributes", () => {
       '<div style="color: red; --k: 1" class="a b">x</div>',
     );
   });
+  it("merges regardless of the existing name's case, through the attribute serializer", () => {
+    const out = withRootAttributes(
+      unsafeHtml('<div CLASS="a &amp; b">x</div>'),
+      { class: "c$&d" },
+      { merge: { class: " " } },
+    );
+    expect(out.value).toBe('<div class="a &amp; b c$&amp;d">x</div>');
+  });
   it("a merge name absent from the root serializes fresh; a rootless value throws", () => {
     const out = withRootAttributes(
       unsafeHtml("<div>x</div>"),

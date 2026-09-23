@@ -1,7 +1,7 @@
-// The always-present half of the channel layer: the node shape, the registry, and the built-in
-// runtime channels the core's hot-path gates reference. Everything else — channel()/meter()/events,
-// capacity validation, the ring writer — lives in ./meter.ts and is wired in through the
-// `sampler` holder below, so apps that never observe anything bundle none of it.
+// The shared half of the channel layer: the node shape, the registry, and the built-in runtime
+// channels. The registry is also read by ./inspect.ts. Everything else — channel()/meter()/events,
+// capacity validation, the ring writer, and the RuntimeHooks that record to the built-ins — lives
+// in ./meter.ts.
 /* ===== Channels & meters: generic, gated, overwriting ring buffers drained by a pull-based meter.
    A channel is a process-global, name-addressed singleton (the producer/consumer rendezvous). It
    stays a no-op — and allocation-free — until a meter attaches. Counts are exact; detail is a
@@ -23,24 +23,6 @@ export interface ChannelNode {
 }
 
 export const channelRegistry = new Map<string, ChannelNode>();
-
-// The detail-ring writer seam. The hot paths call `sampler.record` only under a `samples !== 0`
-// gate, and `samples` can only become non-zero through meter() in ./meter.ts — which swaps this
-// count-only fallback for the real columnar ring writer when it loads. A property on a stable
-// const object (not a live `let` binding): consumers alias the holder into a local once, so the
-// call costs one property load in every module system — no per-call live-binding getters.
-export const sampler = {
-  record(
-    node: ChannelNode,
-    _a: unknown,
-    _b: unknown,
-    _c: unknown,
-    _d: unknown,
-    _e: unknown,
-  ): void {
-    node.seq++;
-  },
-};
 
 // The one construction site for the ChannelNode shape — the built-ins below and ./meter.ts's
 // public channel() both call it, so the literal can't drift between the two modules. `cap` must
@@ -74,8 +56,8 @@ function builtin(
   return node;
 }
 
-// The runtime's built-in channels, exposed publicly as `events` (via loom/observe). The core
-// records to these inline at the hot-path sites; they stay no-ops until a meter attaches. Records
+// The runtime's built-in channels, exposed publicly as `events` (via loom/observe). The runtime
+// hooks in ./meter.ts record to these; they stay no-ops until a meter attaches. Records
 // non-internal nodes only *when inspection is on* — the `internal` flag lives in a node's inspect
 // meta, which isn't allocated while inspection is off (the inspect registrar returns early). So
 // with inspection off, the gate can't see the flag and internal nodes are counted too. Loom creates

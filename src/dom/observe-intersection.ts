@@ -1,5 +1,4 @@
 import { failSetup } from "../core/lifetime.js";
-import { untrack } from "../core/tracking.js";
 // observeIntersection(el, cb, options?) — viewport/root intersection with node lifetime: the
 // callback runs on the IntersectionObserver clock (including the spec's initial delivery on
 // attach) and detaches when the node is torn down. Returns a Stop for early manual detach.
@@ -8,7 +7,7 @@ import { untrack } from "../core/tracking.js";
 // Viewport pools use a normal Map; custom roots use a WeakMap so pooling never extends root lifetime.
 import type { Stop } from "../loom.js";
 import { nodeLifetime } from "./lifetime.js";
-import { once } from "./once.js";
+import { type ObserverPool, observerPool } from "./observer-pool.js";
 
 export type IntersectionCallback = (entry: IntersectionObserverEntry) => void;
 
@@ -19,10 +18,7 @@ export interface ObserveIntersectionOptions {
   readonly threshold?: number | readonly number[];
 }
 
-interface Pool {
-  readonly observer: IntersectionObserver;
-  readonly watched: Map<Element, Set<IntersectionCallback>>;
-}
+type Pool = ObserverPool<IntersectionObserverEntry>;
 
 const viewportPools = new WeakMap<object, Map<string, Pool>>();
 const rootedPools = new WeakMap<Element | Document, Map<string, Pool>>();
@@ -99,50 +95,24 @@ function pooled(
 ): Stop {
   let pool = pools.get(key);
   if (!pool) {
-    const watched = new Map<Element, Set<IntersectionCallback>>();
     const realm = el.ownerDocument.defaultView ?? globalThis;
-    const observer = new (realm as typeof globalThis).IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const callbacks = watched.get(entry.target);
-          if (!callbacks) continue;
-          for (const fn of [...callbacks])
-            if (callbacks.has(fn)) untrack(() => fn(entry));
-        }
-      },
-      {
-        root,
-        rootMargin: options.rootMargin,
-        threshold: options.threshold,
-      },
-    );
-    pool = { observer, watched };
-    pools.set(key, pool);
-  }
-  let callbacks = pool.watched.get(el);
-  if (!callbacks) {
-    callbacks = new Set();
-    pool.watched.set(el, callbacks);
-    pool.observer.observe(el);
-  }
-  const deliver: IntersectionCallback = (entry) => cb(entry);
-  callbacks.add(deliver);
-  return once(() => {
-    const current = pools.get(key);
-    if (!current) return;
-    const set = current.watched.get(el);
-    if (!set) return;
-    set.delete(deliver);
-    if (set.size === 0) {
-      current.watched.delete(el);
-      current.observer.unobserve(el);
-      if (current.watched.size === 0) {
-        current.observer.disconnect();
+    const IO = (realm as typeof globalThis).IntersectionObserver;
+    pool = observerPool(
+      (dispatch) =>
+        new IO(dispatch, {
+          root,
+          rootMargin: options.rootMargin,
+          threshold: options.threshold,
+        }),
+      (observer, target) => observer.observe(target),
+      () => {
         pools.delete(key);
         if (root !== null && pools.size === 0) rootedPools.delete(root);
-      }
-    }
-  });
+      },
+    );
+    pools.set(key, pool);
+  }
+  return pool.add(el, cb);
 }
 
 export function observeIntersection(

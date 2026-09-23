@@ -40,12 +40,7 @@ export function positionOrdered(
     previous = node;
   }
   if (contiguous) {
-    let next: Node | null = end;
-    for (let i = n - 1; i >= 0; i--) {
-      const node = ordered[i] as Node;
-      if (node.parentNode !== parent) placeBefore(parent, node, next);
-      next = node;
-    }
+    insertMissing(parent, ordered, end);
     return;
   }
   const desired = new Map<Node, number>();
@@ -70,12 +65,7 @@ export function positionOrdered(
   // sits in relative order, so nothing moves — just insert the nodes that aren't children yet,
   // skipping the whole LIS scaffold below.
   if (inOrder) {
-    let next: Node | null = end;
-    for (let i = n - 1; i >= 0; i--) {
-      const node = ordered[i] as Node;
-      if (node.parentNode !== parent) placeBefore(parent, node, next);
-      next = node;
-    }
+    insertMissing(parent, ordered, end);
     return;
   }
   const keep = keptIndexes(seq, m, n);
@@ -84,6 +74,21 @@ export function positionOrdered(
   for (let i = n - 1; i >= 0; i--) {
     const node = ordered[i] as Node;
     if (keep[i] === 0) placeBefore(parent, node, next);
+    next = node;
+  }
+}
+
+/** Insert members that aren't children of `parent` yet, walking back-to-front so each lands before
+ * its successor (the last before `end`). Present members don't move. */
+function insertMissing(
+  parent: Node,
+  ordered: readonly Node[],
+  end: Node | null,
+): void {
+  let next: Node | null = end;
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const node = ordered[i] as Node;
+    if (node.parentNode !== parent) placeBefore(parent, node, next);
     next = node;
   }
 }

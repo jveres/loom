@@ -1,5 +1,5 @@
 import { serializeAttributes as serializeRootAttrs } from "./attributes.js";
-import { escapeAttribute, escapeText } from "./escape.js";
+import { escapeText, unescapeAttribute } from "./escape.js";
 
 const htmlMarker = Symbol.for("loom.html");
 declare const htmlTypeBrand: unique symbol;
@@ -76,12 +76,9 @@ export function attributeOf(
   value: Html | string,
   name: string,
 ): string | undefined {
-  const html = typeof value === "string" ? value : value.value;
-  if (!/^\s*<[a-zA-Z]/.test(html)) return undefined;
-  const end = html.indexOf(">");
-  if (end === -1) return undefined;
-  const tag = html.slice(0, end);
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tag = rootOpenTag(typeof value === "string" ? value : value.value);
+  if (tag === undefined) return undefined;
+  const escaped = escapeRegExp(name);
   const valued = new RegExp(
     `\\s${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`,
     "i",
@@ -91,13 +88,17 @@ export function attributeOf(
   return new RegExp(`\\s${escaped}(?=\\s|$)`, "i").test(tag) ? "" : undefined;
 }
 
-const unescapeAttribute = (value: string): string =>
-  value
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+// The root element's opening tag up to (not including) its `>`, or undefined when the markup does
+// not start with an element tag.
+function rootOpenTag(html: string): string | undefined {
+  if (!/^\s*<[a-zA-Z]/.test(html)) return undefined;
+  const end = html.indexOf(">");
+  return end === -1 ? undefined : html.slice(0, end);
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 /** SPLICE attributes into a rendered value's ROOT opening tag — the
  *  writer twin of attributeOf, for a parent stamping a child's static
@@ -118,24 +119,26 @@ export function withRootAttributes(
     readonly merge?: Record<string, string>;
   } = {},
 ): Html {
-  const html = value.value;
-  const end = html.indexOf(">");
-  if (end === -1 || !/^\s*<[a-zA-Z]/.test(html)) {
+  const root = rootOpenTag(value.value);
+  if (root === undefined) {
     throw new Error("withRootAttributes: the value has no root element tag.");
   }
-  let openTag = html.slice(0, end);
-  const rest = html.slice(end);
+  let openTag = root;
+  const rest = value.value.slice(root.length);
   const out: Record<string, unknown> = {};
   for (const [name, raw] of Object.entries(attrs)) {
     const joiner = options.merge?.[name];
     if (joiner !== undefined && raw != null && raw !== false) {
+      // Same case-insensitive name match as attributeOf; the joined value re-serializes through
+      // the one attribute rule (name check, URL filter, escaping).
       const existing = new RegExp(
-        `\\s${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}="([^"]*)"`,
+        `\\s${escapeRegExp(name)}="([^"]*)"`,
+        "i",
       ).exec(openTag);
       if (existing) {
-        openTag = openTag.replace(
-          existing[0],
-          ` ${name}="${existing[1]}${joiner}${escapeAttribute(String(raw === true ? "" : raw))}"`,
+        const joined = `${unescapeAttribute(existing[1] ?? "")}${joiner}${raw === true ? "" : String(raw)}`;
+        openTag = openTag.replace(existing[0], () =>
+          serializeRootAttrs({ [name]: joined }),
         );
         continue;
       }

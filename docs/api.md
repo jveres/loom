@@ -114,8 +114,9 @@ and report exactly one terminal reason, including cancellation and manual stop.
 coordinates. `placeAfter` and `positionOrdered` preserve existing node identity.
 `findScroller` combines axis selection and an optional overflow requirement.
 `reveal` performs nearest or centered scrolling and returns whether it found a
-scroller. `scrollMemory` exposes save/restore/stop, allows empty string keys, and
-uses latest-request-wins restoration.
+scroller. `scrollMemory` records the host's scroll position under the current
+key as the user scrolls and exposes restore/stop; it allows empty string keys
+and uses latest-request-wins restoration.
 
 ### Motion, scheduling, and persistence
 
@@ -143,7 +144,11 @@ its controller includes `.el`, `.setItems`, `.refresh`, and `.stop`. It derives
 its window from the chosen document and accepts a signal.
 
 `resource` owns asynchronous state and cancellation; `pending` aggregates pending
-work. Import `loom/defer` to enable deferred effects. `loom/observe` installs
+work. Import `loom/defer` once to install the deferred lane; effects then opt in
+one at a time with `effect(fn, { defer: true, maxStale })`. The first run is
+synchronous; later runs are coalesced into idle time and happen no later than
+`maxStale` milliseconds (200 by default) after a change. `configure({ deferScheduler })` replaces the
+scheduler, for example with a synchronous one in tests. `loom/observe` installs
 optional runtime hooks, while inspection metadata remains configurable.
 `loom/devtools` manages inspector mounting. `loom/html` constructs escaped HTML;
 its JSX runtime is selected with `jsxImportSource: "loom/html"`.

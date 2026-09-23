@@ -8,8 +8,9 @@ Loom is a small reactive UI runtime with callable signals and real DOM nodes.
 It needs no compiler transform and has no runtime dependencies. JSX returns DOM
 nodes; reactive bindings update those nodes in place.
 
-The current release is `0.7.0`. Version `0.6.0` introduced the breaking API
-consolidation. If you are upgrading from `0.5.0` or earlier, follow the
+The current release is `0.7.0` ([release notes](docs/release-0.7.0.md)). Version
+`0.6.0` introduced the breaking API consolidation
+([release notes](docs/release-0.6.0.md)). If you are upgrading from `0.5.0` or earlier, follow the
 [migration guide](docs/migration.md) to update imports and lifetimes.
 
 ## Start with signals
@@ -72,7 +73,7 @@ other families add model utilities, DOM construction, or browser behavior.
 | `loom/storage` | Validated storage slots and explicit persistence bindings. |
 | `loom/virtual-list` | Standalone fixed-height windowing. |
 | `loom/async` | Async resources and pending-work aggregation. |
-| `loom/defer` | Side-effect import that installs deferred effect scheduling. |
+| `loom/defer` | Side-effect import that lets effects opt into deferred scheduling (`{ defer: true }`). |
 | `loom/observe` | Instrumentation, inspection, channels, and meters. |
 | `loom/devtools` | Inspector UI. |
 | `loom/html` | Escaped server-side HTML construction and serialization. |
@@ -230,10 +231,10 @@ pnpm run bench
 pnpm run dev
 ```
 
-Open `/demo/` for the UI demo or `/bench/` for browser workloads. Rebuild `dist`
+Open `/` for the UI demo or `/bench/` for browser workloads. Rebuild `dist`
 after source changes. `pnpm run build:demo` writes to `dist/demo`, preserving
 the library output. See [architecture](ARCHITECTURE.md), the
-[implementation plan](docs/api-consolidation-plan.md), and
+[API consolidation record](docs/api-consolidation-plan.md), and
 [measurement notes](docs/api-measurements.md) for design and verification details.
 
 ## License

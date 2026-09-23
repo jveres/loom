@@ -1,4 +1,5 @@
 import type { EffectNode, NodeOptions } from "../loom.js";
+import { throwCollected } from "./errors.js";
 
 // A non-effect resource owned by a scope (a poll timer, a lazy source's connection): suspended
 // and resumed with the scope's effects, and torn down when it stops.
@@ -76,23 +77,23 @@ export function swapRemove<T>(
 
 // Snapshot every resource before invoking user hooks: a hook may stop itself, a sibling resource,
 // or a child scope, all of which swap-remove live ownership arrays. Complete every still-live hook
-// in the snapshot before surfacing the first failure.
+// in the snapshot before surfacing the failures (one as-is, several as an AggregateError).
 export function walkResources(
   node: ScopeNode,
   act: (resource: OwnedScopeResource) => void,
 ): void {
   const resources: OwnedScopeResource[] = [];
   collectResources(node, resources);
-  let caught: [unknown] | undefined;
+  const errors: unknown[] = [];
   for (const resource of resources) {
     if (resource.stopped) continue;
     try {
       act(resource);
     } catch (error) {
-      caught ??= [error];
+      errors.push(error);
     }
   }
-  if (caught !== undefined) throw caught[0];
+  throwCollected(errors, "Multiple Loom scope resources failed.");
 }
 
 // Independently-paused child subtrees are already in the matching resource state.

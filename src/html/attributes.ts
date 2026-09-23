@@ -77,7 +77,7 @@ export function renderAttribute(
 
   if (attrName === "class") attrValue = normalizeClass(attrValue);
   if (attrName === "style" && attrValue && typeof attrValue === "object") {
-    attrValue = serializeStyle(attrValue as Record<string, unknown>);
+    attrValue = serializeStyle(attrValue);
   }
 
   if (attrValue === true) return ` ${attrName}`;
@@ -116,8 +116,26 @@ function normalizeClass(value: unknown): string {
   return String(value);
 }
 
-function serializeStyle(value: Record<string, unknown>): string {
+// Mirrors the DOM runtime's style prop: arrays apply in order, a string replaces the whole inline
+// style so far, and a map adds declarations.
+function serializeStyle(value: unknown): string {
   const parts: string[] = [];
+  appendStyle(value, parts);
+  return parts.join(";");
+}
+
+function appendStyle(value: unknown, parts: string[]): void {
+  if (Array.isArray(value)) {
+    for (const item of value) appendStyle(item, parts);
+    return;
+  }
+  if (!value) return;
+  if (typeof value === "string") {
+    parts.length = 0;
+    parts.push(value);
+    return;
+  }
+  if (typeof value !== "object") return;
   for (const [name, rawValue] of Object.entries(value)) {
     const resolved = typeof rawValue === "function" ? rawValue() : rawValue;
     if (resolved == null || !safeCssPropPattern.test(name)) continue;
@@ -133,7 +151,6 @@ function serializeStyle(value: Record<string, unknown>): string {
 
     parts.push(`${cssPropName(name)}:${cssValue}`);
   }
-  return parts.join(";");
 }
 
 function isAriaAttr(name: string): boolean {

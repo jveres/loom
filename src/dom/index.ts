@@ -45,17 +45,16 @@ export type Child =
   | undefined
   | readonly Child[];
 
-// Opaque handles returned by the binding/slot factories (`attr`/`classed`/`style` and
-// `when`/`match`/`each`). Their runtime shape is an internal detail — callers only receive one to
-// hand straight back into JSX or `h()` — so the public types are branded with a private symbol and
-// expose no structure. Build them with the factories; never hand-construct. `DynamicChild` is also a
-// member of {@link Child}.
+// Opaque handles returned by the slot factories (`when`/`match`/`each`). Their runtime shape is an
+// internal detail — callers only receive one to hand straight back into JSX or `h()` — so the public
+// type is branded with a private symbol and exposes no structure. Build them with the factories;
+// never hand-construct. `DynamicChild` is also a member of {@link Child}.
 declare const BINDING: unique symbol;
 export type DynamicChild = { readonly [BINDING]: "dynamic" };
 
-// The real shapes behind those handles, private to this module.
+// A class or style binding's target name and value read, shared by the prop and bindClass/bindStyle
+// paths.
 interface PropBinding {
-  readonly kind: "attr" | "class" | "style";
   readonly name: string;
   readonly read: Read<unknown>;
 }
@@ -432,7 +431,7 @@ export function bindClass(
   read: Read<unknown>,
   options?: BindingOptions,
 ): Stop {
-  return installClassBinding(el, { kind: "class", name, read }, options);
+  return installClassBinding(el, { name, read }, options);
 }
 
 /** Bind an inline style property to a tracked read. */
@@ -442,11 +441,7 @@ export function bindStyle(
   read: Read<unknown>,
   options?: BindingOptions,
 ): Stop {
-  return installStyleBinding(
-    el,
-    { kind: "style", name: cssPropName(name), read },
-    options,
-  );
+  return installStyleBinding(el, { name: cssPropName(name), read }, options);
 }
 
 export function list<T>(
@@ -669,10 +664,8 @@ function applyProps(
       applyStyleProp(node, value as StyleProp);
       continue;
     }
-    // Loom lifecycle hook (not a DOM event): a cleanup run when the node is torn down the Loom way
-    // (`remove()` / `dispose()`, or an ancestor slot swapping it out). Grouped with the other
-    // Loom-owned props above, not the DOM `on*` listeners below — it rides the node-owned disposer
-    // channel (same as the reactive bindings), so it fires exactly when they do.
+    // Loom lifecycle hooks (not DOM events), grouped with the other Loom-owned props above rather
+    // than the DOM `on*` listeners below. onMount runs once after insertion (see ./on-mount.ts).
     if (
       (name === "onmount" || name === "onMount") &&
       typeof value === "function"
@@ -680,6 +673,9 @@ function applyProps(
       onMount(node, value as (node: Node) => void);
       continue;
     }
+    // onUnmount is a cleanup run when the node is torn down the Loom way (`remove()` / `dispose()`,
+    // or an ancestor slot swapping it out). It rides the node-owned disposer channel (same as the
+    // reactive bindings), so it fires exactly when they do.
     if (
       (name === "onunmount" || name === "onUnmount") &&
       typeof value === "function"
@@ -842,7 +838,6 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     const property = cssPropName(name);
     if (typeof styleValue === "function") {
       installStyleBinding(node, {
-        kind: "style",
         name: property,
         read: styleValue as Read<unknown>,
       });
@@ -855,7 +850,6 @@ function applyStyleProp(node: Element, value: StyleProp): void {
 function applyClassMapValue(node: Element, name: string, value: unknown): void {
   if (typeof value === "function") {
     installClassBinding(node, {
-      kind: "class",
       name,
       read: value as Read<unknown>,
     });

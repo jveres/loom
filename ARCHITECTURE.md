@@ -32,7 +32,9 @@ without adding a runtime import cycle or an injected scheduler abstraction.
 
 The deferred lane, inspection, async helpers, and devtools remain optional.
 The graph algorithm is unchanged by the consolidation. Bundle checks cover minimal
-core, inspection/deferred combinations, minimal DOM, and standalone windowing.
+core, full core, inspection/deferred/async/watchSettled combinations, minimal DOM,
+and standalone windowing (`scripts/size.mjs`), plus one budget per package family
+(`api/bundle-budgets.json`).
 
 ## Ownership and disposal
 

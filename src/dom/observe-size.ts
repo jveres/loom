@@ -1,16 +1,13 @@
 import { failSetup } from "../core/lifetime.js";
-import { untrack } from "../core/tracking.js";
 import type { Stop } from "../loom.js";
 import { nodeLifetime } from "./lifetime.js";
+import { type ObserverPool, observerPool } from "./observer-pool.js";
 
 export type SizeCallback = (entry: ResizeObserverEntry) => void;
 export interface ObserveSizeOptions extends ResizeObserverOptions {
   readonly signal?: AbortSignal;
 }
-interface Pool {
-  readonly observer: ResizeObserver;
-  readonly watched: Map<Element, Set<SizeCallback>>;
-}
+type Pool = ObserverPool<ResizeObserverEntry>;
 const realms = new WeakMap<object, Map<ResizeObserverBoxOptions, Pool>>();
 
 /** @internal Connection-owned observation, independent of node disposal. */
@@ -28,42 +25,18 @@ export function connectSize(
   }
   let pool = pools.get(box);
   if (!pool) {
-    const watched = new Map<Element, Set<SizeCallback>>();
     const RO = (realm as typeof globalThis).ResizeObserver;
-    const observer = new RO((entries) => {
-      for (const entry of entries) {
-        const callbacks = watched.get(entry.target);
-        if (!callbacks) continue;
-        for (const fn of [...callbacks])
-          if (callbacks.has(fn)) untrack(() => fn(entry));
-      }
-    });
-    pool = { observer, watched };
+    pool = observerPool(
+      (dispatch) => new RO(dispatch),
+      (observer, target) => observer.observe(target, { box }),
+      () => {
+        pools.delete(box);
+        if (pools.size === 0) realms.delete(realm);
+      },
+    );
     pools.set(box, pool);
   }
-  let callbacks = pool.watched.get(el);
-  if (!callbacks) {
-    callbacks = new Set();
-    pool.observer.observe(el, { box });
-    pool.watched.set(el, callbacks);
-  }
-  // A wrapper gives duplicate registrations independent teardown.
-  const deliver: SizeCallback = (entry) => callback(entry);
-  callbacks.add(deliver);
-  let active = true;
-  return () => {
-    if (!active) return;
-    active = false;
-    callbacks.delete(deliver);
-    if (callbacks.size !== 0) return;
-    pool.watched.delete(el);
-    pool.observer.unobserve(el);
-    if (pool.watched.size === 0) {
-      pool.observer.disconnect();
-      pools.delete(box);
-      if (pools.size === 0) realms.delete(realm);
-    }
-  };
+  return pool.add(el, callback);
 }
 
 export function observeSize(

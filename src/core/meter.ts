@@ -1,6 +1,7 @@
 // The consumer half of the channel layer (public surface): channel() declarations, meters (the
 // pull-based readers), the runtime's built-in `events` registry, and the typed sample contracts.
-// Split from ./channels.ts so none of this bundles into apps that never meter anything.
+// Split from ./channels.ts so none of this bundles into apps that never meter anything. The core
+// reports events through the RuntimeHooks this module installs; nothing is recorded until then.
 
 import {
   installRuntimeHooks,
@@ -17,7 +18,6 @@ import {
   flushCh,
   makeChannelNode,
   readCh,
-  sampler,
   writeCh,
 } from "./channels.js";
 
@@ -93,8 +93,6 @@ function recordChannel(
   }
   node.seq++;
 }
-// Loading this module upgrades the core's count-only fallback to the real ring writer.
-sampler.record = recordChannel;
 
 const now: () => number =
   typeof performance === "undefined" ? Date.now : () => performance.now();
@@ -107,7 +105,7 @@ const runtimeHooks: RuntimeHooks = {
     const meta = node.meta;
     if (readCh.meters === 0 || meta?.internal === true) return;
     if (meta !== undefined && readCh.samples !== 0) {
-      sampler.record(
+      recordChannel(
         readCh,
         meta.id,
         sub.meta?.id,
@@ -123,7 +121,7 @@ const runtimeHooks: RuntimeHooks = {
     const meta = node.meta;
     if (writeCh.meters === 0 || meta?.internal === true) return;
     if (meta !== undefined && writeCh.samples !== 0) {
-      sampler.record(
+      recordChannel(
         writeCh,
         meta.id,
         previous,
@@ -145,7 +143,7 @@ const runtimeHooks: RuntimeHooks = {
     return flushCh.meters !== 0 ? now() : undefined;
   },
   endFlush(appBatchSize, startedAt) {
-    sampler.record(
+    recordChannel(
       flushCh,
       appBatchSize,
       now() - startedAt,
@@ -302,8 +300,8 @@ export function meter<const Channels extends ReadonlyArray<Channel>>(
     }
   };
   attach();
-  // A meter is a scope resource: pause() detaches (the channels can go inactive → the core's emit
-  // sites become no-ops again), resume() re-attaches fresh, stop()/scope teardown detaches.
+  // A meter is a scope resource: pause() detaches (the channels can go inactive → the runtime hooks
+  // below become no-ops again), resume() re-attaches fresh, stop()/scope teardown detaches.
   const stop = registerScopeResource({
     pause: detach,
     resume: attach,
@@ -356,8 +354,8 @@ export function meter<const Channels extends ReadonlyArray<Channel>>(
 }
 
 // Each /* @__PURE__ */ marks its channelOf() wrapper side-effect-free, so a bundler drops the
-// public `events` accessors when an app never meters. The built-in channel *nodes* above stay (the
-// core's emit gates reference them); only these wrappers tree-shake away.
+// public `events` accessors when an app never meters. The built-in channel *nodes* stay (the runtime
+// hooks above record to them); only these wrappers tree-shake away.
 export const events = {
   read: /* @__PURE__ */ channelOf<"loom:read">(readCh),
   write: /* @__PURE__ */ channelOf<"loom:write">(writeCh),
@@ -371,8 +369,9 @@ export const events = {
 // The record shape each built-in detail channel writes into a Frame's `samples`, keyed by the
 // channel's declared `fields`. The Meter API is generic, so `Frame.samples` is typed
 // `Record<string, unknown>`; a consumer (the inspector) narrows a known channel's samples to one of
-// these with `sampleOf`. Keep these in lockstep with the `fields` arrays the built-in channels declare via builtin() in ./channels.ts, fed to
-// createChannelNode above — they are the single named contract the devtools reads against.
+// these with `sampleOf`. Keep these in lockstep with the `fields` arrays the built-in channels
+// declare via builtin() in ./channels.ts — they are the single named contract the devtools reads
+// against.
 export interface ReadSample {
   readonly id: number;
   readonly by: number | undefined;

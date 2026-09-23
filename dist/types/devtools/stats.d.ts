@@ -5,4 +5,5 @@ export declare function wireStats(opts: {
 }): HTMLElement;
 export declare function pauseStats(): void;
 export declare function resumeStats(): void;
+export declare function setStatsMinimized(minimized: boolean): void;
 export declare function stopStats(): void;

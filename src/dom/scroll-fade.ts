@@ -20,6 +20,11 @@ import { domEffect, stopEffectNode } from "../loom.js";
 import { nodeLifetime } from "./lifetime.js";
 import { mediaRead } from "./media-read.js";
 import { ownResource } from "./ownership-base.js";
+import {
+  EDGE_EPSILON,
+  readScrollEdges,
+  watchScrollExtent,
+} from "./scroll-extent.js";
 
 export interface ScrollFadeOptions {
   readonly signal?: AbortSignal;
@@ -31,7 +36,6 @@ export interface ScrollFadeOptions {
   readonly transition?: number;
 }
 
-const EPSILON = 4;
 // prefers-reduced-motion is a USER preference — one value across
 // every window, so the global pooled read serves iframe-mounted
 // elements too (unlike geometry queries, which are per-window).
@@ -231,17 +235,14 @@ export function scrollFade(
 
     const sync = (): void => {
       if (!life.active) return;
-      const scrolled = horizontal ? el.scrollLeft : el.scrollTop;
-      const overflow = horizontal
-        ? el.scrollWidth - el.clientWidth
-        : el.scrollHeight - el.clientHeight;
+      const edges = readScrollEdges(el, horizontal, EDGE_EPSILON);
       // Sticky-header allowance, CSS-driven (--scroll-fade-inset on the
       // host): the first N px stay fully visible — a sticky bar must
       // not be shadowed by its own container's fade — and the start
       // fade runs just below it (content emerging from under the bar). Keep the
       // variable in CSS so scroll events never need computed-style resolution.
-      const nextStart = scrolled > EPSILON ? size : 0;
-      const nextEnd = overflow - scrolled > EPSILON ? size : 0;
+      const nextStart = edges.start ? size : 0;
+      const nextEnd = edges.end ? size : 0;
       if (nextStart === start && nextEnd === end) return;
       if (nextStart !== start) {
         startAnimation = setStop(START_STOP, nextStart, start, startAnimation);
@@ -253,28 +254,7 @@ export function scrollFade(
       end = nextEnd;
     };
 
-    el.addEventListener("scroll", sync, { passive: true });
-    life.add(() => el.removeEventListener("scroll", sync));
-    // Box changes (panel resize) and content changes (rows added/removed,
-    // branches expanded) both move the scrollable extent.
-    const realm = (view ?? globalThis) as typeof globalThis;
-    const observer = new realm.ResizeObserver(() => untrack(sync));
-    life.add(() => observer.disconnect());
-    observer.observe(el);
-    for (const child of el.children) observer.observe(child);
-    const mutations = new realm.MutationObserver((records) => {
-      for (const record of records) {
-        for (const node of record.removedNodes) {
-          if (node.nodeType === 1) observer.unobserve(node as Element);
-        }
-        for (const node of record.addedNodes) {
-          if (node.nodeType === 1) observer.observe(node as Element);
-        }
-      }
-      untrack(sync);
-    });
-    life.add(() => mutations.disconnect());
-    mutations.observe(el, { childList: true });
+    life.add(watchScrollExtent(el, sync));
     untrack(sync);
 
     return life.stop;

@@ -1,6 +1,7 @@
 import { failSetup } from "../core/lifetime.js";
 import { untrack } from "../core/tracking.js";
 import type { Stop } from "../loom.js";
+import { nodeDocument } from "./document-observer.js";
 import { nodeLifetime } from "./lifetime.js";
 
 export type MutationsCallback = (records: MutationRecord[]) => void;
@@ -13,9 +14,7 @@ export function connectMutation(
   callback: MutationsCallback,
   options: MutationObserverInit,
 ): Stop {
-  const realm =
-    (el.nodeType === 9 ? (el as Document) : el.ownerDocument)?.defaultView ??
-    globalThis;
+  const realm = nodeDocument(el)?.defaultView ?? globalThis;
   let active = true;
   const observer = new (realm as typeof globalThis).MutationObserver(
     (records) => {

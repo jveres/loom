@@ -1,9 +1,10 @@
-import { n as e } from "./tracking-DRP3LNHN.js";
-import { r as t } from "./ownership-base-hl0GKMLF.js";
-import { t as n } from "./lifetime-D9QsK10p.js";
-import { t as r } from "./lifetime-Bc5XQUWH.js";
+import { n as e } from "./tracking-CClsWN0I.js";
+import { r as t } from "./ownership-base-BZEik61k.js";
+import { t as n } from "./lifetime-KneSZTc9.js";
+import { t as r } from "./lifetime-CmayFDbD.js";
+import { t as i } from "./press-track-CTLyZWea.js";
 //#region src/dom/hover-class.ts
-function i(t, n = {}) {
+function a(t, n = {}) {
 	let i = r(t, n.signal), a = n.name ?? "is-hover", o = n.capture === !0, s = [], c = (e) => {
 		if (!i.active) return;
 		let t = e === null ? [] : Array.isArray(e) ? e : [e];
@@ -36,7 +37,7 @@ function i(t, n = {}) {
 }
 //#endregion
 //#region src/dom/listen.ts
-function a(t, i, a, o) {
+function o(t, i, a, o) {
 	let s = r(o.owner, o.signal);
 	if (!s.active) return s.stop;
 	let c = (t) => {
@@ -54,7 +55,7 @@ function a(t, i, a, o) {
 }
 //#endregion
 //#region src/dom/pointer-session.ts
-function o(n, r, i) {
+function s(n, r, i) {
 	if (i.signal?.aborted) return () => {};
 	let a = r.pointerId, o = !0, s = !1, c = n, l = () => {}, u = (t) => {
 		let n = t;
@@ -90,25 +91,17 @@ function o(n, r, i) {
 }
 //#endregion
 //#region src/dom/press-class.ts
-function s(t, n = {}) {
-	let i = r(t, n.signal);
-	if (!i.active) return i.stop;
-	let a = n.name ?? "is-pressed", o = -1, s, c = (e) => {
-		e.pointerId === o && (o = -1, s?.abort(), s = void 0, t.classList.remove(a));
-	}, l = (r) => {
-		let i = r;
-		if (i.button !== 0 || o !== -1 || n.when && !e(n.when)) return;
-		o = i.pointerId, s = new AbortController();
-		let l = { signal: s.signal }, u = t.ownerDocument.defaultView ?? globalThis;
-		u.addEventListener("pointerup", c, l), u.addEventListener("pointercancel", c, l), t.addEventListener("pointerleave", c, l), t.classList.add(a);
-	};
-	return t.addEventListener("pointerdown", l), i.add(() => {
-		t.removeEventListener("pointerdown", l), s?.abort(), s = void 0, o = -1, t.classList.remove(a);
-	}), i.stop;
+function c(e, t = {}) {
+	let n = r(e, t.signal);
+	if (!n.active) return n.stop;
+	let a = t.name ?? "is-pressed", o = i(e, (t) => e.classList.toggle(a, t), t.when);
+	return n.add(() => {
+		o(), e.classList.remove(a);
+	}), n.stop;
 }
 //#endregion
 //#region src/dom/tap.ts
-function c(t, n, i, a) {
+function l(t, n, i, a) {
 	let o = a.slop ?? 10, s = a.recentMs ?? 600;
 	if (!Number.isFinite(o) || o < 0 || !Number.isFinite(s) || s < 0) throw RangeError("Tap distances and durations must be finite and non-negative.");
 	let c = r(t, a.signal), l = () => (t.ownerDocument.defaultView?.performance ?? performance).now(), u, d = 0, f = 0, p = -Infinity, m = () => {
@@ -139,14 +132,14 @@ function c(t, n, i, a) {
 		recent: () => c.active && l() - p < s
 	};
 }
-function l(e, t, n = {}) {
-	return c(e, t, () => {}, n);
-}
 function u(e, t, n = {}) {
+	return l(e, t, () => {}, n);
+}
+function d(e, t, n = {}) {
 	let r = n.withinMs ?? 350;
 	if (!Number.isFinite(r) || r < 0) throw RangeError("Double tap interval must be finite and non-negative.");
 	let i = -Infinity;
-	return c(e, (n) => {
+	return l(e, (n) => {
 		let a = (e.ownerDocument.defaultView?.performance ?? performance).now();
 		a - i < r ? (i = -Infinity, t(n)) : i = a;
 	}, () => {
@@ -154,4 +147,4 @@ function u(e, t, n = {}) {
 	}, n).stop;
 }
 //#endregion
-export { a, o as i, l as n, i as o, s as r, u as t };
+export { o as a, s as i, u as n, a as o, c as r, d as t };

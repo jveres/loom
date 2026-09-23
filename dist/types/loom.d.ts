@@ -150,6 +150,11 @@ export declare function detached<T>(run: () => T): T;
  * caller's scope. Creation also avoids inheriting that caller's inspect options. */
 export declare function sharedSource<T>(connect: SourceConnect<T>, initial: T, options?: NodeOptions): Read<T>;
 export declare function computed<T>(getter: (previousValue?: T) => T, options?: NodeOptions): Read<T>;
+/**
+ * Run `fn` now and again whenever a signal it read changes. If `fn` returns a function, that
+ * cleanup runs before the next run and when the effect stops; any other return value is ignored.
+ * `fn` must be synchronous. Returns the effect's stop.
+ */
 export declare function effect<Result>(fn: () => SyncResult<Result>, options?: EffectOptions): Stop;
 /** @internal Create a node-owned DOM effect without linking it to the currently running effect. */
 export declare function domEffect(fn: InternalEffectFn, label: string, target: Node, options?: EffectOptions): EffectNode;

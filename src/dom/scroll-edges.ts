@@ -3,11 +3,14 @@
 // there more past the end? The read scrollFade computes internally,
 // exposed for hosts that paint their own edge chrome (overlay fades,
 // chevrons). Subscriber-counted: the scroll listener and the observers
-// exist only while observed. Box and content changes resync (a resize,
-// rows added or removed) through loom's pooled observers.
+// exist only while observed. Box, child-size, and any content change
+// resync (a resize, a branch expanding, rows added or removed, text edits).
 import { type Read, sharedSource } from "../loom.js";
-import { connectMutation } from "./observe-mutation.js";
-import { connectSize } from "./observe-size.js";
+import {
+  EDGE_EPSILON,
+  readScrollEdges,
+  watchScrollExtent,
+} from "./scroll-extent.js";
 
 export interface ScrollEdges {
   readonly start: boolean;
@@ -28,34 +31,17 @@ export function scrollEdges(
   options: ScrollEdgesOptions = {},
 ): Read<ScrollEdges> {
   const horizontal = options.axis === "x";
-  const epsilon = options.epsilon ?? 4;
+  const epsilon = options.epsilon ?? EDGE_EPSILON;
   return sharedSource<ScrollEdges>((set) => {
     let current = NONE;
     const sync = (): void => {
-      const scrolled = horizontal ? el.scrollLeft : el.scrollTop;
-      const overflow = horizontal
-        ? el.scrollWidth - el.clientWidth
-        : el.scrollHeight - el.clientHeight;
-      const next = {
-        start: scrolled > epsilon,
-        end: overflow - scrolled > epsilon,
-      };
+      const next = readScrollEdges(el, horizontal, epsilon);
       if (next.start === current.start && next.end === current.end) return;
       current = next;
       set(next);
     };
-    el.addEventListener("scroll", sync, { passive: true });
-    const stopSize = connectSize(el, sync);
-    const stopContent = connectMutation(el, sync, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
+    const stop = watchScrollExtent(el, sync, true);
     sync();
-    return () => {
-      el.removeEventListener("scroll", sync);
-      stopSize();
-      stopContent();
-    };
+    return stop;
   }, NONE);
 }
