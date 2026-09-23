@@ -1,5 +1,5 @@
 import { n as e } from "./tracking-DRP3LNHN.js";
-import { n as t, t as n } from "./place-ZwRNX05j.js";
+import { n as t, t as n } from "./place-BoCwAbQk.js";
 import { t as r } from "./lifetime-Bc5XQUWH.js";
 import { afterFrames as i } from "./schedule.js";
 //#region src/dom/caret-at-point.ts

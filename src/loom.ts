@@ -1127,16 +1127,15 @@ function restoreActiveSub(previous: NodeBase | undefined): void {
 }
 
 function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
+  // Keep the accessor small enough for V8 to inline at read sites: observation hooks and the
+  // read-side commit live out of line; only the unobserved write fast path stays here.
   if (value.length) {
     const next = value[0] as T;
     const previous = this.pendingValue;
     if (previous !== next) {
       this.pendingValue = next;
-      const writer = activeSub;
-      if (this.meta !== undefined && writer !== undefined) {
-        inspectHooks?.trackedWrite?.(this, writer);
-      }
-      runtimeHooks?.write(this as StateNode<unknown>, previous, next, writer);
+      if (runtimeHooks !== undefined || this.meta !== undefined)
+        observeWrite(this, previous, next);
       // The first pending write already dirtied the complete downstream graph. Until a read
       // commits this state, later writes only replace its pending value and need no second walk.
       if (this.flags & Dirty) return undefined;
@@ -1150,17 +1149,25 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
     }
     return undefined;
   }
-
-  if (this.flags & Dirty) {
-    if (updateState(this)) {
-      const subs = this.subs;
-      if (subs !== undefined) shallowPropagate(subs);
-    }
-  }
-
+  if (this.flags & Dirty) commitState(this);
   const sub = activeSub;
   if (sub !== undefined) trackRead(this, sub);
   return this.currentValue;
+}
+
+function observeWrite<T>(node: StateNode<T>, previous: T, next: T): void {
+  const writer = activeSub;
+  if (node.meta !== undefined && writer !== undefined) {
+    inspectHooks?.trackedWrite?.(node, writer);
+  }
+  runtimeHooks?.write(node as StateNode<unknown>, previous, next, writer);
+}
+
+function commitState<T>(node: StateNode<T>): void {
+  if (updateState(node)) {
+    const subs = node.subs;
+    if (subs !== undefined) shallowPropagate(subs);
+  }
 }
 
 function sourceOper<T>(this: SourceNode<T>): T {
@@ -1204,38 +1211,42 @@ function sourceSet<T>(node: SourceNode<T>, value: T): void {
 }
 
 function computedOper<T>(this: ComputedNode<T>): T {
+  // Keep the accessor small enough for V8 to inline at read sites: first evaluation and
+  // failure rethrow live out of line.
   const flags = this.flags;
   let shouldUpdate = (flags & Dirty) !== 0;
   if (!shouldUpdate && flags & Pending) {
     shouldUpdate = checkDirty(this.deps as Link, this);
     if (!shouldUpdate) this.flags = flags & ~Pending;
   }
-
   if (shouldUpdate) {
     if (updateComputed(this)) {
       const subs = this.subs;
       if (subs !== undefined) shallowPropagate(subs);
     }
   } else if (!flags) {
-    this.flags = Mutable | RecursedCheck;
-    const previous = setActiveSub(this);
-    try {
-      this.value = this.getter();
-      runtimeHooks?.compute(this as ComputedNode<unknown>);
-    } catch (error) {
-      this.failure = { error };
-    } finally {
-      restoreActiveSub(previous);
-      this.flags &= ~RecursedCheck;
-    }
+    evaluateComputed(this);
   }
-
   const sub = activeSub;
   if (sub !== undefined) trackRead(this, sub);
   // Subscribe before throwing so a handled failure can recover, and an
   // unhandled initial effect can release the computed's dependencies.
   if (this.failure !== undefined) throw this.failure.error;
   return this.value as T;
+}
+
+function evaluateComputed<T>(node: ComputedNode<T>): void {
+  node.flags = Mutable | RecursedCheck;
+  const previous = setActiveSub(node);
+  try {
+    node.value = node.getter();
+    runtimeHooks?.compute(node as ComputedNode<unknown>);
+  } catch (error) {
+    node.failure = { error };
+  } finally {
+    restoreActiveSub(previous);
+    node.flags &= ~RecursedCheck;
+  }
 }
 
 function updateComputed<T>(node: ComputedNode<T>): boolean {
@@ -1291,6 +1302,8 @@ function queueEffect(effect: EffectNode): void {
 }
 
 function runEffect(node: EffectNode): boolean {
+  // Keep the common run path small enough for V8 to inline into flush(); cleanups, errors,
+  // returned values, and observation are handled out of line.
   // Paused after this effect was already queued: leave it dirty for resume.
   if (node.pausedCount) return false;
   const flags = node.flags;
@@ -1299,18 +1312,7 @@ function runEffect(node: EffectNode): boolean {
     (flags & Pending && checkDirty(node.deps as Link, node))
   ) {
     if (flags & HasChildEffect) disposeChildDeps(node);
-    if (node.cleanup) {
-      try {
-        runCleanup(node);
-      } catch (error) {
-        // queueEffect cleared Watching before this run. If the cleanup escapes the boundary, keep
-        // the old dependency set armed so a later write gets another chance to run the effect.
-        // A cleanup that stopped its own effect remains terminal.
-        if (node.flags !== 0) node.flags = Watching;
-        reportEffectError(error, node);
-      }
-      if (!node.flags) return false;
-    }
+    if (node.cleanup && !cleanupBeforeRun(node)) return false;
     node.depsTail = undefined;
     node.flags = Watching | RecursedCheck;
     const previous = setActiveSub(node);
@@ -1332,35 +1334,54 @@ function runEffect(node: EffectNode): boolean {
       else purgeDeps(node);
     }
     if (caught !== undefined) reportEffectError(caught.error, node);
-    // Avoid two helper calls on the dominant `undefined` result path.
-    if (result !== undefined) {
-      if (isPromiseLike(result)) {
-        stopEffect.call(node);
-        ignorePromiseRejection(result);
-        throw new TypeError("effect() callbacks must be synchronous.");
-      }
-      const cleanup =
-        typeof result === "function" ? (result as Stop) : undefined;
-      if (node.flags === 0 && cleanup !== undefined) {
-        // A cleanup returned after self-stop belongs to already-disposed work, so run it now.
-        node.cleanup = cleanup;
-        try {
-          runCleanup(node);
-        } catch (error) {
-          reportEffectError(error, node);
-        }
-      } else {
-        node.cleanup = cleanup;
-      }
-    }
-    const meta = node.meta;
-    if (meta) meta.runs++;
-    runtimeHooks?.effect(node);
-    return meta === undefined || meta.internal !== true;
+    else if (result !== undefined) settleEffectResult(node, result);
+    if (node.meta === undefined && runtimeHooks === undefined) return true;
+    return observeEffectRun(node);
   } else if (node.deps !== undefined) {
     node.flags = Watching | (flags & HasChildEffect);
   }
   return false;
+}
+
+// Run the previous cleanup before a re-run. Returns false when the cleanup stopped its effect.
+function cleanupBeforeRun(node: EffectNode): boolean {
+  try {
+    runCleanup(node);
+  } catch (error) {
+    // queueEffect cleared Watching before this run. If the cleanup escapes the boundary, keep
+    // the old dependency set armed so a later write gets another chance to run the effect.
+    // A cleanup that stopped its own effect remains terminal.
+    if (node.flags !== 0) node.flags = Watching;
+    reportEffectError(error, node);
+  }
+  return node.flags !== 0;
+}
+
+function settleEffectResult(node: EffectNode, result: unknown): void {
+  if (isPromiseLike(result)) {
+    stopEffect.call(node);
+    ignorePromiseRejection(result);
+    throw new TypeError("effect() callbacks must be synchronous.");
+  }
+  const cleanup = typeof result === "function" ? (result as Stop) : undefined;
+  if (node.flags === 0 && cleanup !== undefined) {
+    // A cleanup returned after self-stop belongs to already-disposed work, so run it now.
+    node.cleanup = cleanup;
+    try {
+      runCleanup(node);
+    } catch (error) {
+      reportEffectError(error, node);
+    }
+  } else {
+    node.cleanup = cleanup;
+  }
+}
+
+function observeEffectRun(node: EffectNode): boolean {
+  const meta = node.meta;
+  if (meta) meta.runs++;
+  runtimeHooks?.effect(node);
+  return meta === undefined || meta.internal !== true;
 }
 
 function flush(): void {

@@ -52,8 +52,8 @@ export function positionOrdered(
   for (let i = 0; i < n; i++) desired.set(ordered[i] as Node, i);
   // The members' current DOM order, expressed as desired indexes; track whether that order is
   // already strictly increasing while building it.
-  const seq: number[] = [];
-  const seqNodes: Node[] = [];
+  const seq = new Int32Array(n);
+  let m = 0;
   let inOrder = true;
   for (
     let child = parent.firstChild;
@@ -62,9 +62,8 @@ export function positionOrdered(
   ) {
     const want = desired.get(child);
     if (want !== undefined) {
-      if (want < (seq[seq.length - 1] ?? -1)) inOrder = false;
-      seq.push(want);
-      seqNodes.push(child);
+      if (m > 0 && want < (seq[m - 1] as number)) inOrder = false;
+      seq[m++] = want;
     }
   }
   // Fast path for the common cases (unchanged order, append-only): every present member already
@@ -79,39 +78,44 @@ export function positionOrdered(
     }
     return;
   }
-  // Longest increasing subsequence (patience sorting with parent links): these nodes are already
-  // in relative order and never move.
-  const keep = new Set<Node>();
-  const tails: number[] = []; // seq position of the best tail per LIS length
-  const tailValues: number[] = [];
-  const prev: number[] = new Array(seq.length).fill(-1);
-  for (let i = 0; i < seq.length; i++) {
-    const value = seq[i] as number;
-    let lo = 0;
-    let hi = tailValues.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if ((tailValues[mid] as number) < value) lo = mid + 1;
-      else hi = mid;
-    }
-    if (lo > 0) prev[i] = tails[lo - 1] as number;
-    tails[lo] = i;
-    tailValues[lo] = value;
-  }
-  for (
-    let k = tails.length > 0 ? (tails[tails.length - 1] as number) : -1;
-    k >= 0;
-    k = prev[k] as number
-  ) {
-    keep.add(seqNodes[k] as Node);
-  }
+  const keep = keptIndexes(seq, m, n);
   // Walk back-to-front: kept nodes only advance the reference; everything else moves before it.
   let next: Node | null = end;
   for (let i = n - 1; i >= 0; i--) {
     const node = ordered[i] as Node;
-    if (!keep.has(node)) placeBefore(parent, node, next);
+    if (keep[i] === 0) placeBefore(parent, node, next);
     next = node;
   }
+}
+
+/** Longest increasing subsequence (patience sorting with parent links) of `seq[0..m)`: these
+ * members are already in relative order and never move. Returns a flag per desired index. */
+function keptIndexes(seq: Int32Array, m: number, n: number): Uint8Array {
+  const tails = new Int32Array(m); // seq position of the best tail per LIS length
+  const prev = new Int32Array(m);
+  let length = 0;
+  for (let i = 0; i < m; i++) {
+    const value = seq[i] as number;
+    let lo = 0;
+    let hi = length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((seq[tails[mid] as number] as number) < value) lo = mid + 1;
+      else hi = mid;
+    }
+    prev[i] = lo > 0 ? (tails[lo - 1] as number) : -1;
+    tails[lo] = i;
+    if (lo === length) length++;
+  }
+  const keep = new Uint8Array(n);
+  for (
+    let k = length > 0 ? (tails[length - 1] as number) : -1;
+    k >= 0;
+    k = prev[k] as number
+  ) {
+    keep[seq[k] as number] = 1;
+  }
+  return keep;
 }
 
 /** Seat `node` immediately after `ref`. Already seated nodes are untouched; other moves
