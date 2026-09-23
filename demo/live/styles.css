@@ -363,6 +363,14 @@ h2 {
     color 0.2s;
 }
 
+/* Regions whose content moves by design must never anchor the page's scroll position: otherwise
+   the browser scrolls the page along with every new weft row, reordered rank, or recycled log row. */
+.weave,
+.ranking,
+.log {
+  overflow-anchor: none;
+}
+
 /* A fixed height: the newest row grows in at the top while the oldest leaves at the bottom, and
    the caption below must not move with them. Keep 40 in step with WEAVE_ROWS in main.tsx. */
 .weave {
@@ -494,6 +502,64 @@ h2 {
   color: var(--ink-faint);
 }
 
+.weave-frame {
+  position: relative;
+}
+
+/* A wiki well above its usual pace: its label lights up once. */
+.warp-labels abbr[data-surge] {
+  animation: surge 1.6s ease-out;
+}
+
+@keyframes surge {
+  0%,
+  35% {
+    color: var(--human);
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.warp-labels abbr {
+  display: block;
+}
+
+.tip {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  z-index: 2;
+  translate: -50% calc(-100% - 10px);
+  display: grid;
+  gap: 1px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--ground);
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tip[hidden] {
+  display: none;
+}
+
+.tip[data-align="start"] {
+  translate: -14px calc(-100% - 10px);
+}
+
+.tip[data-align="end"] {
+  translate: calc(-100% + 14px) calc(-100% - 10px);
+}
+
+::highlight(log-search) {
+  background-color: color-mix(in oklab, var(--human) 38%, transparent);
+  color: var(--ink);
+}
+
 /* ---- the leaderboard ---- */
 
 .leaders {
@@ -587,6 +653,101 @@ h2 {
 .stream {
   grid-area: stream;
   min-width: 0;
+}
+
+.stream-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px 24px;
+  margin-bottom: 14px;
+}
+
+.stream-head h2 {
+  margin: 0;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+}
+
+.search {
+  width: 15rem;
+  max-width: 100%;
+  padding: 7px 12px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.search::placeholder {
+  color: var(--ink-faint);
+}
+
+.search:focus-visible {
+  outline: none;
+  border-color: var(--human);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chip input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--human);
+}
+
+.chip:has(input:checked) {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+.chip:has(input:focus-visible) {
+  outline: 2px solid var(--human);
+  outline-offset: 2px;
+}
+
+.log-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  margin: 0;
+  color: var(--ink-dim);
+  font-style: italic;
+  text-align: center;
+}
+
+.link-button {
+  padding: 0;
+  font: inherit;
+  font-style: normal;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-faint);
+  text-underline-offset: 0.18em;
+  cursor: pointer;
 }
 
 .stream-count {
@@ -693,6 +854,287 @@ h2 {
   max-width: 72ch;
 }
 
+.colophon .keys {
+  order: 3;
+  flex-basis: 100%;
+  max-width: none;
+  line-height: 1.9;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 5px;
+  font: 500 0.75rem / 1.4 var(--sans);
+  text-align: center;
+  color: var(--ink-dim);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+/* ---- the article drawer ---- */
+
+/* While an article is open the page underneath doesn't scroll, wherever the pointer is: over the
+   panel's header, a short article, or the scrim. The reserved gutter keeps the page from shifting
+   sideways when its scrollbar goes away. */
+:root {
+  scrollbar-gutter: stable;
+}
+
+:root:has(.drawer[data-open]) {
+  overflow: hidden;
+}
+
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overscroll-behavior: contain;
+}
+
+.drawer[hidden] {
+  display: none;
+}
+
+.drawer-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(10 14 28 / 0.32);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  border-left: 1px solid var(--rule);
+  box-shadow: -24px 0 48px rgb(0 0 0 / 0.18);
+  transform: translateX(100%);
+  transition: transform 0.36s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.drawer[data-open] .drawer-scrim {
+  opacity: 1;
+}
+
+.drawer[data-open] .drawer-panel {
+  transform: none;
+}
+
+.drawer-close {
+  align-self: flex-end;
+  margin: 16px 16px 0;
+  font: 500 0.8125rem / 1 var(--sans);
+  color: var(--ink-dim);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.drawer-close:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+.drawer-body {
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 8px 28px 32px;
+}
+
+.article-site {
+  margin: 0 0 4px;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.article h2 {
+  display: block;
+  margin: 0 0 18px;
+  font-size: 1.9rem;
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.article h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 28px 0 8px;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.article h3 span {
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.article-note {
+  margin: 0 0 14px;
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.summary {
+  overflow: hidden;
+  transition: height 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.summary img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  width: auto;
+  height: auto;
+  margin-bottom: 14px;
+  border-radius: 8px;
+}
+
+.summary-description {
+  margin: 0 0 8px;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  color: var(--ink-dim);
+}
+
+.summary-description:empty {
+  display: none;
+}
+
+.summary-extract {
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+
+.article-link {
+  font-family: var(--sans);
+  font-size: 0.875rem;
+}
+
+.history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-tally {
+  margin: -2px 0 10px;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-tally:empty {
+  display: none;
+}
+
+.turn {
+  padding: 10px 0 11px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.turn:first-child {
+  animation: history-in 0.6s ease-out;
+}
+
+.turn-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-editor {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+a.turn-editor:hover {
+  text-decoration: underline;
+}
+
+.turn[data-bot] .turn-editor {
+  color: var(--bot);
+}
+
+.turn-tag {
+  padding: 0 6px;
+  border: 1px solid color-mix(in oklab, var(--bot) 45%, transparent);
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--bot);
+}
+
+.turn-count {
+  white-space: nowrap;
+}
+
+.turn-head .entry-delta {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.turn-time {
+  min-width: 4.6rem;
+  text-align: right;
+  color: var(--ink-faint);
+  text-decoration: none;
+}
+
+a.turn-time:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.turn-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
+.turn-summary[data-empty] {
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
+@keyframes history-in {
+  from {
+    background: color-mix(in oklab, var(--human) 18%, transparent);
+  }
+}
+
 /* ---- narrower screens ---- */
 
 @media (max-width: 1023px) {
@@ -743,6 +1185,26 @@ h2 {
     display: none;
   }
 
+  .search {
+    flex: 1 1 100%;
+    width: auto;
+  }
+
+  .drawer-panel {
+    top: auto;
+    left: 0;
+    width: 100%;
+    max-height: 86vh;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    border-radius: 16px 16px 0 0;
+    transform: translateY(100%);
+  }
+
+  .drawer-body {
+    padding: 4px 18px 28px;
+  }
+
   .entry {
     grid-template-columns: 4.5rem minmax(0, 1fr) auto;
     column-gap: 12px;
@@ -756,8 +1218,16 @@ h2 {
 
 @media (prefers-reduced-motion: reduce) {
   .weft:first-child,
-  .status[data-feed="live"]::before {
+  .status[data-feed="live"]::before,
+  .warp-labels abbr[data-surge],
+  .turn:first-child {
     animation: none;
+  }
+
+  .drawer-panel,
+  .drawer-scrim,
+  .summary {
+    transition: none;
   }
 
   .weft > i::after,

@@ -7,19 +7,22 @@
 //   channel()         carries the firehose: one allocation-free emit per edit.
 //   frameCoalescer()  drains the channel at most once per frame, only when edits arrived.
 //   meter()           pulls the edits since the last frame; also counts Loom's own effect runs.
-//   list()            keyed rows for the weave and the leaderboard; virtualList() for the log.
+//   list()            keyed rows for the weave, leaderboard, and article history.
+//   virtualList()     the 100,000-edit log, filtered live.
 //   effect({ defer }) ranks the leaderboard off the critical path.
 //   keyedStates()     one count cell per ranked article, pruned as articles drop out.
-//   poll() + watch()  the one-second clock; resource() loads the recording.
 //   scope()           Pause pauses the stream scope: its source() disconnects (the EventSource
-//                     closes) and its clock stops; Resume reconnects and catches up.
+//                     closes) and its clock stops. Each open article owns a scope too.
 //   pause()/resume()  panels scrolled out of view suspend every binding they own and catch up in
 //                     one pass when they return (observeIntersection()).
-//   hovered()/focusWithin()  a ranked article lights up its wiki's thread in the weave.
-//   bindStorage()     remembers the load setting.
-//   observeMutation(), scrollEdges(), mediaRead(), scrollFade(), bindValue(), when().
+//   resource() + pending()  the recording, and each article's summary with cancellation.
+//   watchSettled()    applies the log search once typing pauses.
+//   heightFold(), afterTransition(), afterAnimation(), scrollFade()  motion that ends cleanly.
+//   hovered()/focusWithin(), listen(), onTap()  spotlight, tooltips, and keyboard control.
+//   poll() + watch(), bindValue(), bindStorage(), when(), mediaRead(), observeMutation().
 import {
   batch,
+  computed,
   configure,
   effect,
   poll,
@@ -40,16 +43,34 @@ import {
   mediaRead,
   observeIntersection,
   observeMutation,
-  scrollEdges,
 } from "loom/browser";
 import { bind, bindValue, list, pause, resume, when } from "loom/dom";
-import { onTap } from "loom/events";
+import { listen, onTap } from "loom/events";
 import { keyedStates } from "loom/model";
-import { scrollFade } from "loom/motion";
+import { afterAnimation, scrollFade } from "loom/motion";
 import { channel, events, meter } from "loom/observe";
-import { frameCoalescer } from "loom/schedule";
+import { frameCoalescer, watchSettled } from "loom/schedule";
 import { bindStorage, codecs, storageSlot } from "loom/storage";
 import { virtualList } from "loom/virtual-list";
+import { articleDrawer } from "./article.js";
+import {
+  ARTICLE,
+  articleUrl,
+  BOT,
+  CREATED,
+  clock,
+  type Detail,
+  deltaSign,
+  deltaText,
+  type Edit,
+  EditRing,
+  figure,
+  isBot,
+  pageKey,
+  REPLAYED,
+  siteName,
+  whole,
+} from "./format.js";
 import sampleUrl from "./sample.json?url";
 import "./styles.css";
 
@@ -61,6 +82,7 @@ if (inspecting) configure({ inspect: true });
 const STREAM = "https://stream.wikimedia.org/v2/stream/recentchange";
 const WEAVE_ROWS = 40; // seconds of history in the weave
 const LOG_CAPACITY = 100_000; // edits kept in the scrollable log
+const LOG_ROW = 34; // px; the log's fixed row height
 const RANK_BUCKETS = 30; // the leaderboard window: 30 buckets of 10 s
 const RANK_BUCKET_S = 10;
 const LOADS = [1, 2, 5, 10, 25, 50, 100] as const;
@@ -111,20 +133,17 @@ function warpOf(wiki: string): number {
 
 /* ---- ingest: source() → channel() → frameCoalescer() ---- */
 
-const BOT = 1;
-const CREATED = 2;
-const ARTICLE = 4;
 type Payload = readonly [
   wiki: string,
   server: string,
   title: string,
   flags: number,
-  delta: number,
+  detail: Detail,
 ];
 
 const edits = channel("wiki:edit", {
   capacity: 16_384,
-  fields: ["wiki", "server", "title", "flags", "delta"],
+  fields: ["wiki", "server", "title", "flags", "detail"],
 });
 const loadStep = state(0, { label: "load" });
 const load = (): number => LOADS[loadStep()] ?? 1;
@@ -145,7 +164,8 @@ function emit(edit: Payload): void {
   else pool[Math.floor(Math.random() * pool.length)] = edit;
   for (let extra = load() - 1; extra > 0; extra--) {
     const again = pool[Math.floor(Math.random() * pool.length)];
-    if (again) edits.emit(...again);
+    if (again)
+      edits.emit(again[0], again[1], again[2], again[3] | REPLAYED, again[4]);
   }
   drain.request();
 }
@@ -171,7 +191,7 @@ const fromRecorded = (r: Recorded): Payload => [
   r[2],
   r[3],
   (r[4] ? BOT : 0) | (r[6] ? CREATED : 0) | (r[7] === 0 ? ARTICLE : 0),
-  r[5],
+  { delta: r[5] },
 ];
 watch(recording, (rows) => {
   for (const row of rows?.slice(0, 800) ?? []) pool.push(fromRecorded(row));
@@ -185,8 +205,8 @@ function replay(): () => void {
     let origin = performance.now();
     let next = 0;
     const timer = setInterval(() => {
-      const clock = performance.now() - origin;
-      while (next < rows.length && (rows[next]?.[0] ?? 0) <= clock) {
+      const clockMs = performance.now() - origin;
+      while (next < rows.length && (rows[next]?.[0] ?? 0) <= clockMs) {
         emit(fromRecorded(rows[next++] as Recorded));
       }
       if (next >= rows.length) {
@@ -229,9 +249,12 @@ const streamScope = scope(
             wiki?: string;
             server_name?: string;
             title?: string;
+            user?: string;
+            comment?: string;
             bot?: boolean;
             namespace?: number;
             length?: { old?: number; new?: number };
+            revision?: { old?: number; new?: number };
           };
           if ((e.type !== "edit" && e.type !== "new") || !e.wiki || !e.title)
             return;
@@ -242,7 +265,13 @@ const streamScope = scope(
             (e.bot ? BOT : 0) |
               (e.type === "new" ? CREATED : 0) |
               (e.namespace === 0 ? ARTICLE : 0),
-            (e.length?.new ?? 0) - (e.length?.old ?? 0),
+            {
+              delta: (e.length?.new ?? 0) - (e.length?.old ?? 0),
+              ...(e.user ? { user: e.user } : {}),
+              ...(e.comment ? { comment: e.comment } : {}),
+              ...(e.revision?.new ? { revision: e.revision.new } : {}),
+              ...(e.revision?.old ? { previous: e.revision.old } : {}),
+            },
           ]);
         };
         return () => {
@@ -277,11 +306,13 @@ interface Cell {
 }
 interface Row {
   readonly id: number;
+  readonly at: number;
   readonly cells: readonly Cell[];
 }
 let rowId = 0;
 const newRow = (): Row => ({
   id: rowId++,
+  at: Date.now(),
   cells: WARPS.map(() => ({
     edits: 0,
     bots: 0,
@@ -320,16 +351,21 @@ const ranking = state<readonly Page[]>([], { label: "ranking" });
 const rankCounts = keyedStates<Record<string, number>>({ internal: true });
 const rankShares = keyedStates<Record<string, number>>({ internal: true });
 
-function tally(wiki: string, server: string, title: string): void {
-  const key = `${server}|${title}`;
-  let page = pages.get(key);
+function tally(edit: Edit): void {
+  let page = pages.get(edit.key);
   if (!page) {
-    page = { key, wiki, title, server, total: 0 };
-    pages.set(key, page);
+    page = {
+      key: edit.key,
+      wiki: edit.wiki,
+      title: edit.title,
+      server: edit.server,
+      total: 0,
+    };
+    pages.set(edit.key, page);
   }
   page.total++;
   const bucket = buckets[0] as Map<string, number>;
-  bucket.set(key, (bucket.get(key) ?? 0) + 1);
+  bucket.set(edit.key, (bucket.get(edit.key) ?? 0) + 1);
 }
 
 function rotateBuckets(): void {
@@ -343,33 +379,52 @@ function rotateBuckets(): void {
   }
 }
 
-/* ---- the log: a ring of every edit, windowed by virtualList ---- */
+/* ---- the log: every edit, and the ones matching the filters ---- */
 
-interface Edit {
-  readonly id: number;
-  readonly at: number;
-  readonly server: string;
-  readonly title: string;
-  readonly flags: number;
-  readonly delta: number;
-}
-const ring: Edit[] = [];
-let ringStart = 0;
+const everything = new EditRing(LOG_CAPACITY);
+const matching = new EditRing(LOG_CAPACITY);
+// Oldest edits dropped from each ring since the log was last windowed (see refreshLog).
+let droppedEverything = 0;
+let droppedMatching = 0;
 let editId = 0;
-const logLength = state(0, { internal: true });
-const logSource = {
-  get length() {
-    return ring.length;
-  },
-  at: (index: number): Edit | undefined =>
-    ring[(ringStart + index) % LOG_CAPACITY],
-};
-function remember(edit: Edit): void {
-  if (ring.length < LOG_CAPACITY) ring.push(edit);
-  else {
-    ring[ringStart] = edit;
-    ringStart = (ringStart + 1) % LOG_CAPACITY;
+
+const search = state("", { label: "search" });
+const settledSearch = state("", { internal: true });
+watchSettled(search, (value) => settledSearch(value.trim().toLowerCase()), {
+  delayMs: 180,
+});
+const showPeople = state(true, { label: "show people" });
+const showBots = state(true, { label: "show bots" });
+const onlyNew = state(false, { label: "only new pages" });
+const filter = computed(() => ({
+  text: settledSearch(),
+  people: showPeople(),
+  bots: showBots(),
+  onlyNew: onlyNew(),
+}));
+type Filter = ReturnType<typeof filter>;
+const filtering = computed(() => {
+  const f = filter();
+  return f.text !== "" || !f.people || !f.bots || f.onlyNew;
+});
+const matches = (edit: Edit, f: Filter): boolean =>
+  (isBot(edit) ? f.bots : f.people) &&
+  (!f.onlyNew || (edit.flags & CREATED) !== 0) &&
+  (f.text === "" ||
+    edit.title.toLowerCase().includes(f.text) ||
+    edit.server.includes(f.text));
+const logTotal = state(0, { internal: true });
+const logShown = state(0, { internal: true });
+const logSource = () => (untrack(filtering) ? matching : everything);
+
+// The edits the drawer shows for a page it opens: newest first, from what the log still holds.
+function seen(key: string, limit: number): readonly Edit[] {
+  const found: Edit[] = [];
+  for (let i = everything.length - 1; i >= 0 && found.length < limit; i--) {
+    const edit = everything.at(i);
+    if (edit?.key === key && !(edit.flags & REPLAYED)) found.push(edit);
   }
+  return found;
 }
 
 /* ---- live figures ---- */
@@ -380,42 +435,22 @@ const effectsPerEdit = state(0, { label: "effect runs per edit" });
 
 /* ---- view ---- */
 
-const clock = new Intl.DateTimeFormat(undefined, {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
-const figure = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
-const whole = new Intl.NumberFormat();
-const articleUrl = (server: string, title: string): string =>
-  `https://${server}/wiki/${encodeURIComponent(title.replaceAll(" ", "_"))}`;
-const siteName = (server: string): string => server.replace(/\.org$/, "");
-const isBot = (edit: Edit): boolean => (edit.flags & BOT) !== 0;
-const deltaSign = (edit: Edit): string =>
-  edit.flags & CREATED ? "new" : String(Math.sign(edit.delta));
-const deltaText = (edit: Edit): string =>
-  edit.flags & CREATED
-    ? "new"
-    : edit.delta > 0
-      ? `+${whole.format(edit.delta)}`
-      : edit.delta < 0
-        ? `−${whole.format(-edit.delta)}`
-        : "±0";
+const drawer = articleDrawer(seen);
+const openArticle = (
+  event: MouseEvent,
+  article: { server: string; title: string },
+): void => {
+  // Modified clicks keep their browser meaning (a new tab or window).
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0)
+    return;
+  event.preventDefault();
+  drawer.open(
+    { key: pageKey(article.server, article.title), ...article },
+    event.currentTarget as Element,
+  );
+};
 
-const weaveEl = (<div class="weave" role="presentation" />) as HTMLElement;
-list(weaveEl, rows, {
-  key: (row) => row.id,
-  render: (row) => (
-    <div class="weft">
-      {row.cells.map((cell) => (
-        <i data-l={cell.level} data-t={cell.tone} />
-      ))}
-    </div>
-  ),
-});
-
-// The wiki thread a hovered or focused ranked article belongs to, lit up in the weave by one rule.
+// The wiki thread a hovered or focused article or cell belongs to, lit up in the weave by one rule.
 const focusedWarp = state(-1, { label: "focused wiki" });
 const focusRule = (<style />) as HTMLStyleElement;
 document.head.append(focusRule);
@@ -432,6 +467,80 @@ function spotlight(row: Element, warp: number): void {
     else if (untrack(() => focusedWarp()) === warp) focusedWarp(-1);
   });
 }
+
+const rowOf = new WeakMap<Element, Row>();
+const weaveEl = (<div class="weave" />) as HTMLElement;
+list(weaveEl, rows, {
+  key: (row) => row.id,
+  render: (row) => {
+    const weft = (
+      <div class="weft">
+        {row.cells.map((cell) => (
+          <i data-l={cell.level} data-t={cell.tone} />
+        ))}
+      </div>
+    );
+    rowOf.set(weft, row);
+    return weft;
+  },
+});
+
+// One tooltip for the whole weave, moved by a single delegated pointer listener.
+interface Tip {
+  readonly x: number;
+  readonly y: number;
+  /** Near an edge the tip hangs inward instead of centering on the cell. */
+  readonly align: "start" | "center" | "end";
+  readonly name: string;
+  readonly detail: string;
+}
+const tip = state<Tip | null>(null, { internal: true });
+listen(
+  weaveEl,
+  "pointermove",
+  (event) => {
+    const cell = event.target as Element;
+    const row = cell.parentElement && rowOf.get(cell.parentElement);
+    if (cell.tagName !== "I" || !row) return;
+    const column = [...(cell.parentElement?.children ?? [])].indexOf(cell);
+    const data = row.cells[column];
+    const warp = WARPS[column];
+    if (!data || !warp) return;
+    const box = cell.getBoundingClientRect();
+    const frame = weaveEl.getBoundingClientRect();
+    const count =
+      data.edits === 1 ? "1 edit" : `${whole.format(data.edits)} edits`;
+    const bots =
+      data.bots === 0
+        ? ""
+        : data.bots === data.edits
+          ? ", all by bots"
+          : `, ${whole.format(data.bots)} by bots`;
+    const x = box.left - frame.left + box.width / 2;
+    tip({
+      x,
+      y: box.top - frame.top,
+      align: x < 110 ? "start" : x > frame.width - 110 ? "end" : "center",
+      name: warp.name,
+      detail: `${count} at ${clock.format(row.at)}${bots}`,
+    });
+    focusedWarp(column);
+  },
+  { owner: weaveEl, passive: true },
+);
+listen(
+  weaveEl,
+  "pointerleave",
+  () => {
+    tip(null);
+    focusedWarp(-1);
+  },
+  { owner: weaveEl },
+);
+
+const labelEls = WARPS.map(
+  (warp) => (<abbr title={warp.name}>{warp.label}</abbr>) as HTMLElement,
+);
 
 const rankEl = (<ol class="ranking" />) as HTMLElement;
 list(rankEl, ranking, {
@@ -450,6 +559,7 @@ list(rankEl, ranking, {
         href={articleUrl(page.server, page.title)}
         target="_blank"
         rel="noopener"
+        onclick={(event: MouseEvent) => openArticle(event, page)}
       >
         {page.title}
       </a>
@@ -460,10 +570,9 @@ list(rankEl, ranking, {
 });
 
 const logScroller = (<div class="log" tabindex="0" />) as HTMLElement;
-const logEdges = scrollEdges(logScroller);
 const log = virtualList<Edit>({
-  rowHeight: 34,
-  overscan: 8,
+  rowHeight: LOG_ROW,
+  overscan: 16,
   key: (edit) => edit.id,
   render: (edit, reuse) => {
     if (!reuse) {
@@ -505,6 +614,81 @@ const log = virtualList<Edit>({
   },
 });
 logScroller.append(log.el);
+const editById = new Map<number, Edit>();
+// One delegated listener opens any log title in the drawer.
+listen(
+  logScroller,
+  "click",
+  (event) => {
+    const link = (event.target as Element).closest("a.entry-title");
+    const row = link?.closest<HTMLElement>(".entry");
+    const edit = row && editById.get(Number(row.dataset["id"]));
+    if (edit) openArticle(event, edit);
+  },
+  { owner: logScroller },
+);
+
+// The log follows the newest edit until the reader scrolls back through it. Judged from the scroll
+// position, so every input counts (wheel, trackpad momentum, touch, scrollbar, keys, find in page):
+// any upward movement, even a fraction of a pixel, stops following at once. It resumes only after
+// a scroll has come to rest at the bottom (or on Jump to latest), never mid-gesture, so a trackpad's
+// small back-and-forth near the end can't toggle it and jolt the list. The page's own scrolling
+// only moves down to the end and records where it left the log (see refreshLog), so growing or
+// re-filtering the list never reads as the reader's scroll.
+const following = state(true, { label: "log follows newest" });
+let lastLogTop = 0;
+// Whether the reader's own latest movement was downward: only that can come to rest and resume.
+let readerMovedDown = false;
+const atLogEnd = (): boolean =>
+  logScroller.scrollHeight - logScroller.clientHeight - logScroller.scrollTop <
+  8;
+listen(
+  logScroller,
+  "scroll",
+  () => {
+    const top = logScroller.scrollTop;
+    if (top < lastLogTop) {
+      following(false);
+      readerMovedDown = false;
+    } else if (top > lastLogTop) readerMovedDown = true;
+    lastLogTop = top;
+    if (!("onscrollend" in logScroller)) settle();
+  },
+  { owner: logScroller, passive: true },
+);
+// Where scrollend isn't supported, a scroll counts as finished after a short quiet period.
+let quiet: ReturnType<typeof setTimeout> | undefined;
+function settle(): void {
+  clearTimeout(quiet);
+  quiet = setTimeout(resumeAtRest, 160);
+}
+function resumeAtRest(): void {
+  if (readerMovedDown && atLogEnd()) following(true);
+}
+listen(logScroller, "scrollend", resumeAtRest, { owner: logScroller });
+// Intent that arrives before the scroll moves: stop following at once.
+listen(
+  logScroller,
+  "wheel",
+  (event) => {
+    if (event.deltaY < 0) {
+      following(false);
+      readerMovedDown = false;
+    }
+  },
+  { owner: logScroller, passive: true },
+);
+listen(
+  logScroller,
+  "keydown",
+  (event) => {
+    if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
+      following(false);
+      readerMovedDown = false;
+    }
+  },
+  { owner: logScroller },
+);
 
 const loadInput = (
   <input
@@ -522,6 +706,37 @@ bindValue(
     (value) => loadStep(Number(value)),
   ),
 );
+
+const searchInput = (
+  <input
+    type="search"
+    class="search"
+    placeholder="Search titles or sites"
+    aria-label="Search the log"
+  />
+) as HTMLInputElement;
+bindValue(searchInput, search);
+function chip(label: string, cell: State<boolean>): Element {
+  return (
+    <label class="chip">
+      <input
+        type="checkbox"
+        onMount={(box) =>
+          bindValue(box as HTMLInputElement, cell, { property: "checked" })
+        }
+      />
+      {label}
+    </label>
+  );
+}
+const clearFilters = (): void =>
+  batch(() => {
+    search("");
+    settledSearch("");
+    showPeople(true);
+    showBots(true);
+    onlyNew(false);
+  });
 
 // System, light, or dark, remembered across visits. index.html applies the saved choice before
 // first paint; this keeps it in sync afterwards.
@@ -555,11 +770,7 @@ root.replaceChildren(
         Loom
       </a>
       <p class="status" data-feed={() => (streaming() ? feed() : "paused")}>
-        {() =>
-          streaming()
-            ? statusText[feed()]
-            : "Paused; the stream connection is closed"
-        }
+        {() => (streaming() ? statusText[feed()] : "Paused")}
       </p>
       <button
         type="button"
@@ -624,17 +835,29 @@ root.replaceChildren(
     </section>
     <main class="board">
       <figure class="loom">
-        <div class="warp-labels">
-          {WARPS.map((warp) => (
-            <abbr title={warp.name}>{warp.label}</abbr>
-          ))}
+        <div class="warp-labels">{labelEls}</div>
+        <div class="weave-frame">
+          {weaveEl}
+          <div
+            class="tip"
+            role="status"
+            hidden={() => tip() === null}
+            data-align={() => tip()?.align ?? "center"}
+            style={{
+              "--x": () => `${tip()?.x ?? 0}px`,
+              "--y": () => `${tip()?.y ?? 0}px`,
+            }}
+          >
+            <b>{() => tip()?.name ?? ""}</b>
+            {() => tip()?.detail ?? ""}
+          </div>
         </div>
-        {weaveEl}
         <figcaption>
           <span class="key key-people">People</span>
           <span class="key key-bots">Bots</span>
           <span class="key-note">
-            Newest second on top. Thicker threads carry more edits.
+            Newest second on top. Thicker threads carry more edits; a wiki’s
+            label flashes when it surges.
           </span>
         </figcaption>
       </figure>
@@ -649,22 +872,53 @@ root.replaceChildren(
         )}
       </section>
       <section class="stream" aria-labelledby="stream-title">
-        <h2 id="stream-title">
-          Every edit
-          <span class="stream-count">
-            {() => `${whole.format(logLength())} kept`}
-          </span>
-        </h2>
+        <div class="stream-head">
+          <h2 id="stream-title">
+            Every edit
+            <span class="stream-count">
+              {() =>
+                filtering()
+                  ? `${whole.format(logShown())} of ${whole.format(logTotal())} match`
+                  : `${whole.format(logTotal())} kept`
+              }
+            </span>
+          </h2>
+          <div class="filters">
+            {searchInput}
+            {chip("People", showPeople)}
+            {chip("Bots", showBots)}
+            {chip("New pages only", onlyNew)}
+          </div>
+        </div>
         <div class="log-frame">
           {logScroller}
           {when(
-            () => logEdges().end,
+            () => filtering() && logShown() === 0,
+            () => (
+              <p class="log-empty">
+                No edits match these filters.{" "}
+                <button
+                  type="button"
+                  class="link-button"
+                  onMount={(node) => onTap(node as Element, clearFilters)}
+                >
+                  Clear filters
+                </button>
+              </p>
+            ),
+          )}
+          {when(
+            () => !following(),
             () => (
               <button
                 type="button"
                 class="latest"
                 onMount={(node) =>
-                  onTap(node as Element, () => log.scrollToEnd())
+                  onTap(node as Element, () => {
+                    following(true);
+                    log.scrollToEnd();
+                    lastLogTop = logScroller.scrollTop;
+                  })
                 }
               >
                 Jump to latest
@@ -682,6 +936,11 @@ root.replaceChildren(
         </a>
         ; article text is available under CC BY-SA.
       </p>
+      <p class="keys">
+        <kbd>Space</kbd> pauses, <kbd>J</kbd> and <kbd>K</kbd> step through the
+        leaderboard, <kbd>/</kbd> searches the log, <kbd>Esc</kbd> closes an
+        article.
+      </p>
       <p>
         {inspecting ? (
           <a href="./">Close the Loom inspector</a>
@@ -690,6 +949,7 @@ root.replaceChildren(
         )}
       </p>
     </footer>
+    {drawer.el}
   </div>,
 );
 scrollFade(logScroller, { size: 28 });
@@ -704,17 +964,49 @@ for (const panel of root.querySelectorAll<HTMLElement>(".loom, .stream")) {
     paused = !entry.isIntersecting;
     if (paused) pause(panel);
     else resume(panel);
-    panel.toggleAttribute("data-paused", paused);
     if (panel.classList.contains("stream")) logVisible(!paused);
   });
 }
-watch(
-  () => logVisible(),
-  (visible) => {
-    if (!visible) return;
-    log.setItems(logSource);
-    if (following) log.scrollToEnd();
+
+/* ---- keyboard ---- */
+
+listen(
+  document,
+  "keydown",
+  (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === "Escape") {
+      if (drawer.isOpen()) drawer.close();
+      else if (document.activeElement === searchInput) searchInput.blur();
+      return;
+    }
+    const target = event.target as Element;
+    // Typing and native controls keep their own keys.
+    if (target.closest("input, textarea, select, button, [contenteditable]"))
+      return;
+    if (event.key === "/") {
+      event.preventDefault();
+      searchInput.focus();
+    } else if (event.key === " " && !target.closest("a")) {
+      event.preventDefault();
+      streaming(!streaming());
+    } else if (event.key === "j" || event.key === "k") {
+      const links = [...rankEl.querySelectorAll<HTMLElement>(".rank-title")];
+      if (links.length === 0) return;
+      const at = links.indexOf(document.activeElement as HTMLElement);
+      const next =
+        at === -1
+          ? event.key === "j"
+            ? 0
+            : links.length - 1
+          : Math.min(
+              links.length - 1,
+              Math.max(0, at + (event.key === "j" ? 1 : -1)),
+            );
+      links[next]?.focus();
+    }
   },
+  { owner: root },
 );
 
 /* ---- the leaderboard ranks off the critical path ---- */
@@ -772,49 +1064,146 @@ function rank(): void {
   });
 }
 
+/* ---- the log: filtering, and keeping up with the newest edit ---- */
+
+function refreshLog(): void {
+  if (!logVisible()) return; // plain windowing, not bindings: it checks visibility itself
+  // The reader may have scrolled up since the last frame without the scroll event having arrived
+  // yet; honour that before deciding to jump to the end.
+  if (logScroller.scrollTop < lastLogTop) {
+    following(false);
+    readerMovedDown = false;
+  }
+  const source = logSource();
+  const dropped = source === matching ? droppedMatching : droppedEverything;
+  droppedEverything = 0;
+  droppedMatching = 0;
+  const follow = untrack(() => following());
+  // A full log drops its oldest edits, shifting every row up. A reader looking back would see the
+  // list slide under a still scrollbar, so move the scroll position up by exactly what was dropped:
+  // the edits under their eyes stay put. Move it before windowing, so the rows are placed once,
+  // for the final position (placing them first and scrolling after shows them misplaced for a frame).
+  if (!follow && dropped > 0)
+    logScroller.scrollTop = Math.max(
+      0,
+      logScroller.scrollTop - dropped * LOG_ROW,
+    );
+  log.setItems(source);
+  if (follow) log.scrollToEnd();
+  lastLogTop = logScroller.scrollTop;
+  highlightMatches();
+}
+
+// Search matches are painted with the CSS Custom Highlight API: ranges over the visible rows' text,
+// styled by one ::highlight() rule, with no DOM writes. Browsers without it simply show no marks.
+const searchMarks =
+  typeof Highlight === "function" && "highlights" in CSS
+    ? new Highlight()
+    : undefined;
+if (searchMarks) CSS.highlights.set("log-search", searchMarks);
+function highlightMatches(): void {
+  if (!searchMarks) return;
+  searchMarks.clear();
+  const text = untrack(() => settledSearch());
+  if (text === "") return;
+  for (const cell of logScroller.querySelectorAll(
+    ".entry-title, .entry-site",
+  )) {
+    const node = cell.firstChild;
+    if (!(node instanceof Text)) continue;
+    const haystack = node.data.toLowerCase();
+    for (
+      let at = haystack.indexOf(text);
+      at !== -1;
+      at = haystack.indexOf(text, at + text.length)
+    ) {
+      const range = new Range();
+      range.setStart(node, at);
+      range.setEnd(node, Math.min(node.length, at + text.length));
+      searchMarks.add(range);
+    }
+  }
+}
+// Scrolling re-windows the log on the next frame; re-mark the rows it brings in after that.
+const remark = frameCoalescer(highlightMatches);
+listen(logScroller, "scroll", () => remark.request(), {
+  owner: logScroller,
+  passive: true,
+});
+// A new filter re-scans what the log holds, then the drain keeps the matches current.
+watch(filter, (f) => {
+  matching.clear();
+  if (untrack(filtering)) {
+    for (let i = 0; i < everything.length; i++) {
+      const edit = everything.at(i) as Edit;
+      if (matches(edit, f)) matching.push(edit);
+    }
+  }
+  logShown(matching.length);
+  following(true);
+  refreshLog();
+});
+watch(
+  () => logVisible(),
+  (visible) => {
+    if (visible) refreshLog();
+  },
+);
+
 /* ---- drain the channel, once per frame with new edits ---- */
 
 const reader = meter([edits], "samples");
-// Whether the log was scrolled to its newest edit before the latest batch; it keeps following.
-let following = true;
 let editsThisSecond = 0;
 
 function applyEdits(): void {
   const samples = reader.read()["wiki:edit"]?.samples ?? [];
   if (samples.length === 0) return;
-  following = !logEdges().end;
   const scale = load();
   const current = (rows()[0] as Row).cells;
   const at = Date.now();
+  const f = untrack(filter);
+  const filtered = untrack(filtering);
   batch(() => {
     for (const sample of samples) {
-      const wiki = sample["wiki"] as string;
       const server = sample["server"] as string;
       const title = sample["title"] as string;
-      const flags = sample["flags"] as number;
-      weave(current[warpOf(wiki)] as Cell, (flags & BOT) !== 0, scale);
-      if (flags & ARTICLE && wiki !== "wikidatawiki" && wiki !== "commonswiki")
-        tally(wiki, server, title);
-      remember({
+      const edit: Edit = {
         id: editId++,
         at,
+        wiki: sample["wiki"] as string,
         server,
         title,
-        flags,
-        delta: sample["delta"] as number,
-      });
+        key: pageKey(server, title),
+        flags: sample["flags"] as number,
+        detail: sample["detail"] as Detail,
+      };
+      weave(current[warpOf(edit.wiki)] as Cell, isBot(edit), scale);
+      // The leaderboard ranks real edits only, so every ranked article's history backs its count.
+      if (
+        edit.flags & ARTICLE &&
+        !(edit.flags & REPLAYED) &&
+        edit.wiki !== "wikidatawiki" &&
+        edit.wiki !== "commonswiki"
+      )
+        tally(edit);
+      const dropped = everything.at(0);
+      if (everything.length === LOG_CAPACITY && dropped)
+        editById.delete(dropped.id);
+      if (everything.push(edit)) droppedEverything++;
+      editById.set(edit.id, edit);
+      if (filtered && matches(edit, f) && matching.push(edit))
+        droppedMatching++;
+      drawer.note(edit);
     }
     pagesChanged(pagesChanged() + 1);
-    logLength(ring.length);
+    logTotal(everything.length);
+    logShown(matching.length);
   });
   editsThisSecond += samples.length;
-  // The log is plain windowing, not bindings, so it checks visibility itself.
-  if (!logVisible()) return;
-  log.setItems(logSource);
-  if (following) log.scrollToEnd();
+  refreshLog();
 }
 
-/* ---- the one-second clock: figures, a new weft row, and the leaderboard window ---- */
+/* ---- the one-second clock: figures, surges, a new weft row, and the leaderboard window ---- */
 
 let domWrites = 0;
 observeMutation(
@@ -825,8 +1214,32 @@ observeMutation(
   { subtree: true, childList: true, attributes: true, characterData: true },
 );
 const effectRuns = meter([events.effect]);
+// Each wiki's usual pace, so a second far above it can flash its label.
+const baseline = WARPS.map(() => 0);
+let warmup = 0;
 watch(second, (now) => {
   const runs = effectRuns.read()["loom:effect"]?.count ?? 0;
+  const closing = rows()[0] as Row;
+  const scale = load();
+  warmup++;
+  closing.cells.forEach((cell, index) => {
+    const pace = cell.edits / scale;
+    const usual = baseline[index] ?? 0;
+    const label = labelEls[index];
+    if (
+      label &&
+      warmup > 10 &&
+      pace >= 4 &&
+      pace > usual * 3 &&
+      !label.hasAttribute("data-surge")
+    ) {
+      label.setAttribute("data-surge", "");
+      afterAnimation(label, () => label.removeAttribute("data-surge"), {
+        name: "surge",
+      });
+    }
+    baseline[index] = usual * 0.9 + pace * 0.1;
+  });
   batch(() => {
     editsPerSecond(editsThisSecond);
     writesPerEdit(editsThisSecond > 0 ? domWrites / editsThisSecond : 0);
@@ -840,5 +1253,5 @@ watch(second, (now) => {
     pagesChanged(pagesChanged() + 1);
   }
 });
-log.setItems(logSource);
+refreshLog();
 devtools?.mountInspector();
