@@ -1,7 +1,7 @@
 # Migrate to the consolidated API
 
 Version `0.6.0` introduced the breaking API consolidation. Use this guide when
-upgrading from `0.5.0` or earlier, including upgrades to `0.7.0` or `0.8.0`. Update imports
+upgrading from `0.5.0` or earlier, including upgrades to `0.7.0` or `0.8.x`. Update imports
 and lifetimes together; there are no compatibility aliases or legacy package
 paths. The `markdown-viewer` consumer completed its migration to `v0.6.0`; see
 the [validation results](api-measurements.md) for details.
