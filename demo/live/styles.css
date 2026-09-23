@@ -781,6 +781,8 @@ h2 {
 .log {
   height: clamp(300px, 44vh, 480px);
   overflow: auto;
+  /* Rows keep their width when Jump to latest briefly turns scrolling off. */
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   background: var(--raised);
   border-radius: 10px;

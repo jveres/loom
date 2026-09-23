@@ -676,6 +676,10 @@ listen(
   "scroll",
   () => {
     const top = logScroller.scrollTop;
+    if (jumping) {
+      lastLogTop = top;
+      return;
+    }
     if (top < lastLogTop) {
       following(false);
       readerMovedDown = false;
@@ -700,6 +704,10 @@ listen(
   logScroller,
   "wheel",
   (event) => {
+    if (jumping) {
+      settleJump(); // leftover glide from the fling Jump to latest interrupted
+      return;
+    }
     if (event.deltaY < 0) {
       following(false);
       readerMovedDown = false;
@@ -707,6 +715,29 @@ listen(
   },
   { owner: logScroller, passive: true },
 );
+
+// Jump to latest may land mid-fling. Left alone, the glide carries on: Safari keeps scrolling from
+// where it was, and Chrome keeps sending its momentum wheel events, either of which pulls the log
+// back up. So the jump stops scrolling outright (overflow: hidden ends a glide) and treats what
+// is left of that gesture as spent, until its events have been quiet for a moment.
+let jumping = false;
+let jumpQuiet: ReturnType<typeof setTimeout> | undefined;
+function jumpToLatest(): void {
+  jumping = true;
+  following(true);
+  readerMovedDown = false;
+  logScroller.style.overflow = "hidden";
+  log.scrollToEnd();
+  lastLogTop = logScroller.scrollTop;
+  settleJump();
+}
+function settleJump(): void {
+  clearTimeout(jumpQuiet);
+  jumpQuiet = setTimeout(() => {
+    jumping = false;
+    logScroller.style.removeProperty("overflow");
+  }, 180);
+}
 listen(
   logScroller,
   "keydown",
@@ -927,13 +958,7 @@ root.replaceChildren(
               <button
                 type="button"
                 class="latest"
-                onMount={(node) =>
-                  onTap(node as Element, () => {
-                    following(true);
-                    log.scrollToEnd();
-                    lastLogTop = logScroller.scrollTop;
-                  })
-                }
+                onMount={(node) => onTap(node as Element, jumpToLatest)}
               >
                 Jump to latest
               </button>
