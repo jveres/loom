@@ -6,7 +6,7 @@ import { computed, type Scope, scope, state, watch } from "loom";
 import { pending, resource } from "loom/async";
 import { list, onUnmount, remove, when } from "loom/dom";
 import { onTap } from "loom/events";
-import { afterTransition, heightFold } from "loom/motion";
+import { heightFold } from "loom/motion";
 import {
   articleUrl,
   BOT,
@@ -191,7 +191,7 @@ export function articleDrawer(
     </div>
   ) as HTMLElement;
   const el = (
-    <aside class="drawer" hidden>
+    <aside class="drawer">
       <div
         class="drawer-scrim"
         onMount={(node) => onTap(node as Element, close)}
@@ -203,7 +203,6 @@ export function articleDrawer(
   let current: { readonly scope: Scope; readonly content: Element } | undefined;
   let feed: ((edit: Edit) => void) | undefined;
   let opener: HTMLElement | null = null;
-  let settling: (() => void) | undefined;
 
   function open(article: Article, from?: Element | null): void {
     if (openKey() === article.key) return;
@@ -217,10 +216,7 @@ export function articleDrawer(
     body.replaceChildren(content);
     body.scrollTop = 0;
     openKey(article.key);
-    // Slide in: unhide, let the closed position apply, then flip to open.
-    settling?.();
-    el.hidden = false;
-    void el.offsetWidth;
+    // The slide is a CSS transition on data-open (see .drawer in styles.css).
     el.dataset["open"] = "";
     closeButton.focus({ preventScroll: true });
   }
@@ -229,15 +225,10 @@ export function articleDrawer(
     if (openKey() === null) return;
     openKey(null);
     delete el.dataset["open"];
-    settling = afterTransition(
-      panel,
-      () => {
-        settling = undefined;
-        el.hidden = true;
-        discard();
-      },
-      { property: "transform" },
-    );
+    // Stop the article's work now; its content stays in place to slide out, and the next open
+    // replaces it.
+    current?.scope.stop();
+    feed = undefined;
     if (opener?.isConnected) opener.focus({ preventScroll: true });
     opener = null;
   }

@@ -450,17 +450,8 @@ const openArticle = (
   );
 };
 
-// The wiki thread a hovered or focused article or cell belongs to, lit up in the weave by one rule.
+// The wiki thread a hovered or focused article or cell belongs to, lit up in the weave.
 const focusedWarp = state(-1, { label: "focused wiki" });
-const focusRule = (<style />) as HTMLStyleElement;
-document.head.append(focusRule);
-effect(() => {
-  const warp = focusedWarp();
-  focusRule.textContent =
-    warp < 0
-      ? ""
-      : `.weave{--dim:.28}.weft>i:nth-child(${warp + 1}),.warp-labels>abbr:nth-child(${warp + 1}){--dim:1;--lit:1}`;
-});
 function spotlight(row: Element, warp: number): void {
   bind(row, () => {
     if (hovered(row)() || focusWithin(row)()) focusedWarp(warp);
@@ -541,6 +532,44 @@ listen(
 const labelEls = WARPS.map(
   (warp) => (<abbr title={warp.name}>{warp.label}</abbr>) as HTMLElement,
 );
+
+// One veil over the weave dims every wiki but the lit one: a gradient bounded by two custom
+// properties on the veil alone. Lighting a column restyles two elements, not a thousand cells.
+const weaveFrame = (<div class="weave-frame" />) as HTMLElement;
+const veil = (<div class="veil" />) as HTMLElement;
+const tipEl = (
+  <div
+    class="tip"
+    role="status"
+    hidden={() => tip() === null}
+    data-align={() => tip()?.align ?? "center"}
+    style={{
+      "--x": () => `${tip()?.x ?? 0}px`,
+      "--y": () => `${tip()?.y ?? 0}px`,
+    }}
+  >
+    <b>{() => tip()?.name ?? ""}</b>
+    {() => tip()?.detail ?? ""}
+  </div>
+);
+weaveFrame.append(weaveEl, veil, tipEl);
+let litLabel: Element | undefined;
+effect(() => {
+  const label = labelEls[focusedWarp()];
+  litLabel?.removeAttribute("data-lit");
+  litLabel = undefined;
+  const box = label?.getBoundingClientRect();
+  if (!label || !box || box.width === 0) {
+    veil.removeAttribute("data-on");
+    return;
+  }
+  const left = weaveFrame.getBoundingClientRect().left;
+  veil.style.setProperty("--from", `${box.left - left - 2}px`);
+  veil.style.setProperty("--to", `${box.right - left + 2}px`);
+  veil.setAttribute("data-on", "");
+  label.setAttribute("data-lit", "");
+  litLabel = label;
+});
 
 const rankEl = (<ol class="ranking" />) as HTMLElement;
 list(rankEl, ranking, {
@@ -836,22 +865,7 @@ root.replaceChildren(
     <main class="board">
       <figure class="loom">
         <div class="warp-labels">{labelEls}</div>
-        <div class="weave-frame">
-          {weaveEl}
-          <div
-            class="tip"
-            role="status"
-            hidden={() => tip() === null}
-            data-align={() => tip()?.align ?? "center"}
-            style={{
-              "--x": () => `${tip()?.x ?? 0}px`,
-              "--y": () => `${tip()?.y ?? 0}px`,
-            }}
-          >
-            <b>{() => tip()?.name ?? ""}</b>
-            {() => tip()?.detail ?? ""}
-          </div>
-        </div>
+        {weaveFrame}
         <figcaption>
           <span class="key key-people">People</span>
           <span class="key key-bots">Bots</span>
