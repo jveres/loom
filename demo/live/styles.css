@@ -890,15 +890,21 @@ kbd {
 
 /* ---- the article drawer ---- */
 
-/* The page underneath doesn't scroll while an article is open, wherever the pointer is: the drawer
-   is a scroll container that never scrolls, and it keeps scrolling from chaining past it. (Locking
-   the root's overflow instead would re-lay out the whole page just as the slide starts.) */
+/* The page underneath doesn't scroll while an article is open, wherever the pointer is: over the
+   panel, a short article, or the scrim. The reserved gutter keeps the page from shifting sideways
+   when its scrollbar goes away. */
+:root {
+  scrollbar-gutter: stable;
+}
+
+:root:has(.drawer[data-open]) {
+  overflow: hidden;
+}
+
 .drawer {
   position: fixed;
   inset: 0;
   z-index: 10;
-  overflow: hidden;
-  overscroll-behavior: contain;
   /* Always rendered; hidden only once the slide-out has finished. */
   visibility: hidden;
   pointer-events: none;
