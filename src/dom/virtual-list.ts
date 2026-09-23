@@ -223,7 +223,11 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
       reconcile();
     },
     scrollToEnd() {
-      if (!stopped && scroller) scroller.scrollTop = scroller.scrollHeight;
+      if (stopped || !scroller) return;
+      scroller.scrollTop = scroller.scrollHeight;
+      // Window the new position now, as scrollToIndex does: waiting for the scroll event leaves
+      // the newly revealed rows blank for a frame.
+      reconcile();
     },
     scrollToIndex(index) {
       if (stopped || !scroller) return;

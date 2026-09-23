@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="../assets/loom.svg" />
+    <title>Wikipedia, live — a Loom demo</title>
+    <meta
+      name="description"
+      content="Live Wikipedia edits woven into cloth, rendered with Loom's fine-grained reactivity."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap"
+    />
+    <!-- Paint the ground in the saved theme before the bundled CSS arrives, so nothing flashes. -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        background: light-dark(#eef0f4, #141c33);
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+      }
+    </style>
+    <script>
+      try {
+        const theme = localStorage.getItem("loom-live-theme");
+        if (theme === "light" || theme === "dark")
+          document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <div id="live"></div>
+    <script type="module" src="/demo/live/main.tsx"></script>
+  </body>
+</html>

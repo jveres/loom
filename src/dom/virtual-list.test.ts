@@ -38,6 +38,31 @@ function mount(
   return { vl, scroller, rows, setScroll: (px: number) => (scrolled = px) };
 }
 describe("virtualList", () => {
+  it("scrollToEnd windows the end rows immediately, without waiting for a scroll frame", () => {
+    const { vl, scroller, setScroll, rows } = mount();
+    onTestFinished(() => {
+      vl.stop();
+      scroller.remove();
+    });
+    const items = Array.from({ length: 100 }, (_, i) => i);
+    let top = 0;
+    Object.defineProperty(scroller, "scrollHeight", {
+      get: () => items.length * ROW,
+    });
+    Object.defineProperty(scroller, "scrollTop", {
+      get: () => top,
+      set: (px: number) => {
+        top = Math.min(px, items.length * ROW - VIEW);
+        setScroll(top);
+      },
+    });
+    vl.setItems(items);
+    expect(rows().map((row) => row.textContent)).toContain("0");
+    vl.scrollToEnd();
+    const shown = rows().map((row) => Number(row.textContent));
+    expect(Math.min(...shown)).toBe(90);
+    expect(Math.max(...shown)).toBe(99);
+  });
   it("skips source reads within a scroll window but refresh and setItems remain explicit", () => {
     const frames: FrameRequestCallback[] = [];
     vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((fn) => {

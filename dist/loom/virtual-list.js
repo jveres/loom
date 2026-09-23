@@ -85,7 +85,7 @@ function a(a) {
 			C(), x();
 		},
 		scrollToEnd() {
-			!d && h && (h.scrollTop = h.scrollHeight);
+			d || !h || (h.scrollTop = h.scrollHeight, x());
 		},
 		scrollToIndex(e) {
 			d || !h || (h.scrollTop = Math.max(0, e * o - (h.clientHeight - o) / 2), x());

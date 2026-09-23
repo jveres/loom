@@ -231,7 +231,8 @@ pnpm run bench
 pnpm run dev
 ```
 
-Open `/` for the UI demo or `/bench/` for browser workloads. Rebuild `dist`
+Open `/` for the UI demo, `/live/` for live Wikipedia edits streamed through
+Loom, or `/bench/` for browser workloads. Rebuild `dist`
 after source changes. `pnpm run build:demo` writes to `dist/demo`, preserving
 the library output. See [architecture](ARCHITECTURE.md), the
 [API consolidation record](docs/api-consolidation-plan.md), and
