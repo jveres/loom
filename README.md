@@ -8,6 +8,14 @@ Loom is a small reactive UI runtime with callable signals and real DOM nodes.
 It needs no compiler transform and has no runtime dependencies. JSX returns DOM
 nodes; reactive bindings update those nodes in place.
 
+See it running:
+
+- [Live Wikipedia edits](https://jveres.github.io/loom/live/): every edit to the
+  Wikimedia wikis, streamed and woven into a live dashboard, with its own DOM
+  writes and effect runs per edit on display.
+- [Realtime stress demo](https://jveres.github.io/loom/): a card board under
+  adjustable event load, with the Loom inspector.
+
 The current release is `0.8.1` ([release notes](docs/release-0.8.1.md)). Version
 `0.6.0` introduced the breaking API consolidation
 ([release notes](docs/release-0.6.0.md)). If you are upgrading from `0.5.0` or earlier, follow the
