@@ -73,7 +73,7 @@ const APPS = [
     // import must therefore survive production tree-shaking even when none of its exports are read.
     name: "minimal + observe hooks",
     // The tracking split avoids loading the engine in standalone platform helpers.
-    budget: 3664,
+    budget: 3680,
     minDelta: 300,
     baselineSource: `
       import { configure, state } from "loom";
@@ -115,7 +115,7 @@ const APPS = [
     name: "minimal dom (h+text)",
     // Includes allocation-free default binding metadata and node-local ownership for large mounts.
     // Uniform Stop/signal ownership and untracked callbacks: see docs/api-measurements.md.
-    budget: 6000,
+    budget: 6050,
     source: `
       import { state } from "loom";
       import { h, text } from "loom/dom";

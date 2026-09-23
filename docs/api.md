@@ -83,9 +83,10 @@ Use explicit keys when controls need identities across reordering. As with
 `morph`, snapshots describe static trees; matched nodes retain their existing
 event handlers and effects.
 
-The complete `loom/dom` family is 10,142 bytes gzipped in v0.7.0, up from
-9,845 bytes in v0.6.0. Its package budget is 10,240 bytes; the added snapshot
-operation and shared protected-node matching account for the increase.
+The complete `loom/dom` family is 10,173 bytes gzipped in v0.8.0 (10,142 in
+v0.7.0, 9,845 in v0.6.0). Its package budget is 10,240 bytes; the v0.7.0
+snapshot operation and shared protected-node matching account for most of the
+increase.
 
 Successful placement in the ownership operations commits before outgoing
 cleanup; if cleanup throws, a later update does not repeat the successful
