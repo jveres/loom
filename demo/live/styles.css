@@ -1213,11 +1213,13 @@ a.turn-time:hover {
     width: auto;
   }
 
+  /* A fixed height in dynamic viewport units: the sheet never grows as the article loads, and it
+     fits the visible area on iOS, where vh assumes the browser's toolbars are hidden. */
   .drawer-panel {
     top: auto;
     left: 0;
     width: 100%;
-    max-height: 86vh;
+    height: 86dvh;
     border-left: 0;
     border-top: 1px solid var(--rule);
     border-radius: 16px 16px 0 0;

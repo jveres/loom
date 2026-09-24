@@ -436,19 +436,20 @@ const effectsPerEdit = state(0, { label: "effect runs per edit" });
 /* ---- view ---- */
 
 const drawer = articleDrawer(seen);
+// Titles open in the drawer on a tap (onTap: a press and release that doesn't move, so a scroll
+// never counts, and it works from pointer events, which iOS delivers even while the page changes
+// under the finger and holds back its synthetic click). Their click handler stays for the keyboard
+// and to keep the link from navigating; modified clicks keep their browser meaning (a new tab).
+const plainActivation = (event: MouseEvent): boolean =>
+  !(event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0);
 const openArticle = (
-  event: MouseEvent,
   article: { server: string; title: string },
-): void => {
-  // Modified clicks keep their browser meaning (a new tab or window).
-  if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0)
-    return;
-  event.preventDefault();
+  opener: Element,
+): void =>
   drawer.open(
     { key: pageKey(article.server, article.title), ...article },
-    event.currentTarget as Element,
+    opener,
   );
-};
 
 // The wiki thread a hovered or focused article or cell belongs to, lit up in the weave.
 const focusedWarp = state(-1, { label: "focused wiki" });
@@ -486,48 +487,64 @@ interface Tip {
   readonly detail: string;
 }
 const tip = state<Tip | null>(null, { internal: true });
+function showTip(cell: Element): boolean {
+  const row = cell.parentElement && rowOf.get(cell.parentElement);
+  if (cell.tagName !== "I" || !row) return false;
+  const column = [...(cell.parentElement?.children ?? [])].indexOf(cell);
+  const data = row.cells[column];
+  const warp = WARPS[column];
+  if (!data || !warp) return false;
+  const box = cell.getBoundingClientRect();
+  const frame = weaveEl.getBoundingClientRect();
+  const count =
+    data.edits === 1 ? "1 edit" : `${whole.format(data.edits)} edits`;
+  const bots =
+    data.bots === 0
+      ? ""
+      : data.bots === data.edits
+        ? ", all by bots"
+        : `, ${whole.format(data.bots)} by bots`;
+  const x = box.left - frame.left + box.width / 2;
+  tip({
+    x,
+    y: box.top - frame.top,
+    align: x < 110 ? "start" : x > frame.width - 110 ? "end" : "center",
+    name: warp.name,
+    detail: `${count} at ${clock.format(row.at)}${bots}`,
+  });
+  focusedWarp(column);
+  return true;
+}
+function hideTip(): void {
+  tip(null);
+  focusedWarp(-1);
+}
+// A mouse hovers the weave; a finger can't hover (dragging scrolls the page), so on touch a tap
+// pins a cell's tooltip and tapping the same wiki's column again clears it. (Compared by column: a
+// new row slides in every second, so the cell under the finger is rarely the same element twice.)
 listen(
   weaveEl,
   "pointermove",
   (event) => {
-    const cell = event.target as Element;
-    const row = cell.parentElement && rowOf.get(cell.parentElement);
-    if (cell.tagName !== "I" || !row) return;
-    const column = [...(cell.parentElement?.children ?? [])].indexOf(cell);
-    const data = row.cells[column];
-    const warp = WARPS[column];
-    if (!data || !warp) return;
-    const box = cell.getBoundingClientRect();
-    const frame = weaveEl.getBoundingClientRect();
-    const count =
-      data.edits === 1 ? "1 edit" : `${whole.format(data.edits)} edits`;
-    const bots =
-      data.bots === 0
-        ? ""
-        : data.bots === data.edits
-          ? ", all by bots"
-          : `, ${whole.format(data.bots)} by bots`;
-    const x = box.left - frame.left + box.width / 2;
-    tip({
-      x,
-      y: box.top - frame.top,
-      align: x < 110 ? "start" : x > frame.width - 110 ? "end" : "center",
-      name: warp.name,
-      detail: `${count} at ${clock.format(row.at)}${bots}`,
-    });
-    focusedWarp(column);
+    if (event.pointerType !== "touch") showTip(event.target as Element);
   },
   { owner: weaveEl, passive: true },
 );
 listen(
   weaveEl,
   "pointerleave",
-  () => {
-    tip(null);
-    focusedWarp(-1);
+  (event) => {
+    if (event.pointerType !== "touch") hideTip();
   },
   { owner: weaveEl },
 );
+onTap(weaveEl, (event) => {
+  if (event.pointerType !== "touch") return;
+  const cell = event.target as Element;
+  const column = [...(cell.parentElement?.children ?? [])].indexOf(cell);
+  if (tip() !== null && column === untrack(() => focusedWarp())) hideTip();
+  else showTip(cell);
+});
 
 const labelEls = WARPS.map(
   (warp) => (<abbr title={warp.name}>{warp.label}</abbr>) as HTMLElement,
@@ -588,7 +605,16 @@ list(rankEl, ranking, {
         href={articleUrl(page.server, page.title)}
         target="_blank"
         rel="noopener"
-        onclick={(event: MouseEvent) => openArticle(event, page)}
+        onclick={(event: MouseEvent) => {
+          if (!plainActivation(event)) return;
+          event.preventDefault();
+          openArticle(page, event.currentTarget as Element);
+        }}
+        onMount={(link) =>
+          onTap(link as Element, (event) => {
+            if (plainActivation(event)) openArticle(page, link as Element);
+          })
+        }
       >
         {page.title}
       </a>
@@ -645,17 +671,39 @@ const log = virtualList<Edit>({
 logScroller.append(log.el);
 const editById = new Map<number, Edit>();
 // One delegated listener opens any log title in the drawer.
+const editAt = (target: EventTarget | null): Edit | undefined => {
+  const row = (target as Element | null)
+    ?.closest("a.entry-title")
+    ?.closest<HTMLElement>(".entry");
+  return row ? editById.get(Number(row.dataset["id"])) : undefined;
+};
 listen(
   logScroller,
   "click",
   (event) => {
-    const link = (event.target as Element).closest("a.entry-title");
-    const row = link?.closest<HTMLElement>(".entry");
-    const edit = row && editById.get(Number(row.dataset["id"]));
-    if (edit) openArticle(event, edit);
+    const edit = editAt(event.target);
+    if (!edit || !plainActivation(event)) return;
+    event.preventDefault();
+    openArticle(edit, logScroller);
   },
   { owner: logScroller },
 );
+// The edit under the finger when it went down: a following log can recycle that row for a newer
+// edit before the finger lifts.
+let pressedEdit: Edit | undefined;
+listen(
+  logScroller,
+  "pointerdown",
+  (event) => {
+    pressedEdit = editAt(event.target);
+  },
+  { owner: logScroller, passive: true },
+);
+onTap(logScroller, (event) => {
+  if (pressedEdit && plainActivation(event))
+    openArticle(pressedEdit, logScroller);
+  pressedEdit = undefined;
+});
 
 // The log follows the newest edit until the reader scrolls back through it. Judged from the scroll
 // position, so every input counts (wheel, trackpad momentum, touch, scrollbar, keys, find in page):
