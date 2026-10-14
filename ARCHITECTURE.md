@@ -12,14 +12,15 @@ Canonical family entrypoints curate the operations described in the
 | Module | Responsibility |
 | --- | --- |
 | `src/index.ts` | Public reactive primitives and helper exports. |
-| `src/loom.ts` | Reactive nodes, tracking context, scheduler, computed recovery, and scope operations that coordinate effect queues. |
+| `src/loom.ts` | Reactive nodes, bitflag node/lifecycle state, tracking context, scheduler, computed recovery, and scope operations that coordinate effect queues. |
+| `src/jsx-props.ts` | Shared JSX prop and attribute helpers (`cssPropName`, `isAriaAttr`, `propsWithoutKey`) used across DOM and HTML runtimes. |
 | `src/core/tracking.ts` | Small untrack callback hook; active tracking state stays local to the reactive engine. |
 | `src/core/lifetime.ts` | Terminal manual/signal lifetime and all-cleanup-before-error behavior. |
 | `src/core/graph.ts` | Vendored dependency-graph algorithm; preserve its upstream control flow. |
-| `src/core/scope-ownership.ts` | Scope/resource types, indexed removal, pause counts, terminal resource stop, and resource traversal. |
-| `src/core/errors.ts` | Rethrow one failure unchanged; aggregate multiple disposal failures. |
+| `src/core/scope-ownership.ts` | Scope/resource types, indexed removal, transition-guarded pause counts, terminal resource stop, and resource traversal. |
+| `src/core/errors.ts` | Shared synchronous-callback guard (`SyncResult`, `isPromiseLike`, `ignorePromiseRejection`), single-error rethrow, and multi-error aggregation. |
 | `src/dom/index.ts` | DOM factories, bindings, dynamic slots, and public list adapters. |
-| `src/dom/keyed-reconcile.ts` | Key validation, staged row construction, item updates, placement, and outgoing-row cleanup. |
+| `src/dom/keyed-reconcile.ts` | Single-pass key validation and lookup, staged row construction, item updates, placement, and outgoing-row cleanup. |
 | `src/dom/place.ts` | Contiguous-region fast path and minimum-move LIS fallback. |
 | `src/dom/ownership-base.ts` | Node-owned resources, construction rollback, resource groups, and subtree disposal. |
 | `src/dom/ownership.ts` | Adapter between raw reactive effects and DOM ownership. |
@@ -29,6 +30,13 @@ Scope ownership imports reactive types only. Scope creation, active-scope
 registration, stop orchestration, and resume flushing remain in `loom.ts` because
 they coordinate scheduler state. This keeps ownership traversal independent
 without adding a runtime import cycle or an injected scheduler abstraction.
+
+Reactive nodes encode both their node kind (`Computed`, `Source`) and effect
+lifecycle state (`Paused`, `Deferred`) in the upper bits of `node.flags` alongside
+the graph's lower 6 propagation bits (`Mutable`, `Watching`, `RecursedCheck`,
+`Recursed`, `Dirty`, `Pending`). `EffectNode` instances are initialized with a
+fixed monomorphic shape, and hot paths gate metadata access behind `inspectHooks`
+and `runtimeHooks` so unobserved nodes pay zero missing-property lookups.
 
 The deferred lane, inspection, async helpers, and devtools remain optional.
 The graph algorithm is unchanged by the consolidation. Bundle checks cover minimal
@@ -44,11 +52,13 @@ context before construction and register with their owning node. They do not inh
 without controlling its lifetime. `untrack()` clears reactive tracking and
 parent-effect ownership; it does not escape the ambient scope.
 
-Scope pause counts include paused ancestors. Independently paused descendants
-stay paused when an ancestor resumes. Resource traversal snapshots registrations
-before invoking user callbacks, because a callback can stop itself or another
-resource. Stops mark ownership terminal before cleanup and detach registrations
-in constant time.
+Scope pause counts include paused ancestors. `bumpPausedCount` propagates effect
+pause state only when a scope's `pausedCount` transitions between `0` and `1`,
+and an effect's `Paused` bitflag tracks whether either its owning scope or its
+DOM subtree is paused. Independently paused descendants stay paused when an
+ancestor resumes. Resource traversal snapshots registrations before invoking user
+callbacks, because a callback can stop itself or another resource. Stops mark
+ownership terminal before cleanup and detach registrations in constant time.
 
 Public `source()` created in a scope cannot reconnect while that scope is paused
 or after it stops. Internal pooled reads use subscriber-owned `sharedSource()`;

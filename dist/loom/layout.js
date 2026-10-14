@@ -1,6 +1,6 @@
-import { n as e } from "./tracking-CClsWN0I.js";
-import { n as t, t as n } from "./place-DZFK2_K3.js";
-import { t as r } from "./lifetime-CmayFDbD.js";
+import { n as e } from "./tracking-CaYucQ42.js";
+import { n as t, t as n } from "./place-Dwep3y7Y.js";
+import { t as r } from "./lifetime-D_7_tsmv.js";
 import { afterFrames as i } from "./schedule.js";
 //#region src/dom/caret-at-point.ts
 function a(e, t, n) {
@@ -32,7 +32,7 @@ function s(e, t = {}) {
 	let n = e.ownerDocument.body, r = t.axis ?? "y", i = e.ownerDocument.defaultView ?? globalThis;
 	for (let a = e.parentElement; a && a !== n; a = a.parentElement) {
 		let e = i.getComputedStyle(a), n = r === "x" ? e.overflowX : e.overflowY;
-		if ((n === "auto" || n === "scroll") && !(t.requireOverflow && !(r === "x" ? a.scrollWidth > a.clientWidth : a.scrollHeight > a.clientHeight))) return a;
+		if ((n === "auto" || n === "scroll") && (!t.requireOverflow || (r === "x" ? a.scrollWidth > a.clientWidth : a.scrollHeight > a.clientHeight))) return a;
 	}
 	return null;
 }
@@ -50,27 +50,21 @@ var c = (e, t, n, r) => {
 		boxEnd: i.bottom
 	};
 }, l = (e, t, n, r) => {
-	if (t !== 0) {
-		if (r !== void 0 && typeof e.scrollTo == "function") {
-			e.scrollTo(n === "x" ? {
-				left: e.scrollLeft + t,
-				behavior: r
-			} : {
-				top: e.scrollTop + t,
-				behavior: r
-			});
-			return;
-		}
-		n === "x" ? e.scrollLeft += t : e.scrollTop += t;
-	}
+	t !== 0 && (r !== void 0 && typeof e.scrollTo == "function" ? e.scrollTo(n === "x" ? {
+		left: e.scrollLeft + t,
+		behavior: r
+	} : {
+		top: e.scrollTop + t,
+		behavior: r
+	}) : n === "x" ? e.scrollLeft += t : e.scrollTop += t);
 };
-function u(e, t, n = {}) {
-	let r = n.axis ?? "y", { start: i, end: a, boxStart: o, boxEnd: s } = c(e, t, r, n.margin ?? 0);
-	i < o ? l(e, Math.max(i - o, a - s), r, n.behavior) : a > s && l(e, Math.min(i - o, a - s), r, n.behavior);
+function u(e, t, n, r) {
+	let { start: i, end: a, boxStart: o, boxEnd: s } = c(e, t, n, r.margin ?? 0);
+	i < o ? l(e, Math.max(i - o, a - s), n, r.behavior) : a > s && l(e, Math.min(i - o, a - s), n, r.behavior);
 }
-function d(e, t, n = {}) {
-	let r = n.axis ?? "y", { start: i, end: a, boxStart: o, boxEnd: s } = c(e, t, r, 0);
-	l(e, (i + a) / 2 - (o + s) / 2, r, n.behavior);
+function d(e, t, n, r) {
+	let { start: i, end: a, boxStart: o, boxEnd: s } = c(e, t, n, 0);
+	l(e, (i + a) / 2 - (o + s) / 2, n, r.behavior);
 }
 function f(e, t = {}) {
 	let n = t.axis ?? "y", r = typeof t.scroller == "string" ? e.closest(t.scroller) : t.scroller ?? s(e, {
@@ -82,7 +76,7 @@ function f(e, t = {}) {
 		let { start: t, end: i, boxStart: a, boxEnd: o } = c(r, e, n, 0);
 		if (i > a && t < o) return !0;
 	}
-	return t.align === "center" ? d(r, e, t) : u(r, e, t), !0;
+	return t.align === "center" ? d(r, e, n, t) : u(r, e, n, t), !0;
 }
 //#endregion
 //#region src/dom/scroll-memory.ts
@@ -102,7 +96,7 @@ function p(t, n, a = {}) {
 			s = r, c = !0, u?.();
 			let f = e(() => n(r));
 			queueMicrotask(() => {
-				!o.active || a !== l || (d ? t.scrollLeft = e(() => f()) : t.scrollTop = e(() => f()), u = i(1, () => {
+				o.active && a === l && (d ? t.scrollLeft = e(() => f()) : t.scrollTop = e(() => f()), u = i(1, () => {
 					o.active && a === l && (c = !1);
 				}, { window: t.ownerDocument.defaultView ?? globalThis }));
 			});

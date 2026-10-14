@@ -46,9 +46,8 @@ const FPS_STRAINED = 30; // at or above (below target): strained
 const POLL_S = POLL_MS / 1000;
 const LAG_MS = 200;
 /* ---- module state ---- */
-// Set by wireStats so renderActiveTab() can read the active tab + minimized state without importing it.
+// Set by wireStats so renderActiveTab() can read the active tab without importing panel.ts.
 let activeTabFn: () => TabId | undefined = () => undefined;
-let isMinimizedFn: () => boolean = () => false;
 let heartbeat: Polled<number> | null = null;
 let lagTimer: ReturnType<typeof setInterval> | null = null;
 let rafHandle: number | null = null;
@@ -630,7 +629,7 @@ function pollTick(): number {
 // trace ring(s). Run via a deferred effect (see wireStats) so it yields to the app under load:
 // idle-first, ~POLL_MS floor. Only the visible tab does work, and the graph self-throttles to ~3/s.
 function renderActiveTab(): void {
-  const visible = !isMinimizedFn();
+  const visible = !statsMinimized;
   if (activeTabFn() === "stats" && visible) {
     const c = inspectResources();
     nodeStates = c.states;
@@ -710,10 +709,8 @@ function startMetrics(): void {
 // pauses when the Info tab isn't active. Returns the Info pane.
 export function wireStats(opts: {
   activeTab: () => TabId | undefined;
-  isMinimized: () => boolean;
 }): HTMLElement {
   activeTabFn = opts.activeTab;
-  isMinimizedFn = opts.isMinimized;
   metricsMeter = meter([
     events.read,
     events.write,
@@ -790,8 +787,8 @@ export function stopStats(): void {
     document.removeEventListener("visibilitychange", onLagVisibility);
   if (rafHandle != null) cancelAnimationFrame(rafHandle);
   rafHandle = null;
-  // statsScope owns the heap + web-vital sources and the Info-pane bindings; stopping it tears them
-  // all down (and any future resource added inside), so they need no individual teardown here.
+  // statsScope owns the heap + web-vital sources; stopping it tears them down. (The Info-pane DOM
+  // bindings are node-owned on statsRoot and are disposed when unmountInspector removes the panel.)
   statsScope?.stop();
   statsScope = null;
   statsRoot = null;

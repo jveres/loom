@@ -1,10 +1,11 @@
-import { failSetup } from "../core/lifetime.js";
 // observeIntersection(el, cb, options?) — viewport/root intersection with node lifetime: the
 // callback runs on the IntersectionObserver clock (including the spec's initial delivery on
 // attach) and detaches when the node is torn down. Returns a Stop for early manual detach.
 //
 // Pooling: observers with the same root/rootMargin/threshold are shared and routed per target.
-// Viewport pools use a normal Map; custom roots use a WeakMap so pooling never extends root lifetime.
+// Both viewport pools (keyed by realm) and custom root pools use WeakMaps so pooling never extends
+// realm or root lifetime.
+import { failSetup } from "../core/lifetime.js";
 import type { Stop } from "../loom.js";
 import { nodeLifetime } from "./lifetime.js";
 import { type ObserverPool, observerPool } from "./observer-pool.js";
@@ -89,13 +90,13 @@ function pooled(
   el: Element,
   cb: IntersectionCallback,
   root: Element | Document | null,
+  realm: object,
   pools: Map<string, Pool>,
   key: string,
   options: NormalizedOptions,
 ): Stop {
   let pool = pools.get(key);
   if (!pool) {
-    const realm = el.ownerDocument.defaultView ?? globalThis;
     const IO = (realm as typeof globalThis).IntersectionObserver;
     pool = observerPool(
       (dispatch) =>
@@ -107,7 +108,10 @@ function pooled(
       (observer, target) => observer.observe(target),
       () => {
         pools.delete(key);
-        if (root !== null && pools.size === 0) rootedPools.delete(root);
+        if (pools.size === 0) {
+          if (root === null) viewportPools.delete(realm);
+          else rootedPools.delete(root);
+        }
       },
     );
     pools.set(key, pool);
@@ -123,10 +127,13 @@ export function observeIntersection(
   const life = nodeLifetime(el, options?.signal);
   if (!life.active) return life.stop;
   const root = options?.root ?? null;
+  const realm = el.ownerDocument.defaultView ?? globalThis;
   const normalized = normalizeOptions(options);
-  const pools = poolsFor(root, el.ownerDocument.defaultView ?? globalThis);
+  const pools = poolsFor(root, realm);
   try {
-    life.add(pooled(el, cb, root, pools, poolKey(normalized), normalized));
+    life.add(
+      pooled(el, cb, root, realm, pools, poolKey(normalized), normalized),
+    );
   } catch (error) {
     failSetup(life, error);
   }

@@ -1,8 +1,7 @@
-import { untrack } from "../core/tracking.js";
-import { cssPropName } from "../jsx-props.js";
+import { throwCollected } from "../core/errors.js";
+import { cssPropName, isAriaAttr } from "../jsx-props.js";
 import {
   type CleanupEffectFn,
-  domBindingEffect,
   domEffect,
   type EffectFn,
   type EffectNode,
@@ -10,7 +9,9 @@ import {
   type Read,
   type State,
   type Stop,
+  untrack,
 } from "../loom.js";
+import { nodeDocument } from "./document-observer.js";
 import {
   type EachOptions,
   type ListOptions,
@@ -52,12 +53,6 @@ export type Child =
 declare const BINDING: unique symbol;
 export type DynamicChild = { readonly [BINDING]: "dynamic" };
 
-// A class or style binding's target name and value read, shared by the prop and bindClass/bindStyle
-// paths.
-interface PropBinding {
-  readonly name: string;
-  readonly read: Read<unknown>;
-}
 interface SlotDescriptor {
   readonly __loomDynamic: true;
   readonly mount: (anchor: Comment) => EffectNode;
@@ -220,13 +215,22 @@ export function h(
   const node = isSvg
     ? document.createElementNS(SVG_NS, tag)
     : document.createElement(tag);
+  return finishElement(node, props, children, !isSvg);
+}
+
+function finishElement<T extends Element>(
+  node: T,
+  props: ElementProps | null,
+  children: Child | undefined,
+  htmlElement: boolean,
+): T {
   // Children precede props so form properties such as <select value={...}> are applied only after
   // their options exist. Every prop is still installed synchronously before h() returns.
   if (children !== undefined) {
     if (typeof children === "string") node.textContent = children;
     else appendChild(node, children);
   }
-  if (props) applyProps(node, props, !isSvg);
+  if (props) applyProps(node, props, htmlElement);
   return node;
 }
 
@@ -240,11 +244,7 @@ export function replaceChildren(
   parent: Node & ParentNode,
   ...children: readonly Child[]
 ): void {
-  const owner =
-    parent.nodeType === Node.DOCUMENT_NODE
-      ? (parent as Document)
-      : parent.ownerDocument;
-  const next = (owner ?? document).createDocumentFragment();
+  const next = (nodeDocument(parent) ?? document).createDocumentFragment();
   const incoming = new Set<Node>();
   const originalChildren = new Map<Node, readonly Node[]>();
   const remember = (child: Child): void => {
@@ -284,8 +284,7 @@ export function replaceChildren(
     for (const [originalParent, children] of originalChildren) {
       let before: Node | null = null;
       for (let index = children.length - 1; index >= 0; index--) {
-        const child = children[index];
-        if (!child) continue;
+        const child = children[index] as Node;
         if (incoming.has(child)) {
           try {
             originalParent.insertBefore(child, before);
@@ -318,11 +317,11 @@ export function replaceChildren(
     } catch (error) {
       errors.push(error);
     }
-    if (errors.length === 1) throw failure;
-    throw new AggregateError(
+    throwCollected(
       errors,
       "Loom DOM child replacement and staging cleanup failed.",
     );
+    throw failure;
   };
 
   try {
@@ -350,13 +349,10 @@ export function replaceChildren(
     }
   }
 
-  if (errors.length === 1) throw errors[0];
-  if (errors.length > 1) {
-    throw new AggregateError(
-      errors,
-      "Multiple Loom DOM child-replacement operations failed.",
-    );
-  }
+  throwCollected(
+    errors,
+    "Multiple Loom DOM child-replacement operations failed.",
+  );
 }
 
 /**
@@ -378,13 +374,12 @@ export function svgElement(
   props: ElementProps | null = null,
   children?: Child,
 ): SVGElement {
-  const node = document.createElementNS(SVG_NS, tag);
-  if (children !== undefined) {
-    if (typeof children === "string") node.textContent = children;
-    else appendChild(node, children);
-  }
-  if (props) applyProps(node, props, false);
-  return node;
+  return finishElement(
+    document.createElementNS(SVG_NS, tag),
+    props,
+    children,
+    false,
+  );
 }
 
 // `options` lets a caller relabel the binding or, for tooling built on loom, mark it `internal` so
@@ -394,7 +389,7 @@ export function text(read: Read<unknown>, options?: EffectOptions): Text {
   let previous = "";
   ownResource(
     node,
-    (options === undefined ? domBindingEffect : domEffect)(
+    domEffect(
       () => {
         const next = stringValue(read());
         if (next === previous) return;
@@ -414,6 +409,20 @@ export interface BindingOptions extends EffectOptions {
   readonly signal?: AbortSignal;
 }
 
+function bindEffect(
+  node: Node,
+  fn: EffectFn,
+  label: string,
+  options?: BindingOptions,
+): Stop {
+  if (options?.signal?.aborted) return () => {};
+  return ownStoppableResource(
+    node,
+    domEffect(fn, label, node, options),
+    options?.signal,
+  );
+}
+
 /** Bind an attribute to a tracked read; nullish/false removes it. */
 export function bindAttr(
   el: Element,
@@ -421,7 +430,12 @@ export function bindAttr(
   read: Read<unknown>,
   options?: BindingOptions,
 ): Stop {
-  return applyAttrBinding(el, name, read, options);
+  return bindEffect(
+    el,
+    attrUpdater(el, name, read),
+    `dom.attr.${name}`,
+    options,
+  );
 }
 
 /** Bind one class token to the truthiness of a tracked read. */
@@ -431,7 +445,12 @@ export function bindClass(
   read: Read<unknown>,
   options?: BindingOptions,
 ): Stop {
-  return installClassBinding(el, { name, read }, options);
+  return bindEffect(
+    el,
+    classUpdater(el, name, read),
+    `dom.class.${name}`,
+    options,
+  );
 }
 
 /** Bind an inline style property to a tracked read. */
@@ -441,7 +460,13 @@ export function bindStyle(
   read: Read<unknown>,
   options?: BindingOptions,
 ): Stop {
-  return installStyleBinding(el, { name: cssPropName(name), read }, options);
+  const prop = cssPropName(name);
+  return bindEffect(
+    el,
+    styleUpdater(el, prop, read),
+    `dom.style.${prop}`,
+    options,
+  );
 }
 
 export function list<T>(
@@ -454,23 +479,26 @@ export function list<T>(
   const updates = options.update
     ? { update: options.update, items: new Map<LoomKey, T>() }
     : undefined;
-  const stop = bind(
+  const stop = ownStoppableResource(
     container,
-    () => {
-      const shouldReorder = options.reorder?.() !== false;
-      const items = read();
-      reconcileKeyed(
-        container,
-        null,
-        items,
-        nodes,
-        options.key,
-        options.render,
-        shouldReorder,
-        updates,
-      );
-    },
-    { label: "dom.list" },
+    domEffect(
+      () => {
+        const shouldReorder = options.reorder?.() !== false;
+        const items = read();
+        reconcileKeyed(
+          container,
+          null,
+          items,
+          nodes,
+          options.key,
+          options.render,
+          shouldReorder,
+          updates,
+        );
+      },
+      "dom.list",
+      container,
+    ),
   );
 
   const stopList = (): void => {
@@ -627,9 +655,11 @@ export function bind(
 ): Stop;
 export function bind(node: Node, fn: EffectFn, options?: BindingOptions): Stop;
 export function bind(node: Node, fn: EffectFn, options?: BindingOptions): Stop {
-  if (options?.signal?.aborted) return () => {};
-  const handle = domEffect(fn, "dom.bind", node, options);
-  return ownStoppableResource(node, handle, options?.signal);
+  return bindEffect(node, fn, "dom.bind", options);
+}
+
+function ownEffect(node: Node, fn: EffectFn, label: string): void {
+  ownResource(node, domEffect(fn, label, node));
 }
 
 function applyProps(
@@ -701,7 +731,15 @@ function applyProps(
     }
     if (isFormControlProperty(node, name)) {
       if (typeof value === "function") {
-        applyPropertyBinding(node, name, value as Read<unknown>);
+        ownEffect(
+          node,
+          valueUpdater(
+            value as Read<unknown>,
+            (next) => setFormControlProperty(node, name, next),
+            FORM_CONTROL_UNSET,
+          ),
+          `dom.prop.${name}`,
+        );
       } else {
         setFormControlProperty(node, name, value);
       }
@@ -709,7 +747,11 @@ function applyProps(
     }
     if (value == null || (value === false && !isAriaAttr(name))) continue;
     if (typeof value === "function") {
-      applyAttrBinding(node, name, value as Read<unknown>);
+      ownEffect(
+        node,
+        attrUpdater(node, name, value as Read<unknown>),
+        `dom.attr.${name}`,
+      );
       continue;
     }
     setAttr(node, name, value);
@@ -803,7 +845,16 @@ function applyClassProp(node: Element, value: ClassProp): void {
   if (!isPlainRecord(value)) return;
   for (const name in value) {
     if (!Object.hasOwn(value, name)) continue;
-    applyClassMapValue(node, name, value[name]);
+    const item = value[name];
+    if (typeof item === "function") {
+      ownEffect(
+        node,
+        classUpdater(node, name, item as Read<unknown>),
+        `dom.class.${name}`,
+      );
+    } else if (item) {
+      node.classList.add(name);
+    }
   }
 }
 
@@ -813,11 +864,6 @@ function appendClassName(node: Element, value: string): void {
 
   const current = node.getAttribute("class");
   node.setAttribute("class", current ? `${current} ${next}` : next);
-}
-
-function hasClassName(node: Element, name: string): boolean {
-  const current = node.getAttribute("class");
-  return current ? current.split(/\s+/).includes(name) : false;
 }
 
 function applyStyleProp(node: Element, value: StyleProp): void {
@@ -837,58 +883,39 @@ function applyStyleProp(node: Element, value: StyleProp): void {
     const styleValue = value[name];
     const property = cssPropName(name);
     if (typeof styleValue === "function") {
-      installStyleBinding(node, {
-        name: property,
-        read: styleValue as Read<unknown>,
-      });
+      ownEffect(
+        node,
+        styleUpdater(node, property, styleValue as Read<unknown>),
+        `dom.style.${property}`,
+      );
     } else if (styleValue != null) {
       styleDecl.setProperty(property, String(styleValue));
     }
   }
 }
 
-function applyClassMapValue(node: Element, name: string, value: unknown): void {
-  if (typeof value === "function") {
-    installClassBinding(node, {
-      name,
-      read: value as Read<unknown>,
-    });
-  } else if (value) {
-    node.classList.add(name);
-  }
-}
-
-function installClassBinding(
-  node: Element,
-  binding: PropBinding,
-  options?: BindingOptions,
-): Stop {
-  let previous = hasClassName(node, binding.name);
-  return bind(
-    node,
-    () => {
-      const next = Boolean(binding.read());
-      if (next === previous) return;
-      node.classList.toggle(binding.name, next);
-      previous = next;
-    },
-    { label: `dom.class.${binding.name}`, ...options },
-  );
-}
-
-function applyAttrBinding(
+function classUpdater(
   node: Element,
   name: string,
   read: Read<unknown>,
-  options?: BindingOptions,
-): Stop {
-  return bindReactiveValue(
-    node,
-    `dom.attr.${name}`,
+): EffectFn {
+  let previous = node.classList.contains(name);
+  return () => {
+    const next = Boolean(read());
+    if (next === previous) return;
+    node.classList.toggle(name, next);
+    previous = next;
+  };
+}
+
+function attrUpdater(
+  node: Element,
+  name: string,
+  read: Read<unknown>,
+): EffectFn {
+  return valueUpdater(
     () => attrValue(name, read()),
     (next) => setAttrValue(node, name, next),
-    undefined,
-    options,
   );
 }
 
@@ -954,60 +981,35 @@ function setFormControlProperty(
   }
 }
 
-function applyPropertyBinding(
+function styleUpdater(
   node: Element,
-  name: FormControlProperty,
+  name: string,
   read: Read<unknown>,
-): void {
-  bindReactiveValue(
-    node,
-    `dom.prop.${name}`,
-    () => read(),
-    (next) => setFormControlProperty(node, name, next),
-    FORM_CONTROL_UNSET,
-  );
-}
-
-function installStyleBinding(
-  node: Element,
-  binding: PropBinding,
-  options?: BindingOptions,
-): Stop {
+): EffectFn {
   const styleDecl = (node as StyledElement).style;
-  return bindReactiveValue(
-    node,
-    `dom.style.${binding.name}`,
-    () => attrValue(binding.name, binding.read()),
+  return valueUpdater(
+    () => attrValue(name, read()),
     (next) => {
-      if (next === null) styleDecl.removeProperty(binding.name);
-      else styleDecl.setProperty(binding.name, next);
+      if (next === null) styleDecl.removeProperty(name);
+      else styleDecl.setProperty(name, next);
     },
-    undefined,
-    options,
   );
 }
 
 // Shared dedup scaffold for the less common attr/property/style paths. Text and class keep
 // specialized bodies above so large mounts do not retain two extra wrapper closures per binding.
-function bindReactiveValue<T>(
-  node: Node,
-  label: string,
+function valueUpdater<T>(
   read: () => T,
   apply: (value: T) => void,
   initial?: T,
-  options?: BindingOptions,
-): Stop {
+): EffectFn {
   let previous = initial;
-  return bind(
-    node,
-    () => {
-      const next = read();
-      if (next === previous) return;
-      apply(next);
-      previous = next;
-    },
-    { label, ...options },
-  );
+  return () => {
+    const next = read();
+    if (next === previous) return;
+    apply(next);
+    previous = next;
+  };
 }
 
 function setAttr(node: Element, name: string, value: unknown): void {
@@ -1024,10 +1026,6 @@ function attrValue(name: string, value: unknown): string | null {
   if (value == null || value === false) return null;
   if (value === true) return "";
   return String(value);
-}
-
-function isAriaAttr(name: string): boolean {
-  return name.startsWith("aria-");
 }
 
 function stringValue(value: unknown): string {

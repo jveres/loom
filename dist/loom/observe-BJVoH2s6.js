@@ -1,4 +1,4 @@
-import { b as e, f as t, h as n, m as r, p as i, t as a } from "./loom-BsucpYd_.js";
+import { d as e, f as t, m as n, p as r, t as i, y as a } from "./loom-WRYGQLBj.js";
 //#region src/core/channels.ts
 var o = /* @__PURE__ */ new Map();
 function s(e, t, n) {
@@ -33,18 +33,18 @@ var l = c("loom:read", 1024, [
 });
 function x(e, t, r) {
 	if (!v) return;
-	let i = n(a(), r), o = ++g, s = {
+	let a = n(i(), r), o = ++g, s = {
 		id: o,
 		disposed: !1,
-		internal: i?.internal === !0,
+		internal: a?.internal === !0,
 		kind: t,
-		label: i?.label ?? `${t} #${o}`,
+		label: a?.label ?? `${t} #${o}`,
 		runs: 0,
-		target: i && "target" in i && i.target ? new WeakRef(i.target) : void 0
+		target: a && "target" in a && a.target ? new WeakRef(a.target) : void 0
 	};
 	return e.meta = s, y.set(o, new WeakRef(e)), b?.register(e, o), s;
 }
-t({
+e({
 	register: x,
 	unregister(e) {
 		y.delete(e);
@@ -61,7 +61,7 @@ var S = /* @__PURE__ */ new Set();
 function C(e, t) {
 	if (!v) return;
 	let n = e.meta, r = t.meta;
-	if (!(!n || !r || n.internal || r.internal)) {
+	if (n && r && !n.internal && !r.internal) {
 		for (let i = e.subs; i !== void 0; i = i.nextSub) if (i.sub === t) {
 			let e = `${n.id}:${r.id}`;
 			if (S.has(e)) return;
@@ -92,7 +92,7 @@ function T() {
 			continue;
 		}
 		let l = c.meta;
-		!l || l.internal || (l.kind === "computed" ? (t++, c.subs === void 0 && s++) : l.kind === "effect" ? (n++, l.target !== void 0 && i++) : "connect" in c ? a++ : (e++, c.subs === void 0 && s++));
+		l && !l.internal && (l.kind === "computed" ? (t++, c.subs === void 0 && s++) : l.kind === "effect" ? (n++, l.target !== void 0 && i++) : "connect" in c ? a++ : (e++, c.subs === void 0 && s++));
 	}
 	return {
 		states: e,
@@ -176,7 +176,7 @@ function P(e, t, n, r, i, a) {
 	e.seq++;
 }
 var F = typeof performance > "u" ? Date.now : () => performance.now();
-i({
+t({
 	create(e) {
 		m.meters !== 0 && e?.internal !== !0 && m.seq++;
 	},
@@ -228,43 +228,43 @@ function z(e, t) {
 	for (let n = 0; n < e.length; n++) if (e[n] !== t[n]) return !1;
 	return !0;
 }
-function B(t, n = "count") {
-	let r = n === "samples", i = [];
-	for (let e of t) {
-		let t = o.get(e.name);
-		t !== void 0 && i.push({
-			node: t,
-			cursor: t.seq
+function B(e, t = "count") {
+	let n = t === "samples", r = [];
+	for (let t of e) {
+		let e = o.get(t.name);
+		e !== void 0 && r.push({
+			node: e,
+			cursor: e.seq
 		});
 	}
-	let a = !1, s = () => {
-		if (!a) {
-			a = !0;
-			for (let e of i) e.node.meters++, r && (e.node.samples++, N(e.node)), e.cursor = e.node.seq;
+	let i = !1, s = () => {
+		if (!i) {
+			i = !0;
+			for (let e of r) e.node.meters++, n && (e.node.samples++, N(e.node)), e.cursor = e.node.seq;
 		}
 	}, c = () => {
-		if (a) {
-			a = !1;
-			for (let e of i) e.node.meters--, r && (e.node.samples--, e.node.samples === 0 && (e.node.cols = void 0, e.node.head = 0));
+		if (i) {
+			i = !1;
+			for (let e of r) e.node.meters--, n && (e.node.samples--, e.node.samples === 0 && (e.node.cols = void 0, e.node.head = 0));
 		}
 	};
 	return s(), {
 		read() {
 			let e = Object.create(null);
-			for (let t of i) {
-				let n = t.node, i = n.seq, a = i - t.cursor, o = 0, s = I;
-				if (r && n.cap !== 0 && a > 0) {
-					let e = a < n.cap ? a : n.cap;
+			for (let t of r) {
+				let r = t.node, i = r.seq, a = i - t.cursor, o = 0, s = I;
+				if (n && r.cap !== 0 && a > 0) {
+					let e = a < r.cap ? a : r.cap;
 					o = a - e;
-					let { fields: t, mask: r, head: i, cap: c } = n, l = n.cols ?? [], u = [];
-					for (let n = 0; n < e; n++) {
-						let a = i + c - e + n & r, o = Object.create(null);
+					let { fields: t, mask: n, head: i, cap: c } = r, l = r.cols ?? [], u = [];
+					for (let r = 0; r < e; r++) {
+						let a = i + c - e + r & n, o = Object.create(null);
 						for (let e = 0; e < t.length; e++) o[t[e]] = l[e]?.[a];
 						u.push(o);
 					}
 					s = u;
 				}
-				t.cursor = i, e[n.name] = {
+				t.cursor = i, e[r.name] = {
 					count: a,
 					dropped: o,
 					samples: s
@@ -272,7 +272,7 @@ function B(t, n = "count") {
 			}
 			return e;
 		},
-		stop: e({
+		stop: a({
 			pause: c,
 			resume: s,
 			stop: c

@@ -81,7 +81,9 @@ function gCoerce(input: string, prev: unknown): unknown {
   return input;
 }
 // Editable = a state signal (has a writable source) holding a primitive.
-function gEditable(n: InspectNode): boolean {
+function gEditable(
+  n: InspectNode,
+): n is InspectNode & { readonly source: State<unknown> } {
   if (n.kind !== "state" || !n.source) return false;
   const v = n.value;
   return (
@@ -366,7 +368,7 @@ function gCreateCell(
   if (item.child) row.classList.add("li-grow-child");
   row.onmouseenter = () => gPaint(gTargetsFor(n.id), true);
   row.onmouseleave = () => gPaint(gTargetsFor(n.id), false);
-  if (gEditable(n) && n.source) {
+  if (gEditable(n)) {
     val.classList.add("li-edit");
     const signal = n.source;
     val.onclick = () => gBeginEdit(n.id, signal, val, row);

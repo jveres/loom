@@ -10,8 +10,7 @@ export interface ObserveSizeOptions extends ResizeObserverOptions {
 type Pool = ObserverPool<ResizeObserverEntry>;
 const realms = new WeakMap<object, Map<ResizeObserverBoxOptions, Pool>>();
 
-/** @internal Connection-owned observation, independent of node disposal. */
-export function connectSize(
+function connectSize(
   el: Element,
   callback: SizeCallback,
   options?: ResizeObserverOptions,

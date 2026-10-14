@@ -16,7 +16,7 @@ See it running:
 - [Realtime stress demo](https://jveres.github.io/loom/): a card board under
   adjustable event load, with the Loom inspector.
 
-The current release is `0.8.1` ([release notes](docs/release-0.8.1.md)). Version
+The current release is `0.9.0` ([release notes](docs/release-0.9.0.md)). Version
 `0.6.0` introduced the breaking API consolidation
 ([release notes](docs/release-0.6.0.md)). If you are upgrading from `0.5.0` or earlier, follow the
 [migration guide](docs/migration.md) to update imports and lifetimes.
@@ -219,7 +219,7 @@ Loom is distributed through GitHub with committed ESM bundles and declarations.
 Install the current release from its GitHub tag:
 
 ```sh
-pnpm add github:jveres/loom#v0.8.1
+pnpm add github:jveres/loom#v0.9.0
 ```
 
 Development uses TypeScript 7. The shared source-entry map drives local aliases;

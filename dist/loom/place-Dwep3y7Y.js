@@ -6,33 +6,37 @@ function e(e, t, n) {
 function t(t, i, a) {
 	let o = i.length;
 	if (o === 0) return;
-	let s, c = !0;
-	for (let e of i) if (e.parentNode === t) {
-		if (s !== void 0 && s.nextSibling !== e) {
-			c = !1;
-			break;
+	let s, c = !0, l = !1;
+	for (let e = 0; e < o; e++) {
+		let n = i[e];
+		if (n.parentNode !== t) l = !0;
+		else {
+			if (s !== void 0 && s.nextSibling !== n) {
+				c = !1;
+				break;
+			}
+			s = n;
 		}
-		s = e;
 	}
 	if (c) {
-		n(t, i, a);
+		l && n(t, i, a);
 		return;
 	}
-	let l = /* @__PURE__ */ new Map();
-	for (let e = 0; e < o; e++) l.set(i[e], e);
-	let u = new Int32Array(o), d = 0, f = !0;
+	let u = /* @__PURE__ */ new Map();
+	for (let e = 0; e < o; e++) u.set(i[e], e);
+	let d = new Int32Array(o), f = 0, p = !0;
 	for (let e = t.firstChild; e !== null; e = e.nextSibling) {
-		let t = l.get(e);
-		t !== void 0 && (d > 0 && t < u[d - 1] && (f = !1), u[d++] = t);
+		let t = u.get(e);
+		t !== void 0 && (f > 0 && t < d[f - 1] && (p = !1), d[f++] = t);
 	}
-	if (f) {
-		n(t, i, a);
+	if (p) {
+		f < o && n(t, i, a);
 		return;
 	}
-	let p = r(u, d, o), m = a;
+	let m = r(d, f, o), h = a;
 	for (let n = o - 1; n >= 0; n--) {
 		let r = i[n];
-		p[n] === 0 && e(t, r, m), m = r;
+		m[n] === 0 && e(t, r, h), h = r;
 	}
 }
 function n(t, n, r) {

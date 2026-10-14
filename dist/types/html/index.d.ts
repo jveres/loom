@@ -1,3 +1,4 @@
+import { type SerializeAttributesOptions, serializeAttributes } from "./attributes.js";
 declare const htmlTypeBrand: unique symbol;
 export interface Html {
     /** Nominal brand: trusted HTML values can only be constructed by this module. */
@@ -33,5 +34,5 @@ export declare function withRootAttributes(value: Html, attrs: Record<string, st
     readonly tag?: string;
     readonly merge?: Record<string, string>;
 }): Html;
-export { type SerializeAttributesOptions, serializeAttributes, } from "./attributes.js";
 export { escapeAttribute, escapeText } from "./escape.js";
+export { type SerializeAttributesOptions, serializeAttributes };

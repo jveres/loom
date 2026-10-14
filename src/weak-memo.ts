@@ -1,4 +1,3 @@
-import { untrack } from "./core/tracking.js";
 // weakMemo(compute, version?) — a per-OBJECT memo: one value per key
 // object, held weakly (a dropped key drops its entry), recomputed
 // when `version` (any Read — a revision counter, a document version)
@@ -7,6 +6,7 @@ import { untrack } from "./core/tracking.js";
 // document changes". Both computation and version reads are UNTRACKED — a
 // lookup, never a subscription — so the memo is invalidated lazily and
 // costs no effect.
+import { untrack } from "./core/tracking.js";
 import type { Read } from "./loom.js";
 
 export function weakMemo<K extends object, V>(

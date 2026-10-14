@@ -40,30 +40,23 @@ export function startPointerSession(
     if (active && event.pointerId === pointerId)
       untrack(() => options.move(event));
   };
-  const onUp: EventListener = (rawEvent) => {
+  const onEnd: EventListener = (rawEvent) => {
     const event = rawEvent as PointerEvent;
-    if (event.pointerId === pointerId) finish("pointerup", event);
-  };
-  const onCancel: EventListener = (rawEvent) => {
-    const event = rawEvent as PointerEvent;
-    if (event.pointerId === pointerId) finish("pointercancel", event);
-  };
-  const onLostCapture: EventListener = (rawEvent) => {
-    const event = rawEvent as PointerEvent;
-    if (event.pointerId === pointerId) finish("lostpointercapture", event);
+    if (event.pointerId === pointerId)
+      finish(event.type as PointerSessionEndReason, event);
   };
 
   const attach = (): void => {
     route.addEventListener("pointermove", onMove);
-    route.addEventListener("pointerup", onUp);
-    route.addEventListener("pointercancel", onCancel);
-    route.addEventListener("lostpointercapture", onLostCapture);
+    route.addEventListener("pointerup", onEnd);
+    route.addEventListener("pointercancel", onEnd);
+    route.addEventListener("lostpointercapture", onEnd);
   };
   const detach = (): void => {
     route.removeEventListener("pointermove", onMove);
-    route.removeEventListener("pointerup", onUp);
-    route.removeEventListener("pointercancel", onCancel);
-    route.removeEventListener("lostpointercapture", onLostCapture);
+    route.removeEventListener("pointerup", onEnd);
+    route.removeEventListener("pointercancel", onEnd);
+    route.removeEventListener("lostpointercapture", onEnd);
   };
 
   function finish(reason: PointerSessionEndReason, event?: PointerEvent): void {

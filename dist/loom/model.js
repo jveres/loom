@@ -1,67 +1,67 @@
-import { n as e } from "./tracking-CClsWN0I.js";
-import { T as t, j as n, k as r, n as i, u as a } from "./loom-BsucpYd_.js";
+import { n as e } from "./tracking-CaYucQ42.js";
+import { A as t, D as n, O as r, l as i, n as a, w as o } from "./loom-WRYGQLBj.js";
 //#region src/keyed-states.ts
-function o(...n) {
-	let r = n[0] ?? {}, i = /* @__PURE__ */ new Map(), a = (t, n) => {
-		let r = i.get(t);
-		if (!r) {
-			let a = e(n);
+function s(...e) {
+	let t = e[0] ?? {}, r = /* @__PURE__ */ new Map(), i = (e, t) => {
+		let i = r.get(e);
+		if (!i) {
+			let a = n(t);
 			if (typeof a != "function") throw TypeError("Keyed state factory must return a state.");
-			r = a, i.set(t, r);
+			i = a, r.set(e, i);
 		}
-		return r;
+		return i;
 	};
 	return {
-		factory: a,
-		value: (e, n) => a(e, () => t(n, {
-			...r,
-			...r.label ? { label: `${r.label}.${e}` } : {}
+		factory: i,
+		value: (e, n) => i(e, () => o(n, {
+			...t,
+			...t.label ? { label: `${t.label}.${e}` } : {}
 		})),
-		prune(t) {
-			let n = typeof t == "string" ? (e) => e.includes(t) : t, r = 0;
-			for (let t of i.keys()) e(() => n(t)) && (i.delete(t), r++);
-			return r;
+		prune(e) {
+			let t = typeof e == "string" ? (t) => t.includes(e) : e, i = 0;
+			for (let e of r.keys()) n(() => t(e)) && (r.delete(e), i++);
+			return i;
 		},
-		has: (e) => i.has(e)
+		has: (e) => r.has(e)
 	};
 }
 //#endregion
 //#region src/lens.ts
-function s(t, r) {
-	return n(() => t()[r], (n) => {
-		let i = e(() => t());
-		if (Object.is(i[r], n)) return;
+function c(e, r) {
+	return t(() => e()[r], (t) => {
+		let i = n(() => e());
+		if (Object.is(i[r], t)) return;
 		let a = Array.isArray(i) ? i.slice() : { ...i };
-		a[r] = n, t(a);
+		a[r] = t, e(a);
 	});
 }
 //#endregion
 //#region src/revisions.ts
-function c(n = {}) {
-	let o = n.separator ?? ".";
-	if (o.length === 0) throw RangeError("Revision separator must not be empty.");
-	let s = /* @__PURE__ */ new Map(), c = (e) => {
-		let r = s.get(e);
-		return r || (r = t(0, {
-			...n.label ? { label: `${n.label}.${e || "root"}` } : {},
-			...n.internal ? { internal: !0 } : {}
-		}), s.set(e, r)), r;
-	}, l = (e, t) => {
-		let n = e;
+function l(e = {}) {
+	let t = e.separator ?? ".";
+	if (t.length === 0) throw RangeError("Revision separator must not be empty.");
+	let s = /* @__PURE__ */ new Map(), c = (t) => {
+		let n = s.get(t);
+		return n || (n = o(0, {
+			...e.label ? { label: `${e.label}.${t || "root"}` } : {},
+			...e.internal ? { internal: !0 } : {}
+		}), s.set(t, n)), n;
+	}, l = (e, n) => {
+		let r = e;
 		for (;;) {
-			if (t.add(n), n === "") return;
-			let e = n.lastIndexOf(o);
-			n = e === -1 ? "" : n.slice(0, e);
+			if (n.add(r), r === "") return;
+			let e = r.lastIndexOf(t);
+			r = e === -1 ? "" : r.slice(0, e);
 		}
 	};
 	return {
 		get size() {
 			return s.size;
 		},
-		prune(t) {
-			return e(() => {
-				let e = typeof t == "string" ? (e) => e.includes(t) : t ?? (() => !0), n = 0;
-				for (let [t, r] of s) e(t) && !a(r) && (s.delete(t), n++);
+		prune(e) {
+			return n(() => {
+				let t = typeof e == "string" ? (t) => t.includes(e) : e ?? (() => !0), n = 0;
+				for (let [e, r] of s) t(e) && !i(r) && (s.delete(e), n++);
 				return n;
 			});
 		},
@@ -69,7 +69,7 @@ function c(n = {}) {
 		invalidate(...e) {
 			let t = /* @__PURE__ */ new Set();
 			for (let n of e) l(n, t);
-			i(() => {
+			a(() => {
 				for (let e of t) {
 					let t = s.get(e);
 					t && r(t, (e) => e + 1);
@@ -80,7 +80,7 @@ function c(n = {}) {
 }
 //#endregion
 //#region src/weak-memo.ts
-function l(t, n) {
+function u(t, n) {
 	let r = /* @__PURE__ */ new WeakMap(), i, a = !1;
 	return (o) => {
 		if (n) {
@@ -93,4 +93,4 @@ function l(t, n) {
 	};
 }
 //#endregion
-export { o as keyedStates, s as lens, c as revisions, l as weakMemo };
+export { s as keyedStates, c as lens, l as revisions, u as weakMemo };

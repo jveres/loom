@@ -13,67 +13,73 @@ import type { Link, ReactiveNode } from "./graph.js";
 const now = (): number => performance.now();
 const Mutable = 1;
 const Watching = 2;
+const Deferred = 256;
 
+const INF = Number.POSITIVE_INFINITY;
 const deferredQueue: Array<EffectNode | undefined> = [];
-type DeadlineEntry = readonly [node: EffectNode, deadline: number];
-// A lazy min-heap of enqueue-time deadlines. Queue slots remain FIFO for execution; the heap only
-// answers which leftover must run soonest after a budget-limited drain. Processed/stopped entries
-// are discarded lazily, avoiding a full tail scan after every partial drain.
-const deferredDeadlines: DeadlineEntry[] = [];
+const deadlineHeap: Array<[EffectNode, number]> = [];
+let maxQueuedDeadline = 0;
 let deferHead = 0;
 let drainScheduled = false;
-let drainDeadline = Number.POSITIVE_INFINITY; // absolute time (now()+maxStale) the pending drain fires by
+let drainDeadline = INF; // absolute time (now()+maxStale) the pending drain fires by
 let drainCancel: (() => void) | undefined;
 let drainActive = false;
 let scheduling = false;
 let continuationTimer: ReturnType<typeof setTimeout> | undefined;
 
-function pushDeadline(entry: DeadlineEntry): void {
-  let index = deferredDeadlines.length;
-  deferredDeadlines.push(entry);
+function pushDeadline(node: EffectNode, deadline: number): void {
+  const entry: [EffectNode, number] = [node, deadline];
+  let index = deadlineHeap.length;
+  deadlineHeap.push(entry);
   while (index > 0) {
     const parent = (index - 1) >> 1;
-    const parentEntry = deferredDeadlines[parent] as DeadlineEntry;
-    if (parentEntry[1] <= entry[1]) break;
-    deferredDeadlines[index] = parentEntry;
+    const parentEntry = deadlineHeap[parent] as [EffectNode, number];
+    if (parentEntry[1] <= deadline) break;
+    deadlineHeap[index] = parentEntry;
     index = parent;
   }
-  deferredDeadlines[index] = entry;
+  deadlineHeap[index] = entry;
 }
 
 function popDeadline(): void {
-  const tail = deferredDeadlines.pop() as DeadlineEntry;
-  if (deferredDeadlines.length === 0) return;
+  const tail = deadlineHeap.pop() as [EffectNode, number];
+  const length = deadlineHeap.length;
+  if (length === 0) return;
   let index = 0;
   while (true) {
     const left = index * 2 + 1;
-    if (left >= deferredDeadlines.length) break;
+    if (left >= length) break;
     const right = left + 1;
-    let child = left;
-    if (
-      right < deferredDeadlines.length &&
-      (deferredDeadlines[right] as DeadlineEntry)[1] <
-        (deferredDeadlines[left] as DeadlineEntry)[1]
-    ) {
-      child = right;
-    }
-    const childEntry = deferredDeadlines[child] as DeadlineEntry;
+    const child =
+      right < length &&
+      (deadlineHeap[right] as [EffectNode, number])[1] <
+        (deadlineHeap[left] as [EffectNode, number])[1]
+        ? right
+        : left;
+    const childEntry = deadlineHeap[child] as [EffectNode, number];
     if (tail[1] <= childEntry[1]) break;
-    deferredDeadlines[index] = childEntry;
+    deadlineHeap[index] = childEntry;
     index = child;
   }
-  deferredDeadlines[index] = tail;
+  deadlineHeap[index] = tail;
 }
 
 function soonestPendingDeadline(): number {
-  while (deferredDeadlines.length !== 0) {
-    const entry = deferredDeadlines[0] as DeadlineEntry;
-    if (entry[0].deferredQueued && entry[0].deferDeadline === entry[1]) {
-      return entry[1];
+  if (deadlineHeap.length === 0) {
+    while (deferHead < deferredQueue.length) {
+      const node = deferredQueue[deferHead];
+      if (node?.deferredQueued) return node.deferDeadline as number;
+      deferredQueue[deferHead++] = undefined;
     }
-    popDeadline();
+  } else {
+    while (deadlineHeap.length !== 0) {
+      const [node, deadline] = deadlineHeap[0] as [EffectNode, number];
+      if (node.deferredQueued && node.deferDeadline === deadline)
+        return deadline;
+      popDeadline();
+    }
   }
-  return Number.POSITIVE_INFINITY;
+  return INF;
 }
 
 // An inline scheduler is invoked from graph notify(), before propagate() has necessarily visited
@@ -134,7 +140,7 @@ function scheduleContinuation(): void {
   continuationTimer = setTimeout(() => {
     continuationTimer = undefined;
     const soonest = soonestPendingDeadline();
-    if (soonest !== Number.POSITIVE_INFINITY) {
+    if (soonest < INF) {
       scheduleDrain(soonest, Math.max(0, soonest - now()));
     } else {
       clearDeferredQueue();
@@ -188,11 +194,11 @@ function defaultDeferScheduler(
 // FIFO, so it is also where this walk can stop. flushScope may re-offer the first node itself
 // (pause→resume mid-flight); that duplicate remains clock-free.
 function deferEffect(node: EffectNode): void {
-  clearWatching(node);
+  node.flags &= ~Watching;
   if (node.deferredQueued) {
     if (!drainScheduled && continuationTimer !== undefined) {
       const deadline = soonestPendingDeadline();
-      if (deadline !== Number.POSITIVE_INFINITY)
+      if (deadline < INF)
         scheduleDrain(deadline, Math.max(0, deadline - now()));
     }
     return;
@@ -208,13 +214,25 @@ function deferEffect(node: EffectNode): void {
     const maxStale = node.maxStale as number;
     const deadline = enqueuedAt + maxStale;
     node.deferDeadline = deadline;
-    pushDeadline([node, deadline]);
+    if (deadlineHeap.length !== 0) {
+      pushDeadline(node, deadline);
+    } else if (deadline >= maxQueuedDeadline) {
+      maxQueuedDeadline = deadline;
+    } else {
+      for (let i = deferHead; i < deferredQueue.length; i++) {
+        const prev = deferredQueue[i];
+        if (prev) pushDeadline(prev, prev.deferDeadline as number);
+      }
+    }
     if (maxStale < timeout) timeout = maxStale;
 
     const parent = node.subs?.sub as EffectNode | undefined;
-    if (parent === undefined || !parent.deferred || !(parent.flags & Watching))
+    if (
+      parent === undefined ||
+      (parent.flags & (Deferred | Watching)) !== (Deferred | Watching) ||
+      parent.deferredQueued
+    )
       break;
-    if (parent.deferredQueued) break;
     node = parent;
   }
 
@@ -225,6 +243,7 @@ function deferEffect(node: EffectNode): void {
     deferredQueue[left++] = deferredQueue[right];
     deferredQueue[right--] = first;
   }
+
   scheduleDrain(enqueuedAt + timeout, timeout);
 }
 
@@ -248,7 +267,7 @@ function scheduleDrain(deadline: number, timeout: number): void {
     const cancel = scheduler((hasBudget) => {
       if (scheduling && propagationStillActive()) {
         drainScheduled = false;
-        drainDeadline = Number.POSITIVE_INFINITY;
+        drainDeadline = INF;
         drainCancel = undefined;
         scheduleContinuation();
         return;
@@ -272,7 +291,7 @@ function scheduleDrain(deadline: number, timeout: number): void {
 function drainDeferred(hasBudget: () => boolean): void {
   if (drainActive) return;
   drainScheduled = false;
-  drainDeadline = Number.POSITIVE_INFINITY;
+  drainDeadline = INF;
   drainCancel = undefined;
   drainActive = true;
   try {
@@ -305,7 +324,7 @@ function drainDeferred(hasBudget: () => boolean): void {
     // soonest one, not a fresh maxStale. The deadline heap makes repeated one-item drains O(n log n)
     // instead of rescanning an n, n-1, n-2... tail (O(n²)).
     const soonest = soonestPendingDeadline();
-    if (soonest !== Number.POSITIVE_INFINITY) {
+    if (soonest < INF) {
       if (scheduling) scheduleContinuation();
       else scheduleDrain(soonest, Math.max(0, soonest - now()));
       return;
@@ -317,11 +336,12 @@ function drainDeferred(hasBudget: () => boolean): void {
 
 function clearDeferredQueue(): void {
   deferredQueue.length = 0;
-  deferredDeadlines.length = 0;
+  deadlineHeap.length = 0;
+  maxQueuedDeadline = 0;
   deferHead = 0;
   cancelContinuation();
 }
 
 // Install: hand the core our enqueue, capture its internals as plain locals (no per-call
 // live-binding getters — see the install seam's comment in loom.ts).
-const { runEffect, clearWatching } = installDeferredLane(deferEffect);
+const runEffect = installDeferredLane(deferEffect);

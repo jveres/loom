@@ -101,6 +101,31 @@ retain zero removed nodes, and all seven browser behavior checks pass.
 Run the scope case with `pnpm exec vitest bench --run bench/hotpaths.bench.ts
 -t 'deep scope pause/resume'` in each checkout.
 
+## Runtime & hot-path optimization pass
+
+Subsequent hot-path refinements (preserving `src/core/graph.ts` verbatim) encode
+node kinds (`Computed`, `Source`) and effect lifecycle (`Paused`, `Deferred`)
+in `node.flags`, initialize `EffectNode` with a fixed monomorphic shape, gate
+`.meta` lookups behind `inspectHooks` / `runtimeHooks`, guard `bumpPausedCount`
+to walk scope effects only on `0 ↔ 1` transitions, fast-path monotonic
+`maxStale` deadlines in `loom/defer`, fold `reconcileKeyed` key validation and
+existing-node lookup into one pass, short-circuit `positionOrdered` when no
+desired nodes are missing (`hasMissing`) or all present nodes are in order
+(`m < n`), and replace per-pass `Set` allocation in `virtualList` with a
+monotonic `pass` counter on `MountedRow`.
+
+Representative `vitest bench` (`bench/core-algorithm.bench.ts` and
+`bench/hotpaths.bench.ts`) and `scripts/size.mjs` measurements:
+
+| Benchmark / Bundle | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| `create-stop/10000-effects` | 0.9038 ms | 0.6105 ms | -32.5% |
+| `scope/10000-effects` | 0.6929 ms | 0.5200 ms | -25.0% |
+| `depth 50: dirty-while-paused + resume` | 655 ops/s | 1,481 ops/s | +126.1% |
+| `10k deferred effects: budgeted continuation chunks` | 512 ops/s | 954 ops/s | +86.3% |
+| `minimal (state+computed+effect)` | 3,080 B gzip | 3,031 B gzip | -49 B |
+| `minimal dom (h+text)` | 5,994 B gzip | 5,826 B gzip | -168 B |
+
 ## Reproduce
 
 Start Vite from the repository:

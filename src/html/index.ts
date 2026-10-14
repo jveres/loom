@@ -1,4 +1,7 @@
-import { serializeAttributes as serializeRootAttrs } from "./attributes.js";
+import {
+  type SerializeAttributesOptions,
+  serializeAttributes,
+} from "./attributes.js";
 import { escapeText, unescapeAttribute } from "./escape.js";
 
 const htmlMarker = Symbol.for("loom.html");
@@ -138,7 +141,7 @@ export function withRootAttributes(
       if (existing) {
         const joined = `${unescapeAttribute(existing[1] ?? "")}${joiner}${raw === true ? "" : String(raw)}`;
         openTag = openTag.replace(existing[0], () =>
-          serializeRootAttrs({ [name]: joined }),
+          serializeAttributes({ [name]: joined }),
         );
         continue;
       }
@@ -146,12 +149,9 @@ export function withRootAttributes(
     out[name] = raw;
   }
   return unsafeHtml(
-    `${openTag}${serializeRootAttrs(out, options.tag ? { tag: options.tag } : {})}${rest}`,
+    `${openTag}${serializeAttributes(out, options.tag ? { tag: options.tag } : {})}${rest}`,
   );
 }
 
-export {
-  type SerializeAttributesOptions,
-  serializeAttributes,
-} from "./attributes.js";
 export { escapeAttribute, escapeText } from "./escape.js";
+export { type SerializeAttributesOptions, serializeAttributes };

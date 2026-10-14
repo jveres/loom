@@ -1,5 +1,6 @@
-export type OwnershipStop = () => void;
-export type OwnedResource = object;
+import { type SyncResult } from "../core/errors.js";
+type OwnershipStop = () => void;
+type OwnedResource = object;
 interface OwnedResourceDriver {
     readonly onStop: (resource: OwnedResource, release: OwnershipStop) => void;
     readonly stop: (resource: OwnedResource) => void;
@@ -25,7 +26,6 @@ export interface ResourceGroup<T> {
     readonly value: T;
     readonly dispose: OwnershipStop;
 }
-type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
 /**
  * Capture node-owned resources and lifecycle stops created by `fn` in a flat
  * ownership arena. Node ownership remains intact for granular removal;

@@ -239,7 +239,7 @@ function startDragSession(
   target.style.bottom = "auto";
   const prevUserSelect = document.body.style.userSelect;
   document.body.style.userSelect = "none";
-  let stop: Stop = () => {};
+  let stop: Stop | undefined;
   stop = startPointerSession(handle, e, {
     move: (event) => onMove(event, rect),
     end: () => {
@@ -478,7 +478,6 @@ export function mountInspector(target?: Element): void {
   inspectorScope = scope(() => {
     statsPane = wireStats({
       activeTab: () => ui?.(),
-      isMinimized: () => panel?.classList.contains("li-min") ?? false,
     });
   }, PANEL_OPTS);
   if (startMin) {
@@ -596,6 +595,11 @@ export function mountInspector(target?: Element): void {
           });
       }
     }
+    // Trace is "active" only while its tab is shown AND the panel isn't minimized — drives both the
+    // live dot and (the point) detaching its meters so the core records zero detail when off-screen.
+    setTraceActive(
+      tab === "trace" && panel?.classList.contains("li-min") !== true,
+    );
     // Restore the incoming tab's scroll now its pane is laid out (its content height is back).
     // The content may have shrunk while we were away (e.g. the graph lost rows), so clamp the saved
     // offset to the current valid range rather than letting it sit out of bounds.
@@ -606,11 +610,6 @@ export function mountInspector(target?: Element): void {
       if (tab === "graph") showGraph();
       else if (tab === "trace") showTrace();
     }
-    // Trace is "active" only while its tab is shown AND the panel isn't minimized — drives both the
-    // live dot and (the point) detaching its meters so the core records zero detail when off-screen.
-    setTraceActive(
-      tab === "trace" && panel?.classList.contains("li-min") !== true,
-    );
     prevTab = tab ?? null;
   });
   scrollFades.push(
@@ -628,10 +627,9 @@ export function unmountInspector(): void {
   stopStats();
   for (const dispose of scrollFades) dispose();
   scrollFades.length = 0;
-  // inspectorScope owns the meters, heartbeat, the deferred render effect and every binding created
-  // inside wireStats; stopping it is the authoritative teardown for those, so a resource added to
-  // the scope but not tracked above can't leak. (Bindings made after the scope
-  // returned — e.g. the tab switcher — are node-owned and die with remove(panel) below.)
+  // inspectorScope owns the meters, heartbeat, and deferred render effect created in wireStats;
+  // stopping it tears down the deferred render effect and any scope resources not stopped above.
+  // (DOM bindings in the Info pane and panel are node-owned and die with remove(panel) below.)
   inspectorScope?.stop();
   inspectorScope = null;
   storageAbort?.abort();

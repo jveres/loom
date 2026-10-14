@@ -31,8 +31,13 @@ export function positionOrdered(
   // LIS storage. Check only present members; new nodes can then be inserted around them.
   let previous: Node | undefined;
   let contiguous = true;
-  for (const node of ordered) {
-    if (node.parentNode !== parent) continue;
+  let hasMissing = false;
+  for (let i = 0; i < n; i++) {
+    const node = ordered[i] as Node;
+    if (node.parentNode !== parent) {
+      hasMissing = true;
+      continue;
+    }
     if (previous !== undefined && previous.nextSibling !== node) {
       contiguous = false;
       break;
@@ -40,7 +45,7 @@ export function positionOrdered(
     previous = node;
   }
   if (contiguous) {
-    insertMissing(parent, ordered, end);
+    if (hasMissing) insertMissing(parent, ordered, end);
     return;
   }
   const desired = new Map<Node, number>();
@@ -65,7 +70,7 @@ export function positionOrdered(
   // sits in relative order, so nothing moves — just insert the nodes that aren't children yet,
   // skipping the whole LIS scaffold below.
   if (inOrder) {
-    insertMissing(parent, ordered, end);
+    if (m < n) insertMissing(parent, ordered, end);
     return;
   }
   const keep = keptIndexes(seq, m, n);

@@ -1,8 +1,13 @@
-import { throwCollected } from "../core/errors.js";
+import {
+  ignorePromiseRejection,
+  isPromiseLike,
+  type SyncResult,
+  throwCollected,
+} from "../core/errors.js";
 import { untrack } from "../core/tracking.js";
 
-export type OwnershipStop = () => void;
-export type OwnedResource = object;
+type OwnershipStop = () => void;
+type OwnedResource = object;
 
 interface OwnedResourceDriver {
   readonly onStop: (resource: OwnedResource, release: OwnershipStop) => void;
@@ -31,11 +36,12 @@ interface RegisteredStop {
 }
 
 const REGISTERED_STOP = Symbol("loom.registered-stop");
-type OwnedEntry = OwnershipStop | RegisteredStop | OwnedResource;
+type TrackedResource = RegisteredStop | OwnedResource;
+type OwnedEntry = OwnershipStop | TrackedResource;
 type OwnedEffects = OwnedEntry | OwnedEntry[];
 interface GroupEntry {
   readonly owner: Node;
-  readonly resource: OwnedEntry;
+  readonly resource: TrackedResource;
   readonly index: number;
 }
 
@@ -103,12 +109,16 @@ function runOwned(
   throwCollected(errors, "Multiple Loom DOM disposers failed.");
 }
 
-function addOwned(node: Node, entry: OwnedEntry): void {
+function attachOwned(node: Node, entry: OwnedEntry): void {
   const target = node as OwnedNode;
   const owned = target[OWNED];
   if (!owned) target[OWNED] = entry;
   else if (Array.isArray(owned)) owned.push(entry);
   else target[OWNED] = [owned, entry];
+}
+
+function addOwned(node: Node, entry: TrackedResource): void {
+  attachOwned(node, entry);
   const group = activeResourceGroup;
   if (group !== undefined) {
     const captured: ArenaEntry = {
@@ -130,8 +140,7 @@ function addOwned(node: Node, entry: OwnedEntry): void {
       }
     };
     if (isRegisteredStop(entry)) entry.release = release;
-    else if (typeof entry !== "function")
-      resourceDriver?.onStop(entry, release);
+    else resourceDriver?.onStop(entry, release);
   }
   const construction = activeConstruction;
   if (construction !== undefined) {
@@ -169,11 +178,7 @@ export function own(node: Node, stop: OwnershipStop): void {
     void onUnmount(node, stop);
     return;
   }
-  const target = node as OwnedNode;
-  const owned = target[OWNED];
-  if (!owned) target[OWNED] = stop;
-  else if (Array.isArray(owned)) owned.push(stop);
-  else target[OWNED] = [owned, stop];
+  attachOwned(node, stop);
 }
 
 /** Register a raw resource without allocating a public/manual stop handle. */
@@ -253,8 +258,6 @@ export interface ResourceGroup<T> {
   readonly dispose: OwnershipStop;
 }
 
-type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
-
 /**
  * Capture node-owned resources and lifecycle stops created by `fn` in a flat
  * ownership arena. Node ownership remains intact for granular removal;
@@ -281,7 +284,7 @@ export function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T> {
   try {
     value = fn() as T;
     if (isPromiseLike(value)) {
-      void Promise.resolve(value).catch(() => undefined);
+      ignorePromiseRejection(value);
       throw new TypeError("resourceGroup() callbacks must be synchronous.");
     }
   } catch (error) {
@@ -309,23 +312,14 @@ export function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T> {
   };
 }
 
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    (typeof value === "object" || typeof value === "function") &&
-    value !== null &&
-    "then" in value &&
-    typeof value.then === "function"
-  );
-}
-
 function compareGroupEntries(left: GroupEntry, right: GroupEntry): number {
   if (left.owner === right.owner) return left.index - right.index;
-  if (left.owner.contains(right.owner)) return 1;
-  if (right.owner.contains(left.owner)) return -1;
   const position = left.owner.compareDocumentPosition(right.owner);
   if ((position & Node.DOCUMENT_POSITION_DISCONNECTED) !== 0) {
     return left.index - right.index;
   }
+  if ((position & Node.DOCUMENT_POSITION_CONTAINED_BY) !== 0) return 1;
+  if ((position & Node.DOCUMENT_POSITION_CONTAINS) !== 0) return -1;
   return (position & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 ? -1 : 1;
 }
 
@@ -333,10 +327,9 @@ function stopResourceGroup(resources: GroupEntry[]): void {
   let errors: unknown[] | undefined;
   const driver = resourceDriver;
   const ordered: GroupEntry[] = [];
-  const stop = (resource: OwnedEntry): void => {
+  const stop = (resource: TrackedResource): void => {
     try {
-      if (typeof resource === "function") resource();
-      else if (isRegisteredStop(resource)) resource.dispose();
+      if (isRegisteredStop(resource)) resource.dispose();
       else if (driver !== undefined) driver.stop(resource);
       else throw new Error("No Loom DOM resource driver is installed.");
     } catch (error) {
@@ -348,8 +341,7 @@ function stopResourceGroup(resources: GroupEntry[]): void {
     const resource = entry.resource;
     if (
       isRegisteredStop(resource) ||
-      (typeof resource !== "function" &&
-        driver?.requiresOrderedStop(resource) === true)
+      driver?.requiresOrderedStop(resource) === true
     ) {
       ordered.push(entry);
     } else {
@@ -438,30 +430,17 @@ export function dispose(root: Node): void {
 
 /** Dispose a subtree and detach it even when one of its disposers fails. */
 export function remove(node: Node): void {
-  let disposalFailed = false;
-  let disposalError: unknown;
+  let errors: unknown[] | undefined;
   try {
     dispose(node);
   } catch (error) {
-    disposalFailed = true;
-    disposalError = error;
+    errors = [error];
   }
-
-  let removalFailed = false;
-  let removalError: unknown;
   try {
     node.parentNode?.removeChild(node);
   } catch (error) {
-    removalFailed = true;
-    removalError = error;
+    if (errors === undefined) throw error;
+    errors.push(error);
   }
-
-  if (disposalFailed && removalFailed) {
-    throw new AggregateError(
-      [disposalError, removalError],
-      "Loom DOM disposal and removal both failed.",
-    );
-  }
-  if (disposalFailed) throw disposalError;
-  if (removalFailed) throw removalError;
+  throwCollected(errors, "Loom DOM disposal and removal both failed.");
 }

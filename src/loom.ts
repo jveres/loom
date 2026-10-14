@@ -1,4 +1,9 @@
-import { throwCollected } from "./core/errors.js";
+import {
+  ignorePromiseRejection,
+  isPromiseLike,
+  type SyncResult,
+  throwCollected,
+} from "./core/errors.js";
 import {
   createReactiveSystem,
   type Link,
@@ -22,6 +27,10 @@ const Recursed = 8;
 const Dirty = 16;
 const Pending = 32;
 const HasChildEffect = 64;
+const Paused = 128;
+const Deferred = 256;
+const Computed = 512;
+const Source = 1024;
 
 export interface State<T> {
   (): T;
@@ -92,11 +101,6 @@ export interface NodeInfo {
 export type CleanupEffectFn = () => Stop;
 type InternalEffectFn = () => unknown;
 
-// `() => void` deliberately accepts value-returning callbacks in TypeScript, including async
-// functions. Keep that convenient effect API for ordinary expression bodies, but exclude promises
-// from direct effect()/scope() calls so their tracked/owned work cannot silently escape an await.
-type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
-
 type PropKey<T extends object> = Extract<keyof T, string>;
 
 export type Props<T extends object> = {
@@ -143,13 +147,9 @@ interface EffectNode extends NodeBase {
   releaseOwnership?: Stop | undefined;
   // The scope that owns this effect (for collective stop/pause/resume), if any, and this effect's
   // slot in scope.effects — so a manual stop can swap-remove in O(1) instead of leaking the dead node.
-  scope?: ScopeNode | undefined;
-  scopeIndex?: number | undefined;
-  // Combined direct + owning-scope pause depth. Keeping the effective value on the effect makes
-  // notify/run a single field check; scope pause/resume pays the rare traversal instead.
-  pausedCount?: number | undefined;
+  scope: ScopeNode | undefined;
+  scopeIndex: number;
   directPausedCount?: number | undefined;
-  deferred?: boolean | undefined; // route re-runs to the deferred lane instead of the synchronous flush
   deferredQueued?: boolean; // currently in deferredQueue (O(1) dedup, replaces an includes() scan)
   maxStale?: number; // deferred lane: guaranteed-refresh floor in ms
   // Deferred lane: absolute fire-by time (now()+maxStale) stamped at enqueue. A leftover from a
@@ -245,62 +245,55 @@ export function liveScopeCount(): number {
   return liveScopes;
 }
 
-// Inspection-enabled public accessors carry a hidden reverse handle to their node. Production
-// accessors avoid this extra property; trigger() discovers dependencies through a temporary watcher.
-const NODE = Symbol("loom.node");
-type NodeHandle = { [NODE]?: NodeBase | undefined };
-function tagNode(accessor: object, node: NodeBase): void {
-  // A plain store, not defineProperty — ~5x cheaper, and this runs on every create. The key is a
-  // private unexported symbol, so enumerability is invisible outside getOwnPropertySymbols.
-  (accessor as NodeHandle)[NODE] = node;
-}
-function nodeOf(accessor: object): NodeBase | undefined {
-  return (accessor as NodeHandle)[NODE];
-}
-
 const { link, unlink, propagate, checkDirty, shallowPropagate } =
   createReactiveSystem({
     update(node) {
-      if ("getter" in node)
+      if (node.flags & Computed)
         return updateComputed(node as ComputedNode<unknown>);
-      if ("currentValue" in node)
-        return updateState(node as StateNode<unknown>);
-      node.flags = Mutable;
-      return true;
+      return updateState(node as StateNode<unknown>);
     },
     notify(node) {
-      const effectNode = node as EffectNode;
       // Paused effects stay dirty and catch up on resume.
-      if (effectNode.pausedCount) return;
-      enqueueEffect(effectNode);
+      if (node.flags & Paused) return;
+      enqueueEffect(node as EffectNode);
     },
     unwatched(node) {
-      if ("getter" in node) {
+      const flags = node.flags;
+      if (flags & Computed) {
         if (node.depsTail !== undefined) {
-          node.flags = Mutable | Dirty;
+          node.flags = Computed | Mutable | Dirty;
           disposeDeps(node as ComputedNode<unknown>);
         }
-      } else if ("currentValue" in node) {
-        if ("connect" in node) disconnectSource(node as SourceNode<unknown>);
-      } else if ("fn" in node) {
+      } else if (flags & Source) {
+        disconnectSource(node as SourceNode<unknown>);
+      } else if (!(flags & Mutable)) {
         stopEffect.call(node as EffectNode);
-      } else {
-        disposeDeps(node as NodeBase);
       }
     },
   });
 
 export function state<T>(initial: T, options?: NodeOptions): State<T> {
+  return createState(initial, options);
+}
+
+function createState<T>(
+  initial: T,
+  options?: NodeOptions,
+  group?: number,
+  key?: string,
+): State<T> {
   const node = createStateNode(initial);
   const source = stateOper.bind(node) as State<T>;
   const meta = inspectHooks?.register(node, "state", options);
   // Only inspected states need the reverse accessor used by the editor. Keep ordinary state nodes
   // on the smaller hot shape.
-  if (meta !== undefined) node.source = source as State<unknown>;
-  // The production accessor carries no reverse node handle. Inspection needs
-  // one for props grouping/editor writes; ordinary trigger() pays its rare
-  // discovery cost instead of taxing every state creation.
-  if (meta !== undefined) tagNode(source, node);
+  if (meta !== undefined) {
+    node.source = source as State<unknown>;
+    if (group) {
+      meta.group = group;
+      meta.key = key as string;
+    }
+  }
   runtimeHooks?.create(meta);
   return source;
 }
@@ -337,7 +330,6 @@ export function source<T>(
   const node = createSourceNode(connect, initial);
   const read = sourceOper.bind(node) as Read<T>;
   const meta = inspectHooks?.register(node, "state", options);
-  if (meta !== undefined) tagNode(read, node);
   // When created inside a scope, pausing the scope disconnects the producer even though paused
   // subscribers stay linked; resuming reconnects it if anything is still observing.
   const erased = node as SourceNode<unknown>;
@@ -442,7 +434,6 @@ export function computed<T>(
   const node = createComputedNode(getter);
   const read = computedOper.bind(node) as Read<T>;
   const meta = inspectHooks?.register(node, "computed", options);
-  if (meta !== undefined) tagNode(read, node);
   runtimeHooks?.create(meta);
   return read;
 }
@@ -457,27 +448,19 @@ export function effect<Result>(
   options?: EffectOptions,
 ): Stop;
 export function effect(fn: InternalEffectFn, options?: EffectOptions): Stop {
-  const node = startEffect(fn, options);
-  const stop = stopEffect.bind(node);
-  if (node.meta !== undefined) tagNode(stop, node);
-  return stop;
-}
-
-function startEffect(
-  fn: InternalEffectFn,
-  options: EffectOptions | undefined,
-): EffectNode {
-  return startEffectNode(createEffectNode(fn), options);
+  return stopEffect.bind(startEffectNode(fn, options));
 }
 
 function startEffectNode(
-  node: EffectNode,
+  fn: InternalEffectFn,
   options: EffectOptions | undefined,
+  ownedByDom = false,
 ): EffectNode {
-  if (activeScope !== undefined) {
+  const node = createEffectNode(fn);
+  if (!ownedByDom && activeScope !== undefined) {
     node.scope = activeScope;
     node.scopeIndex = activeScope.effects.length;
-    node.pausedCount = activeScope.pausedCount;
+    if (activeScope.pausedCount > 0) node.flags |= Paused;
     activeScope.effects.push(node);
   }
   if (options?.defer === true) {
@@ -486,7 +469,7 @@ function startEffectNode(
         'effect({ defer: true }) requires the deferred lane — import "loom/defer" once at startup.',
       );
     }
-    node.deferred = true;
+    node.flags |= Deferred;
     node.deferredQueued = false;
     node.maxStale = options.maxStale ?? defaultMaxStale;
     node.deferDeadline = 0;
@@ -494,30 +477,28 @@ function startEffectNode(
   const meta = inspectHooks?.register(node, "effect", options);
   runtimeHooks?.create(meta);
   const previous = setActiveSub(node);
-  if (previous !== undefined) {
+  if (!ownedByDom && previous !== undefined) {
     link(node, previous, 0);
     previous.flags |= HasChildEffect;
   }
-  let caught: { error: unknown } | undefined;
   let result: unknown;
   try {
-    runDepth++;
-    result = node.fn();
+    try {
+      runDepth++;
+      result = node.fn();
+    } finally {
+      runDepth--;
+      restoreActiveSub(previous);
+      node.flags &= ~RecursedCheck;
+    }
   } catch (error) {
-    caught = { error };
-  } finally {
-    runDepth--;
-    restoreActiveSub(previous);
-    node.flags &= ~RecursedCheck;
-  }
-  if (caught !== undefined) {
     if (onError === undefined) {
       // The first run threw and there's no boundary: the caller never receives a disposer, so the
       // deps read before the throw would retain this dead effect. Dispose it here, then surface.
       stopEffect.call(node);
-      throw caught.error;
+      throw error;
     }
-    reportEffectError(caught.error, node);
+    reportEffectError(error, node);
   }
   // Most effects return undefined. Keep that overwhelmingly common path to one branch instead of
   // paying promise/cleanup classification helpers after every run.
@@ -540,42 +521,12 @@ export function domEffect(
   const resolved =
     options !== undefined
       ? { label, target, ...options }
-      : inspectHooks !== undefined
-        ? { label, target }
-        : undefined;
-  const attributed = mergeOptions(activeScope?.options, resolved);
-  return detached(() => startEffect(fn, attributed));
-}
-
-/** @internal Start a plain node-owned DOM sink on the minimal production path. */
-export function domBindingEffect(
-  fn: EffectFn,
-  label: string,
-  target: Node,
-): EffectNode {
-  if (
-    activeScope !== undefined ||
-    inspectHooks !== undefined ||
-    runtimeHooks !== undefined ||
-    onError !== undefined
-  ) {
-    return domEffect(fn, label, target, undefined);
+      : inspectHooks && { label, target };
+  if (activeScope === undefined) {
+    return startEffectNode(fn, resolved, true);
   }
-
-  const node = createEffectNode(fn);
-  const previous = setActiveSub(node);
-  try {
-    runDepth++;
-    node.fn();
-  } catch (error) {
-    stopEffect.call(node);
-    throw error;
-  } finally {
-    runDepth--;
-    restoreActiveSub(previous);
-    node.flags &= ~RecursedCheck;
-  }
-  return node;
+  const attributed = mergeOptions(activeScope.options, resolved);
+  return withoutScope(() => startEffectNode(fn, attributed, true));
 }
 
 /** @internal Stop a raw owner-bound DOM effect. */
@@ -643,45 +594,39 @@ export function scope<Result>(
   };
 }
 
-// Non-barrel seam for the deferred lane (./core/defer.ts): hands the lane plain function
-// references ONCE at install. Under live-binding transforms an imported binding is a getter per
-// access; returning the internals lets the lane capture them into
-// module-local consts and pay a plain call forever after.
-export function installDeferredLane(enqueue: (node: EffectNode) => void): {
-  runEffect: (node: EffectNode) => void;
-  clearWatching: (node: EffectNode) => void;
-} {
+// Non-barrel seam for the deferred lane (./core/defer.ts): hands the lane a plain function
+// reference ONCE at install. Under live-binding transforms an imported binding is a getter per
+// access; returning the internal runner lets the lane capture it into a
+// module-local const and pay a plain call forever after.
+export function installDeferredLane(
+  enqueue: (node: EffectNode) => void,
+): (node: EffectNode) => boolean {
   deferredLane.enqueue = enqueue;
-  return {
-    runEffect,
-    clearWatching: (node) => {
-      node.flags &= ~Watching;
-    },
-  };
+  return runEffect;
 }
 export type { EffectNode };
 
 /** @internal Suspend one raw owner-bound effect. */
-export function pauseEffectNode(node: EffectNode): boolean {
-  if (node.flags === 0) return false;
+export function pauseEffectNode(node: EffectNode): void {
+  if (node.flags === 0) return;
   node.directPausedCount = (node.directPausedCount ?? 0) + 1;
-  node.pausedCount = (node.pausedCount ?? 0) + 1;
-  return true;
+  node.flags |= Paused;
 }
 
 /** @internal Resume one raw owner-bound effect. */
-export function resumeEffectNode(node: EffectNode): boolean {
-  if (node.flags === 0) return false;
+export function resumeEffectNode(node: EffectNode): void {
+  if (node.flags === 0) return;
   const directPausedCount = node.directPausedCount ?? 0;
   if (directPausedCount > 0) {
     node.directPausedCount = directPausedCount - 1;
-    node.pausedCount = (node.pausedCount ?? 0) - 1;
+    if (directPausedCount === 1 && !node.scope?.pausedCount) {
+      node.flags &= ~Paused;
+    }
   }
-  if (!node.pausedCount && (node.flags & (Dirty | Pending)) !== 0) {
+  if (!(node.flags & Paused) && (node.flags & (Dirty | Pending)) !== 0) {
     enqueueEffect(node);
     flushPendingAtTopLevel();
   }
-  return true;
 }
 
 // Register a resource with the ambient scope (pause/resume/stop ride the scope's lifecycle) and
@@ -780,9 +725,9 @@ function flushScope(node: ScopeNode): void {
   // A synchronous deferred scheduler can stop/swap-remove an effect while it is enqueued. Iterate
   // a stable snapshot so that mutation cannot skip the sibling moved into its slot.
   for (const effectNode of node.effects.slice()) {
-    if (effectNode.flags === 0) continue;
-    if (effectNode.pausedCount) continue;
-    if ((effectNode.flags & (Dirty | Pending)) !== 0) enqueueEffect(effectNode);
+    const flags = effectNode.flags;
+    if (!(flags & Paused) && (flags & (Dirty | Pending)) !== 0)
+      enqueueEffect(effectNode);
   }
   for (const child of node.children) flushScope(child);
 }
@@ -790,7 +735,8 @@ function flushScope(node: ScopeNode): void {
 // Route an effect to its lane: deferred re-runs go off the critical path, the rest queue for the
 // synchronous flush.
 function enqueueEffect(node: EffectNode): void {
-  if (node.deferred) (deferredLane.enqueue as (node: EffectNode) => void)(node);
+  if (node.flags & Deferred)
+    (deferredLane.enqueue as (node: EffectNode) => void)(node);
   else queueEffect(node);
 }
 
@@ -948,7 +894,9 @@ export function props<T extends object>(
   }
   // A null-prototype result makes every string key data, including `__proto__`, `constructor`, and
   // `toString`; assigning those onto `{}` would mutate/inherit from Object.prototype instead.
-  const out = Object.create(null) as {
+  // Object.setPrototypeOf({}, null) keeps V8 fast properties instead of Object.create(null)'s
+  // dictionary mode while detaching Object.prototype before any own keys are assigned.
+  const out = Object.setPrototypeOf({}, null) as {
     [K in PropKey<T>]: State<T[K]>;
   };
   const keys = Object.keys(initial) as Array<PropKey<T>>;
@@ -956,15 +904,7 @@ export function props<T extends object>(
   const group = inspectHooks !== undefined ? inspectHooks.nextGroup() : 0;
   for (let index = 0; index < keys.length; index++) {
     const key = keys[index] as PropKey<T>;
-    const signal = state(initial[key], propOptions(options, key));
-    if (group !== 0) {
-      const meta = nodeOf(signal as object)?.meta;
-      if (meta) {
-        meta.group = group;
-        meta.key = key;
-      }
-    }
-    out[key] = signal;
+    out[key] = createState(initial[key], propOptions(options, key), group, key);
   }
   return out;
 }
@@ -1058,7 +998,7 @@ function createSourceNode<T>(
     generation: 0,
     subs: undefined,
     subsTail: undefined,
-    flags: Mutable,
+    flags: Mutable | Source,
   });
 }
 
@@ -1071,7 +1011,7 @@ function createComputedNode<T>(
     subsTail: undefined,
     deps: undefined,
     depsTail: undefined,
-    flags: 0,
+    flags: Computed,
     getter,
   });
 }
@@ -1084,6 +1024,8 @@ function createEffectNode(fn: InternalEffectFn): EffectNode {
     subsTail: undefined,
     deps: undefined,
     depsTail: undefined,
+    scope: undefined,
+    scopeIndex: -1,
     flags: Watching | RecursedCheck,
   });
 }
@@ -1121,7 +1063,7 @@ function stateOper<T>(this: StateNode<T>, ...value: [] | [T]): T | undefined {
     const previous = this.pendingValue;
     if (previous !== next) {
       this.pendingValue = next;
-      if (runtimeHooks !== undefined || this.meta !== undefined)
+      if (runtimeHooks !== undefined || inspectHooks !== undefined)
         observeWrite(this, previous, next);
       // The first pending write already dirtied the complete downstream graph. Until a read
       // commits this state, later writes only replace its pending value and need no second walk.
@@ -1187,7 +1129,7 @@ function sourceSet<T>(node: SourceNode<T>, value: T): void {
   // resync runs inside the connecting reader), so the self-dependency diagnostic doesn't apply.
   runtimeHooks?.write(node as StateNode<unknown>, previous, value, undefined);
   if (node.flags & Dirty) return;
-  node.flags = Mutable | Dirty;
+  node.flags = Mutable | Source | Dirty;
   const subs = node.subs;
   if (subs !== undefined) {
     propagate(subs, runDepth > 0);
@@ -1209,7 +1151,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
       const subs = this.subs;
       if (subs !== undefined) shallowPropagate(subs);
     }
-  } else if (!flags) {
+  } else if (!(flags & Mutable)) {
     evaluateComputed(this);
   }
   const sub = activeSub;
@@ -1221,7 +1163,7 @@ function computedOper<T>(this: ComputedNode<T>): T {
 }
 
 function evaluateComputed<T>(node: ComputedNode<T>): void {
-  node.flags = Mutable | RecursedCheck;
+  node.flags = Computed | Mutable | RecursedCheck;
   const previous = setActiveSub(node);
   try {
     node.value = node.getter();
@@ -1237,7 +1179,7 @@ function evaluateComputed<T>(node: ComputedNode<T>): void {
 function updateComputed<T>(node: ComputedNode<T>): boolean {
   if (node.flags & HasChildEffect) disposeChildDeps(node);
   node.depsTail = undefined;
-  node.flags = Mutable | RecursedCheck;
+  node.flags = Computed | Mutable | RecursedCheck;
   const previous = setActiveSub(node);
   try {
     cycle++;
@@ -1261,7 +1203,7 @@ function updateComputed<T>(node: ComputedNode<T>): boolean {
 }
 
 function updateState<T>(node: StateNode<T>): boolean {
-  node.flags = Mutable;
+  node.flags &= ~Dirty;
   const oldValue = node.currentValue;
   node.currentValue = node.pendingValue;
   return oldValue !== node.currentValue;
@@ -1290,8 +1232,8 @@ function runEffect(node: EffectNode): boolean {
   // Keep the common run path small enough for V8 to inline into flush(); cleanups, errors,
   // returned values, and observation are handled out of line.
   // Paused after this effect was already queued: leave it dirty for resume.
-  if (node.pausedCount) return false;
   const flags = node.flags;
+  if (flags & Paused) return false;
   if (
     flags & Dirty ||
     (flags & Pending && checkDirty(node.deps as Link, node))
@@ -1299,31 +1241,31 @@ function runEffect(node: EffectNode): boolean {
     if (flags & HasChildEffect) disposeChildDeps(node);
     if (node.cleanup && !cleanupBeforeRun(node)) return false;
     node.depsTail = undefined;
-    node.flags = Watching | RecursedCheck;
+    node.flags = (node.flags & (Paused | Deferred)) | Watching | RecursedCheck;
     const previous = setActiveSub(node);
     let result: unknown;
-    let caught: { error: unknown } | undefined;
     try {
-      cycle++;
-      runDepth++;
-      result = node.fn();
+      try {
+        cycle++;
+        runDepth++;
+        result = node.fn();
+      } finally {
+        runDepth--;
+        restoreActiveSub(previous);
+        node.flags &= ~RecursedCheck;
+        // stop() can run midway through this callback; detach any reads made after that terminal
+        // transition instead of letting them resurrect the dead subscriber.
+        if (node.flags === 0) disposeDeps(node);
+        else purgeDeps(node);
+      }
     } catch (error) {
-      caught = { error };
-    } finally {
-      runDepth--;
-      restoreActiveSub(previous);
-      node.flags &= ~RecursedCheck;
-      // stop() can run midway through this callback; detach any reads made after that terminal
-      // transition instead of letting them resurrect the dead subscriber.
-      if (node.flags === 0) disposeDeps(node);
-      else purgeDeps(node);
+      reportEffectError(error, node);
     }
-    if (caught !== undefined) reportEffectError(caught.error, node);
-    else if (result !== undefined) settleEffectResult(node, result);
-    if (node.meta === undefined && runtimeHooks === undefined) return true;
+    if (result !== undefined) settleEffectResult(node, result);
+    if (runtimeHooks === undefined && inspectHooks === undefined) return true;
     return observeEffectRun(node);
   } else if (node.deps !== undefined) {
-    node.flags = Watching | (flags & HasChildEffect);
+    node.flags = (flags & ~Pending) | Watching;
   }
   return false;
 }
@@ -1336,7 +1278,8 @@ function cleanupBeforeRun(node: EffectNode): boolean {
     // queueEffect cleared Watching before this run. If the cleanup escapes the boundary, keep
     // the old dependency set armed so a later write gets another chance to run the effect.
     // A cleanup that stopped its own effect remains terminal.
-    if (node.flags !== 0) node.flags = Watching;
+    if (node.flags !== 0)
+      node.flags = (node.flags & (Paused | Deferred)) | Watching;
     reportEffectError(error, node);
   }
   return node.flags !== 0;
@@ -1424,8 +1367,8 @@ function flush(): void {
 }
 
 function stopEffect(this: EffectNode): void {
-  if (this.flags === 0) return;
-  const meta = this.meta;
+  const flags = this.flags;
+  if (flags === 0) return;
   if (activeSub === this) activeSub = undefined;
   this.flags = 0; // drainDeferred skips flags===0, including a node still in its queue
   const release = this.releaseOwnership;
@@ -1433,12 +1376,12 @@ function stopEffect(this: EffectNode): void {
     this.releaseOwnership = undefined;
     release();
   }
-  if (this.deferred) this.deferredQueued = false;
+  if (flags & Deferred) this.deferredQueued = false;
   const owner = this.scope;
   if (owner !== undefined && !owner.stopped) {
     // Swap-remove from scope.effects so a long-lived scope doesn't retain dead effects. Skipped while
     // the scope itself is stopping (stopScope iterates effects then clears the array wholesale).
-    swapRemove(owner.effects, this.scopeIndex ?? -1, (moved, i) => {
+    swapRemove(owner.effects, this.scopeIndex, (moved, i) => {
       moved.scopeIndex = i;
     });
     this.scope = undefined;
@@ -1457,27 +1400,15 @@ function stopEffect(this: EffectNode): void {
       cleanupError = error;
     }
   }
-  if (meta) {
-    meta.disposed = true;
-    inspectHooks?.unregister(meta.id);
+  if (inspectHooks) {
+    const meta = this.meta;
+    if (meta) {
+      meta.disposed = true;
+      inspectHooks.unregister(meta.id);
+    }
   }
   runtimeHooks?.dispose(this);
   if (failed) reportEffectError(cleanupError, this);
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    value !== null &&
-    value !== undefined &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
-}
-
-function ignorePromiseRejection(promise: PromiseLike<unknown>): void {
-  // The callback contract is rejected synchronously, but an already-created native Promise can
-  // still reject later. Observe that rejection so API misuse does not also emit an unrelated
-  // unhandled-rejection process error.
-  void promise.then(undefined, () => undefined);
 }
 
 // An effect threw. With a handler installed, route it there (and let the flush continue with the
@@ -1507,8 +1438,7 @@ function disposeChildDeps(sub: NodeBase): void {
   let dep = sub.depsTail;
   while (dep !== undefined) {
     const previous = dep.prevDep;
-    const node = dep.dep;
-    if (!("getter" in node) && !("currentValue" in node)) unlink(dep, sub);
+    if (!(dep.dep.flags & (Mutable | Computed))) unlink(dep, sub);
     dep = previous;
   }
 }

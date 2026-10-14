@@ -1,77 +1,80 @@
-import { a as e, d as t } from "./loom-BsucpYd_.js";
+import { a as e, u as t } from "./loom-WRYGQLBj.js";
 //#region src/core/defer.ts
-var n = () => performance.now(), r = 1, i = 2, a = [], o = [], s = 0, c = !1, l = Infinity, u, d = !1, f = !1, p;
-function m(e) {
-	let t = o.length;
-	for (o.push(e); t > 0;) {
-		let n = t - 1 >> 1, r = o[n];
-		if (r[1] <= e[1]) break;
-		o[t] = r, t = n;
+var n = () => performance.now(), r = 1, i = 2, a = Infinity, o = [], s = [], c = 0, l = 0, u = !1, d = a, f, p = !1, m = !1, h;
+function g(e, t) {
+	let n = [e, t], r = s.length;
+	for (s.push(n); r > 0;) {
+		let e = r - 1 >> 1, n = s[e];
+		if (n[1] <= t) break;
+		s[r] = n, r = e;
 	}
-	o[t] = e;
-}
-function h() {
-	let e = o.pop();
-	if (o.length === 0) return;
-	let t = 0;
-	for (;;) {
-		let n = t * 2 + 1;
-		if (n >= o.length) break;
-		let r = n + 1, i = n;
-		r < o.length && o[r][1] < o[n][1] && (i = r);
-		let a = o[i];
-		if (e[1] <= a[1]) break;
-		o[t] = a, t = i;
-	}
-	o[t] = e;
-}
-function g() {
-	for (; o.length !== 0;) {
-		let e = o[0];
-		if (e[0].deferredQueued && e[0].deferDeadline === e[1]) return e[1];
-		h();
-	}
-	return Infinity;
+	s[r] = n;
 }
 function _() {
+	let e = s.pop(), t = s.length;
+	if (t === 0) return;
+	let n = 0;
+	for (;;) {
+		let r = n * 2 + 1;
+		if (r >= t) break;
+		let i = r + 1, a = i < t && s[i][1] < s[r][1] ? i : r, o = s[a];
+		if (e[1] <= o[1]) break;
+		s[n] = o, n = a;
+	}
+	s[n] = e;
+}
+function v() {
+	if (s.length === 0) for (; l < o.length;) {
+		let e = o[l];
+		if (e?.deferredQueued) return e.deferDeadline;
+		o[l++] = void 0;
+	}
+	else for (; s.length !== 0;) {
+		let [e, t] = s[0];
+		if (e.deferredQueued && e.deferDeadline === t) return t;
+		_();
+	}
+	return a;
+}
+function y() {
 	let e = /* @__PURE__ */ new Set();
-	for (let t = s; t < a.length; t++) {
-		let n = a[t];
+	for (let t = l; t < o.length; t++) {
+		let n = o[t];
 		if (n === void 0 || n.flags === 0) continue;
 		let r = n.deps;
 		for (; r !== void 0;) {
-			if (v(r.dep, e)) return !0;
+			if (b(r.dep, e)) return !0;
 			r = r.nextDep;
 		}
 	}
 	return !1;
 }
-function v(e, t) {
+function b(e, t) {
 	if (t.has(e)) return !1;
 	t.add(e);
 	let n = e.subs;
 	for (; n !== void 0;) {
 		let e = n.sub;
-		if (e.flags & i || (e.flags & r) !== 0 && v(e, t)) return !0;
+		if (e.flags & i || (e.flags & r) !== 0 && b(e, t)) return !0;
 		n = n.nextSub;
 	}
 	for (n = e.deps; n !== void 0;) {
-		if (v(n.dep, t)) return !0;
+		if (b(n.dep, t)) return !0;
 		n = n.nextDep;
 	}
 	return !1;
 }
-function y() {
-	p !== void 0 && (clearTimeout(p), p = void 0);
+function x() {
+	h !== void 0 && (clearTimeout(h), h = void 0);
 }
-function b() {
-	p === void 0 && (p = setTimeout(() => {
-		p = void 0;
-		let e = g();
-		e === Infinity ? T() : C(e, Math.max(0, e - n()));
+function S() {
+	h === void 0 && (h = setTimeout(() => {
+		h = void 0;
+		let e = v();
+		e < a ? T(e, Math.max(0, e - n())) : D();
 	}, 0));
 }
-function x(e, t) {
+function C(e, t) {
 	let r = globalThis;
 	if (typeof r.requestIdleCallback == "function") {
 		let i = r.requestIdleCallback((t) => {
@@ -86,56 +89,58 @@ function x(e, t) {
 	}, t);
 	return () => clearTimeout(i);
 }
-function S(e) {
-	if (D(e), e.deferredQueued) {
-		if (!c && p !== void 0) {
-			let e = g();
-			e !== Infinity && C(e, Math.max(0, e - n()));
+function w(e) {
+	if (e.flags &= -3, e.deferredQueued) {
+		if (!u && h !== void 0) {
+			let e = v();
+			e < a && T(e, Math.max(0, e - n()));
 		}
 		return;
 	}
-	let t = n(), r = a.length, o = e.maxStale;
+	let t = n(), r = o.length, i = e.maxStale;
 	for (;;) {
-		e.deferredQueued = !0, a.push(e);
+		e.deferredQueued = !0, o.push(e);
 		let n = e.maxStale, r = t + n;
-		e.deferDeadline = r, m([e, r]), n < o && (o = n);
-		let s = e.subs?.sub;
-		if (s === void 0 || !s.deferred || !(s.flags & i) || s.deferredQueued) break;
-		e = s;
-	}
-	let s = r, l = a.length - 1;
-	for (; s < l;) {
-		let e = a[s];
-		a[s++] = a[l], a[l--] = e;
-	}
-	C(t + o, o);
-}
-function C(t, n) {
-	if (!(d || f) && !(c && l <= t)) {
-		u?.(), c = !0, l = t, f = !0;
-		try {
-			let r = (e.scheduler ?? x)((e) => {
-				if (f && _()) {
-					c = !1, l = Infinity, u = void 0, b();
-					return;
-				}
-				w(e);
-			}, n);
-			c && l === t && (u = r);
-		} finally {
-			f = !1;
+		if (e.deferDeadline = r, s.length !== 0) g(e, r);
+		else if (r >= c) c = r;
+		else for (let e = l; e < o.length; e++) {
+			let t = o[e];
+			t && g(t, t.deferDeadline);
 		}
-		!c && s < a.length && b();
+		n < i && (i = n);
+		let a = e.subs?.sub;
+		if (a === void 0 || (a.flags & 258) != 258 || a.deferredQueued) break;
+		e = a;
+	}
+	let d = r, f = o.length - 1;
+	for (; d < f;) {
+		let e = o[d];
+		o[d++] = o[f], o[f--] = e;
+	}
+	T(t + i, i);
+}
+function T(t, n) {
+	if (!(p || m) && !(u && d <= t)) {
+		f?.(), u = !0, d = t, m = !0;
+		try {
+			let r = (e.scheduler ?? C)((e) => {
+				m && y() ? (u = !1, d = a, f = void 0, S()) : E(e);
+			}, n);
+			u && d === t && (f = r);
+		} finally {
+			m = !1;
+		}
+		!u && l < o.length && S();
 	}
 }
-function w(e) {
-	if (!d) {
-		c = !1, l = Infinity, u = void 0, d = !0;
+function E(e) {
+	if (!p) {
+		u = !1, d = a, f = void 0, p = !0;
 		try {
-			for (; s < a.length && e();) {
-				let e = a[s];
-				if (a[s] = void 0, s++, e.deferredQueued = !1, e.flags !== 0) try {
-					E(e);
+			for (; l < o.length && e();) {
+				let e = o[l];
+				if (o[l] = void 0, l++, e.deferredQueued = !1, e.flags !== 0) try {
+					O(e);
 				} catch (e) {
 					setTimeout(() => {
 						throw e;
@@ -143,20 +148,20 @@ function w(e) {
 				}
 			}
 		} finally {
-			d = !1;
+			p = !1;
 		}
-		if (s < a.length) {
-			let e = g();
-			if (e !== Infinity) {
-				f ? b() : C(e, Math.max(0, e - n()));
+		if (l < o.length) {
+			let e = v();
+			if (e < a) {
+				m ? S() : T(e, Math.max(0, e - n()));
 				return;
 			}
 		}
-		T();
+		D();
 	}
 }
-function T() {
-	a.length = 0, o.length = 0, s = 0, y();
+function D() {
+	o.length = 0, s.length = 0, c = 0, l = 0, x();
 }
-var { runEffect: E, clearWatching: D } = t(S);
+var O = t(w);
 //#endregion

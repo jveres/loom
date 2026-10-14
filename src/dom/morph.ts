@@ -51,8 +51,7 @@ export function morph(
   to: Element,
   options: MorphOptions = {},
 ): Element {
-  if (from === to || (options.skip !== undefined && shouldSkip(from, options)))
-    return from;
+  if (from === to || shouldSkip(from, options)) return from;
   if (from.tagName !== to.tagName) {
     from.replaceWith(to);
     return to;
@@ -227,7 +226,7 @@ function reconcileChildren(
   }
 
   const used = new Set<Node>();
-  const seenNewKeys = options.key ? new Set<string>() : null;
+  let seenNewKeys: Set<string> | undefined;
   const result: Node[] = [];
   let cursor = 0;
   let skippedCursor = 0;
@@ -244,11 +243,10 @@ function reconcileChildren(
       shouldSkip(next as Element, options);
     const skippedMatch = skipped ? unkeyedSkipped[skippedCursor++] : undefined;
     if (key !== null) {
-      if (seenNewKeys !== null) {
-        if (seenNewKeys.has(key))
-          throw new Error(`Duplicate morph key "${key}".`);
-        seenNewKeys.add(key);
-      }
+      seenNewKeys ??= new Set();
+      if (seenNewKeys.has(key))
+        throw new Error(`Duplicate morph key "${key}".`);
+      seenNewKeys.add(key);
       const hit = keyed.get(key);
       // A key match still requires the same tag: morphing across tags would hit the recursive
       // replaceWith path whose replacement can't be threaded back into this walk — adopt instead.

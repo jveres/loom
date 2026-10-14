@@ -1,6 +1,6 @@
-import { n as e } from "./tracking-CClsWN0I.js";
-import { A as t, o as n } from "./loom-BsucpYd_.js";
-import { n as r, t as i } from "./lifetime-KneSZTc9.js";
+import { n as e } from "./tracking-CaYucQ42.js";
+import { k as t, o as n } from "./loom-WRYGQLBj.js";
+import { n as r, t as i } from "./lifetime-CYx3KLZ0.js";
 //#region src/schedule.ts
 function a(e, t = globalThis) {
 	let n = !0, r = () => {
@@ -16,7 +16,7 @@ function o(t, n, i) {
 	};
 	return a.add(s), {
 		request() {
-			!a.active || o || (o = n(() => {
+			a.active && !o && (o = n(() => {
 				o = void 0, a.active && e(t);
 			}));
 		},
@@ -84,15 +84,7 @@ function f(a, o, s) {
 		}, (e) => {
 			if (!c.active) return;
 			let t = l(e, f);
-			if (f = e, t) {
-				h && (m = e);
-				return;
-			}
-			if (l(e, p)) {
-				v();
-				return;
-			}
-			m = e, h = !0, _(), g = setTimeout(y, s.delayMs);
+			f = e, t ? h && (m = e) : l(e, p) ? v() : (m = e, h = !0, _(), g = setTimeout(y, s.delayMs));
 		})));
 	} catch (e) {
 		i(c, e);

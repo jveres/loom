@@ -91,7 +91,6 @@ function updateLiveDot(): void {
       : "Live — capturing";
 }
 export function buildTracePane(): HTMLElement {
-  applyMode(); // resets state; meters attach only once the tab goes active (setTraceActive)
   traceVList = virtualList<TraceRow>({
     rowHeight: TRACE_ROW_H,
     key: (r) => r.seq,
@@ -366,31 +365,30 @@ function labelOf(id: number): string {
   return `#${id}`;
 }
 function trRender(item: TraceRow, reuse: HTMLElement | null): HTMLElement {
-  const row = reuse ?? trCreateRow();
+  // Trace rows are keyed by immutable `seq`, so an in-place update on a shifted row only needs to
+  // refresh the new-arrivals boundary marker.
+  if (reuse !== null) {
+    reuse.classList.toggle("li-tr-mark", item.seq === lastTopSeq);
+    return reuse;
+  }
+  const row = trCreateRow();
   const kind = row.children[0] as HTMLElement;
   kind.textContent = item.kind === "read" ? "R" : "W";
   kind.className = `li-tr-kind li-tr-kind-${item.kind}`;
   (row.children[1] as HTMLElement).textContent = item.timeText;
   (row.children[2] as HTMLElement).textContent = item.name;
   const change = row.children[3] as HTMLElement;
-  const prev = change.children[0] as HTMLElement;
-  const arrow = change.children[1] as HTMLElement;
-  const next = change.children[2] as HTMLElement;
-  const src = change.children[3] as HTMLElement;
-  if (item.kind === "read") {
-    prev.textContent = "";
-    prev.className = "li-tr-val"; // drop any value-type class left from a reused write row
-    arrow.textContent = "";
-    next.textContent = "";
-    next.className = "li-tr-val";
-  } else {
+  if (item.kind === "write") {
+    const prev = change.children[0] as HTMLElement;
+    const arrow = change.children[1] as HTMLElement;
+    const next = change.children[2] as HTMLElement;
     prev.textContent = item.prevText;
     prev.className = `li-tr-val ${item.prevCls}`;
     arrow.textContent = " → ";
     next.textContent = item.nextText;
     next.className = `li-tr-val ${item.nextCls}`;
   }
-  src.textContent = item.srcText; // "by <source>" — the effect/computed that read/wrote it
+  (change.children[3] as HTMLElement).textContent = item.srcText; // "by <source>" — the effect/computed that read/wrote it
   row.title = item.full; // hover shows the untruncated line
   row.dataset["id"] = String(item.id); // for hover-highlight (delegated on the scroll container)
   row.classList.toggle("li-tr-mark", item.seq === lastTopSeq); // new-arrivals boundary

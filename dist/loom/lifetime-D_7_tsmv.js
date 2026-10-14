@@ -1,5 +1,5 @@
-import { r as e } from "./ownership-base-BZEik61k.js";
-import { n as t } from "./lifetime-KneSZTc9.js";
+import { r as e } from "./ownership-base-1B2CbISn.js";
+import { n as t } from "./lifetime-CYx3KLZ0.js";
 //#region src/dom/lifetime.ts
 function n(n, r) {
 	let i = t(r);

@@ -1,5 +1,3 @@
-import { failSetup } from "../core/lifetime.js";
-import { untrack } from "../core/tracking.js";
 // scrollFade(el, { size?, axis?, transition? }) — soft-edge masks on a scrollable container: content fades
 // out at an edge exactly while more content lies beyond it. Behavior only,
 // no styling opinions: the effect is a layered mask on the element itself,
@@ -16,7 +14,9 @@ import { untrack } from "../core/tracking.js";
 // direction: a carve narrower than the real scrollbar fades a sliver of
 // it, a wider one merely leaves a sliver of content unfaded.
 
-import { domEffect, stopEffectNode } from "../loom.js";
+import { failSetup } from "../core/lifetime.js";
+import { cssPropName } from "../jsx-props.js";
+import { domEffect, stopEffectNode, untrack } from "../loom.js";
 import { nodeLifetime } from "./lifetime.js";
 import { mediaRead } from "./media-read.js";
 import { ownResource } from "./ownership-base.js";
@@ -83,14 +83,12 @@ export function scrollFade(
     "webkitMaskSize",
     "webkitMaskComposite",
   ];
-  const cssName = (key: string): string =>
-    `${key.startsWith("webkit") ? "-" : ""}${key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)}`;
   const original = new Map(
     styleKeys.map((key) => [
       key,
       {
         value: styles[key] ?? "",
-        priority: el.style.getPropertyPriority(cssName(key)),
+        priority: el.style.getPropertyPriority(cssPropName(key)),
       },
     ]),
   );
@@ -108,15 +106,15 @@ export function scrollFade(
   const ownedCustom = new Map<string, string>();
   life.add(() => {
     for (const key of styleKeys) {
+      const prop = cssPropName(key);
       if (
         styles[key] !== owned.get(key) ||
-        el.style.getPropertyPriority(cssName(key)) !== ""
+        el.style.getPropertyPriority(prop) !== ""
       )
         continue;
-      const previous = original.get(key);
-      if (!previous) continue;
+      const previous = original.get(key) as { value: string; priority: string };
       if (previous.priority)
-        el.style.setProperty(cssName(key), previous.value, previous.priority);
+        el.style.setProperty(prop, previous.value, previous.priority);
       else styles[key] = previous.value;
     }
     for (const key of custom) {
@@ -125,8 +123,10 @@ export function scrollFade(
         el.style.getPropertyPriority(key) !== ""
       )
         continue;
-      const previous = originalCustom.get(key);
-      if (!previous) continue;
+      const previous = originalCustom.get(key) as {
+        value: string;
+        priority: string;
+      };
       if (previous.value)
         el.style.setProperty(key, previous.value, previous.priority);
       else el.style.removeProperty(key);
@@ -159,7 +159,7 @@ export function scrollFade(
     // stop update reads the source directly, so a flip gates the very
     // next update — no effect-schedule lag.
     const reduceMotion = animateStops
-      ? mediaRead(REDUCE_MOTION, { window: view ?? globalThis })
+      ? mediaRead(REDUCE_MOTION, { window: view })
       : null;
     const stopReduceMotion = reduceMotion
       ? domEffect(
@@ -213,7 +213,7 @@ export function scrollFade(
       animation: Animation | undefined,
     ): Animation | undefined => {
       const nextValue = `${next}px`;
-      if (!animateStops || reduceMotion?.() || view === null || previous < 0) {
+      if (!animateStops || reduceMotion?.() || previous < 0) {
         animation?.cancel();
         el.style.setProperty(property, nextValue);
         ownedCustom.set(property, el.style.getPropertyValue(property));

@@ -20,3 +20,7 @@ export function cssPropName(name: string): string {
   if (name.startsWith("--")) return name;
   return name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
+
+export function isAriaAttr(name: string): boolean {
+  return name.startsWith("aria-");
+}

@@ -36,12 +36,23 @@ export interface ScopeNode {
   stopped: boolean;
 }
 
+const Paused = 128;
+
 // Add `delta` to the paused-ancestor count of `node` and its whole subtree (every descendant gains
 // or loses this scope as a paused ancestor). Walks all children, including independently-paused ones.
 export function bumpPausedCount(node: ScopeNode, delta: number): void {
-  node.pausedCount += delta;
-  for (const effectNode of node.effects) {
-    effectNode.pausedCount = (effectNode.pausedCount ?? 0) + delta;
+  const previous = node.pausedCount;
+  const next = previous + delta;
+  node.pausedCount = next;
+  if (previous === 0 || next === 0) {
+    for (const effectNode of node.effects) {
+      if (effectNode.flags === 0) continue;
+      if (next > 0 || effectNode.directPausedCount) {
+        effectNode.flags |= Paused;
+      } else {
+        effectNode.flags &= ~Paused;
+      }
+    }
   }
   for (const child of node.children) bumpPausedCount(child, delta);
 }
@@ -84,6 +95,7 @@ export function walkResources(
 ): void {
   const resources: OwnedScopeResource[] = [];
   collectResources(node, resources);
+  if (resources.length === 0) return;
   const errors: unknown[] = [];
   for (const resource of resources) {
     if (resource.stopped) continue;

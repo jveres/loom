@@ -1,3 +1,4 @@
+import { type SyncResult } from "./core/errors.js";
 import { type Link, type ReactiveNode } from "./core/graph.js";
 import { type ScopeNode, type ScopeResource } from "./core/scope-ownership.js";
 export interface State<T> {
@@ -49,7 +50,6 @@ export interface NodeInfo {
 }
 export type CleanupEffectFn = () => Stop;
 type InternalEffectFn = () => unknown;
-type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
 type PropKey<T extends object> = Extract<keyof T, string>;
 export type Props<T extends object> = {
     readonly [K in PropKey<T>]: State<T[K]>;
@@ -78,11 +78,9 @@ interface EffectNode extends NodeBase {
     cleanup: Stop | undefined;
     /** Internal group unlink, installed only for effects captured by a DOM resource group. */
     releaseOwnership?: Stop | undefined;
-    scope?: ScopeNode | undefined;
-    scopeIndex?: number | undefined;
-    pausedCount?: number | undefined;
+    scope: ScopeNode | undefined;
+    scopeIndex: number;
     directPausedCount?: number | undefined;
-    deferred?: boolean | undefined;
     deferredQueued?: boolean;
     maxStale?: number;
     deferDeadline?: number;
@@ -158,8 +156,6 @@ export declare function computed<T>(getter: (previousValue?: T) => T, options?: 
 export declare function effect<Result>(fn: () => SyncResult<Result>, options?: EffectOptions): Stop;
 /** @internal Create a node-owned DOM effect without linking it to the currently running effect. */
 export declare function domEffect(fn: InternalEffectFn, label: string, target: Node, options?: EffectOptions): EffectNode;
-/** @internal Start a plain node-owned DOM sink on the minimal production path. */
-export declare function domBindingEffect(fn: EffectFn, label: string, target: Node): EffectNode;
 /** @internal Stop a raw owner-bound DOM effect. */
 export declare function stopEffectNode(node: EffectNode): void;
 export declare function batch<T>(fn: () => T): T;
@@ -172,15 +168,12 @@ export declare function batch<T>(fn: () => T): T;
  * child suspended.
  */
 export declare function scope<Result>(fn: () => SyncResult<Result>, options?: NodeOptions): Scope;
-export declare function installDeferredLane(enqueue: (node: EffectNode) => void): {
-    runEffect: (node: EffectNode) => void;
-    clearWatching: (node: EffectNode) => void;
-};
+export declare function installDeferredLane(enqueue: (node: EffectNode) => void): (node: EffectNode) => boolean;
 export type { EffectNode };
 /** @internal Suspend one raw owner-bound effect. */
-export declare function pauseEffectNode(node: EffectNode): boolean;
+export declare function pauseEffectNode(node: EffectNode): void;
 /** @internal Resume one raw owner-bound effect. */
-export declare function resumeEffectNode(node: EffectNode): boolean;
+export declare function resumeEffectNode(node: EffectNode): void;
 export declare function registerScopeResource(resource: ScopeResource): Stop;
 export type Polled<T> = Read<T> & {
     readonly stop: Stop;

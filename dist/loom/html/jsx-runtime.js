@@ -1,5 +1,5 @@
-import { n as e } from "../jsx-props-sAPN8GVq.js";
-import { a as t, i as n, s as r } from "../html-CIqfobD1.js";
+import { r as e } from "../jsx-props-CBvsxEaL.js";
+import { a as t, i as n, s as r } from "../html-CGLfrYOK.js";
 //#region src/html/jsx-runtime.ts
 var i = /^[A-Za-z][A-Za-z0-9:._-]*$/, a = /* @__PURE__ */ new Set([
 	"area",
@@ -33,15 +33,7 @@ function u(r, i, a) {
 function d(e, o, s) {
 	if (!i.test(e)) throw Error(`Invalid HTML tag name "${e}".`);
 	let c = `<${e}`, l;
-	if (o) {
-		for (let t in o) if (Object.hasOwn(o, t)) {
-			if (t === "children") {
-				l = o[t];
-				continue;
-			}
-			c += r(e, t, o[t], s);
-		}
-	}
+	if (o) for (let t in o) Object.hasOwn(o, t) && (t === "children" ? l = o[t] : c += r(e, t, o[t], s));
 	return c += ">", a.has(e) || (c += n(l), c += `</${e}>`), t(c);
 }
 //#endregion

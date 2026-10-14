@@ -33,6 +33,9 @@ class FakeText extends FakeNode {
 }
 class FakeClassList {
   constructor(private readonly element: FakeElement) {}
+  contains(token: string): boolean {
+    return this.element.className.split(/\s+/).includes(token);
+  }
   add(...tokens: string[]): void {
     const names = new Set(this.element.className.split(/\s+/).filter(Boolean));
     for (const token of tokens) names.add(token);

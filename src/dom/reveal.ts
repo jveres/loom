@@ -91,9 +91,9 @@ const scrollBy = (
 function scrollNearest(
   box: HTMLElement,
   el: Element,
-  options: ScrollOptions = {},
+  axis: RevealAxis,
+  options: ScrollOptions,
 ): void {
-  const axis = options.axis ?? "y";
   const { start, end, boxStart, boxEnd } = edges(
     box,
     el,
@@ -120,9 +120,9 @@ function scrollNearest(
 function scrollCentered(
   box: HTMLElement,
   el: Element,
-  options: ScrollOptions = {},
+  axis: RevealAxis,
+  options: ScrollOptions,
 ): void {
-  const axis = options.axis ?? "y";
   const { start, end, boxStart, boxEnd } = edges(box, el, axis, 0);
   scrollBy(
     box,
@@ -143,7 +143,7 @@ export function reveal(el: Element, options: RevealOptions = {}): boolean {
     const { start, end, boxStart, boxEnd } = edges(box, el, axis, 0);
     if (end > boxStart && start < boxEnd) return true; // a sliver shows
   }
-  if (options.align === "center") scrollCentered(box, el, options);
-  else scrollNearest(box, el, options);
+  if (options.align === "center") scrollCentered(box, el, axis, options);
+  else scrollNearest(box, el, axis, options);
   return true;
 }

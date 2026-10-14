@@ -1,10 +1,10 @@
-import { n as e } from "./tracking-CClsWN0I.js";
-import { C as t, r as n } from "./loom-BsucpYd_.js";
-import { t as r } from "./lifetime-KneSZTc9.js";
-import { t as i } from "./lifetime-CmayFDbD.js";
-import { n as a, t as o } from "./document-observer-BFn9LFx6.js";
-import { n as s, r as c, t as l } from "./scroll-extent-C1gAubf3.js";
-import { t as u } from "./press-track-CTLyZWea.js";
+import { n as e } from "./tracking-CaYucQ42.js";
+import { S as t, r as n } from "./loom-WRYGQLBj.js";
+import { n as r, t as i } from "./document-observer-BFn9LFx6.js";
+import { t as a } from "./lifetime-CYx3KLZ0.js";
+import { t as o } from "./lifetime-D_7_tsmv.js";
+import { n as s, r as c, t as l } from "./scroll-extent-C66uLz7p.js";
+import { t as u } from "./press-track-DBB0OgrE.js";
 //#region src/dom/connected.ts
 var d = /* @__PURE__ */ new WeakMap(), f = /* @__PURE__ */ new WeakMap();
 function p(e) {
@@ -18,7 +18,7 @@ function p(e) {
 	return f.set(e, n), n;
 }
 function m(e) {
-	return e.observer ??= a(e.document, () => {
+	return e.observer ??= r(e.document, () => {
 		for (let [t, n] of e.watched) n(t.isConnected);
 	}), e.observer;
 }
@@ -27,7 +27,7 @@ function h(e) {
 	if (n) return n;
 	let r = t((t) => {
 		t(e.isConnected);
-		let n = o(e);
+		let n = i(e);
 		if (!n) return () => void 0;
 		let r = p(n);
 		return r.watched.set(e, t), m(r), () => {
@@ -55,11 +55,8 @@ function S() {
 		y = !1;
 		let e = v;
 		if (e !== null) {
-			if (b(e.takeRecords()), e.disconnect(), _.size === 0) {
-				v = null;
-				return;
-			}
-			for (let e of _.keys()) x(e);
+			if (b(e.takeRecords()), e.disconnect(), _.size === 0) v = null;
+			else for (let e of _.keys()) x(e);
 		}
 	}));
 }
@@ -198,49 +195,49 @@ function U(e, t) {
 	let n = z.get(e);
 	return n || (n = /* @__PURE__ */ new Map(), z.set(e, n)), n;
 }
-function W(e, t, n, r, i, a) {
-	let o = r.get(i);
-	if (!o) {
-		let t = (e.ownerDocument.defaultView ?? globalThis).IntersectionObserver;
-		o = L((e) => new t(e, {
+function W(e, t, n, r, i, a, o) {
+	let s = i.get(a);
+	if (!s) {
+		let e = r.IntersectionObserver;
+		s = L((t) => new e(t, {
 			root: n,
-			rootMargin: a.rootMargin,
-			threshold: a.threshold
+			rootMargin: o.rootMargin,
+			threshold: o.threshold
 		}), (e, t) => e.observe(t), () => {
-			r.delete(i), n !== null && r.size === 0 && z.delete(n);
-		}), r.set(i, o);
+			i.delete(a), i.size === 0 && (n === null ? R.delete(r) : z.delete(n));
+		}), i.set(a, s);
 	}
-	return o.add(e, t);
+	return s.add(e, t);
 }
 function G(e, t, n) {
-	let a = i(e, n?.signal);
-	if (!a.active) return a.stop;
-	let o = n?.root ?? null, s = V(n), c = U(o, e.ownerDocument.defaultView ?? globalThis);
+	let r = o(e, n?.signal);
+	if (!r.active) return r.stop;
+	let i = n?.root ?? null, s = e.ownerDocument.defaultView ?? globalThis, c = V(n), l = U(i, s);
 	try {
-		a.add(W(e, t, o, c, H(s), s));
+		r.add(W(e, t, i, s, l, H(c), c));
 	} catch (e) {
-		r(a, e);
+		a(r, e);
 	}
-	return a.stop;
+	return r.stop;
 }
 //#endregion
 //#region src/dom/observe-mutation.ts
 function K(t, n, r) {
-	let i = o(t)?.defaultView ?? globalThis, a = !0, s = new i.MutationObserver((t) => {
-		a && e(() => n(t));
+	let a = i(t)?.defaultView ?? globalThis, o = !0, s = new a.MutationObserver((t) => {
+		o && e(() => n(t));
 	});
 	return s.observe(t, r), () => {
-		a = !1, s.disconnect();
+		o = !1, s.disconnect();
 	};
 }
 function q(e, t, n) {
-	let a = i(e, n.signal);
-	if (a.active) try {
-		a.add(K(e, t, n));
+	let r = o(e, n.signal);
+	if (r.active) try {
+		r.add(K(e, t, n));
 	} catch (e) {
-		r(a, e);
+		a(r, e);
 	}
-	return a.stop;
+	return r.stop;
 }
 //#endregion
 //#region src/dom/observe-size.ts
@@ -258,13 +255,13 @@ function Y(e, t, n) {
 	return o.add(e, t);
 }
 function X(e, t, n) {
-	let a = i(e, n?.signal);
-	if (a.active) try {
-		a.add(Y(e, t, n));
+	let r = o(e, n?.signal);
+	if (r.active) try {
+		r.add(Y(e, t, n));
 	} catch (e) {
-		r(a, e);
+		a(r, e);
 	}
-	return a.stop;
+	return r.stop;
 }
 //#endregion
 //#region src/dom/pressed.ts

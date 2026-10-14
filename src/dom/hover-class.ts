@@ -43,27 +43,27 @@ export function hoverClass(
     for (const el of list) el.classList.add(name);
     dressed = list;
   };
+  const when = options.when;
+  const target = options.target;
   const over = (event: Event): void => {
     const pointer = event as PointerEvent;
     // The gate answers for EVERY sighting, a touch's included — a
     // host may refuse a touch's clear (a sticky engagement).
-    if (options.when && untrack(() => options.when?.(pointer)) === false)
-      return;
+    if (when && !untrack(() => when(pointer))) return;
     if (pointer.pointerType === "touch") {
       if (dressed.length > 0) set(null);
       return;
     }
     set(
-      options.target
-        ? untrack(() => options.target?.(pointer) ?? null)
+      target
+        ? untrack(() => target(pointer))
         : (pointer.target as Element | null),
     );
   };
   const leave = (event: Event): void => {
     if (event.target !== host) return;
     const pointer = event as PointerEvent;
-    if (options.when && untrack(() => options.when?.(pointer)) === false)
-      return;
+    if (when && !untrack(() => when(pointer))) return;
     set(null);
   };
   if (life.active) {

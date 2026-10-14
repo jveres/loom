@@ -19,7 +19,7 @@ export interface ListOptions<T> extends EachOptions<T> {
 
 export type LoomKey = string | number;
 
-export interface RowUpdates<T> {
+interface RowUpdates<T> {
   readonly update: ListUpdate<T>;
   readonly items: Map<LoomKey, T>;
 }
@@ -36,36 +36,49 @@ export function reconcileKeyed<T>(
   reorder = true,
   updates?: RowUpdates<T>,
 ): void {
+  const length = items.length;
   const seen = new Set<LoomKey>();
-  const keys = new Array<LoomKey>(items.length);
-  for (let index = 0; index < items.length; index++) {
+  const keys = new Array<LoomKey>(length);
+  const ordered = new Array<Element>(length);
+  let reused = 0;
+  for (let index = 0; index < length; index++) {
     const k = key(items[index] as T);
     if (seen.has(k)) throw new Error(`Duplicate Loom key "${k}".`);
     seen.add(k);
     keys[index] = k;
+    const existing = nodes.get(k);
+    if (existing !== undefined) {
+      ordered[index] = existing;
+      reused++;
+    }
   }
 
-  const created = new Map<LoomKey, Element>();
-  const ordered = new Array<Element>(items.length);
+  let created: Map<LoomKey, Element> | undefined;
   withConstructionRollback(() => {
     try {
-      for (let index = 0; index < items.length; index++) {
-        const k = keys[index] as LoomKey;
-        let node = nodes.get(k);
-        if (node === undefined) {
-          const keyText = String(k);
-          node = untrack(() => render(items[index] as T, keyText));
-          created.set(k, node);
-          node.setAttribute("data-loom-key", keyText);
-        } else if (updates && items[index] !== updates.items.get(k)) {
-          const current = items[index] as T;
-          const previous = updates.items.get(k) as T;
-          const existing = node;
-          untrack(() => updates.update(existing, current, previous));
-        }
-        ordered[index] = node;
+      if (reused < length || updates) {
+        untrack(() => {
+          for (let index = 0; index < length; index++) {
+            const k = keys[index] as LoomKey;
+            let node = ordered[index];
+            if (node === undefined) {
+              const keyText = String(k);
+              node = render(items[index] as T, keyText);
+              if (created === undefined) created = new Map();
+              created.set(k, node);
+              node.setAttribute("data-loom-key", keyText);
+              ordered[index] = node;
+            } else if (updates && items[index] !== updates.items.get(k)) {
+              updates.update(
+                node,
+                items[index] as T,
+                updates.items.get(k) as T,
+              );
+            }
+          }
+        });
       }
-      if (nodes.size === 0 && ordered.length !== 0) {
+      if (nodes.size === 0 && length !== 0) {
         const fragment = (
           parent.ownerDocument ?? document
         ).createDocumentFragment();
@@ -80,13 +93,15 @@ export function reconcileKeyed<T>(
       }
     } catch (error) {
       // Existing rows remain owned and live; only staged additions are retired.
-      removeNodes(created.values(), [error]);
+      removeNodes(created ? created.values() : [], [error]);
     }
   });
 
-  for (const [k, node] of created) nodes.set(k, node);
+  if (created !== undefined) {
+    for (const [k, node] of created) nodes.set(k, node);
+  }
   if (updates) {
-    for (let index = 0; index < items.length; index++) {
+    for (let index = 0; index < length; index++) {
       updates.items.set(keys[index] as LoomKey, items[index] as T);
     }
   }

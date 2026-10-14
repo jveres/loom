@@ -54,6 +54,13 @@ export { type ScrollEdges, type ScrollEdgesOptions, scrollEdges, } from "./dom/s
 // dist/types/core/defer.d.ts
 export {};
 
+// dist/types/core/errors.d.ts
+export type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
+export declare function isPromiseLike(value: unknown): value is PromiseLike<unknown>;
+export declare function ignorePromiseRejection(promise: PromiseLike<unknown>): void;
+/** Preserve a single thrown value; aggregate only when several operations failed. */
+export declare function throwCollected(errors: readonly unknown[] | undefined, message: string): void;
+
 // dist/types/core/graph.d.ts
 /**
  * Vendored reactive-graph system from alien-signals v3.2.1 (system.mjs),
@@ -606,11 +613,12 @@ export interface ListOptions<T> extends EachOptions<T> {
     readonly reorder?: Read<boolean>;
 }
 export type LoomKey = string | number;
-export interface RowUpdates<T> {
+interface RowUpdates<T> {
     readonly update: ListUpdate<T>;
     readonly items: Map<LoomKey, T>;
 }
 export declare function reconcileKeyed<T>(parent: Node, before: Node | null, items: readonly T[], nodes: Map<LoomKey, Element>, key: (item: T) => LoomKey, render: (item: T, key: string) => Element, reorder?: boolean, updates?: RowUpdates<T>): void;
+export {};
 
 // dist/types/dom/listen.d.ts
 import type { Stop } from "../loom.js";
@@ -682,8 +690,6 @@ export type MutationsCallback = (records: MutationRecord[]) => void;
 export interface ObserveMutationOptions extends MutationObserverInit {
     readonly signal?: AbortSignal;
 }
-/** @internal Connection-owned observation, independent of node disposal. */
-export declare function connectMutation(el: Node, callback: MutationsCallback, options: MutationObserverInit): Stop;
 export declare function observeMutation(el: Node, callback: MutationsCallback, options: ObserveMutationOptions): Stop;
 
 // dist/types/dom/observe-size.d.ts
@@ -692,8 +698,6 @@ export type SizeCallback = (entry: ResizeObserverEntry) => void;
 export interface ObserveSizeOptions extends ResizeObserverOptions {
     readonly signal?: AbortSignal;
 }
-/** @internal Connection-owned observation, independent of node disposal. */
-export declare function connectSize(el: Element, callback: SizeCallback, options?: ResizeObserverOptions): Stop;
 export declare function observeSize(el: Element, callback: SizeCallback, options?: ObserveSizeOptions): Stop;
 
 // dist/types/dom/offset-in.d.ts
@@ -713,8 +717,9 @@ export interface OnMountOptions {
 export declare function onMount(node: Node, fn: (node: Node) => void, options?: OnMountOptions): Stop;
 
 // dist/types/dom/ownership-base.d.ts
-export type OwnershipStop = () => void;
-export type OwnedResource = object;
+import { type SyncResult } from "../core/errors.js";
+type OwnershipStop = () => void;
+type OwnedResource = object;
 interface OwnedResourceDriver {
     readonly onStop: (resource: OwnedResource, release: OwnershipStop) => void;
     readonly stop: (resource: OwnedResource) => void;
@@ -740,7 +745,6 @@ export interface ResourceGroup<T> {
     readonly value: T;
     readonly dispose: OwnershipStop;
 }
-type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
 /**
  * Capture node-owned resources and lifecycle stops created by `fn` in a flat
  * ownership arena. Node ownership remains intact for granular removal;
@@ -954,6 +958,7 @@ export declare function escapeAttribute(value: string): string;
 export declare function unescapeAttribute(value: string): string;
 
 // dist/types/html/index.d.ts
+import { type SerializeAttributesOptions, serializeAttributes } from "./attributes.js";
 declare const htmlTypeBrand: unique symbol;
 export interface Html {
     /** Nominal brand: trusted HTML values can only be constructed by this module. */
@@ -989,8 +994,8 @@ export declare function withRootAttributes(value: Html, attrs: Record<string, st
     readonly tag?: string;
     readonly merge?: Record<string, string>;
 }): Html;
-export { type SerializeAttributesOptions, serializeAttributes, } from "./attributes.js";
 export { escapeAttribute, escapeText } from "./escape.js";
+export { type SerializeAttributesOptions, serializeAttributes };
 
 // dist/types/html/jsx-runtime.d.ts
 import { type Html, type HtmlChild } from "./index.js";
@@ -1062,6 +1067,7 @@ import { type State } from "./loom.js";
 export declare function lens<T extends object, K extends keyof T>(source: State<T>, key: K): State<T[K]>;
 
 // dist/types/loom.d.ts
+import { type SyncResult } from "./core/errors.js";
 import { type Link, type ReactiveNode } from "./core/graph.js";
 import { type ScopeNode, type ScopeResource } from "./core/scope-ownership.js";
 export interface State<T> {
@@ -1113,7 +1119,6 @@ export interface NodeInfo {
 }
 export type CleanupEffectFn = () => Stop;
 type InternalEffectFn = () => unknown;
-type SyncResult<T> = T extends PromiseLike<unknown> ? never : T;
 type PropKey<T extends object> = Extract<keyof T, string>;
 export type Props<T extends object> = {
     readonly [K in PropKey<T>]: State<T[K]>;
@@ -1142,11 +1147,9 @@ interface EffectNode extends NodeBase {
     cleanup: Stop | undefined;
     /** Internal group unlink, installed only for effects captured by a DOM resource group. */
     releaseOwnership?: Stop | undefined;
-    scope?: ScopeNode | undefined;
-    scopeIndex?: number | undefined;
-    pausedCount?: number | undefined;
+    scope: ScopeNode | undefined;
+    scopeIndex: number;
     directPausedCount?: number | undefined;
-    deferred?: boolean | undefined;
     deferredQueued?: boolean;
     maxStale?: number;
     deferDeadline?: number;
@@ -1222,8 +1225,6 @@ export declare function computed<T>(getter: (previousValue?: T) => T, options?: 
 export declare function effect<Result>(fn: () => SyncResult<Result>, options?: EffectOptions): Stop;
 /** @internal Create a node-owned DOM effect without linking it to the currently running effect. */
 export declare function domEffect(fn: InternalEffectFn, label: string, target: Node, options?: EffectOptions): EffectNode;
-/** @internal Start a plain node-owned DOM sink on the minimal production path. */
-export declare function domBindingEffect(fn: EffectFn, label: string, target: Node): EffectNode;
 /** @internal Stop a raw owner-bound DOM effect. */
 export declare function stopEffectNode(node: EffectNode): void;
 export declare function batch<T>(fn: () => T): T;
@@ -1236,15 +1237,12 @@ export declare function batch<T>(fn: () => T): T;
  * child suspended.
  */
 export declare function scope<Result>(fn: () => SyncResult<Result>, options?: NodeOptions): Scope;
-export declare function installDeferredLane(enqueue: (node: EffectNode) => void): {
-    runEffect: (node: EffectNode) => void;
-    clearWatching: (node: EffectNode) => void;
-};
+export declare function installDeferredLane(enqueue: (node: EffectNode) => void): (node: EffectNode) => boolean;
 export type { EffectNode };
 /** @internal Suspend one raw owner-bound effect. */
-export declare function pauseEffectNode(node: EffectNode): boolean;
+export declare function pauseEffectNode(node: EffectNode): void;
 /** @internal Resume one raw owner-bound effect. */
-export declare function resumeEffectNode(node: EffectNode): boolean;
+export declare function resumeEffectNode(node: EffectNode): void;
 export declare function registerScopeResource(resource: ScopeResource): Stop;
 export type Polled<T> = Read<T> & {
     readonly stop: Stop;

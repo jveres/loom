@@ -1,4 +1,3 @@
-import { untrack } from "../core/tracking.js";
 // A minimal fixed-row-height windowing list: only the rows in (and just around) the viewport are
 // kept in the DOM. `el` is an in-flow, full-height holder (a spacer sets its height) meant to be
 // placed inside an existing scroll container — it does not introduce its own scrollbar; the visible
@@ -12,6 +11,7 @@ import { untrack } from "../core/tracking.js";
 // Loom's node ownership: replacement, eviction, and stop dispose their subtree before removal.
 
 import { throwCollected } from "../core/errors.js";
+import { untrack } from "../core/tracking.js";
 import { dispose, onUnmount, remove } from "./ownership-base.js";
 
 // The backing data: the windower needs only the total count (for scroll height) and random access
@@ -77,11 +77,13 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
     /** Source revision/index last rendered; unchanged stationary rows need no render call. */
     revision: number;
     index: number;
+    pass: number;
   }
   const mounted = new Map<string | number, MountedRow>();
   let scroller: HTMLElement | null = null;
   let raf = 0;
   let revision = 0;
+  let pass = 0;
   let windowStart = -1;
   let windowEnd = -1;
   let windowRevision = -1;
@@ -109,7 +111,7 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
       return;
     // Only a completed pass can be skipped. Failed rendering must remain retryable.
     windowRevision = -1;
-    const live = new Set<string | number>();
+    const currentPass = ++pass;
     const disposalErrors: unknown[] = [];
     for (let i = start; i < end; i++) {
       // `at` is caller-supplied on ListSource; a lazy source whose length/at disagree could return
@@ -117,37 +119,39 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
       const item = items.at(i);
       if (item === undefined) continue;
       const k = options.key(item);
-      live.add(k);
       const existing = mounted.get(k);
-      if (
-        existing !== undefined &&
-        existing.revision === revision &&
-        existing.index === i
-      ) {
-        continue;
+      if (existing !== undefined) {
+        existing.pass = currentPass;
+        if (existing.revision === revision && existing.index === i) {
+          continue;
+        }
       }
       const previousRow = existing?.row ?? null;
       const row = untrack(() => options.render(item, previousRow));
       row.style.transform = `translateY(${i * h}px)`;
       if (existing === undefined) {
         el.append(row);
-      } else if (row !== existing.row) {
-        // render() is meant to update `existing` in place, but tolerate a fresh element too.
-        existing.row.before(row);
-        // Publish the replacement before cleanup: remove() still detaches the old row when one of
-        // its disposers throws, and the list must not retain that detached element afterward.
-        mounted.set(k, { row, revision, index: i });
-        try {
-          remove(existing.row);
-        } catch (error) {
-          disposalErrors.push(error);
+        mounted.set(k, { row, revision, index: i, pass: currentPass });
+      } else {
+        const prev = existing.row;
+        existing.revision = revision;
+        existing.index = i;
+        if (row !== prev) {
+          // render() is meant to update `existing` in place, but tolerate a fresh element too.
+          prev.before(row);
+          // Publish the replacement before cleanup: remove() still detaches the old row when one of
+          // its disposers throws, and the list must not retain that detached element afterward.
+          existing.row = row;
+          try {
+            remove(prev);
+          } catch (error) {
+            disposalErrors.push(error);
+          }
         }
-        continue;
       }
-      mounted.set(k, { row, revision, index: i });
     }
     for (const [k, entry] of mounted)
-      if (!live.has(k)) {
+      if (entry.pass !== currentPass) {
         mounted.delete(k);
         try {
           remove(entry.row);
@@ -190,17 +194,12 @@ export function virtualList<T>(options: VirtualListOptions<T>): VirtualList<T> {
     if (raf) view.cancelAnimationFrame(raf);
     scroller?.removeEventListener("scroll", schedule);
     scroller = null;
-    let disposalFailed = false;
-    let disposalError: unknown;
     try {
       dispose(el);
-    } catch (error) {
-      disposalFailed = true;
-      disposalError = error;
+    } finally {
+      mounted.clear();
+      el.replaceChildren();
     }
-    mounted.clear();
-    el.replaceChildren();
-    if (disposalFailed) throw disposalError;
   };
 
   if (!stopped) {

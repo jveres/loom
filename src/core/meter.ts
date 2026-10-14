@@ -56,8 +56,8 @@ function createChannelNode(
   return makeChannelNode(name, cap, fields);
 }
 
-// Allocate a channel's ring columns on first need (a samples meter attaching, or a first emit on a
-// metered detail channel) — unmetered channels never pay the arrays.
+// Allocate a channel's ring columns when a samples meter attaches — unmetered and count-only
+// channels never pay the arrays.
 function ensureRing(node: ChannelNode): void {
   if (node.cap !== 0 && node.cols === undefined) {
     const cols: unknown[][] = [];

@@ -18,6 +18,10 @@ export interface DoubleTapOptions extends TapOptions {
   readonly withinMs?: number;
 }
 
+function now(node: Element): number {
+  return (node.ownerDocument.defaultView?.performance ?? performance).now();
+}
+
 function taps(
   node: Element,
   handler: (event: PointerEvent) => void,
@@ -36,8 +40,6 @@ function taps(
       "Tap distances and durations must be finite and non-negative.",
     );
   const life = nodeLifetime(node, options.signal);
-  const now = (): number =>
-    (node.ownerDocument.defaultView?.performance ?? performance).now();
   let id: number | undefined;
   let x = 0;
   let y = 0;
@@ -70,7 +72,7 @@ function taps(
       reset();
       return;
     }
-    last = now();
+    last = now(node);
     untrack(() => handler(pointer));
   };
   if (life.active) {
@@ -88,7 +90,7 @@ function taps(
   }
   return {
     stop: life.stop,
-    recent: () => life.active && now() - last < recentMs,
+    recent: () => life.active && now(node) - last < recentMs,
   };
 }
 
@@ -113,13 +115,11 @@ export function onDoubleTap(
   return taps(
     node,
     (event) => {
-      const now = (
-        node.ownerDocument.defaultView?.performance ?? performance
-      ).now();
-      if (now - last < withinMs) {
+      const time = now(node);
+      if (time - last < withinMs) {
         last = Number.NEGATIVE_INFINITY;
         handler(event);
-      } else last = now;
+      } else last = time;
     },
     () => {
       last = Number.NEGATIVE_INFINITY;

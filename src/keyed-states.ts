@@ -1,5 +1,4 @@
-import { untrack } from "./core/tracking.js";
-import { type NodeOptions, type State, state } from "./loom.js";
+import { type NodeOptions, type State, state, untrack } from "./loom.js";
 
 /** Identity-keyed states with an explicit key/value schema. */
 export interface KeyedStates<Schema extends object> {

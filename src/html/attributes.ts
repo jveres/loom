@@ -5,7 +5,7 @@
 // runtime renders through it; `serializeAttributes` is the same rule for
 // hand-built markup (a highlighter's token spans, a static tag builder),
 // so a second copy of the name pattern never drifts.
-import { cssPropName } from "../jsx-props.js";
+import { cssPropName, isAriaAttr } from "../jsx-props.js";
 import { escapeAttribute } from "./escape.js";
 
 const safeAttrNamePattern = /^[A-Za-z_:][A-Za-z0-9:._-]*$/;
@@ -151,10 +151,6 @@ function appendStyle(value: unknown, parts: string[]): void {
 
     parts.push(`${cssPropName(name)}:${cssValue}`);
   }
-}
-
-function isAriaAttr(name: string): boolean {
-  return name.startsWith("aria-");
 }
 
 function isUrlAttr(name: string): boolean {
