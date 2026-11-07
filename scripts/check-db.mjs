@@ -120,6 +120,11 @@ try {
       const measurements = await writer.evaluate(async () =>
         (await import("/bench/db-browser-checks.ts")).measureDatabase(),
       );
+      assert.equal(
+        measurements.queuedBurst.completedScans,
+        20,
+        `${engineName} superseded reads performed unnecessary full scans`,
+      );
       assert.deepEqual(errors, [], `${engineName} unhandled browser errors`);
       const result = {
         engine: engineName,

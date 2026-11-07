@@ -16,8 +16,11 @@ const value = (position: number) => ({
   body: "synthetic",
 });
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-export async function until(test: () => boolean): Promise<void> {
-  const deadline = performance.now() + 5000;
+export async function until(
+  test: () => boolean,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
   while (!test()) {
     if (performance.now() > deadline)
       throw new Error("Database condition timed out");
@@ -41,9 +44,19 @@ export function openFixture(name: string, version = 1) {
 async function removeDatabase(name: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase(name);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(new Error("Fixture connection leaked"));
+    const deadline = setTimeout(
+      () => reject(new Error("Fixture connection did not drain")),
+      10000,
+    );
+    request.onsuccess = () => {
+      clearTimeout(deadline);
+      resolve();
+    };
+    request.onerror = () => {
+      clearTimeout(deadline);
+      reject(request.error);
+    };
+    // A close-pending connection may briefly block deletion while its reads drain.
   });
 }
 
@@ -303,6 +316,82 @@ export async function runDatabaseChecks(): Promise<string[]> {
     await db.write(["labels"], (tx) => tx.store("labels").put("beta", "ended"));
     await pause();
     check(nestedRuns === ended, "parent effect disposal stops queries");
+
+    const originalTransaction = IDBDatabase.prototype.transaction;
+    let failCommittedCallback!: (reason: unknown) => void;
+    const afterCommit = new Promise<never>((_resolve, reject) => {
+      failCommittedCallback = reject;
+    });
+    IDBDatabase.prototype.transaction = function (...args) {
+      const native = originalTransaction.apply(this, args);
+      if (this.name === name && native.mode === "readwrite") {
+        // Native completion is irreversible; run this listener before the adapter's.
+        native.addEventListener(
+          "complete",
+          () => failCommittedCallback(new Error("late failure")),
+          { once: true },
+        );
+      }
+      return native;
+    };
+    try {
+      const failure = await rejected(
+        db.write(["labels"], async (tx) => {
+          await tx.store("labels").put("commit-boundary", "durable");
+          await afterCommit;
+        }),
+        "TransactionContractError",
+      );
+      check(
+        failure instanceof TransactionContractError && failure.committed,
+        "native completion boundary preserves committed error classification",
+      );
+      check(
+        (await db.read(["labels"], (tx) =>
+          tx.store("labels").get("commit-boundary"),
+        )) === "durable",
+        "native completion boundary cannot roll back durable data",
+      );
+    } finally {
+      IDBDatabase.prototype.transaction = originalTransaction;
+    }
+
+    const transaction = IDBDatabase.prototype.transaction;
+    let cancelledReads = 0;
+    IDBDatabase.prototype.transaction = function (...args) {
+      const native = transaction.apply(this, args);
+      if (this.name === name && native.mode === "readonly")
+        native.addEventListener("abort", () => cancelledReads++);
+      return native;
+    };
+    try {
+      const stopped = db.query(["items"], (tx) =>
+        tx.store("items").scan({ limit: 1000 }),
+      );
+      stopped.stop();
+      await until(() => cancelledReads === 1);
+      check(
+        !stopped.ready(),
+        "stop aborts admitted readonly work without delivering a value",
+      );
+      const selected = state("alpha");
+      const changing = db.query(["labels"], (tx) =>
+        tx.store("labels").get(selected()),
+      );
+      for (let i = 0; i < 20; i++) selected(i % 2 === 0 ? "beta" : "alpha");
+      await until(() => changing.ready());
+      check(
+        changing() === "changed" && changing.error() === undefined,
+        "superseded native aborts do not replace the latest result with an error",
+      );
+      check(
+        cancelledReads === 21,
+        "parameter changes abort superseded readonly transactions",
+      );
+      changing.stop();
+    } finally {
+      IDBDatabase.prototype.transaction = transaction;
+    }
 
     const transportRead = peer.query(["labels"], (tx) =>
       tx.store("labels").get("transport"),
@@ -619,6 +708,7 @@ export async function measureDatabase() {
       earlierSamples.push(performance.now() - time);
     }
     let invocations = 0;
+    let completedScans = 0;
     const queries = Array.from({ length: 20 }, (_, group) =>
       db.query(["items"], (tx) => {
         invocations++;
@@ -632,6 +722,10 @@ export async function measureDatabase() {
             },
             direction: "prev",
             limit: 100,
+          })
+          .then((rows) => {
+            completedScans++;
+            return rows;
           });
       }),
     );
@@ -644,12 +738,34 @@ export async function measureDatabase() {
           .store("items")
           .put("42", { group: "42", position: 42, body: String(i) }),
       );
-    await until(() => queries.every((query) => !query.loading()));
+    await until(() => queries.every((query) => !query.loading()), 30000);
     const burst = {
       writes: 100,
       openQueries: 20,
       invocations: invocations - beforeBurst,
       elapsedMs: performance.now() - burstStart,
+    };
+    const beforeQueued = invocations;
+    const completedBeforeQueued = completedScans;
+    const queuedStart = performance.now();
+    await Promise.all(
+      Array.from({ length: 100 }, (_, i) =>
+        db.write(["items"], (tx) =>
+          tx
+            .store("items")
+            .put("99900", { group: "0", position: 99900, body: String(i) }),
+        ),
+      ),
+    );
+    await until(() => queries.every((query) => !query.loading()), 30000);
+    if (queries[0]?.()?.[0]?.body !== "99")
+      throw new Error("Queued writes did not converge");
+    const queuedBurst = {
+      writes: 100,
+      openQueries: 20,
+      invocations: invocations - beforeQueued,
+      elapsedMs: performance.now() - queuedStart,
+      completedScans: completedScans - completedBeforeQueued,
     };
     for (const query of queries) query.stop();
     samples.sort((a, b) => a - b);
@@ -664,6 +780,7 @@ export async function measureDatabase() {
       warmP95: samples[18],
       earlierP95: earlierSamples[18],
       burst,
+      queuedBurst,
       samples,
     };
   } finally {

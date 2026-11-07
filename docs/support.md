@@ -14,7 +14,7 @@ capabilities beyond importing its module.
 | TypeScript 7.0.2, Bundler resolution | Packed declarations and consumer workflows compile with strict checking. |
 | TypeScript 7.0.2, NodeNext resolution | The same packed consumers compile without source aliases. |
 | Node 24.21.0 ESM | All 20 package entrypoints import without DOM globals. Core and HTML operations support server use. |
-| Chromium 158.0.8127.18, Firefox 159.0, Playwright WebKit 27.2 | Each passes 19 DOM, platform, iframe, and popup checks plus 46 IndexedDB checks and real two-tab commit tests. Chromium also passes both DOM GC retention scenarios and a 100-query database retention check. Native Safari is not separately tested. |
+| Chromium 158.0.8127.18, Firefox 159.0, Playwright WebKit 27.2 | Each passes 19 DOM, platform, iframe, and popup checks plus 52 IndexedDB checks and real two-tab commit tests. Chromium also passes both DOM GC retention scenarios and a 100-query database retention check. Native Safari is not separately tested. |
 | CommonJS and arbitrary deep imports | Unsupported. Use the explicit ESM package exports. |
 
 DOM operations require a document. Observer installations require the native

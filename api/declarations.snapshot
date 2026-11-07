@@ -267,8 +267,8 @@ export declare class TransactionContractError extends Error {
     readonly committed: boolean;
     constructor(message: string, committed: boolean, options?: ErrorOptions);
 }
-export declare function storeNames(stores: readonly string[]): string[];
-export declare function transact<S extends Schema<S>, N extends StoreName<S>, T>(database: IDBDatabase, stores: readonly N[], mode: IDBTransactionMode, body: (tx: WriteTransaction<S, N>) => T | Promise<T>, committed: (stores: readonly string[]) => void, settled: () => void): Promise<T>;
+export declare function storeNames<N extends string>(stores: readonly N[]): N[];
+export declare function transact<S extends Schema<S>, N extends StoreName<S>, T>(database: IDBDatabase, names: N[], mode: IDBTransactionMode, body: (tx: WriteTransaction<S, N>) => T | Promise<T>, committed: (stores: readonly string[]) => void, settled: () => void, signal?: AbortSignal): Promise<T>;
 
 // dist/types/db/types.d.ts
 import type { Resource } from "../async/index.js";

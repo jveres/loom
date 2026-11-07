@@ -67,8 +67,7 @@ export class NotificationBus {
       if (!live) return;
       live = false;
       if (--this.owners !== 0) return;
-      this.channel?.close();
-      this.channel = undefined;
+      this.closeChannel();
       if (typeof window !== "undefined") {
         window.removeEventListener("pageshow", this.resume);
         window.removeEventListener("focus", this.resume);
@@ -123,13 +122,17 @@ export class NotificationBus {
     }
   }
 
-  private disable(): void {
+  private closeChannel(): void {
     try {
       this.channel?.close();
     } catch {
       /* Failed transport is already unusable. */
     }
     this.channel = undefined;
+  }
+
+  private disable(): void {
+    this.closeChannel();
     isolated(() => this.mode("manual"));
   }
 }

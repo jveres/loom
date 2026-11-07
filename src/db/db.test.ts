@@ -135,3 +135,66 @@ describe("database opening", () => {
     expect(abort).toHaveBeenCalledOnce();
   });
 });
+
+describe("database transaction settlement", () => {
+  it("should report committed callback failure when native rollback is no longer possible", async () => {
+    const reason = new Error("callback failed after commit");
+    const transaction = {
+      abort: () => {
+        throw new DOMException("Already committed", "InvalidStateError");
+      },
+    } as unknown as IDBTransaction;
+    const native = {
+      name: "settlement-fixture",
+      version: 1,
+      close() {},
+      transaction: () => transaction,
+    };
+    const request = { result: native } as unknown as IDBOpenDBRequest;
+    vi.stubGlobal("indexedDB", { open: () => request });
+    vi.stubGlobal("BroadcastChannel", undefined);
+    const opening = openDatabase<{
+      items: { key: string; value: string; indexes: Record<never, never> };
+    }>({ name: native.name, version: 1 });
+    request.onsuccess?.call(request, new Event("success"));
+    const db = await opening;
+    try {
+      const write = db.write(["items"], async () => {
+        throw reason;
+      });
+      await Promise.resolve();
+      transaction.oncomplete?.call(transaction, new Event("complete"));
+      await expect(write).rejects.toMatchObject({
+        name: "TransactionContractError",
+        committed: true,
+        cause: reason,
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("should finish closing even if notification transport cleanup throws", async () => {
+    vi.stubGlobal(
+      "BroadcastChannel",
+      class {
+        close() {
+          throw new Error("Transport cleanup failed");
+        }
+      },
+    );
+    const native = { name: "close-fixture", version: 1, close() {} };
+    const request = { result: native } as unknown as IDBOpenDBRequest;
+    vi.stubGlobal("indexedDB", { open: () => request });
+    const opening = openDatabase<{
+      items: { key: string; value: string; indexes: Record<never, never> };
+    }>({ name: native.name, version: 1 });
+    request.onsuccess?.call(request, new Event("success"));
+    const db = await opening;
+    expect(() => db.close()).not.toThrow();
+    expect(db.connection()).toBe("closed");
+    await expect(db.read(["items"], () => 1)).rejects.toMatchObject({
+      name: "InvalidStateError",
+    });
+  });
+});

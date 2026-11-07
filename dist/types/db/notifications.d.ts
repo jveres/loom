@@ -16,6 +16,7 @@ export declare class NotificationBus {
     subscribe(stores: ReadonlySet<string>, notify: () => void): () => void;
     invalidate(stores?: readonly string[]): void;
     commit(version: number, stores: readonly string[]): void;
+    private closeChannel;
     private disable;
 }
 export declare function notifications(name: string): NotificationBus;

@@ -17,7 +17,7 @@ export class TransactionContractError extends Error {
   }
 }
 
-export function storeNames(stores: readonly string[]): string[] {
+export function storeNames<N extends string>(stores: readonly N[]): N[] {
   if (
     !Array.isArray(stores) ||
     stores.length === 0 ||
@@ -85,16 +85,18 @@ function scanOptions(options: Scan<DbKey>): {
 // The facade owns failure and completion. No native handle escapes the callback.
 export function transact<S extends Schema<S>, N extends StoreName<S>, T>(
   database: IDBDatabase,
-  stores: readonly N[],
+  names: N[],
   mode: IDBTransactionMode,
   body: (tx: WriteTransaction<S, N>) => T | Promise<T>,
   committed: (stores: readonly string[]) => void,
   settled: () => void,
+  signal?: AbortSignal,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let native: IDBTransaction;
-    const names = storeNames(stores);
+    // The handle validates and snapshots names before retaining ownership.
     try {
+      signal?.throwIfAborted();
       native = database.transaction(names, mode);
     } catch (error) {
       settled();
@@ -119,6 +121,14 @@ export function transact<S extends Schema<S>, N extends StoreName<S>, T>(
           /* Completion has already made rollback impossible. */
         }
       }
+    };
+    // Only reactive readonly calls supply a signal. Imperative writes always drain.
+    const abort = () => fail(signal?.reason);
+    signal?.addEventListener("abort", abort, { once: true });
+    const finish = () => {
+      finished = true;
+      signal?.removeEventListener("abort", abort);
+      settled();
     };
     const ensure = () => {
       if (finished || bodyDone || failed)
@@ -244,8 +254,7 @@ export function transact<S extends Schema<S>, N extends StoreName<S>, T>(
       },
     } as unknown as WriteTransaction<S, N>;
     native.onabort = () => {
-      finished = true;
-      settled();
+      finish();
       reject(
         failed
           ? failure
@@ -271,10 +280,17 @@ export function transact<S extends Schema<S>, N extends StoreName<S>, T>(
               true,
             ),
           );
-        else if (failed) reject(failure);
+        else if (failed)
+          reject(
+            new TransactionContractError(
+              "Callback failed after the native transaction committed",
+              true,
+              { cause: failure },
+            ),
+          );
         else resolve(value);
       } finally {
-        settled();
+        finish();
       }
     };
     try {

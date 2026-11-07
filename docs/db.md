@@ -117,6 +117,8 @@ An omitted await does not hide a request failure from the outer operation.
 
 If the native transaction finishes while the callback is still pending, the
 outer operation rejects with `TransactionContractError` and `committed: true`.
+The same marker applies if a callback fails after native rollback becomes
+impossible; the original failure is retained as `cause`.
 The write may already be durable and is still broadcast. Later callback failures
 are observed, but cannot roll it back. Never automatically retry this error.
 Storage errors preserve native `DOMException` names; argument errors use
@@ -138,7 +140,9 @@ exactly the callback's `T`.
 
 Scope pause disconnects notifications and suspends new effect-driven reads.
 An admitted read may still settle while paused. Resume always performs a fresh
-read. `stop` and scope disposal are terminal. The database itself remains open
+read. Superseding or stopping a query aborts its obsolete native readonly
+transaction when still active, so ignored results do not keep scanning. This
+does not cancel imperative `read`/`write` calls. `stop` and scope disposal are terminal. The database itself remains open
 until `close`; creating it inside a reactive scope does not transfer ownership.
 
 `close` rejects new operations, removes query subscriptions, exposes a closed
@@ -191,15 +195,23 @@ Quota exhaustion and unexpected termination use named fault injection where
 filling the user's disk or killing the browser would be inappropriate.
 
 A November 2026 local qualification on Node 24.21.0 measured approximately
-4.0 KiB gzip incremental cost over the same reactive consumer without database
+4.1 KiB gzip incremental cost over the same reactive consumer without database
 storage (6 KiB limit). All existing core/family budgets passed. The 100,000-record
 fixture uses 1 KiB payloads across 100 groups and bounded 100-row reads. Desktop
 three-engine warm reads and two-tab 100-row updates passed the 50 ms and 250 ms
 p95 gates. These are synthetic development measurements, not device guarantees.
 
-Store-level invalidation has a deliberate cost: 100 separate commits with 20
-queries on the affected store caused 2,000 query callbacks. Microtask coalescing
-does not combine commits arriving in separate turns. Batch related changes in
+Store-level invalidation still invokes each affected query callback. In the
+100-commit/20-query stress test this means 2,000 callback invocations. With
+queued writes, superseded transactions are aborted and only the 20 current
+queries complete their scans; this is a regression gate in `check:db`. Before
+cancellation was connected, that Chromium workload exceeded the 30-second
+measurement window. With the fix it completed in about 0.1–0.2 seconds in local
+Chromium/WebKit runs and 0.3–1.0 seconds in Firefox runs. These are machine-local
+measurements, not universal timing promises.
+
+Sequential writes interleaved with completed reads still cause 2,000 scans:
+each snapshot can be current before the next commit. Batch related writes in
 one transaction and keep the active query count appropriate for the view.
 
 See the [API index](api.md), [support policy](support.md), and

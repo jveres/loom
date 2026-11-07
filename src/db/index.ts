@@ -66,11 +66,12 @@ function handle<S extends Schema<S>>(native: IDBDatabase): Database<S> {
     stores: readonly N[],
     mode: "readonly" | "readwrite",
     body: (tx: WriteTransaction<S, N>) => T | Promise<T>,
+    signal?: AbortSignal,
   ) => {
     if (!open) return Promise.reject(closedError());
     let names: N[];
     try {
-      names = storeNames(stores) as N[];
+      names = storeNames(stores);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -83,6 +84,7 @@ function handle<S extends Schema<S>>(native: IDBDatabase): Database<S> {
       body,
       (changed) => bus.commit(native.version, changed),
       done,
+      signal,
     );
   };
 
@@ -95,7 +97,7 @@ function handle<S extends Schema<S>>(native: IDBDatabase): Database<S> {
       stores: readonly N[],
       body: (tx: ReadTransaction<S, N>) => T | Promise<T>,
     ) {
-      const names = storeNames(stores) as N[];
+      const names = storeNames(stores);
       let result!: Resource<T>;
       const owner = scope(
         () => {
@@ -113,11 +115,11 @@ function handle<S extends Schema<S>>(native: IDBDatabase): Database<S> {
             disconnectors.add(disconnect);
             return disconnect;
           }, 0);
-          result = resource<T>(() => {
+          result = resource<T>((_previous, signal) => {
             // Read connection first: closing detaches the invalidation dependency.
             if (connection() !== "open") return Promise.reject(closedError());
             invalidation(); // Subscribe before starting the snapshot transaction.
-            return run(names, "readonly", body).then((value) => {
+            return run(names, "readonly", body, signal).then((value) => {
               if (!open) throw closedError();
               return value;
             });

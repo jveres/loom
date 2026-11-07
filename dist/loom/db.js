@@ -40,7 +40,7 @@ var u = class {
 		this.owners++;
 		let e = !0;
 		return () => {
-			e && (e = !1, --this.owners === 0 && (this.channel?.close(), this.channel = void 0, typeof window < "u" && (window.removeEventListener("pageshow", this.resume), window.removeEventListener("focus", this.resume), document.removeEventListener("visibilitychange", this.visible)), this.listeners.clear(), c.delete(this.name)));
+			e && (e = !1, --this.owners === 0 && (this.closeChannel(), typeof window < "u" && (window.removeEventListener("pageshow", this.resume), window.removeEventListener("focus", this.resume), document.removeEventListener("visibilitychange", this.visible)), this.listeners.clear(), c.delete(this.name)));
 		};
 	}
 	subscribe(e, t) {
@@ -76,11 +76,14 @@ var u = class {
 			this.disable();
 		}
 	}
-	disable() {
+	closeChannel() {
 		try {
 			this.channel?.close();
 		} catch {}
-		this.channel = void 0, l(() => this.mode("manual"));
+		this.channel = void 0;
+	}
+	disable() {
+		this.closeChannel(), l(() => this.mode("manual"));
 	}
 };
 function d(e) {
@@ -139,46 +142,50 @@ function g(e) {
 		limit: e.limit
 	};
 }
-function _(e, n, r, i, a, o) {
-	return new Promise((s, c) => {
-		let l, u = m(n);
+function _(e, n, r, i, a, o, s) {
+	return new Promise((c, l) => {
+		let u;
 		try {
-			l = e.transaction(u, r);
+			s?.throwIfAborted(), u = e.transaction(n, r);
 		} catch (e) {
-			o(), c(e);
+			o(), l(e);
 			return;
 		}
-		let d = !1, f = !1, _ = !1, v, y, b = /* @__PURE__ */ new Set(), x = (e) => {
-			if (_ || (_ = !0, v = e), !d) try {
-				l.abort();
+		let d = !1, f = !1, m = !1, _, v, y = /* @__PURE__ */ new Set(), b = (e) => {
+			if (m || (m = !0, _ = e), !d) try {
+				u.abort();
 			} catch {}
-		}, S = () => {
-			if (d || f || _) throw new DOMException("Transaction callback is no longer active", "TransactionInactiveError");
-		}, C = (e) => {
+		}, x = () => b(s?.reason);
+		s?.addEventListener("abort", x, { once: !0 });
+		let S = () => {
+			d = !0, s?.removeEventListener("abort", x), o();
+		}, C = () => {
+			if (d || f || m) throw new DOMException("Transaction callback is no longer active", "TransactionInactiveError");
+		}, w = (e) => {
 			try {
-				return S(), e();
+				return C(), e();
 			} catch (e) {
-				throw x(e), e;
+				throw b(e), e;
 			}
-		}, w = (e) => (e.catch(() => void 0), e), T = (e, t) => w(new Promise((n, r) => {
+		}, T = (e) => (e.catch(() => void 0), e), E = (e, t) => T(new Promise((n, r) => {
 			try {
-				let i = C(e);
-				t !== void 0 && b.add(t), i.onsuccess = () => n(i.result), i.onerror = (e) => {
+				let i = w(e);
+				t !== void 0 && y.add(t), i.onsuccess = () => n(i.result), i.onerror = (e) => {
 					e.preventDefault();
 					let t = i.error ?? new DOMException("Request failed", "UnknownError");
-					x(t), r(t);
+					b(t), r(t);
 				};
 			} catch (e) {
 				r(e);
 			}
-		})), E = (e) => {
-			let t = (t, n) => w(new Promise((r, i) => {
+		})), D = (e) => {
+			let t = (t, n) => T(new Promise((r, i) => {
 				try {
-					let a = C(() => g(t)), o = C(() => e.openCursor(a.range, a.direction)), s = [];
+					let a = w(() => g(t)), o = w(() => e.openCursor(a.range, a.direction)), s = [];
 					o.onerror = (e) => {
 						e.preventDefault();
 						let t = o.error;
-						x(t), i(t);
+						b(t), i(t);
 					}, o.onsuccess = () => {
 						try {
 							let e = o.result;
@@ -191,7 +198,7 @@ function _(e, n, r, i, a, o) {
 								value: e.value
 							} : e.value), s.length === a.limit ? r(s) : e.continue();
 						} catch (e) {
-							x(e), i(e);
+							b(e), i(e);
 						}
 					};
 				} catch (e) {
@@ -202,45 +209,45 @@ function _(e, n, r, i, a, o) {
 				scan: (e) => t(e, !1),
 				entries: (e) => t(e, !0)
 			};
-		}, D = { store(e) {
-			return C(() => {
-				if (!u.includes(e)) throw new DOMException("Store is outside the transaction scope", "NotFoundError");
-				let t = l.objectStore(e);
+		}, O = { store(e) {
+			return w(() => {
+				if (!n.includes(e)) throw new DOMException("Store is outside the transaction scope", "NotFoundError");
+				let t = u.objectStore(e);
 				if (t.keyPath !== null || t.autoIncrement) throw new DOMException("Stores require explicit out-of-line keys", "InvalidAccessError");
 				return {
-					...E(t),
-					get: (e) => T(() => t.get(h(e))),
-					index: (e) => C(() => E(t.index(e))),
+					...D(t),
+					get: (e) => E(() => t.get(h(e))),
+					index: (e) => w(() => D(t.index(e))),
 					...r === "readwrite" ? {
-						put: (n, r) => w(T(() => t.put(r, h(n)), e).then(() => void 0)),
-						delete: (n) => T(() => t.delete(h(n)), e),
-						clear: () => T(() => t.clear(), e)
+						put: (n, r) => T(E(() => t.put(r, h(n)), e).then(() => void 0)),
+						delete: (n) => E(() => t.delete(h(n)), e),
+						clear: () => E(() => t.clear(), e)
 					} : {}
 				};
 			});
 		} };
-		l.onabort = () => {
-			d = !0, o(), c(_ ? v : l.error ?? new DOMException("Transaction aborted", "AbortError"));
-		}, l.oncomplete = () => {
+		u.onabort = () => {
+			S(), l(m ? _ : u.error ?? new DOMException("Transaction aborted", "AbortError"));
+		}, u.oncomplete = () => {
 			d = !0;
 			try {
-				if (b.size) try {
-					a([...b]);
+				if (y.size) try {
+					a([...y]);
 				} catch {}
-				f ? _ ? c(v) : s(y) : c(new p("Callback outlived the native transaction; await only its requests", !0));
+				f ? m ? l(new p("Callback failed after the native transaction committed", !0, { cause: _ })) : c(v) : l(new p("Callback outlived the native transaction; await only its requests", !0));
 			} finally {
-				o();
+				S();
 			}
 		};
 		try {
-			let e = i(D);
+			let e = i(O);
 			t(e) ? Promise.resolve(e).then((e) => {
-				y = e, f = !0;
+				v = e, f = !0;
 			}, (e) => {
-				f = !0, x(e);
-			}) : (y = e, f = !0);
+				f = !0, b(e);
+			}) : (v = e, f = !0);
 		} catch (e) {
-			f = !0, x(e);
+			f = !0, b(e);
 		}
 	});
 }
@@ -260,16 +267,16 @@ function y(t) {
 		}
 	};
 	t.onversionchange = () => g("versionchange"), t.onclose = () => g("terminated");
-	let y = (e, n, r) => {
+	let y = (e, n, r, i) => {
 		if (!u) return Promise.reject(v());
-		let i;
+		let a;
 		try {
-			i = m(e);
+			a = m(e);
 		} catch (e) {
 			return Promise.reject(e);
 		}
-		let a = c.retain();
-		return _(t, i, n, r, (e) => c.commit(t.version, e), a);
+		let o = c.retain();
+		return _(t, a, n, r, (e) => c.commit(t.version, e), o, i);
 	};
 	return {
 		connection: () => n(),
@@ -285,7 +292,7 @@ function y(t) {
 					};
 					return h.add(r), r;
 				}, 0);
-				l = e(() => n() === "open" ? (a(), y(o, "readonly", i).then((e) => {
+				l = e((e, t) => n() === "open" ? (a(), y(o, "readonly", i, t).then((e) => {
 					if (!u) throw v();
 					return e;
 				})) : Promise.reject(v()));
