@@ -1,7 +1,12 @@
 // Repeatable failure scenarios. Each one causes a real failure, reads the result back, and rejects
 // if storage did not do what the API promises, so a passing card is evidence and not only a label.
 import { openDatabase, TransactionContractError } from "loom/db";
-import { deleteDatabase, firstRows, type StockroomDb } from "./database.js";
+import {
+  appendJournal,
+  deleteDatabase,
+  firstRows,
+  type StockroomDb,
+} from "./database.js";
 
 async function twoItems(db: StockroomDb, bin: string) {
   const [first, second] = await firstRows(db, bin, 2);
@@ -99,13 +104,12 @@ export async function prematureCommit(
   db: StockroomDb,
   tab: string,
 ): Promise<string> {
-  const key = (await journalLength(db)) + 1;
+  let key: number | undefined;
+  const line = `${tab}: saved before a timer ended the transaction`;
   let caught: unknown;
   try {
     await db.write(["journal"], async (tx) => {
-      await tx
-        .store("journal")
-        .put(key, `${tab}: saved before a timer ended the transaction`);
+      key = await appendJournal(tx.store("journal"), line);
       await new Promise((resolve) => setTimeout(resolve, 50));
       await tx.store("journal").put(key + 1, "This line must not persist");
     });
@@ -114,11 +118,13 @@ export async function prematureCommit(
   }
   if (!(caught instanceof TransactionContractError) || !caught.committed)
     throw new Error("Expected TransactionContractError with committed: true");
+  if (key === undefined)
+    throw new Error("The first journal append did not finish");
+  const savedKey = key;
   const saved = await db.read(["journal"], (tx) =>
-    tx.store("journal").get(key),
+    tx.store("journal").get(savedKey),
   );
-  if (saved === undefined)
-    throw new Error("The committed journal line is missing");
+  if (saved !== line) throw new Error("The committed journal line is missing");
   return `TransactionContractError with committed: true. The first line is saved, so this write must not be retried.`;
 }
 
@@ -127,9 +133,11 @@ export async function closeDuringWrite(
   db: StockroomDb,
   tab: string,
 ): Promise<string> {
-  const key = (await journalLength(db)) + 1;
   const write = db.write(["journal"], (tx) =>
-    tx.store("journal").put(key, `${tab}: saved after close() was called`),
+    appendJournal(
+      tx.store("journal"),
+      `${tab}: saved after close() was called`,
+    ),
   );
   db.close();
   await write;

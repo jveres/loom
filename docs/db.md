@@ -198,6 +198,10 @@ be aborted when its resource is invalidated. Closing is not write rollback.
 Native version changes automatically close old handles. Open a fresh handle and
 recreate queries after connection replacement.
 
+`loom/db` handles close automatically on `versionchange`. To demonstrate a
+blocked upgrade, use a raw connection that deliberately remains open, as another
+library or older application code might.
+
 `onBlocked` is a synchronous observer. Throwing or returning a Promise rejects
 opening; late native success is closed, and Promise rejections are observed.
 
@@ -213,7 +217,9 @@ reopen a stale schema or force a newer connection to downgrade.
 `crossTab()` reports `broadcast` or `manual`. If BroadcastChannel is absent or
 fails, same-window updates and focus/visible/pageshow refresh still work, but
 active peers have no automatic delivery guarantee. Call `db.refresh()` explicitly
-when needed. A transport/listener failure cannot turn a committed write into a
+when needed. `crossTab()` describes only this window: a `broadcast` tab cannot
+detect a peer in manual mode and may remain stale after that peer writes until
+it refreshes or regains focus/visibility. A transport/listener failure cannot turn a committed write into a
 storage failure or cause it to be retried.
 
 All writers must use the module for commit notifications. Raw IndexedDB writers

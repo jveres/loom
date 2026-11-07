@@ -123,3 +123,9 @@ in one write, as **Add 1,000 in one write** does. See the guide's
 - If two tabs run an upgrade scenario at the same time, one can wait for the other
   because they share a database. The Run button only prevents this within one tab.
 - There is no retry, network, or cache policy here. That belongs to an application.
+
+Concurrent scenario regression checks also run in all three source-browser
+engines. Twelve separate handles append through the premature-commit and
+close-during-write scenarios together. The check verifies every old entry,
+exactly twelve new entries, one marker per writer, and no late callback errors.
+Journal keys are allocated inside the same write transaction as the append.

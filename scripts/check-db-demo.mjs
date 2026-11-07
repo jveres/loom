@@ -489,10 +489,85 @@ async function exercise(engineName, context, url) {
   };
 }
 
+async function concurrentScenarios(context, url) {
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await page.goto(url);
+    const result = await page.evaluate(async () => {
+      const { openStockroom } = await import("/demo/db/database.ts");
+      const { prematureCommit, closeDuringWrite } = await import(
+        "/demo/db/scenarios.ts"
+      );
+      const reader = await openStockroom("race-reader");
+      const handles = await Promise.all(
+        Array.from({ length: 12 }, (_, i) => openStockroom(`race-${i}`)),
+      );
+      const snapshot = () =>
+        reader.read(["journal"], (tx) =>
+          tx.store("journal").entries({ limit: 10000 }),
+        );
+      try {
+        const before = await snapshot();
+        await Promise.all(
+          handles.map((db, i) =>
+            i % 2 === 0
+              ? prematureCommit(db, `race-${i}`)
+              : closeDuringWrite(db, `race-${i}`),
+          ),
+        );
+        // The deliberately late callback must not create another journal line.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const after = await snapshot();
+        return {
+          preserved: before.every((entry) =>
+            after.some(
+              (next) => next.key === entry.key && next.value === entry.value,
+            ),
+          ),
+          appended: after.length - before.length,
+          markers: handles.map(
+            (_, i) =>
+              after.filter((entry) => entry.value.startsWith(`race-${i}:`))
+                .length,
+          ),
+        };
+      } finally {
+        for (const db of handles) db.close();
+        reader.close();
+      }
+    });
+    assert.deepEqual(
+      result,
+      { preserved: true, appended: 12, markers: Array(12).fill(1) },
+      "Concurrent scenarios must append distinct journal entries without overwriting prior data",
+    );
+    assert.deepEqual(
+      errors,
+      [],
+      "Concurrent scenarios leaked a late rejection",
+    );
+  } finally {
+    await page.close();
+  }
+}
+
 async function runEngine(label, engineName, engine, url) {
   const browser = await engine.launch({ headless: true });
   const context = await browser.newContext();
   try {
+    if (label === "source") {
+      const regressionContext = await browser.newContext();
+      try {
+        await concurrentScenarios(regressionContext, url);
+      } finally {
+        await regressionContext.close();
+      }
+      console.log(
+        `${engineName}: concurrent scenario journal regression passed`,
+      );
+    }
     const result = await exercise(engineName, context, url);
     console.log(
       `${label} ${engineName} ${browser.version()}: ${result.steps.length} demo workflows passed`,

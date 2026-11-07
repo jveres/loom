@@ -49,12 +49,14 @@ function partName(index: number): string {
   return `${part} ${size}`;
 }
 
-async function appendJournal(
+export async function appendJournal(
   journal: WriteStore<Stockroom["journal"]>,
   line: string,
-): Promise<void> {
+): Promise<number> {
   const [last] = await journal.entries({ direction: "prev", limit: 1 });
-  await journal.put((last?.key ?? 0) + 1, line);
+  const key = (last?.key ?? 0) + 1;
+  await journal.put(key, line);
+  return key;
 }
 
 // A readwrite transaction serializes this with other tabs, so two tabs cannot both seed.
