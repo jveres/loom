@@ -248,11 +248,13 @@ pnpm run bench
 pnpm exec playwright install chromium firefox webkit
 pnpm run check:browser
 pnpm run check:db
+pnpm run check:db-demo
 pnpm run dev
 ```
 
 Open `/` for the UI demo, `/live/` for live Wikipedia edits streamed through
-Loom, or `/bench/` for browser workloads. Rebuild `dist`
+Loom, [`/db/`](demo/db/README.md) for the IndexedDB demo, or `/bench/` for browser
+workloads. Rebuild `dist`
 after source changes. `pnpm run build:demo` writes to `dist/demo`, preserving
 the library output. See [architecture](ARCHITECTURE.md), the
 [API consolidation record](docs/api-consolidation-plan.md), and

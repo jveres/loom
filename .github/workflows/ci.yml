@@ -40,6 +40,9 @@ jobs:
       - name: IndexedDB and multi-tab matrix
         run: pnpm run check:db
 
+      - name: Database demo matrix
+        run: pnpm run check:db-demo
+
       - name: Bundle-size budgets
         run: pnpm size
       - name: Public API and packed package

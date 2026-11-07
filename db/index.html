@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="../assets/loom.svg" />
+    <title>Stockroom — a Loom database demo</title>
+    <meta
+      name="description"
+      content="A synthetic stockroom that exercises loom/db: typed stores, bounded paging, atomic writes, reactive queries, and two-tab updates."
+    />
+    <!-- Paint the scheme-matched ground before the bundled CSS arrives, so nothing flashes. -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        background: light-dark(#f4f3ef, #15161a);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stockroom"></div>
+    <script type="module" src="/demo/db/main.tsx"></script>
+  </body>
+</html>

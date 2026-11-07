@@ -6,12 +6,14 @@ const root = import.meta.dirname;
 
 export default defineConfig({
   resolve: { alias: loomAliases },
-  // build:demo ships both pages: the realtime demo at / and the live Wikipedia demo at /live/.
+  // build:demo ships the realtime demo at /, the live Wikipedia demo at /live/, and the database
+  // demo at /db/.
   build: {
     rolldownOptions: {
       input: {
         main: resolve(root, "index.html"),
         live: resolve(root, "live/index.html"),
+        db: resolve(root, "db/index.html"),
       },
     },
   },

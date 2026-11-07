@@ -276,7 +276,8 @@ Sequential writes interleaved with completed reads still cause 2,000 scans:
 each snapshot can be current before the next commit. Batch related writes in
 one transaction and keep the active query count appropriate for the view.
 
-See the [API index](api.md), [support policy](support.md), and
+The [Stockroom demo](../demo/db/README.md) exercises this API through a real UI
+across tabs. See the [API index](api.md), [support policy](support.md), and
 [native transaction lifecycle](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction).
 The alternative adapter's responsibilities are described in the
 [idb documentation](https://github.com/jakearchibald/idb).

@@ -16,6 +16,7 @@ Canonical family entrypoints curate the operations described in the
 | `src/db/notifications.ts` | Reference-counted database notification bus, consumed by handles and queries. |
 | `src/db/db.test.ts`, `bench/db-browser-checks.ts`, `scripts/check-db.mjs` | Node fault checks, real-browser contracts, and cross-tab/latency workloads, consumed by library qualification. |
 | `docs/db.md` | Public generic database guide and design rationale, consumed by package users. |
+| `db/index.html`, `demo/db/`, `scripts/check-db-demo.mjs` | Stockroom demo of the public database API and its three-engine UI check; not part of the package. |
 | `src/index.ts` | Public reactive primitives and helper exports. |
 | `src/loom.ts` | Reactive nodes, bitflag node/lifecycle state, tracking context, scheduler, computed recovery, and scope operations that coordinate effect queues. |
 | `src/jsx-props.ts` | Shared JSX prop and attribute helpers (`cssPropName`, `isAriaAttr`, `propsWithoutKey`) used across DOM and HTML runtimes. |

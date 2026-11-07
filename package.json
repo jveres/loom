@@ -41,7 +41,8 @@
     "check:api": "node scripts/check-api.mjs",
     "check:package": "node scripts/check-package.mjs",
     "check:browser": "node scripts/check-browser.mjs",
-    "check:db": "node scripts/check-db.mjs"
+    "check:db": "node scripts/check-db.mjs",
+    "check:db-demo": "node scripts/check-db-demo.mjs"
   },
   "exports": {
     ".": {
