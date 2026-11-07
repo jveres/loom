@@ -253,7 +253,7 @@ function B(e, t = "count") {
 			for (let t of r) {
 				let r = t.node, i = r.seq, a = i - t.cursor, o = 0, s = I;
 				if (n && r.cap !== 0 && a > 0) {
-					let e = a < r.cap ? a : r.cap;
+					let e = Math.min(a, r.cap);
 					o = a - e;
 					let { fields: t, mask: n, head: i, cap: c } = r, l = r.cols ?? [], u = [];
 					for (let r = 0; r < e; r++) {

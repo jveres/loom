@@ -442,23 +442,6 @@ h2 {
   border-radius: 8px;
 }
 
-.metric-grid .metric span,
-.event strong {
-  display: block;
-  color: var(--dim);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.metric-grid .metric strong {
-  display: block;
-  margin-top: 5px;
-  font-size: 18px;
-  font-variant-numeric: tabular-nums;
-}
-
 .selected-panel {
   display: grid;
   gap: 10px;
@@ -507,10 +490,6 @@ h2 {
   text-transform: uppercase;
 }
 
-.selected-title strong.hidden {
-  visibility: hidden;
-}
-
 .selected-meta {
   color: var(--dim);
   font-size: 13px;
@@ -551,6 +530,27 @@ h2 {
 .event small {
   color: var(--dim);
   font-size: 12px;
+}
+
+.metric-grid .metric span,
+.event strong {
+  display: block;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.metric-grid .metric strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.selected-title strong.hidden {
+  visibility: hidden;
 }
 
 .feedback {

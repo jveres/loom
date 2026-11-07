@@ -136,10 +136,6 @@ table.bench tr.danger {
   background: var(--danger);
 }
 
-table.bench tr.danger td {
-  color: var(--warn);
-}
-
 td.col-md-1 {
   width: 60px;
   color: var(--dim);
@@ -201,6 +197,10 @@ table.res td:first-child {
   color: var(--dim);
   font-family: inherit;
   text-align: left;
+}
+
+table.bench tr.danger td {
+  color: var(--warn);
 }
 
 .ratio.good {

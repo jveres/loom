@@ -325,7 +325,7 @@ export function meter<const Channels extends ReadonlyArray<Channel>>(
         let samples: ReadonlyArray<Readonly<Record<string, unknown>>> =
           EMPTY_SAMPLES;
         if (withSamples && node.cap !== 0 && count > 0) {
-          const avail = count < node.cap ? count : node.cap;
+          const avail = Math.min(count, node.cap);
           dropped = count - avail;
           const { fields, mask, head, cap } = node;
           const cols = node.cols ?? [];

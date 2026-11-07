@@ -5,7 +5,7 @@ import { f as c, n as l, p as u, t as ee, v as te, y as ne } from "./dom-GgmJq4d
 import { i as re, n as d } from "./events-C3Am8PgS.js";
 import { t as ie } from "./motion-BjmrBjQI.js";
 import { bindStorage as f, codecs as p, storageSlot as m } from "./storage.js";
-import { a as h, i as g, n as _, o as ae, r as v } from "./observe-B_oxdQ1b.js";
+import { a as h, i as g, n as _, o as ae, r as v } from "./observe-Dm8fpfu4.js";
 import { virtualList as oe } from "./virtual-list.js";
 import { jsx as y, jsxs as b } from "./jsx-runtime.js";
 // src/devtools/bindings.ts
