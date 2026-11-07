@@ -54,7 +54,7 @@ one canonical surface without compatibility aliases.
 
 CI checks source types, behavior, README and database examples, generated distribution drift,
 public exports/declarations, packed consumers, bundle budgets, and the three-engine
-browser lifecycle matrix. Update
+browser lifecycle and IndexedDB/multi-tab matrices. Update
 `api/declarations.snapshot` intentionally after reviewing a public contract
 change. `api/exports.json` enumerates runtime exports, and
 `api/bundle-budgets.json` bounds complete family imports. Tests cover behavioral

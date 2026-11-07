@@ -8,7 +8,8 @@ callback arguments. Shared `Read`, `State`, `Stop`, and `Scope` types come from
 
 ## Families and declarations
 
-Each row is a supported package entrypoint. JSX protocol paths serve compiler
+Each row is a supported package entrypoint in this checkout. `loom/db` is an
+unreleased integration; see its [availability and installation](db.md#availability). JSX protocol paths serve compiler
 integration; the remaining families are named imports for application code.
 
 | Import | Runtime exports | Types and signatures |
@@ -36,7 +37,8 @@ integration; the remaining families are named imports for application code.
 
 ## Contracts you can reuse
 
-An immediate query or command returns a value or `void`. A subscription or
+A synchronous query or command returns a value or `void`. Database transactions
+return Promises; database queries return reactive resources. A subscription or
 binding returns an idempotent `Stop`; a multi-operation controller exposes
 `.stop()`. Controllers with `.cancel()` stay reusable after cancellation.
 Already-aborted signals install nothing, and stopped controllers cannot restart.

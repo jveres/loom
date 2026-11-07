@@ -223,6 +223,14 @@ Install the current release from its GitHub tag:
 pnpm add github:jveres/loom#v0.9.0
 ```
 
+The optional `loom/db` entrypoint is currently available on `c232-loom-db`,
+not in the `v0.9.0` release tag. For the tested database implementation, pin:
+
+```sh
+pnpm add github:jveres/loom#1ef4327a440858878e128e4e206c5e56c7b72515
+```
+
+See the [database guide](docs/db.md) for its API and qualification limits.
 Development uses TypeScript 7. The shared source-entry map drives local aliases;
 package checks also compile consumers outside the repository against a tarball.
 
@@ -237,6 +245,9 @@ pnpm run check:package
 pnpm run samples
 pnpm run size
 pnpm run bench
+pnpm exec playwright install chromium firefox webkit
+pnpm run check:browser
+pnpm run check:db
 pnpm run dev
 ```
 

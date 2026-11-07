@@ -1,4 +1,4 @@
-// Compile self-contained README examples with the repository's TypeScript 7.
+// Compile self-contained README and database guide examples with the repository's TypeScript 7.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,7 +18,7 @@ try {
       return name;
     },
   );
-  if (!files.length) throw new Error("No README samples found.");
+  if (!files.length) throw new Error("No documentation samples found.");
   writeFileSync(
     join(dir, "tsconfig.json"),
     JSON.stringify({
@@ -48,7 +48,7 @@ try {
     { stdio: "inherit" },
   );
   console.log(
-    `Verified ${files.length} self-contained README samples with TypeScript 7.`,
+    `Verified ${files.length} self-contained documentation samples with TypeScript 7.`,
   );
 } finally {
   rmSync(dir, { recursive: true, force: true });

@@ -9,6 +9,14 @@ This is a generic storage API. It has no required application fields, cache
 protocol, server connection, command retry policy, or UI model. The application
 chooses whether its records are primary local data or a rebuildable cache.
 
+## Availability
+
+This entrypoint is on the `c232-loom-db` integration branch; the `v0.9.0`
+release tag does not contain it. The tested implementation is commit
+`1ef4327a440858878e128e4e206c5e56c7b72515`; see the
+[installation instructions](../README.md#install-and-develop). The package
+version remains 0.9.0, so use the commit to identify this integration build.
+
 ## Open and define a schema
 
 Use out-of-line keys and create the native schema in the synchronous upgrade
@@ -67,12 +75,47 @@ view.stop();
 db.close();
 ```
 
+`name` selects a database in the current origin and storage partition.
+`version` must be a positive safe integer; increase it to change stores or
+indexes in `upgrade`. Opening an older version than the stored schema rejects
+with `VersionError`. A failed upgrade rolls back its schema/data changes; the
+module does not delete or rebuild the database automatically.
+
 `openDatabase` rejects if IndexedDB is unavailable or access is denied. There
 is no memory fallback or implicit deletion. `signal` cancels opening, including
 waiting on a blocked upgrade. A late successful connection is closed. Upgrades
 that already committed cannot be undone. A throwing blocked observer cancels
 the attempt. Upgrade callbacks cannot return promises; native request handlers
 can be installed on the supplied upgrade transaction for migrations.
+
+## Operation reference
+
+The [exported declarations](../dist/types/db/types.d.ts) define the generic
+schema, transaction, range, entry, and handle types. Operations use the store
+names and key/value/index types in your `Schema`; no schema object is passed
+at runtime.
+
+| Operation | Result and behavior |
+| --- | --- |
+| `openDatabase<S>(options)` | `Promise<Database<S>>`; opens an explicitly owned connection. |
+| `db.read(stores, callback)` | Promise of the callback result, after the readonly transaction completes. |
+| `db.write(stores, callback)` | Promise of the callback result, after the readwrite transaction commits. |
+| `db.query(stores, callback)` | `Resource<T>`; starts a reactive readonly query immediately. |
+| `tx.store(name).get(key)` | Promise of the stored value or `undefined`. |
+| `store.scan(options)` / `store.entries(options)` | Promise of bounded values or primary-key/value entries. |
+| `store.index(name)` | A typed index reader with `scan` and `entries`. |
+| `store.put(key, value)` | `Promise<void>`; insert or replace the complete value at an explicit key. No merge or generated key. |
+| `store.delete(key)` | `Promise<void>`; remove the key, including a harmless missing-key delete. |
+| `store.clear()` | `Promise<void>`; remove all records in that store, preserving schema and indexes. |
+| `query.refresh()` | Rerun this query; tracked parameter changes also rerun it. |
+| `db.refresh()` | Invalidate all live queries on same-name handles in this window; no broadcast or network fetch. |
+| `query.stop()` | Terminal query disposal; does not close the database. |
+| `db.close()` | Idempotent connection closure; no records are deleted. |
+
+Write methods exist only inside `db.write`. Values must be structured-cloneable;
+the facade does not serialize functions or validate values against TypeScript.
+`connection`, `crossTab`, and resource status are reactive reads; their lifetime
+and recovery behavior are described below.
 
 ## Bound every collection read
 
@@ -118,7 +161,8 @@ An omitted await does not hide a request failure from the outer operation.
 If the native transaction finishes while the callback is still pending, the
 outer operation rejects with `TransactionContractError` and `committed: true`.
 The same marker applies if a callback fails after native rollback becomes
-impossible; the original failure is retained as `cause`.
+impossible; a failure known at completion is retained as `cause`. A failure
+that arrives after the outer rejection is observed but cannot amend that error.
 The write may already be durable and is still broadcast. Later callback failures
 are observed, but cannot roll it back. Never automatically retry this error.
 Storage errors preserve native `DOMException` names; argument errors use
@@ -142,13 +186,14 @@ Scope pause disconnects notifications and suspends new effect-driven reads.
 An admitted read may still settle while paused. Resume always performs a fresh
 read. Superseding or stopping a query aborts its obsolete native readonly
 transaction when still active, so ignored results do not keep scanning. This
-does not cancel imperative `read`/`write` calls. `stop` and scope disposal are terminal. The database itself remains open
-until `close`; creating it inside a reactive scope does not transfer ownership.
+does not cancel imperative `read`/`write` calls. `stop` and scope disposal are
+terminal. The database itself remains open until `close`; creating it inside a reactive scope does not transfer ownership.
 
 `close` rejects new operations, removes query subscriptions, exposes a closed
 connection error to existing queries, and fences pending query delivery. Admitted
-native transactions still settle, and their successful commits still notify
-other handles before transport ownership is released. Closing is not rollback.
+imperative transactions still settle, and their successful commits still notify
+other handles before transport ownership is released. Reactive query work may
+be aborted when its resource is invalidated. Closing is not write rollback.
 `connection()` reports `open`, `closed`, `versionchange`, or `terminated`.
 Native version changes automatically close old handles. Open a fresh handle and
 recreate queries after connection replacement.
@@ -158,7 +203,8 @@ opening; late native success is closed, and Promise rejections are observed.
 
 ## Observe other tabs
 
-Same-database handles share a window-local bus. After commit the bus broadcasts
+Same-database handles share a window-local bus. Cross-tab delivery requires the
+same origin, storage partition, database name, and notification protocol. After commit the bus broadcasts
 only database identity, schema version, sender identity, and changed store names.
 Other tabs reread IndexedDB; messages are hints, not record updates. Native
 versionchange controls schema recovery, so delayed older-version hints cannot
@@ -176,6 +222,20 @@ between commit and broadcast. A resumed view rereads, but an active peer may
 remain stale until refresh. Worker integration is not qualified; the initial
 support target is browser windows. Storage may be evicted and is not a backup.
 
+## Clear data or reset the schema
+
+For a data-only reset, use one `db.write` callback over the affected stores and
+await each store's `clear()`. This preserves the schema and notifies other
+module queries only after the complete reset commits. Reset related stores in
+one transaction when their records must remain consistent.
+
+For a complete database deletion, stop its queries, close its handles, and use
+the native `indexedDB.deleteDatabase(name)` request. Observe `success`, `error`,
+and `blocked`; a close-pending transaction can delay deletion, and another tab
+may need to close its connection. There is no Loom delete-database wrapper.
+Reopen with the original upgrade callback to recreate an empty schema. This is
+an explicit application action, never automatic storage-error recovery.
+
 ## Foundation and qualification
 
 The implementation uses native IndexedDB, with no new runtime dependencies.
@@ -186,7 +246,9 @@ wrapping but would not remove those contracts or reactive lifetimes. Native code
 keeps that boundary explicit and preserves Loom's dependency policy; reconsider
 it if the facade expands enough to justify a broader adapter.
 
-Run `pnpm check:db` for real IndexedDB and two-tab scenarios in Chromium, Firefox,
+After `pnpm install`, install the test engines with
+`pnpm exec playwright install chromium firefox webkit` (CI also uses
+`--with-deps` on Linux). Run `pnpm check:db` for real IndexedDB and two-tab scenarios in Chromium, Firefox,
 and Playwright WebKit, plus synthetic measurements. Unit opening faults run in
 `pnpm test`. `pnpm check:package` verifies a packed consumer and import safety;
 `pnpm size` checks core budgets and the optional database's incremental cost.
