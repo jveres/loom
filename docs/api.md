@@ -8,8 +8,8 @@ callback arguments. Shared `Read`, `State`, `Stop`, and `Scope` types come from
 
 ## Families and declarations
 
-Each row is a supported package entrypoint in this checkout. `loom/db` is an
-unreleased integration; see its [availability and installation](db.md#availability). JSX protocol paths serve compiler
+Each row is a supported package entrypoint in this checkout. `loom/db` is
+available from v0.10.0; see its [installation instructions](db.md#availability). JSX protocol paths serve compiler
 integration; the remaining families are named imports for application code.
 
 | Import | Runtime exports | Types and signatures |

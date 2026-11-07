@@ -11,11 +11,10 @@ chooses whether its records are primary local data or a rebuildable cache.
 
 ## Availability
 
-This entrypoint is on the `c232-loom-db` integration branch; the `v0.9.0`
-release tag does not contain it. The tested implementation is commit
-`1ef4327a440858878e128e4e206c5e56c7b72515`; see the
-[installation instructions](../README.md#install-and-develop). The package
-version remains 0.9.0, so use the commit to identify this integration build.
+This entrypoint is included in v0.10.0. Install with
+`pnpm add github:jveres/loom#v0.10.0`; the earlier v0.9.0 tag does not contain it.
+See the [release notes](release-0.10.0.md) and
+[Stockroom demo guide](https://github.com/jveres/loom/blob/v0.10.0/demo/db/README.md) for qualification and examples.
 
 ## Open and define a schema
 

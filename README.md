@@ -10,13 +10,15 @@ nodes; reactive bindings update those nodes in place.
 
 See it running:
 
+- [Stockroom database demo](https://jveres.github.io/loom/db/): bounded local
+  inventory reads, atomic writes, real failure scenarios, and multiple tabs.
 - [Live Wikipedia edits](https://jveres.github.io/loom/live/): every edit to the
   Wikimedia wikis, streamed and woven into a live dashboard, with its own DOM
   writes and effect runs per edit on display.
 - [Realtime stress demo](https://jveres.github.io/loom/): a card board under
   adjustable event load, with the Loom inspector.
 
-The current release is `0.9.0` ([release notes](docs/release-0.9.0.md)). Version
+The current release is `0.10.0` ([release notes](docs/release-0.10.0.md)). Version
 `0.6.0` introduced the breaking API consolidation
 ([release notes](docs/release-0.6.0.md)). If you are upgrading from `0.5.0` or earlier, follow the
 [migration guide](docs/migration.md) to update imports and lifetimes.
@@ -220,17 +222,11 @@ Loom is distributed through GitHub with committed ESM bundles and declarations.
 Install the current release from its GitHub tag:
 
 ```sh
-pnpm add github:jveres/loom#v0.9.0
+pnpm add github:jveres/loom#v0.10.0
 ```
 
-The optional `loom/db` entrypoint is currently available on `c232-loom-db`,
-not in the `v0.9.0` release tag. For the tested database implementation, pin:
-
-```sh
-pnpm add github:jveres/loom#1ef4327a440858878e128e4e206c5e56c7b72515
-```
-
-See the [database guide](docs/db.md) for its API and qualification limits.
+The optional `loom/db` entrypoint is included from v0.10.0. See the
+[database guide](docs/db.md) for its API and qualification limits.
 Development uses TypeScript 7. The shared source-entry map drives local aliases;
 package checks also compile consumers outside the repository against a tarball.
 
