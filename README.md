@@ -80,6 +80,7 @@ other families add model utilities, DOM construction, or browser behavior.
 | `loom/schedule` | Coalescers, frame delays, event races, and quiet-period watches. |
 | `loom/storage` | Validated storage slots and explicit persistence bindings. |
 | `loom/virtual-list` | Standalone fixed-height windowing. |
+| `loom/db` | Typed IndexedDB transactions and reactive bounded reads across tabs; see the [database guide](docs/db.md). |
 | `loom/async` | Async resources and pending-work aggregation. |
 | `loom/defer` | Side-effect import that lets effects opt into deferred scheduling (`{ defer: true }`). |
 | `loom/observe` | Instrumentation, inspection, channels, and meters. |

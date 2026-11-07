@@ -1,5 +1,5 @@
-import { a as e, i as t, n, r } from "./tracking-CaYucQ42.js";
-//#region src/dom/ownership-base.ts
+import { a as e, i as t, n, r } from "./tracking-wsSu4LCy.js";
+// src/dom/ownership-base.ts
 var i, a, o;
 function s(e) {
 	i = e;
@@ -229,5 +229,4 @@ function O(t) {
 	}
 	e(n, "Loom DOM disposal and removal both failed.");
 }
-//#endregion
 export { g as a, O as c, E as d, v as f, h as i, y as l, s as n, _ as o, C as r, T as s, D as t, b as u };

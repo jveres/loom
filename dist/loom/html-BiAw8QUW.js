@@ -1,5 +1,5 @@
-import { n as e, t } from "./jsx-props-CBvsxEaL.js";
-//#region src/html/escape.ts
+import { n as e, t } from "./jsx-props-DuIVfWzo.js";
+// src/html/escape.ts
 var n = {
 	"&": "&amp;",
 	"<": "&lt;",
@@ -17,8 +17,7 @@ var a = Object.fromEntries(Object.entries(n).map(([e, t]) => [t, e])), o = new R
 function s(e) {
 	return e.replace(o, (e) => a[e] ?? e);
 }
-//#endregion
-//#region src/html/attributes.ts
+// src/html/attributes.ts
 var c = /^[A-Za-z_:][A-Za-z0-9:._-]*$/, l = /^(-{2}[A-Za-z][A-Za-z0-9-]*|-?[A-Za-z][A-Za-z0-9-]*)$/, u = /^(?:javascript:|vbscript:|data:text\/html|data:text\/xml|data:application\/xhtml\+xml|data:image\/svg)/i, d = /[\u0000-\u0020]/g, f = /* @__PURE__ */ new Set([
 	"href",
 	"src",
@@ -77,8 +76,7 @@ function y(e, t = {}) {
 	for (let i in e) Object.hasOwn(e, i) && (n += m(r, i, e[i], t.dev === !0));
 	return n;
 }
-//#endregion
-//#region src/html/index.ts
+// src/html/index.ts
 var b = Symbol.for("loom.html");
 function x(e) {
 	return {
@@ -135,5 +133,4 @@ function O(e, t, n = {}) {
 	}
 	return x(`${i}${y(o, n.tag ? { tag: n.tag } : {})}${a}`);
 }
-//#endregion
 export { x as a, y as c, C as i, i as l, S as n, O as o, w as r, m as s, T as t, r as u };

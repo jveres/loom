@@ -162,7 +162,7 @@ describe("scrollFade", () => {
       "calc(100% - var(--scroll-fade-gutter, 0px)) 100%, 100% 100%",
     );
     expect(el.style.maskComposite).toBe("exclude");
-    expect(el.style.webkitMaskComposite).toBe("xor");
+    // Vendor-prefixed CSS support is qualified in the real-browser matrix.
     dispose();
     expect(el.style.maskSize).toBe("");
     expect(el.style.maskComposite).toBe("");

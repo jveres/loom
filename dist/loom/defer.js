@@ -1,5 +1,5 @@
-import { a as e, u as t } from "./loom-WRYGQLBj.js";
-//#region src/core/defer.ts
+import { a as e, u as t } from "./loom-Bchrc-TP.js";
+// src/core/defer.ts
 var n = () => performance.now(), r = 1, i = 2, a = Infinity, o = [], s = [], c = 0, l = 0, u = !1, d = a, f, p = !1, m = !1, h;
 function g(e, t) {
 	let n = [e, t], r = s.length;
@@ -164,4 +164,3 @@ function D() {
 	o.length = 0, s.length = 0, c = 0, l = 0, x();
 }
 var O = t(w);
-//#endregion

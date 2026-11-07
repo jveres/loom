@@ -1,8 +1,8 @@
-import { n as e } from "./tracking-CaYucQ42.js";
-import { n as t, t as n } from "./place-Dwep3y7Y.js";
-import { t as r } from "./lifetime-D_7_tsmv.js";
-import { afterFrames as i } from "./schedule.js";
-//#region src/dom/caret-at-point.ts
+import { n as e, t } from "./place-DUwBXkiV.js";
+import { n } from "./tracking-wsSu4LCy.js";
+import { afterFrames as r } from "./schedule.js";
+import { t as i } from "./lifetime-CuwHoBWD.js";
+// src/dom/caret-at-point.ts
 function a(e, t, n) {
 	let r = e, i = r.caretPositionFromPoint?.(t, n);
 	if (i) return {
@@ -15,8 +15,7 @@ function a(e, t, n) {
 		offset: a.startOffset
 	} : void 0;
 }
-//#endregion
-//#region src/dom/offset-in.ts
+// src/dom/offset-in.ts
 function o(e, t) {
 	let n = t.getBoundingClientRect(), r = e.getBoundingClientRect();
 	return {
@@ -26,8 +25,7 @@ function o(e, t) {
 		height: r.height
 	};
 }
-//#endregion
-//#region src/dom/reveal.ts
+// src/dom/reveal.ts
 function s(e, t = {}) {
 	let n = e.ownerDocument.body, r = t.axis ?? "y", i = e.ownerDocument.defaultView ?? globalThis;
 	for (let a = e.parentElement; a && a !== n; a = a.parentElement) {
@@ -78,30 +76,28 @@ function f(e, t = {}) {
 	}
 	return t.align === "center" ? d(r, e, n, t) : u(r, e, n, t), !0;
 }
-//#endregion
-//#region src/dom/scroll-memory.ts
-function p(t, n, a = {}) {
-	let o = r(t, a.signal), s, c = !1, l = 0, u, d = a.axis === "x", f = () => {
+// src/dom/scroll-memory.ts
+function p(e, t, a = {}) {
+	let o = i(e, a.signal), s, c = !1, l = 0, u, d = a.axis === "x", f = () => {
 		if (!o.active || c || s === void 0) return;
 		let r = s;
-		e(() => n(r)(d ? t.scrollLeft : t.scrollTop));
+		n(() => t(r)(d ? e.scrollLeft : e.scrollTop));
 	};
-	return o.active && (t.addEventListener("scroll", f, { passive: !0 }), o.add(() => {
-		t.removeEventListener("scroll", f), u?.();
+	return o.active && (e.addEventListener("scroll", f, { passive: !0 }), o.add(() => {
+		e.removeEventListener("scroll", f), u?.();
 	})), {
 		stop: o.stop,
-		restore(r) {
+		restore(i) {
 			if (!o.active) return;
 			let a = ++l;
-			s = r, c = !0, u?.();
-			let f = e(() => n(r));
+			s = i, c = !0, u?.();
+			let f = n(() => t(i));
 			queueMicrotask(() => {
-				o.active && a === l && (d ? t.scrollLeft = e(() => f()) : t.scrollTop = e(() => f()), u = i(1, () => {
+				o.active && a === l && (d ? e.scrollLeft = n(() => f()) : e.scrollTop = n(() => f()), u = r(1, () => {
 					o.active && a === l && (c = !1);
-				}, { window: t.ownerDocument.defaultView ?? globalThis }));
+				}, { window: e.ownerDocument.defaultView ?? globalThis }));
 			});
 		}
 	};
 }
-//#endregion
-export { a as caretAtPoint, s as findScroller, o as offsetIn, n as placeAfter, t as positionOrdered, f as reveal, p as scrollMemory };
+export { a as caretAtPoint, s as findScroller, o as offsetIn, t as placeAfter, e as positionOrdered, f as reveal, p as scrollMemory };

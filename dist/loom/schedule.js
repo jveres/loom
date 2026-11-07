@@ -1,7 +1,7 @@
-import { n as e } from "./tracking-CaYucQ42.js";
-import { k as t, o as n } from "./loom-WRYGQLBj.js";
-import { n as r, t as i } from "./lifetime-CYx3KLZ0.js";
-//#region src/schedule.ts
+import { n as e, t } from "./lifetime-BJiN2AyE.js";
+import { n } from "./tracking-wsSu4LCy.js";
+import { k as r, o as i } from "./loom-Bchrc-TP.js";
+// src/schedule.ts
 function a(e, t = globalThis) {
 	let n = !0, r = () => {
 		n && (n = !1, e());
@@ -10,14 +10,14 @@ function a(e, t = globalThis) {
 		n = !1, i !== void 0 && t.cancelAnimationFrame?.(i);
 	};
 }
-function o(t, n, i) {
-	let a = r(i?.signal), o, s = () => {
+function o(t, r, i) {
+	let a = e(i?.signal), o, s = () => {
 		o?.(), o = void 0;
 	};
 	return a.add(s), {
 		request() {
-			a.active && !o && (o = n(() => {
-				o = void 0, a.active && e(t);
+			a.active && !o && (o = r(() => {
+				o = void 0, a.active && n(t);
 			}));
 		},
 		cancel: s,
@@ -37,28 +37,28 @@ function s(e, t) {
 function c(e, t) {
 	return o(e, (e) => a(e, t?.window), t);
 }
-function l(t, n, i) {
+function l(t, r, i) {
 	if (!Number.isInteger(t) || t < 1) throw RangeError("Frame count must be a positive integer.");
-	let o = r(i?.signal), s;
+	let o = e(i?.signal), s;
 	o.add(() => s?.());
 	let c = () => {
-		o.active && (--t === 0 ? (o.stop(), e(n)) : s = a(c, i?.window));
+		o.active && (--t === 0 ? (o.stop(), n(r)) : s = a(c, i?.window));
 	};
 	return o.active && (s = a(c, i?.window)), o.stop;
 }
-function u(t, n, a, o) {
+function u(r, i, a, o) {
 	d(o.timeoutMs);
-	let s = r(o.signal);
+	let s = e(o.signal);
 	if (!s.active) return s.stop;
-	let c = (t) => {
-		s.active && (s.stop(), e(() => a(t)));
-	}, l = t, u = l.ownerDocument?.defaultView ?? l.defaultView ?? l.window ?? globalThis;
+	let c = (e) => {
+		s.active && (s.stop(), n(() => a(e)));
+	}, l = r, u = l.ownerDocument?.defaultView ?? l.defaultView ?? l.window ?? globalThis;
 	try {
-		t.addEventListener(n, c, { capture: o.capture ?? !1 }), s.add(() => t.removeEventListener(n, c, o.capture ?? !1));
+		r.addEventListener(i, c, { capture: o.capture ?? !1 }), s.add(() => r.removeEventListener(i, c, o.capture ?? !1));
 		let e = u.setTimeout(c, o.timeoutMs);
 		s.add(() => u.clearTimeout(e));
 	} catch (e) {
-		i(s, e);
+		t(s, e);
 	}
 	return s.stop;
 }
@@ -67,18 +67,18 @@ function d(e) {
 }
 function f(a, o, s) {
 	d(s.delayMs);
-	let c = r(s.signal), l = s.equals ?? ((e, t) => e === t), u = !0, f, p, m, h = !1, g, _ = () => {
+	let c = e(s.signal), l = s.equals ?? ((e, t) => e === t), u = !0, f, p, m, h = !1, g, _ = () => {
 		g !== void 0 && clearTimeout(g), g = void 0;
 	}, v = () => {
 		h = !1, _();
 	}, y = () => {
 		if (!c.active || !h) return;
 		v();
-		let t = p;
-		p = m, e(() => o(p, t));
+		let e = p;
+		p = m, n(() => o(p, e));
 	};
 	if (c.add(v), c.active) try {
-		c.add(n(() => t(() => {
+		c.add(i(() => r(() => {
 			let e = a();
 			return u && (u = !1, f = p = e), e;
 		}, (e) => {
@@ -87,7 +87,7 @@ function f(a, o, s) {
 			f = e, t ? h && (m = e) : l(e, p) ? v() : (m = e, h = !0, _(), g = setTimeout(y, s.delayMs));
 		})));
 	} catch (e) {
-		i(c, e);
+		t(c, e);
 	}
 	return {
 		stop: c.stop,
@@ -95,5 +95,4 @@ function f(a, o, s) {
 		flush: y
 	};
 }
-//#endregion
 export { l as afterFrames, u as eventOrTimeout, c as frameCoalescer, s as microtaskCoalescer, f as watchSettled };

@@ -2,7 +2,7 @@ import { state } from "loom";
 import { observeSize } from "loom/browser";
 import { each, h, list, remove } from "loom/dom";
 import { startPointerSession } from "loom/events";
-import { afterAnimation, afterTransition } from "loom/motion";
+import { afterAnimation, afterTransition, scrollFade } from "loom/motion";
 import { afterFrames } from "loom/schedule";
 import { virtualList } from "loom/virtual-list";
 export async function runBrowserChecks() {
@@ -195,6 +195,24 @@ export async function runBrowserChecks() {
     remove(node);
   } finally {
     iframe.remove();
+  }
+  const faded = document.createElement("div");
+  faded.style.cssText = "height:100px;overflow:auto";
+  const content = document.createElement("div");
+  content.style.height = "400px";
+  faded.append(content);
+  document.body.append(faded);
+  const stopFade = scrollFade(faded);
+  try {
+    check(
+      ["exclude", "xor"].includes(faded.style.maskComposite) &&
+        (!CSS.supports("-webkit-mask-composite", "xor") ||
+          faded.style.getPropertyValue("-webkit-mask-composite") === "xor"),
+      `scroll fade mask composition: ${faded.style.maskComposite}; ${faded.style.getPropertyValue("-webkit-mask-composite")}`,
+    );
+  } finally {
+    stopFade();
+    faded.remove();
   }
   return checks;
 }

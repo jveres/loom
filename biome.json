@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.5/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -18,7 +18,9 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      "complexity": { "useLiteralKeys": "off" }
+      "complexity": {
+        "useLiteralKeys": "off"
+      }
     }
   },
   "overrides": [
@@ -26,8 +28,12 @@
       "includes": ["src/devtools/inspector.css"],
       "linter": {
         "rules": {
-          "complexity": { "noImportantStyles": "off" },
-          "style": { "noDescendingSpecificity": "off" }
+          "complexity": {
+            "noImportantStyles": "off"
+          },
+          "style": {
+            "noDescendingSpecificity": "off"
+          }
         }
       }
     },
@@ -35,9 +41,19 @@
       "includes": ["src/core/graph.ts"],
       "linter": {
         "rules": {
-          "correctness": { "noConstantCondition": "off" },
-          "suspicious": { "noAssignInExpressions": "off" }
+          "correctness": {
+            "noConstantCondition": "off"
+          },
+          "suspicious": {
+            "noAssignInExpressions": "off"
+          }
         }
+      }
+    },
+    {
+      "includes": ["**/*.md"],
+      "formatter": {
+        "enabled": false
       }
     }
   ]

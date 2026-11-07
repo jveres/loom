@@ -1,5 +1,5 @@
-import { D as e, E as t, c as n, n as r, w as i } from "./loom-WRYGQLBj.js";
-//#region src/async/index.ts
+import { D as e, E as t, c as n, n as r, w as i } from "./loom-Bchrc-TP.js";
+// src/async/index.ts
 function a(a, o) {
 	let s = i(void 0, o), c = i(!0, o), l = i(!1, o), u = i(void 0, o), d = i(0, o), f = n(() => {
 		d();
@@ -36,5 +36,4 @@ function a(a, o) {
 function o(...e) {
 	return () => e.some((e) => e.loading());
 }
-//#endregion
 export { o as pending, a as resource };

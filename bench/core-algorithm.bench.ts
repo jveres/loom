@@ -6,7 +6,7 @@ import {
   startBatch,
 } from "alien-signals";
 import { batch, computed, effect, scope, state } from "loom";
-import { bench, describe } from "vitest";
+import { describe, test } from "vitest";
 
 let sink = 0;
 const consume = (value: number): void => {
@@ -32,21 +32,57 @@ const loomCascade = cascadeGraph(state, effect);
 const alienCascade = cascadeGraph(alienSignal, alienEffect);
 const loomScoped = scopedGraph();
 describe("core algorithm: loom vs alien-signals", () => {
-  bench("loom: direct write -> effect", loomDirect);
-  bench("alien: direct write -> effect", alienDirect);
-  bench("loom: fanout 100 effects", loomFanout);
-  bench("alien: fanout 100 effects", alienFanout);
-  bench("loom: computed chain depth 25", loomChain);
-  bench("alien: computed chain depth 25", alienChain);
-  bench("loom: dynamic deps 64 of 128", loomDynamic);
-  bench("alien: dynamic deps 64 of 128", alienDynamic);
-  bench("loom: batch 100 sources -> effect", loomBatched);
-  bench("alien: batch 100 sources -> effect", alienBatched);
-  bench("loom: batch 100 writes -> 100 effects", loomRepeatedWrites);
-  bench("alien: batch 100 writes -> 100 effects", alienRepeatedWrites);
-  bench("loom: effect cascade depth 100", loomCascade);
-  bench("alien: effect cascade depth 100", alienCascade);
-  bench("loom: scoped write -> effect", loomScoped);
+  test("loom: direct write -> effect", async ({ bench }) => {
+    await bench("loom: direct write -> effect", loomDirect).run();
+  });
+  test("alien: direct write -> effect", async ({ bench }) => {
+    await bench("alien: direct write -> effect", alienDirect).run();
+  });
+  test("loom: fanout 100 effects", async ({ bench }) => {
+    await bench("loom: fanout 100 effects", loomFanout).run();
+  });
+  test("alien: fanout 100 effects", async ({ bench }) => {
+    await bench("alien: fanout 100 effects", alienFanout).run();
+  });
+  test("loom: computed chain depth 25", async ({ bench }) => {
+    await bench("loom: computed chain depth 25", loomChain).run();
+  });
+  test("alien: computed chain depth 25", async ({ bench }) => {
+    await bench("alien: computed chain depth 25", alienChain).run();
+  });
+  test("loom: dynamic deps 64 of 128", async ({ bench }) => {
+    await bench("loom: dynamic deps 64 of 128", loomDynamic).run();
+  });
+  test("alien: dynamic deps 64 of 128", async ({ bench }) => {
+    await bench("alien: dynamic deps 64 of 128", alienDynamic).run();
+  });
+  test("loom: batch 100 sources -> effect", async ({ bench }) => {
+    await bench("loom: batch 100 sources -> effect", loomBatched).run();
+  });
+  test("alien: batch 100 sources -> effect", async ({ bench }) => {
+    await bench("alien: batch 100 sources -> effect", alienBatched).run();
+  });
+  test("loom: batch 100 writes -> 100 effects", async ({ bench }) => {
+    await bench(
+      "loom: batch 100 writes -> 100 effects",
+      loomRepeatedWrites,
+    ).run();
+  });
+  test("alien: batch 100 writes -> 100 effects", async ({ bench }) => {
+    await bench(
+      "alien: batch 100 writes -> 100 effects",
+      alienRepeatedWrites,
+    ).run();
+  });
+  test("loom: effect cascade depth 100", async ({ bench }) => {
+    await bench("loom: effect cascade depth 100", loomCascade).run();
+  });
+  test("alien: effect cascade depth 100", async ({ bench }) => {
+    await bench("alien: effect cascade depth 100", alienCascade).run();
+  });
+  test("loom: scoped write -> effect", async ({ bench }) => {
+    await bench("loom: scoped write -> effect", loomScoped).run();
+  });
 });
 interface Signal<T> {
   (): T;

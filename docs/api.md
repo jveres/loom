@@ -23,6 +23,7 @@ integration; the remaining families are named imports for application code.
 | `loom/schedule` | `afterFrames`, `eventOrTimeout`, `frameCoalescer`, `microtaskCoalescer`, `watchSettled` | [Declarations](../dist/types/schedule.d.ts) |
 | `loom/storage` | `bindStorage`, `codecs`, `storageSlot` | [Declarations](../dist/types/storage.d.ts) |
 | `loom/virtual-list` | `virtualList` | [Declarations](../dist/types/dom/virtual-list.d.ts) |
+| `loom/db` | `openDatabase`, `TransactionContractError` | [Guide](db.md), [declarations](../dist/types/db/index.d.ts) |
 | `loom/async` | `pending`, `resource` | [Declarations](../dist/types/async/index.d.ts) |
 | `loom/defer` | Side-effect installation only. | [Declarations](../dist/types/core/defer.d.ts) |
 | `loom/observe` | `channel`, `events`, `inspect`, `inspectResources`, `meter`, `sampleOf` | [Declarations](../dist/types/observe.d.ts) |

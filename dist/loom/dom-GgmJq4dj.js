@@ -1,12 +1,12 @@
-import { a as e, n as t } from "./tracking-CaYucQ42.js";
-import { D as n, T as r, b as i, g as a, s as o } from "./loom-WRYGQLBj.js";
-import { n as s, t as c } from "./jsx-props-CBvsxEaL.js";
-import { n as l, t as u } from "./document-observer-BFn9LFx6.js";
-import { a as d, d as f, f as p, i as m, l as h, n as g, o as _, r as v, s as y, t as b } from "./ownership-base-1B2CbISn.js";
-import { n as x } from "./place-Dwep3y7Y.js";
-import { t as ee } from "./lifetime-CYx3KLZ0.js";
-import { t as S } from "./lifetime-D_7_tsmv.js";
-//#region src/dom/keyed-reconcile.ts
+import { a as e, n as t } from "./tracking-wsSu4LCy.js";
+import { n, t as r } from "./jsx-props-DuIVfWzo.js";
+import { D as i, T as a, b as o, g as s, s as c } from "./loom-Bchrc-TP.js";
+import { n as l, t as u } from "./document-observer-zbd6B0Gc.js";
+import { a as d, d as f, f as p, i as m, l as h, n as g, o as _, r as v, s as y, t as b } from "./ownership-base-SRCUIJtL.js";
+import { n as x } from "./place-DUwBXkiV.js";
+import { t as S } from "./lifetime-CuwHoBWD.js";
+import { t as ee } from "./lifetime-BJiN2AyE.js";
+// src/dom/keyed-reconcile.ts
 function C(e, n, r, i, a, o, s = !0, c) {
 	let l = r.length, u = /* @__PURE__ */ new Set(), d = Array(l), f = Array(l), m = 0;
 	for (let e = 0; e < l; e++) {
@@ -44,8 +44,7 @@ function C(e, n, r, i, a, o, s = !0, c) {
 		h(e);
 	}
 }
-//#endregion
-//#region src/dom/on-mount.ts
+// src/dom/on-mount.ts
 var w = /* @__PURE__ */ new WeakMap();
 function te(e) {
 	for (let [t, n] of e.pending) if (t.isConnected) {
@@ -88,8 +87,7 @@ function T(e, n, r) {
 		t && (t.delete(s), t.size === 0 && (a?.pending.delete(e), a?.pending.size === 0 && (a.observer?.disconnect(), a.observer = null)));
 	}), r?.signal?.addEventListener("abort", o, { once: !0 }), o;
 }
-//#endregion
-//#region src/dom/ownership.ts
+// src/dom/ownership.ts
 g({
 	onStop: (e, t) => {
 		let n = e;
@@ -101,12 +99,12 @@ g({
 			};
 		}
 	},
-	stop: (e) => r(e),
+	stop: (e) => a(e),
 	pause: (e) => {
-		a(e);
+		s(e);
 	},
 	resume: (e) => {
-		i(e);
+		o(e);
 	},
 	requiresOrderedStop: (e) => e.cleanup !== void 0
 });
@@ -116,33 +114,31 @@ function E(e) {
 function D(e) {
 	f(e);
 }
-//#endregion
-//#region src/dom/bind-value.ts
-function re(e, n, i = {}) {
-	let a = S(e, i.signal);
-	if (!a.active) return a.stop;
-	let s = i.property === "checked", c = () => s ? e.checked : e.value, l = c(), u = () => {
-		a.active && c() !== l && (s ? e.checked = l : e.value = l);
+// src/dom/bind-value.ts
+function re(e, n, r = {}) {
+	let i = S(e, r.signal);
+	if (!i.active) return i.stop;
+	let o = r.property === "checked", s = () => o ? e.checked : e.value, l = s(), u = () => {
+		i.active && s() !== l && (o ? e.checked = l : e.value = l);
 	}, f = () => {
-		a.active && (l = c(), t(() => {
+		i.active && (l = s(), t(() => {
 			n(l);
 		}));
-	}, p = s ? "change" : "input";
-	e.addEventListener("blur", u), e.addEventListener(p, f), a.add(() => {
+	}, p = o ? "change" : "input";
+	e.addEventListener("blur", u), e.addEventListener(p, f), i.add(() => {
 		e.removeEventListener("blur", u), e.removeEventListener(p, f);
 	});
 	try {
-		let t = o(() => {
+		let t = c(() => {
 			l = n(), e.ownerDocument.activeElement !== e && u();
 		}, "dom.bindValue", e);
-		d(e, t), a.add(() => r(t));
+		d(e, t), i.add(() => a(t));
 	} catch (e) {
-		ee(a, e);
+		ee(i, e);
 	}
-	return a.stop;
+	return i.stop;
 }
-//#endregion
-//#region src/dom/keyed-child.ts
+// src/dom/keyed-child.ts
 function ie(e) {
 	let n, r = !0;
 	return v(e, () => {
@@ -156,8 +152,7 @@ function ie(e) {
 		}), n = i, h(o.filter((t) => t.parentNode !== e));
 	};
 }
-//#endregion
-//#region src/dom/morph.ts
+// src/dom/morph.ts
 function O(e, t) {
 	let n = t.skip;
 	return n === void 0 ? !1 : typeof n == "string" ? e.matches(n) : n(e);
@@ -267,8 +262,7 @@ function j(e, t, n, r) {
 	}
 	return x(e, g, null), p;
 }
-//#endregion
-//#region src/dom/index.ts
+// src/dom/index.ts
 var M = (e) => e, N = "http://www.w3.org/2000/svg", le = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
 function ue(e) {
 	return (t, ...n) => {
@@ -357,13 +351,13 @@ function pe(e, t = null, n) {
 }
 function F(e, t) {
 	let n = document.createTextNode(""), r = "";
-	return d(n, o(() => {
+	return d(n, c(() => {
 		let t = Oe(e());
 		t !== r && (r = t, n.data = t);
 	}, "dom.text", n, t)), n;
 }
 function I(e, t, n, r) {
-	return r?.signal?.aborted ? () => {} : _(e, o(t, n, e, r), r?.signal);
+	return r?.signal?.aborted ? () => {} : _(e, c(t, n, e, r), r?.signal);
 }
 function me(e, t, n, r) {
 	return I(e, K(e, t, n), `dom.attr.${t}`, r);
@@ -371,19 +365,19 @@ function me(e, t, n, r) {
 function he(e, t, n, r) {
 	return I(e, G(e, t, n), `dom.class.${t}`, r);
 }
-function L(e, t, n, r) {
-	let i = c(t);
-	return I(e, Y(e, i, n), `dom.style.${i}`, r);
+function L(e, t, n, i) {
+	let a = r(t);
+	return I(e, Y(e, a, n), `dom.style.${a}`, i);
 }
 function ge(e, t, n) {
 	if (n.signal?.aborted) return () => {};
 	let r = /* @__PURE__ */ new Map(), i = n.update ? {
 		update: n.update,
 		items: /* @__PURE__ */ new Map()
-	} : void 0, a = _(e, o(() => {
+	} : void 0, a = _(e, c(() => {
 		let a = n.reorder?.() !== !1;
 		C(e, null, t(), r, n.key, n.render, a, i);
-	}, "dom.list", e)), s = () => {
+	}, "dom.list", e)), o = () => {
 		let e = [...r.values()];
 		r.clear(), i?.items.clear();
 		let t = [];
@@ -393,31 +387,31 @@ function ge(e, t, n) {
 			t.push(e);
 		}
 		h(e, t);
-	}, c = S(e, n.signal);
-	return c.add(s), c.stop;
+	}, s = S(e, n.signal);
+	return s.add(o), s.stop;
 }
 function R(e, t) {
 	return M({
 		__loomDynamic: !0,
-		mount(r) {
-			let i = [], a;
-			return o(() => {
+		mount(n) {
+			let r = [], a;
+			return c(() => {
 				let o = e();
 				if (o === a) return;
-				let s = r.parentNode;
+				let s = n.parentNode;
 				if (s === null) return;
 				let c = p(() => {
 					let e = (s.ownerDocument ?? document).createDocumentFragment();
 					try {
-						n(() => B(e, t(o)));
-						let i = [...e.childNodes];
-						return s.insertBefore(e, r), i;
+						i(() => B(e, t(o)));
+						let r = [...e.childNodes];
+						return s.insertBefore(e, n), r;
 					} catch (t) {
 						throw h([...e.childNodes], [t]), t;
 					}
-				}), l = i.filter((e) => !c.includes(e));
-				i = c, a = o, h(l);
-			}, "dom.dynamic", H(r));
+				}), l = r.filter((e) => !c.includes(e));
+				r = c, a = o, h(l);
+			}, "dom.dynamic", H(n));
 		}
 	});
 }
@@ -434,13 +428,13 @@ function ye(e, t, n, r = {}) {
 	return M({
 		__loomDynamic: !0,
 		mount(i) {
-			let a = /* @__PURE__ */ new Map(), s = r.update ? {
+			let a = /* @__PURE__ */ new Map(), o = r.update ? {
 				update: r.update,
 				items: /* @__PURE__ */ new Map()
 			} : void 0;
-			return o(() => {
-				let r = e(), o = i.parentNode;
-				o && C(o, i, r, a, n, t, !0, s);
+			return c(() => {
+				let r = e(), s = i.parentNode;
+				s && C(s, i, r, a, n, t, !0, o);
 			}, "dom.each", H(i));
 		}
 	});
@@ -449,31 +443,31 @@ function be(e, t, n) {
 	return I(e, t, "dom.bind", n);
 }
 function z(e, t, n) {
-	d(e, o(t, n, e));
+	d(e, c(t, n, e));
 }
 function xe(e, t, r) {
-	let i = !1;
-	for (let a in t) {
-		if (!Object.hasOwn(t, a) || a === "children") continue;
-		let o = t[a];
-		if (a === "key") o != null && e.setAttribute("data-loom-key", String(o));
-		else if (a === "class" || a === "className") {
-			if (!i && typeof o == "string") {
-				let t = o.trim();
+	let a = !1;
+	for (let o in t) {
+		if (!Object.hasOwn(t, o) || o === "children") continue;
+		let s = t[o];
+		if (o === "key") s != null && e.setAttribute("data-loom-key", String(s));
+		else if (o === "class" || o === "className") {
+			if (!a && typeof s == "string") {
+				let t = s.trim();
 				t && (r ? e.className = t : e.setAttribute("class", t));
-			} else U(e, o);
-			i = !0;
-		} else if (a === "style") W(e, o);
-		else if ((a === "onmount" || a === "onMount") && typeof o == "function") T(e, o);
-		else if ((a === "onunmount" || a === "onUnmount") && typeof o == "function") m(e, o);
+			} else U(e, s);
+			a = !0;
+		} else if (o === "style") W(e, s);
+		else if ((o === "onmount" || o === "onMount") && typeof s == "function") T(e, s);
+		else if ((o === "onunmount" || o === "onUnmount") && typeof s == "function") m(e, s);
 		else {
-			if (a === "ontap" || a === "onTap" || a.toLowerCase() === "ondoublepress") throw TypeError("Install tap behavior from loom/events.");
-			if (a.startsWith("on") && typeof o == "function") {
-				let t = ke(a), r = (e) => {
-					n(() => o(e));
+			if (o === "ontap" || o === "onTap" || o.toLowerCase() === "ondoublepress") throw TypeError("Install tap behavior from loom/events.");
+			if (o.startsWith("on") && typeof s == "function") {
+				let t = ke(o), n = (e) => {
+					i(() => s(e));
 				};
-				e.addEventListener(t, r), m(e, () => e.removeEventListener(t, r));
-			} else Ee(e, a) ? typeof o == "function" ? z(e, X(o, (t) => J(e, a, t), Te), `dom.prop.${a}`) : J(e, a, o) : o == null || o === !1 && !s(a) || (typeof o == "function" ? z(e, K(e, a, o), `dom.attr.${a}`) : De(e, a, o));
+				e.addEventListener(t, n), m(e, () => e.removeEventListener(t, n));
+			} else Ee(e, o) ? typeof s == "function" ? z(e, X(s, (t) => J(e, o, t), Te), `dom.prop.${o}`) : J(e, o, s) : s == null || s === !1 && !n(o) || (typeof s == "function" ? z(e, K(e, o, s), `dom.attr.${o}`) : De(e, o, s));
 		}
 	}
 }
@@ -536,10 +530,10 @@ function W(e, t) {
 	}
 	if (!$(t)) return;
 	let n = e.style;
-	for (let r in t) {
-		if (!Object.hasOwn(t, r)) continue;
-		let i = t[r], a = c(r);
-		typeof i == "function" ? z(e, Y(e, a, i), `dom.style.${a}`) : i != null && n.setProperty(a, String(i));
+	for (let i in t) {
+		if (!Object.hasOwn(t, i)) continue;
+		let a = t[i], o = r(i);
+		typeof a == "function" ? z(e, Y(e, o, a), `dom.style.${o}`) : a != null && n.setProperty(o, String(a));
 	}
 }
 function G(e, t, n) {
@@ -589,7 +583,7 @@ function Z(e, t, n) {
 	n === null ? e.removeAttribute(t) : e.setAttribute(t, n);
 }
 function Q(e, t) {
-	return s(e) && typeof t == "boolean" ? String(t) : t == null || t === !1 ? null : t === !0 ? "" : String(t);
+	return n(e) && typeof t == "boolean" ? String(t) : t == null || t === !1 ? null : t === !0 ? "" : String(t);
 }
 function Oe(e) {
 	return e == null || e === !1 ? "" : String(e);
@@ -601,5 +595,4 @@ function ke(e) {
 function $(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
-//#endregion
 export { re as _, ye as a, T as b, ve as c, ue as d, F as f, ie as g, ce as h, L as i, fe as l, k as m, me as n, de as o, _e as p, he as r, ge as s, be as t, pe as u, E as v, D as y };

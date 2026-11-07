@@ -8,17 +8,14 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
+import { buildSync } from "esbuild";
 
 const root = resolve(import.meta.dirname, "..");
 const dir = mkdtempSync(join(tmpdir(), "loom-package-"));
-const require = createRequire(import.meta.url);
-const { buildSync } = createRequire(require.resolve("vite/package.json"))(
-  "esbuild",
-);
+
 try {
   const packed = JSON.parse(
     execFileSync(

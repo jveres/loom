@@ -6,7 +6,7 @@ import {
 } from "alien-signals";
 import type { Props, Stop } from "loom";
 import { batch, effect, props, state } from "loom";
-import { bench, describe } from "vitest";
+import { describe, test } from "vitest";
 
 type Tone = 0 | 1 | 2 | 3 | 4;
 type Signal<T> = {
@@ -58,14 +58,20 @@ function consume(value: number): void {
   sink = (sink + value) | 0;
 }
 describe("loom vs alien-signals", () => {
-  bench("loom: full chaos core", () => {
-    runLoomChaos();
+  test("loom: full chaos core", async ({ bench }) => {
+    await bench("loom: full chaos core", () => {
+      runLoomChaos();
+    }).run();
   });
-  bench("loom manual: full chaos core", () => {
-    runLoomManualChaos();
+  test("loom manual: full chaos core", async ({ bench }) => {
+    await bench("loom manual: full chaos core", () => {
+      runLoomManualChaos();
+    }).run();
   });
-  bench("alien native: full chaos core", () => {
-    runAlienChaos();
+  test("alien native: full chaos core", async ({ bench }) => {
+    await bench("alien native: full chaos core", () => {
+      runAlienChaos();
+    }).run();
   });
 });
 function runLoomChaos(): void {

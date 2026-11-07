@@ -1,4 +1,4 @@
-//#region src/jsx-props.ts
+// src/jsx-props.ts
 function e(e) {
 	if (!e) return {};
 	if (!Object.hasOwn(e, "key")) return e;
@@ -12,5 +12,4 @@ function t(e) {
 function n(e) {
 	return e.startsWith("aria-");
 }
-//#endregion
 export { n, e as r, t };

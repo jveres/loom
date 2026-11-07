@@ -119,5 +119,6 @@
   "loom/jsx-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"],
   "loom/jsx-dev-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"],
   "loom/html/jsx-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"],
-  "loom/html/jsx-dev-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"]
+  "loom/html/jsx-dev-runtime": ["Fragment", "jsx", "jsxDEV", "jsxs"],
+  "loom/db": ["openDatabase", "TransactionContractError"]
 }

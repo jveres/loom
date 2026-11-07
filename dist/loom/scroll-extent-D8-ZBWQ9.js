@@ -1,6 +1,6 @@
-import { n as e } from "./tracking-CaYucQ42.js";
-import { S as t } from "./loom-WRYGQLBj.js";
-//#region src/dom/media-read.ts
+import { n as e } from "./tracking-wsSu4LCy.js";
+import { S as t } from "./loom-Bchrc-TP.js";
+// src/dom/media-read.ts
 var n = /* @__PURE__ */ new WeakMap();
 function r(e, r) {
 	let i = r?.window ?? globalThis, a = n.get(i);
@@ -15,8 +15,7 @@ function r(e, r) {
 	}
 	return o;
 }
-//#endregion
-//#region src/dom/scroll-extent.ts
+// src/dom/scroll-extent.ts
 function i(e, t, n) {
 	let r = t ? e.scrollLeft : e.scrollTop, i = t ? e.scrollWidth - e.clientWidth : e.scrollHeight - e.clientHeight;
 	return {
@@ -48,5 +47,4 @@ function a(t, n, r = !1) {
 	}
 	return c;
 }
-//#endregion
 export { a as n, r, i as t };

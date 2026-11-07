@@ -11,6 +11,11 @@ Canonical family entrypoints curate the operations described in the
 
 | Module | Responsibility |
 | --- | --- |
+| `src/db/index.ts`, `types.ts` | Optional generic IndexedDB entrypoint and public contracts, consumed by applications. |
+| `src/db/transaction.ts` | Bounded native requests and callback/commit lifetime, consumed by database handles. |
+| `src/db/notifications.ts` | Reference-counted database notification bus, consumed by handles and queries. |
+| `src/db/db.test.ts`, `bench/db-browser-checks.ts`, `scripts/check-db.mjs` | Node fault checks, real-browser contracts, and cross-tab/size workloads, consumed by library qualification. |
+| `docs/db.md` | Public generic database guide and design rationale, consumed by package users. |
 | `src/index.ts` | Public reactive primitives and helper exports. |
 | `src/loom.ts` | Reactive nodes, bitflag node/lifecycle state, tracking context, scheduler, computed recovery, and scope operations that coordinate effect queues. |
 | `src/jsx-props.ts` | Shared JSX prop and attribute helpers (`cssPropName`, `isAriaAttr`, `propsWithoutKey`) used across DOM and HTML runtimes. |

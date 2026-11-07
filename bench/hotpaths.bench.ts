@@ -8,7 +8,7 @@ import {
   trigger,
 } from "loom";
 import "../src/core/defer.js";
-import { bench, describe } from "vitest";
+import { describe, test } from "vitest";
 
 const benchGlobal = globalThis as typeof globalThis & {
   __loomBenchmarkSink?: unknown;
@@ -18,99 +18,121 @@ const benchGlobal = globalThis as typeof globalThis & {
 // 1. Deferred queue — enqueue N deferred effects, then drain them in one pass or in budgeted chunks.
 describe("deferred queue", () => {
   for (const N of [1000, 10000]) {
-    bench(`${N} deferred effects: enqueue all + single drain`, () => {
-      let fire: ((b: () => boolean) => void) | undefined;
+    test(`${N} deferred effects: enqueue all + single drain`, async ({
+      bench,
+    }) => {
+      await bench(`${N} deferred effects: enqueue all + single drain`, () => {
+        let fire: ((b: () => boolean) => void) | undefined;
+        configure({
+          deferScheduler: (drain) => {
+            fire = drain;
+            return () => {};
+          },
+        });
+        const signals = Array.from({ length: N }, () => state(0));
+        const stops = signals.map((c) =>
+          effect(() => void c(), { defer: true }),
+        );
+        for (let i = 0; i < N; i++) (signals[i] as (v: number) => void)(i + 1);
+        fire?.(() => true);
+        for (const s of stops) s();
+      }).run();
+    });
+  }
+  test("10k deferred effects: budgeted continuation chunks", async ({
+    bench,
+  }) => {
+    await bench("10k deferred effects: budgeted continuation chunks", () => {
+      const pending: Array<(hasBudget: () => boolean) => void> = [];
       configure({
         deferScheduler: (drain) => {
-          fire = drain;
+          pending.push(drain);
           return () => {};
         },
       });
-      const signals = Array.from({ length: N }, () => state(0));
-      const stops = signals.map((c) => effect(() => void c(), { defer: true }));
-      for (let i = 0; i < N; i++) (signals[i] as (v: number) => void)(i + 1);
-      fire?.(() => true);
-      for (const s of stops) s();
-    });
-  }
-  bench("10k deferred effects: budgeted continuation chunks", () => {
-    const pending: Array<(hasBudget: () => boolean) => void> = [];
-    configure({
-      deferScheduler: (drain) => {
-        pending.push(drain);
-        return () => {};
-      },
-    });
-    const signals = Array.from({ length: 10000 }, () => state(0));
-    const stops = signals.map((signal) =>
-      effect(() => void signal(), { defer: true }),
-    );
-    for (let i = 0; i < signals.length; i++) signals[i]?.(i + 1);
-    while (pending.length > 0) {
-      let budget = 32;
-      pending.shift()?.(() => budget-- > 0);
-    }
-    for (const stop of stops) stop();
+      const signals = Array.from({ length: 10000 }, () => state(0));
+      const stops = signals.map((signal) =>
+        effect(() => void signal(), { defer: true }),
+      );
+      for (let i = 0; i < signals.length; i++) signals[i]?.(i + 1);
+      while (pending.length > 0) {
+        let budget = 32;
+        pending.shift()?.(() => budget-- > 0);
+      }
+      for (const stop of stops) stop();
+    }).run();
   });
 });
 // 2. Create-only throughput — node creation (and effect stop) with inspection off.
 describe("create-only", () => {
-  bench("create 10k states", () => {
-    const out: unknown[] = [];
-    for (let i = 0; i < 10000; i++) out.push(state(i));
-    benchGlobal.__loomBenchmarkSink = out;
+  test("create 10k states", async ({ bench }) => {
+    await bench("create 10k states", () => {
+      const out: unknown[] = [];
+      for (let i = 0; i < 10000; i++) out.push(state(i));
+      benchGlobal.__loomBenchmarkSink = out;
+    }).run();
   });
-  bench("create 10k computeds", () => {
-    const s = state(0);
-    const out: unknown[] = [];
-    for (let i = 0; i < 10000; i++) out.push(computed(() => s()));
-    benchGlobal.__loomBenchmarkSink = out;
+  test("create 10k computeds", async ({ bench }) => {
+    await bench("create 10k computeds", () => {
+      const s = state(0);
+      const out: unknown[] = [];
+      for (let i = 0; i < 10000; i++) out.push(computed(() => s()));
+      benchGlobal.__loomBenchmarkSink = out;
+    }).run();
   });
-  bench("create 10k effects", () => {
-    const s = state(0);
-    const stops = Array.from({ length: 10000 }, () => effect(() => void s()));
-    for (const st of stops) st();
+  test("create 10k effects", async ({ bench }) => {
+    await bench("create 10k effects", () => {
+      const s = state(0);
+      const stops = Array.from({ length: 10000 }, () => effect(() => void s()));
+      for (const st of stops) st();
+    }).run();
   });
 });
 // 3. mutate/trigger-heavy object updates — each call discovers dependencies through a temporary watcher.
 describe("mutate / trigger", () => {
-  bench("mutate 50k object updates", () => {
-    const obj = state({ n: 0 });
-    let sink = 0;
-    const stop = effect(() => {
-      sink = obj().n;
-    });
-    for (let i = 0; i < 50000; i++)
-      mutate(obj, (o) => {
-        o.n = i;
+  test("mutate 50k object updates", async ({ bench }) => {
+    await bench("mutate 50k object updates", () => {
+      const obj = state({ n: 0 });
+      let sink = 0;
+      const stop = effect(() => {
+        sink = obj().n;
       });
-    stop();
-    if (sink < 0) throw new Error("sink");
+      for (let i = 0; i < 50000; i++)
+        mutate(obj, (o) => {
+          o.n = i;
+        });
+      stop();
+      if (sink < 0) throw new Error("sink");
+    }).run();
   });
-  bench("trigger 50k", () => {
-    const obj = state({ n: 0 });
-    const stop = effect(() => void obj());
-    for (let i = 0; i < 50000; i++) trigger(obj);
-    stop();
+  test("trigger 50k", async ({ bench }) => {
+    await bench("trigger 50k", () => {
+      const obj = state({ n: 0 });
+      const stop = effect(() => void obj());
+      for (let i = 0; i < 50000; i++) trigger(obj);
+      stop();
+    }).run();
   });
 });
 // 4. Deep scope pause/resume — writes while a 50-deep scope chain is paused, then resume + flushScope.
 describe("deep scope pause/resume", () => {
-  bench("depth 50: dirty-while-paused + resume x300", () => {
-    const signals: Array<(v: number) => void> = [];
-    const build = (depth: number) =>
-      scope(() => {
-        const c = state(0);
-        signals.push(c as (v: number) => void);
-        effect(() => void c());
-        if (depth > 0) build(depth - 1);
-      });
-    const root = build(50);
-    for (let i = 0; i < 300; i++) {
-      root.pause();
-      for (const c of signals) c(i);
-      root.resume();
-    }
-    root.stop();
+  test("depth 50: dirty-while-paused + resume x300", async ({ bench }) => {
+    await bench("depth 50: dirty-while-paused + resume x300", () => {
+      const signals: Array<(v: number) => void> = [];
+      const build = (depth: number) =>
+        scope(() => {
+          const c = state(0);
+          signals.push(c as (v: number) => void);
+          effect(() => void c());
+          if (depth > 0) build(depth - 1);
+        });
+      const root = build(50);
+      for (let i = 0; i < 300; i++) {
+        root.pause();
+        for (const c of signals) c(i);
+        root.resume();
+      }
+      root.stop();
+    }).run();
   });
 });

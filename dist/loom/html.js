@@ -1,1 +1,1 @@
-export { t as attributeOf, l as escapeAttribute, u as escapeText, n as html, r as isHtml, i as renderToString, c as serializeAttributes, a as unsafeHtml, o as withRootAttributes } from "./html-CGLfrYOK.js";
+export { t as attributeOf, l as escapeAttribute, u as escapeText, n as html, r as isHtml, i as renderToString, c as serializeAttributes, a as unsafeHtml, o as withRootAttributes } from "./html-BiAw8QUW.js";

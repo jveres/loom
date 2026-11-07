@@ -1,5 +1,5 @@
-import { n as e } from "./tracking-CaYucQ42.js";
-//#region src/dom/press-track.ts
+import { n as e } from "./tracking-wsSu4LCy.js";
+// src/dom/press-track.ts
 function t(t, n, r) {
 	let i = -1, a, o = () => {
 		i = -1, a?.abort(), a = void 0;
@@ -16,5 +16,4 @@ function t(t, n, r) {
 		t.removeEventListener("pointerdown", c), o();
 	};
 }
-//#endregion
 export { t };

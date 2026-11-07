@@ -1,6 +1,6 @@
-import { r as e } from "../jsx-props-CBvsxEaL.js";
-import { a as t, i as n, s as r } from "../html-CGLfrYOK.js";
-//#region src/html/jsx-runtime.ts
+import { r as e } from "../jsx-props-DuIVfWzo.js";
+import { a as t, i as n, s as r } from "../html-BiAw8QUW.js";
+// src/html/jsx-runtime.ts
 var i = /^[A-Za-z][A-Za-z0-9:._-]*$/, a = /* @__PURE__ */ new Set([
 	"area",
 	"base",
@@ -36,5 +36,4 @@ function d(e, o, s) {
 	if (o) for (let t in o) Object.hasOwn(o, t) && (t === "children" ? l = o[t] : c += r(e, t, o[t], s));
 	return c += ">", a.has(e) || (c += n(l), c += `</${e}>`), t(c);
 }
-//#endregion
 export { c as Fragment, o as jsx, l as jsxDEV, s as jsxs };

@@ -1,6 +1,6 @@
-import { r as e } from "./jsx-props-CBvsxEaL.js";
-import { o as t } from "./dom-U3gKEfx2.js";
-//#region src/dom/jsx-runtime.ts
+import { r as e } from "./jsx-props-DuIVfWzo.js";
+import { o as t } from "./dom-GgmJq4dj.js";
+// src/dom/jsx-runtime.ts
 function n(e, t, n) {
 	return o(e, t);
 }
@@ -21,5 +21,4 @@ function s(e, n) {
 	for (let e in n) Object.hasOwn(n, e) && e !== "children" && e !== "key" && (e === "htmlFor" ? r.for = n[e] : r[e] = n[e]);
 	return t(e, r, n.children);
 }
-//#endregion
 export { i as Fragment, n as jsx, a as jsxDEV, r as jsxs };

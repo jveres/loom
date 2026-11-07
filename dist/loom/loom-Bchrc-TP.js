@@ -1,5 +1,5 @@
-import { a as e, i as t, r as n, t as r } from "./tracking-CaYucQ42.js";
-//#region src/core/graph.ts
+import { a as e, i as t, r as n, t as r } from "./tracking-wsSu4LCy.js";
+// src/core/graph.ts
 function i({ update: e, notify: t, unwatched: n }) {
 	return {
 		link: r,
@@ -114,8 +114,7 @@ function i({ update: e, notify: t, unwatched: n }) {
 		return !1;
 	}
 }
-//#endregion
-//#region src/core/scope-ownership.ts
+// src/core/scope-ownership.ts
 var a = 128;
 function o(e, t) {
 	let n = e.pausedCount, r = n + t;
@@ -151,8 +150,7 @@ function te(e, t) {
 	for (let n of e.resources) t.push(n);
 	for (let n of e.children) n.paused || te(n, t);
 }
-//#endregion
-//#region src/loom.ts
+// src/loom.ts
 var l = 1, u = 2, d = 16, ne = 32, f = 64, p = 128, m = 256, h = 512, re = 1024, g = {
 	enqueue: void 0,
 	scheduler: void 0
@@ -798,5 +796,4 @@ function ot(e) {
 	let t = Object.getPrototypeOf(e);
 	return t === Object.prototype || t === null;
 }
-//#endregion
 export { pe as A, me as C, B as D, Ne as E, Pe as O, ge as S, Se as T, je as _, g as a, De as b, be as c, oe as d, ae as f, Ee as g, Ie as h, Re as i, Fe as k, Me as l, H as m, Ce as n, he as o, ce as p, ye as r, xe as s, se as t, Te as u, Le as v, de as w, we as x, L as y };

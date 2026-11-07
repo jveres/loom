@@ -1,5 +1,5 @@
-import { d as e, f as t, m as n, p as r, t as i, y as a } from "./loom-WRYGQLBj.js";
-//#region src/core/channels.ts
+import { d as e, f as t, m as n, p as r, t as i, y as a } from "./loom-Bchrc-TP.js";
+// src/core/channels.ts
 var o = /* @__PURE__ */ new Map();
 function s(e, t, n) {
 	return {
@@ -137,8 +137,7 @@ function O(e, t) {
 		default: return;
 	}
 }
-//#endregion
-//#region src/core/meter.ts
+// src/core/meter.ts
 var k = 1 << 20, A = 5;
 function j(e) {
 	if (e === 0) return 0;
@@ -291,5 +290,4 @@ var V = {
 function H(e) {
 	return e;
 }
-//#endregion
 export { w as a, H as i, V as n, T as o, B as r, R as t };

@@ -1,11 +1,11 @@
-import { n as e } from "./tracking-CaYucQ42.js";
-import { S as t, r as n } from "./loom-WRYGQLBj.js";
-import { n as r, t as i } from "./document-observer-BFn9LFx6.js";
-import { t as a } from "./lifetime-CYx3KLZ0.js";
-import { t as o } from "./lifetime-D_7_tsmv.js";
-import { n as s, r as c, t as l } from "./scroll-extent-C66uLz7p.js";
-import { t as u } from "./press-track-DBB0OgrE.js";
-//#region src/dom/connected.ts
+import { S as e, r as t } from "./loom-Bchrc-TP.js";
+import { n, t as r } from "./document-observer-zbd6B0Gc.js";
+import { n as i, r as a, t as o } from "./scroll-extent-D8-ZBWQ9.js";
+import { t as s } from "./lifetime-BJiN2AyE.js";
+import { t as c } from "./lifetime-CuwHoBWD.js";
+import { n as l } from "./tracking-wsSu4LCy.js";
+import { t as u } from "./press-track-DxrGhZKi.js";
+// src/dom/connected.ts
 var d = /* @__PURE__ */ new WeakMap(), f = /* @__PURE__ */ new WeakMap();
 function p(e) {
 	let t = f.get(e);
@@ -18,26 +18,25 @@ function p(e) {
 	return f.set(e, n), n;
 }
 function m(e) {
-	return e.observer ??= r(e.document, () => {
+	return e.observer ??= n(e.document, () => {
 		for (let [t, n] of e.watched) n(t.isConnected);
 	}), e.observer;
 }
-function h(e) {
-	let n = d.get(e);
+function h(t) {
+	let n = d.get(t);
 	if (n) return n;
-	let r = t((t) => {
-		t(e.isConnected);
-		let n = i(e);
+	let i = e((e) => {
+		e(t.isConnected);
+		let n = r(t);
 		if (!n) return () => void 0;
-		let r = p(n);
-		return r.watched.set(e, t), m(r), () => {
-			r.watched.delete(e), r.watched.size === 0 && (r.observer?.disconnect(), r.observer = null);
+		let i = p(n);
+		return i.watched.set(t, e), m(i), () => {
+			i.watched.delete(t), i.watched.size === 0 && (i.observer?.disconnect(), i.observer = null);
 		};
-	}, e.isConnected);
-	return d.set(e, r), r;
+	}, t.isConnected);
+	return d.set(t, i), i;
 }
-//#endregion
-//#region src/dom/element-reads.ts
+// src/dom/element-reads.ts
 var g = /* @__PURE__ */ new WeakMap(), _ = /* @__PURE__ */ new Map(), v = null, y = !1;
 function b(e) {
 	for (let t of e) {
@@ -74,8 +73,8 @@ function T(e, t, n) {
 function E(e, t) {
 	return O(g, e, t, () => D(e, t));
 }
-function D(e, n) {
-	return t((t) => (t(e.getAttribute(n)), T(e, n, t)), e.getAttribute(n));
+function D(t, n) {
+	return e((e) => (e(t.getAttribute(n)), T(t, n, e)), t.getAttribute(n));
 }
 function O(e, t, n, r) {
 	let i = e.get(t);
@@ -84,81 +83,78 @@ function O(e, t, n, r) {
 	return a === void 0 && (a = r(), i.set(n, a)), a;
 }
 var k = /* @__PURE__ */ new WeakMap(), A = /* @__PURE__ */ new WeakMap();
-function j(e, t) {
-	return O(k, e, t, () => {
+function j(e, n) {
+	return O(k, e, n, () => {
 		let r = E(e, "class");
-		return n(() => (r(), e.classList.contains(t)));
+		return t(() => (r(), e.classList.contains(n)));
 	});
 }
-function M(e, t) {
-	return O(A, e, t, () => {
+function M(e, n) {
+	return O(A, e, n, () => {
 		let r = E(e, "style");
-		return n(() => (r(), e.style.getPropertyValue(t)));
+		return t(() => (r(), e.style.getPropertyValue(n)));
 	});
 }
-//#endregion
-//#region src/dom/hovered.ts
+// src/dom/hovered.ts
 var N = /* @__PURE__ */ new WeakMap(), P = /* @__PURE__ */ new WeakMap();
-function F(e) {
-	let n = N.get(e);
+function F(t) {
+	let n = N.get(t);
 	if (n) return n;
-	let r = t((t) => {
-		let n = (e) => {
-			e.pointerType !== "touch" && t(!0);
-		}, r = () => t(!1);
-		return e.addEventListener("pointerenter", n), e.addEventListener("pointerleave", r), e.addEventListener("pointercancel", r), () => {
-			e.removeEventListener("pointerenter", n), e.removeEventListener("pointerleave", r), e.removeEventListener("pointercancel", r), t(!1);
+	let r = e((e) => {
+		let n = (t) => {
+			t.pointerType !== "touch" && e(!0);
+		}, r = () => e(!1);
+		return t.addEventListener("pointerenter", n), t.addEventListener("pointerleave", r), t.addEventListener("pointercancel", r), () => {
+			t.removeEventListener("pointerenter", n), t.removeEventListener("pointerleave", r), t.removeEventListener("pointercancel", r), e(!1);
 		};
 	}, !1);
-	return N.set(e, r), r;
+	return N.set(t, r), r;
 }
-function I(e) {
-	let n = P.get(e);
+function I(t) {
+	let n = P.get(t);
 	if (n) return n;
-	let r = t((t) => {
+	let r = e((e) => {
 		let n = () => {
-			let n = e.ownerDocument.activeElement;
-			t(n !== null && e.contains(n));
-		}, r = () => t(!0), i = (r) => {
+			let n = t.ownerDocument.activeElement;
+			e(n !== null && t.contains(n));
+		}, r = () => e(!0), i = (r) => {
 			let i = r.relatedTarget;
-			i instanceof Node ? t(e.contains(i)) : n();
+			i instanceof Node ? e(t.contains(i)) : n();
 		};
-		return e.addEventListener("focusin", r), e.addEventListener("focusout", i), n(), () => {
-			e.removeEventListener("focusin", r), e.removeEventListener("focusout", i), t(!1);
+		return t.addEventListener("focusin", r), t.addEventListener("focusout", i), n(), () => {
+			t.removeEventListener("focusin", r), t.removeEventListener("focusout", i), e(!1);
 		};
 	}, !1);
-	return P.set(e, r), r;
+	return P.set(t, r), r;
 }
-//#endregion
-//#region src/dom/observer-pool.ts
-function L(t, n, r) {
-	let i = /* @__PURE__ */ new Map(), a = t((t) => {
-		for (let n of t) {
-			let t = i.get(n.target);
-			if (t) for (let r of [...t]) t.has(r) && e(() => r(n));
+// src/dom/observer-pool.ts
+function L(e, t, n) {
+	let r = /* @__PURE__ */ new Map(), i = e((e) => {
+		for (let t of e) {
+			let e = r.get(t.target);
+			if (e) for (let n of [...e]) e.has(n) && l(() => n(t));
 		}
 	});
-	return { add(e, t) {
-		let o = i.get(e);
+	return { add(e, a) {
+		let o = r.get(e);
 		if (!o) {
 			o = /* @__PURE__ */ new Set();
 			try {
-				n(a, e);
+				t(i, e);
 			} catch (e) {
-				throw i.size === 0 && (a.disconnect(), r()), e;
+				throw r.size === 0 && (i.disconnect(), n()), e;
 			}
-			i.set(e, o);
+			r.set(e, o);
 		}
-		let s = (e) => t(e), c = o;
+		let s = (e) => a(e), c = o;
 		c.add(s);
 		let l = !0;
 		return () => {
-			l && (l = !1, c.delete(s), c.size === 0 && (i.delete(e), a.unobserve(e), i.size === 0 && (a.disconnect(), r())));
+			l && (l = !1, c.delete(s), c.size === 0 && (r.delete(e), i.unobserve(e), r.size === 0 && (i.disconnect(), n())));
 		};
 	} };
 }
-//#endregion
-//#region src/dom/observe-intersection.ts
+// src/dom/observe-intersection.ts
 var R = /* @__PURE__ */ new WeakMap(), z = /* @__PURE__ */ new WeakMap();
 function B(e = "0px") {
 	let t = e.trim().split(/\s+/).filter(Boolean).map((e) => /^[+-]?0(?:\.0+)?(?:[a-z%]+)?$/i.test(e) ? "0px" : e), [n = "0px", r = n, i = n, a = r] = t.length === 3 ? [
@@ -210,37 +206,35 @@ function W(e, t, n, r, i, a, o) {
 	return s.add(e, t);
 }
 function G(e, t, n) {
-	let r = o(e, n?.signal);
+	let r = c(e, n?.signal);
 	if (!r.active) return r.stop;
-	let i = n?.root ?? null, s = e.ownerDocument.defaultView ?? globalThis, c = V(n), l = U(i, s);
+	let i = n?.root ?? null, a = e.ownerDocument.defaultView ?? globalThis, o = V(n), l = U(i, a);
 	try {
-		r.add(W(e, t, i, s, l, H(c), c));
+		r.add(W(e, t, i, a, l, H(o), o));
 	} catch (e) {
-		a(r, e);
+		s(r, e);
 	}
 	return r.stop;
 }
-//#endregion
-//#region src/dom/observe-mutation.ts
-function K(t, n, r) {
-	let a = i(t)?.defaultView ?? globalThis, o = !0, s = new a.MutationObserver((t) => {
-		o && e(() => n(t));
+// src/dom/observe-mutation.ts
+function K(e, t, n) {
+	let i = r(e)?.defaultView ?? globalThis, a = !0, o = new i.MutationObserver((e) => {
+		a && l(() => t(e));
 	});
-	return s.observe(t, r), () => {
-		o = !1, s.disconnect();
+	return o.observe(e, n), () => {
+		a = !1, o.disconnect();
 	};
 }
 function q(e, t, n) {
-	let r = o(e, n.signal);
+	let r = c(e, n.signal);
 	if (r.active) try {
 		r.add(K(e, t, n));
 	} catch (e) {
-		a(r, e);
+		s(r, e);
 	}
 	return r.stop;
 }
-//#endregion
-//#region src/dom/observe-size.ts
+// src/dom/observe-size.ts
 var J = /* @__PURE__ */ new WeakMap();
 function Y(e, t, n) {
 	let r = e.ownerDocument.defaultView ?? globalThis, i = n?.box ?? "content-box", a = J.get(r);
@@ -255,43 +249,40 @@ function Y(e, t, n) {
 	return o.add(e, t);
 }
 function X(e, t, n) {
-	let r = o(e, n?.signal);
+	let r = c(e, n?.signal);
 	if (r.active) try {
 		r.add(Y(e, t, n));
 	} catch (e) {
-		a(r, e);
+		s(r, e);
 	}
 	return r.stop;
 }
-//#endregion
-//#region src/dom/pressed.ts
+// src/dom/pressed.ts
 var Z = /* @__PURE__ */ new WeakMap();
-function Q(e) {
-	let n = Z.get(e);
+function Q(t) {
+	let n = Z.get(t);
 	if (n) return n;
-	let r = t((t) => {
-		let n = u(e, t);
+	let r = e((e) => {
+		let n = u(t, e);
 		return () => {
-			n(), t(!1);
+			n(), e(!1);
 		};
 	}, !1);
-	return Z.set(e, r), r;
+	return Z.set(t, r), r;
 }
-//#endregion
-//#region src/dom/scroll-edges.ts
+// src/dom/scroll-edges.ts
 var $ = {
 	start: !1,
 	end: !1
 };
-function ee(e, n = {}) {
-	let r = n.axis === "x", i = n.epsilon ?? 4;
-	return t((t) => {
-		let n = $, a = () => {
-			let a = l(e, r, i);
-			(a.start !== n.start || a.end !== n.end) && (n = a, t(a));
-		}, o = s(e, a, !0);
-		return a(), o;
+function ee(t, n = {}) {
+	let r = n.axis === "x", a = n.epsilon ?? 4;
+	return e((e) => {
+		let n = $, s = () => {
+			let i = o(t, r, a);
+			(i.start !== n.start || i.end !== n.end) && (n = i, e(i));
+		}, c = i(t, s, !0);
+		return s(), c;
 	}, $);
 }
-//#endregion
-export { E as attrRead, j as classRead, h as connected, I as focusWithin, F as hovered, c as mediaRead, G as observeIntersection, q as observeMutation, X as observeSize, Q as pressed, ee as scrollEdges, M as styleRead };
+export { E as attrRead, j as classRead, h as connected, I as focusWithin, F as hovered, a as mediaRead, G as observeIntersection, q as observeMutation, X as observeSize, Q as pressed, ee as scrollEdges, M as styleRead };

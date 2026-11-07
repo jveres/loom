@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const readme = readFileSync(join(root, "README.md"), "utf8");
+const readme = ["README.md", "docs/db.md"]
+  .map((file) => readFileSync(join(root, file), "utf8"))
+  .join("\n");
 const config = JSON.parse(readFileSync(join(root, "tsconfig.json"), "utf8"));
 const dir = mkdtempSync(join(tmpdir(), "loom-samples-"));
 try {

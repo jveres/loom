@@ -1,5 +1,5 @@
 import { computed, effect, state } from "loom";
-import { bench, describe } from "vitest";
+import { describe, test } from "vitest";
 
 // Store results on globalThis so V8 cannot prove the benchmark's work is unobservable and fold the
 // loops away. A module-local impossible guard is not a sufficient black box for an optimizing JIT.
@@ -13,23 +13,27 @@ describe("state accessor throughput", () => {
   const accessors = Array.from({ length: 1024 }, (_, index) =>
     state((Date.now() + index) & 255),
   );
-  bench("read x100k (no sub)", () => {
-    let x = 0;
-    for (let i = 0; i < 100000; i++) {
-      const read = accessors[i & 1023] as (typeof accessors)[number];
-      x += read();
-    }
-    benchGlobal.__loomBenchmarkSink = x;
+  test("read x100k (no sub)", async ({ bench }) => {
+    await bench("read x100k (no sub)", () => {
+      let x = 0;
+      for (let i = 0; i < 100000; i++) {
+        const read = accessors[i & 1023] as (typeof accessors)[number];
+        x += read();
+      }
+      benchGlobal.__loomBenchmarkSink = x;
+    }).run();
   });
-  bench("write x100k", () => {
-    const salt = performance.now() | 0;
-    for (let i = 0; i < 100000; i++) {
-      const write = accessors[i & 1023] as (typeof accessors)[number];
-      write(i ^ salt);
-    }
-    let x = 0;
-    for (const read of accessors) x += read();
-    benchGlobal.__loomBenchmarkSink = x;
+  test("write x100k", async ({ bench }) => {
+    await bench("write x100k", () => {
+      const salt = performance.now() | 0;
+      for (let i = 0; i < 100000; i++) {
+        const write = accessors[i & 1023] as (typeof accessors)[number];
+        write(i ^ salt);
+      }
+      let x = 0;
+      for (const read of accessors) x += read();
+      benchGlobal.__loomBenchmarkSink = x;
+    }).run();
   });
   // Read inside a live effect dep — exercises link + the channel-emit guard on the read path.
   const a = state(0);
@@ -38,8 +42,10 @@ describe("state accessor throughput", () => {
   effect(() => {
     sink = d() as number;
   });
-  bench("write->effect x50k", () => {
-    for (let i = 0; i < 50000; i++) a(i);
-    benchGlobal.__loomBenchmarkSink = sink;
+  test("write->effect x50k", async ({ bench }) => {
+    await bench("write->effect x50k", () => {
+      for (let i = 0; i < 50000; i++) a(i);
+      benchGlobal.__loomBenchmarkSink = sink;
+    }).run();
   });
 });

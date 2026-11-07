@@ -1,4 +1,4 @@
-//#region src/dom/place.ts
+// src/dom/place.ts
 function e(e, t, n) {
 	let r = e;
 	r.moveBefore !== void 0 && t.parentNode === e ? r.moveBefore(t, n) : e.insertBefore(t, n);
@@ -64,5 +64,4 @@ function i(t, n) {
 	let r = t.parentNode;
 	r && (n.parentNode !== r || t.nextSibling !== n) && e(r, n, t.nextSibling);
 }
-//#endregion
 export { t as n, i as t };

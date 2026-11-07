@@ -1,6 +1,6 @@
-import { a as e, n as t } from "./tracking-CaYucQ42.js";
-import { c as n, r, t as i } from "./ownership-base-1B2CbISn.js";
-//#region src/dom/virtual-list.ts
+import { a as e, n as t } from "./tracking-wsSu4LCy.js";
+import { c as n, r, t as i } from "./ownership-base-SRCUIJtL.js";
+// src/dom/virtual-list.ts
 function a(a) {
 	let o = a.rowHeight, s = a.overscan ?? 6;
 	if (!Number.isFinite(o) || o <= 0 || !Number.isInteger(s) || s < 0) throw RangeError("Virtual row height must be positive and overscan a non-negative integer.");
@@ -88,5 +88,4 @@ function a(a) {
 		stop: E
 	};
 }
-//#endregion
 export { a as virtualList };

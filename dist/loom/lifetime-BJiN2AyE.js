@@ -1,5 +1,5 @@
-import { a as e } from "./tracking-CaYucQ42.js";
-//#region src/core/lifetime.ts
+import { a as e } from "./tracking-wsSu4LCy.js";
+// src/core/lifetime.ts
 function t(t) {
 	let n = !t?.aborted, r = [], i = () => {
 		if (!n) return;
@@ -30,5 +30,4 @@ function n(e, t) {
 	}
 	throw t;
 }
-//#endregion
 export { t as n, n as t };

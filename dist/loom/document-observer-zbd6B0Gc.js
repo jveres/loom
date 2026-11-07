@@ -1,4 +1,4 @@
-//#region src/dom/document-observer.ts
+// src/dom/document-observer.ts
 function e(e) {
 	return e.nodeType === 9 ? e : e.ownerDocument;
 }
@@ -9,5 +9,4 @@ function t(e, t) {
 		subtree: !0
 	}), n;
 }
-//#endregion
 export { t as n, e as t };

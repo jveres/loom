@@ -10,6 +10,7 @@ export const loomEntries = {
   schedule: "src/schedule.ts",
   storage: "src/storage.ts",
   "virtual-list": "src/dom/virtual-list.ts",
+  db: "src/db/index.ts",
   async: "src/async/index.ts",
   defer: "src/core/defer.ts",
   observe: "src/observe.ts",

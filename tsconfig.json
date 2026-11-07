@@ -28,7 +28,8 @@
       "loom/jsx-runtime": ["./src/dom/jsx-runtime.ts"],
       "loom/jsx-dev-runtime": ["./src/dom/jsx-runtime.ts"],
       "loom/html/jsx-runtime": ["./src/html/jsx-runtime.ts"],
-      "loom/html/jsx-dev-runtime": ["./src/html/jsx-runtime.ts"]
+      "loom/html/jsx-dev-runtime": ["./src/html/jsx-runtime.ts"],
+      "loom/db": ["./src/db/index.ts"]
     },
     "allowImportingTsExtensions": false,
     "isolatedModules": true,

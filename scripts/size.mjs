@@ -8,17 +8,12 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
-// Resolve the esbuild instance vite ships with — no separate install (pnpm's build-script
-// approval would otherwise block a direct esbuild dependency for a dev-only script).
-const require = createRequire(import.meta.url);
-const viteRequire = createRequire(require.resolve("vite/package.json"));
-const { buildSync } = viteRequire("esbuild");
+import { buildSync } from "esbuild";
 
 const root =
   process.env.LOOM_PACKAGE_ROOT ??
@@ -28,6 +23,28 @@ const root =
 // state/computed/effect alone (engine + signals + channel gates + deferred lane; no meter ring
 // writer, no inspect machinery — those load with loom/observe).
 const APPS = [
+  {
+    name: "reactive database consumer",
+    budget: 10000,
+    maxDelta: 6144,
+    baselineSource: `
+      import { effect, state } from "loom";
+      import { resource } from "loom/async";
+      const key = state("first");
+      const value = resource(async () => key());
+      effect(() => console.log(value(), value.loading(), value.error()));
+    `,
+    source: `
+      import { effect, state } from "loom";
+      import { openDatabase } from "loom/db";
+      const key = state("first");
+      const db = await openDatabase({ name: "size-fixture", version: 1,
+        upgrade(native) { native.createObjectStore("values"); } });
+      const value = db.query(["values"], tx => tx.store("values").get(key()));
+      effect(() => console.log(value(), value.loading(), value.error()));
+      await db.write(["values"], tx => tx.store("values").put(key(), "saved"));
+    `,
+  },
   {
     name: "minimal (state+computed+effect)",
     budget: 3500,
@@ -172,10 +189,12 @@ try {
       : undefined;
     const delta = baseline === undefined ? undefined : gz - baseline;
     const ok =
-      gz <= app.budget && (!app.minDelta || (delta ?? 0) >= app.minDelta);
+      gz <= app.budget &&
+      (!app.minDelta || (delta ?? 0) >= app.minDelta) &&
+      (!app.maxDelta || (delta ?? 0) <= app.maxDelta);
     failed ||= !ok;
     const deltaText =
-      delta === undefined ? "" : `, +${delta} B side-effect delta`;
+      delta === undefined ? "" : `, +${delta} B incremental delta`;
     console.log(
       `${ok ? "ok  " : "FAIL"} ${app.name}: ${gz} B gzip (budget ${app.budget}${deltaText})`,
     );

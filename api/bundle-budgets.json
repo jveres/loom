@@ -17,5 +17,6 @@
   "loom/jsx-runtime": 6144,
   "loom/jsx-dev-runtime": 6144,
   "loom/html/jsx-runtime": 1536,
-  "loom/html/jsx-dev-runtime": 1536
+  "loom/html/jsx-dev-runtime": 1536,
+  "loom/db": 10240
 }

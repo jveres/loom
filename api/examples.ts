@@ -125,3 +125,77 @@ async function removedPaths(): Promise<void> {
   await import("loom/dom/reveal");
 }
 void removedPaths;
+
+/** Generic persistence without application cache fields or embedded primary keys. */
+export async function databaseConsumer() {
+  const { openDatabase } = await import("loom/db");
+  interface Schema {
+    labels: { key: string; value: string; indexes: Record<never, never> };
+    records: {
+      key: string;
+      value: { rank: number };
+      indexes: { byRank: number };
+    };
+  }
+  const db = await openDatabase<Schema>({
+    name: "packed-consumer",
+    version: 1,
+    upgrade(native) {
+      native.createObjectStore("labels");
+      native.createObjectStore("records").createIndex("byRank", "rank");
+      return undefined;
+    },
+  });
+  await db.write(["labels"], (tx) => tx.store("labels").put("alpha", "same"));
+  const entries = await db.read(["labels"], (tx) =>
+    tx.store("labels").entries({ limit: 100 }),
+  );
+  const primary: string | undefined = entries[0]?.key;
+  const rows = db.query(["records"], (tx) =>
+    tx
+      .store("records")
+      .index("byRank")
+      .scan({ range: { lower: 1 }, limit: 10 }),
+  );
+  rows.stop();
+  db.close();
+  return primary;
+}
+
+/** Never executed: the package check requires each diagnostic to remain present. */
+export async function databaseTypeFailures(
+  db: import("loom/db").Database<{
+    records: {
+      key: string;
+      value: { rank: number };
+      indexes: { byRank: number };
+    };
+    other: { key: number; value: boolean; indexes: Record<never, never> };
+  }>,
+) {
+  await db.read(["records"], async (tx) => {
+    // @ts-expect-error Stores must be declared in the transaction scope.
+    tx.store("other");
+    // @ts-expect-error Readonly facades cannot mutate storage.
+    tx.store("records").clear();
+    // @ts-expect-error Primary key type is string.
+    tx.store("records").get(1);
+    // @ts-expect-error Only declared indexes can be read.
+    tx.store("records").index("missing");
+    const index = tx.store("records").index("byRank");
+    // @ts-expect-error Index ranges use the numeric index key.
+    index.entries({ range: { only: "primary" }, limit: 10 });
+    // @ts-expect-error Exact and bounded ranges are mutually exclusive.
+    index.scan({ range: { only: 1, lower: 2 }, limit: 10 });
+    const entries = await index.entries({ limit: 10 });
+    // @ts-expect-error Entry keys remain string primary keys.
+    const numeric: number | undefined = entries[0]?.key;
+    return numeric;
+  });
+  // @ts-expect-error Unknown database stores are rejected.
+  db.read(["missing"], () => undefined);
+  await db.write(["records"], async (tx) => {
+    // @ts-expect-error Stored values must have the declared shape.
+    await tx.store("records").put("id", { text: "wrong" });
+  });
+}
