@@ -34,7 +34,7 @@ a branch. The Pages workflow publishes it after a push to `main`.
 ## Storage and reset
 
 The data stays in IndexedDB for this origin and browser profile. It survives a
-reload and a browser restart, but the browser can evict it. It is not a backup.
+reload, but the browser can evict it. It is not a backup.
 
 | Database | Contents | Lifetime |
 | --- | --- | --- |
@@ -82,7 +82,7 @@ development server runs, so the build needs its own check. The script fails on
 an unhandled page error, an external request, or a page that scrolls sideways at
 360 pixels.
 
-Keyboard access, focus rings, light and dark themes, a 375-pixel phone layout, and
+Tab order, focus rings, light and dark themes, a 375-pixel phone layout, and
 layout stability during state changes were checked once by hand in Chromium, with
 scripted measurements and screenshots. The script does not repeat those checks.
 
