@@ -15,6 +15,7 @@ Canonical family entrypoints curate the operations described in the
 | `src/db/transaction.ts` | Bounded native requests and callback/commit lifetime, consumed by database handles. |
 | `src/db/notifications.ts` | Reference-counted database notification bus, consumed by handles and queries. |
 | `src/db/db.test.ts`, `bench/db-browser-checks.ts`, `scripts/check-db.mjs` | Node fault checks, real-browser contracts, and cross-tab/latency workloads, consumed by library qualification. |
+| `docs/release-0.10.1.md` | Dependency-only patch release and checks, consumed by package users through the README. |
 | `docs/release-0.10.0.md` | Release changes and qualification limits, consumed by package users through the README. |
 | `docs/db.md` | Public generic database guide and design rationale, consumed by package users. |
 | `db/index.html`, `demo/db/`, `scripts/check-db-demo.mjs` | Stockroom demo of the public database API and its three-engine UI check; not part of the package. |

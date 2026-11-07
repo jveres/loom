@@ -1,6 +1,6 @@
 {
   "name": "loom",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "type": "module",
   "description": "A tiny runtime reactive UI core.",
@@ -127,7 +127,7 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.5",
+    "@biomejs/biome": "2.6.6",
     "@types/node": "^26.6.6",
     "alien-signals": "3.2.1",
     "esbuild": "^0.28.2",

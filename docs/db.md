@@ -12,7 +12,7 @@ chooses whether its records are primary local data or a rebuildable cache.
 ## Availability
 
 This entrypoint is included in v0.10.0. Install with
-`pnpm add github:jveres/loom#v0.10.0`; the earlier v0.9.0 tag does not contain it.
+`pnpm add github:jveres/loom#v0.10.1`; the earlier v0.9.0 tag does not contain it.
 See the [release notes](release-0.10.0.md) and
 [Stockroom demo guide](https://github.com/jveres/loom/blob/v0.10.0/demo/db/README.md) for qualification and examples.
 
