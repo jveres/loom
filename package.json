@@ -15,6 +15,7 @@
     "./dist/loom/observe*.js",
     "./src/core/defer.ts",
     "./src/core/inspect.ts",
+    "./src/dom/ownership.ts",
     "./src/observe.ts"
   ],
   "files": [
