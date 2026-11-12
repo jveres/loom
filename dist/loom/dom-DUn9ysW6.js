@@ -108,29 +108,41 @@ g({
 	},
 	requiresOrderedStop: (e) => e.cleanup !== void 0
 });
-function E(e) {
+function re(e) {
 	y(e);
 }
-function D(e) {
+function E(e) {
 	f(e);
 }
 // src/dom/bind-value.ts
-function re(e, n, r = {}) {
+var D = Symbol();
+function ie(e, n, r = {}) {
 	let i = S(e, r.signal);
 	if (!i.active) return i.stop;
-	let o = r.property === "checked", s = () => o ? e.checked : e.value, l = s(), u = () => {
+	let o = r.property === "checked", s = () => o ? e.checked : e.value, l = s(), u = D, f = !1, p = !1, m = !1, h = () => {
 		i.active && s() !== l && (o ? e.checked = l : e.value = l);
-	}, f = () => {
-		i.active && (l = s(), t(() => {
-			n(l);
-		}));
-	}, p = o ? "change" : "input";
-	e.addEventListener("blur", u), e.addEventListener(p, f), i.add(() => {
-		e.removeEventListener("blur", u), e.removeEventListener(p, f);
+	}, g = (e) => {
+		if (i.active) {
+			e.isComposing && (p = !0), m = !1, l = s(), f = !0;
+			try {
+				t(() => {
+					n(l), u = n();
+				});
+			} finally {
+				f = !1;
+			}
+		}
+	}, _ = () => {
+		p = !0;
+	}, v = () => {
+		p = !1, m && (m = !1, h());
+	}, y = o ? "change" : "input";
+	e.addEventListener("blur", h), e.addEventListener(y, g), e.addEventListener("compositionstart", _), e.addEventListener("compositionend", v), i.add(() => {
+		e.removeEventListener("blur", h), e.removeEventListener(y, g), e.removeEventListener("compositionstart", _), e.removeEventListener("compositionend", v);
 	});
 	try {
 		let t = c(() => {
-			l = n(), e.ownerDocument.activeElement !== e && u();
+			l = n(), f || l === u || (u = D, p ? m = !0 : h());
 		}, "dom.bindValue", e);
 		d(e, t), i.add(() => a(t));
 	} catch (e) {
@@ -139,7 +151,7 @@ function re(e, n, r = {}) {
 	return i.stop;
 }
 // src/dom/keyed-child.ts
-function ie(e) {
+function ae(e) {
 	let n, r = !0;
 	return v(e, () => {
 		r = !1;
@@ -158,9 +170,9 @@ function O(e, t) {
 	return n === void 0 ? !1 : typeof n == "string" ? e.matches(n) : n(e);
 }
 function k(e, t, n = {}) {
-	return e === t || O(e, n) ? e : e.tagName === t.tagName ? (ae(e, t), oe(e, t), j(e, t.childNodes, n), e) : (e.replaceWith(t), t);
+	return e === t || O(e, n) ? e : e.tagName === t.tagName ? (oe(e, t), se(e, t), j(e, t.childNodes, n), e) : (e.replaceWith(t), t);
 }
-function ae(e, t) {
+function oe(e, t) {
 	let n = e.attributes;
 	for (let r = n.length - 1; r >= 0; r--) {
 		let i = n[r].name;
@@ -172,12 +184,12 @@ function ae(e, t) {
 		e.getAttribute(n.name) !== n.value && e.setAttribute(n.name, n.value);
 	}
 }
-function oe(e, t) {
+function se(e, t) {
 	let n = e.nodeName;
 	if ((n === "INPUT" || n === "TEXTAREA" || n === "OPTION") && t.nodeName === n && e.ownerDocument.activeElement !== e) {
 		if (n === "INPUT") {
 			let n = e, r = t;
-			n.value !== r.value && (n.value = r.value), n.checked !== r.checked && !se(n) && (n.checked = r.checked);
+			n.value !== r.value && (n.value = r.value), n.checked !== r.checked && !ce(n) && (n.checked = r.checked);
 		} else if (n === "TEXTAREA") {
 			let n = e, r = t;
 			n.value !== r.value && (n.value = r.value);
@@ -187,7 +199,7 @@ function oe(e, t) {
 		}
 	}
 }
-function se(e) {
+function ce(e) {
 	if (e.type !== "radio" || e.name === "") return !1;
 	let t = e.ownerDocument.activeElement;
 	if (t === null || t === e || t.nodeName !== "INPUT") return !1;
@@ -195,7 +207,7 @@ function se(e) {
 	return n.type === "radio" && n.name === e.name && n.form === e.form;
 }
 var A = (e, t) => t.key && e.nodeType === 1 ? t.key(e) : null;
-function ce(e, t, n = {}) {
+function le(e, t, n = {}) {
 	let r;
 	for (let n of t) if (n.parentNode === e) {
 		if (r ??= /* @__PURE__ */ new Set(), r.has(n)) throw Error("Duplicate retained morph child.");
@@ -263,8 +275,8 @@ function j(e, t, n, r) {
 	return x(e, g, null), p;
 }
 // src/dom/index.ts
-var M = (e) => e, N = "http://www.w3.org/2000/svg", le = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
-function ue(e) {
+var M = (e) => e, N = "http://www.w3.org/2000/svg", ue = /* @__PURE__ */ new Set(/* @__PURE__ */ "svg.g.defs.symbol.use.switch.foreignObject.image.path.rect.circle.ellipse.line.polyline.polygon.text.tspan.textPath.linearGradient.radialGradient.stop.clipPath.mask.pattern.marker.filter.feGaussianBlur.feOffset.feBlend.feColorMatrix.feComposite.feFlood.feMerge.feMergeNode.feMorphology.feDropShadow.feImage.feTile.feTurbulence.feDisplacementMap".split("."));
+function de(e) {
 	return (t, ...n) => {
 		if (n.length !== 0 || t.length !== 1) throw TypeError("template() accepts static markup only; bind dynamic values after cloning.");
 		let r = document.createElement("template");
@@ -275,14 +287,14 @@ function ue(e) {
 		return () => i.cloneNode(!0);
 	};
 }
-function de(e, t = null, n) {
-	let r = le.has(e);
+function fe(e, t = null, n) {
+	let r = ue.has(e);
 	return P(r ? document.createElementNS(N, e) : document.createElement(e), t, n, !r);
 }
 function P(e, t, n, r) {
-	return n !== void 0 && (typeof n == "string" ? e.textContent = n : B(e, n)), t && xe(e, t, r), e;
+	return n !== void 0 && (typeof n == "string" ? e.textContent = n : B(e, n)), t && Se(e, t, r), e;
 }
-function fe(t, ...n) {
+function pe(t, ...n) {
 	let r = (u(t) ?? document).createDocumentFragment(), i = /* @__PURE__ */ new Set(), a = /* @__PURE__ */ new Map(), o = (e) => {
 		if (Array.isArray(e)) for (let t of e) o(t);
 		else if (typeof e == "object" && e && V(e) && !i.has(e)) {
@@ -346,30 +358,30 @@ function fe(t, ...n) {
 	}
 	e(l, "Multiple Loom DOM child-replacement operations failed.");
 }
-function pe(e, t = null, n) {
+function me(e, t = null, n) {
 	return P(document.createElementNS(N, e), t, n, !1);
 }
 function F(e, t) {
 	let n = document.createTextNode(""), r = "";
 	return d(n, c(() => {
-		let t = Oe(e());
+		let t = ke(e());
 		t !== r && (r = t, n.data = t);
 	}, "dom.text", n, t)), n;
 }
 function I(e, t, n, r) {
 	return r?.signal?.aborted ? () => {} : _(e, c(t, n, e, r), r?.signal);
 }
-function me(e, t, n, r) {
+function he(e, t, n, r) {
 	return I(e, K(e, t, n), `dom.attr.${t}`, r);
 }
-function he(e, t, n, r) {
+function ge(e, t, n, r) {
 	return I(e, G(e, t, n), `dom.class.${t}`, r);
 }
-function L(e, t, n, i) {
+function _e(e, t, n, i) {
 	let a = r(t);
 	return I(e, Y(e, a, n), `dom.style.${a}`, i);
 }
-function ge(e, t, n) {
+function ve(e, t, n) {
 	if (n.signal?.aborted) return () => {};
 	let r = /* @__PURE__ */ new Map(), i = n.update ? {
 		update: n.update,
@@ -390,17 +402,22 @@ function ge(e, t, n) {
 	}, s = S(e, n.signal);
 	return s.add(o), s.stop;
 }
-function R(e, t) {
+function L(e, t) {
 	return M({
 		__loomDynamic: !0,
 		mount(n) {
-			let r = [], a;
+			let r = document.createComment("loom-slot-start");
+			n.parentNode?.insertBefore(r, n);
+			let a;
 			return c(() => {
 				let o = e();
 				if (o === a) return;
 				let s = n.parentNode;
 				if (s === null) return;
-				let c = p(() => {
+				r.parentNode !== s && s.insertBefore(r, n);
+				let c = [];
+				for (let e = r.nextSibling; e !== null && e !== n; e = e.nextSibling) c.push(e);
+				let l = p(() => {
 					let e = (s.ownerDocument ?? document).createDocumentFragment();
 					try {
 						i(() => B(e, t(o)));
@@ -409,22 +426,22 @@ function R(e, t) {
 					} catch (t) {
 						throw h([...e.childNodes], [t]), t;
 					}
-				}), l = r.filter((e) => !c.includes(e));
-				r = c, a = o, h(l);
+				}), u = c.filter((e) => !l.includes(e));
+				a = o, h(u);
 			}, "dom.dynamic", H(n));
 		}
 	});
 }
-function _e(e, t, n) {
-	return R(() => e() ? "1" : "0", (e) => e === "1" ? t() : n ? n() : null);
+function R(e, t, n) {
+	return L(() => e() ? "1" : "0", (e) => e === "1" ? t() : n ? n() : null);
 }
-function ve(e, t, n) {
-	return R(() => String(e()), (e) => {
+function ye(e, t, n) {
+	return L(() => String(e()), (e) => {
 		let r = (Object.hasOwn(t, e) ? t[e] : void 0) ?? n;
 		return r ? r() : null;
 	});
 }
-function ye(e, t, n, r = {}) {
+function be(e, t, n, r = {}) {
 	return M({
 		__loomDynamic: !0,
 		mount(i) {
@@ -439,13 +456,13 @@ function ye(e, t, n, r = {}) {
 		}
 	});
 }
-function be(e, t, n) {
+function xe(e, t, n) {
 	return I(e, t, "dom.bind", n);
 }
 function z(e, t, n) {
 	d(e, c(t, n, e));
 }
-function xe(e, t, r) {
+function Se(e, t, r) {
 	let a = !1;
 	for (let o in t) {
 		if (!Object.hasOwn(t, o) || o === "children") continue;
@@ -463,17 +480,17 @@ function xe(e, t, r) {
 		else {
 			if (o === "ontap" || o === "onTap" || o.toLowerCase() === "ondoublepress") throw TypeError("Install tap behavior from loom/events.");
 			if (o.startsWith("on") && typeof s == "function") {
-				let t = ke(o), n = (e) => {
+				let t = Ae(o), n = (e) => {
 					i(() => s(e));
 				};
 				e.addEventListener(t, n), m(e, () => e.removeEventListener(t, n));
-			} else Ee(e, o) ? typeof s == "function" ? z(e, X(s, (t) => J(e, o, t), Te), `dom.prop.${o}`) : J(e, o, s) : s == null || s === !1 && !n(o) || (typeof s == "function" ? z(e, K(e, o, s), `dom.attr.${o}`) : De(e, o, s));
+			} else De(e, o) ? typeof s == "function" ? z(e, X(s, (t) => J(e, o, t), Ee), `dom.prop.${o}`) : J(e, o, s) : s == null || s === !1 && !n(o) || (typeof s == "function" ? z(e, K(e, o, s), `dom.attr.${o}`) : Oe(e, o, s));
 		}
 	}
 }
 function B(e, t) {
 	if (Array.isArray(t)) for (let n of t) B(e, n);
-	else if (Se(t)) Ce(e, t);
+	else if (Ce(t)) we(e, t);
 	else if (t != null && t !== !0 && t !== !1) {
 		if (typeof t == "function") e.appendChild(F(t));
 		else if (typeof t != "object") e.appendChild(document.createTextNode(String(t)));
@@ -490,10 +507,10 @@ function V(e) {
 	let n = e, r = (n.ownerDocument?.defaultView ?? n.defaultView)?.Node;
 	return r !== void 0 && e instanceof r;
 }
-function Se(e) {
+function Ce(e) {
 	return typeof e == "object" && !!e && e.__loomDynamic === !0;
 }
-function Ce(e, t) {
+function we(e, t) {
 	let n = document.createComment("loom-slot");
 	e.appendChild(n), d(n, M(t).mount(n));
 }
@@ -504,7 +521,7 @@ function H(e) {
 function U(e, t) {
 	if (Array.isArray(t)) for (let n of t) U(e, n);
 	else if (t) {
-		if (typeof t == "string") we(e, t);
+		if (typeof t == "string") Te(e, t);
 		else if ($(t)) for (let n in t) {
 			if (!Object.hasOwn(t, n)) continue;
 			let r = t[n];
@@ -512,7 +529,7 @@ function U(e, t) {
 		}
 	}
 }
-function we(e, t) {
+function Te(e, t) {
 	let n = t.trim();
 	if (!n) return;
 	let r = e.getAttribute("class");
@@ -546,8 +563,8 @@ function G(e, t, n) {
 function K(e, t, n) {
 	return X(() => Q(t, n()), (n) => Z(e, t, n));
 }
-var Te = Symbol("form-control-unset");
-function Ee(e, t) {
+var Ee = Symbol("form-control-unset");
+function De(e, t) {
 	if (t !== "checked" && t !== "selected" && t !== "value" || e.namespaceURI !== "http://www.w3.org/1999/xhtml") return !1;
 	let n = e.localName;
 	return t === "checked" ? n === "input" : t === "selected" ? n === "option" : t === "value" && (n === "button" || n === "input" || n === "option" || n === "select" || n === "textarea");
@@ -576,7 +593,7 @@ function X(e, t, n) {
 		n !== r && (t(n), r = n);
 	};
 }
-function De(e, t, n) {
+function Oe(e, t, n) {
 	Z(e, t, Q(t, n));
 }
 function Z(e, t, n) {
@@ -585,14 +602,14 @@ function Z(e, t, n) {
 function Q(e, t) {
 	return n(e) && typeof t == "boolean" ? String(t) : t == null || t === !1 ? null : t === !0 ? "" : String(t);
 }
-function Oe(e) {
+function ke(e) {
 	return e == null || e === !1 ? "" : String(e);
 }
-function ke(e) {
+function Ae(e) {
 	let t = e.slice(2).toLowerCase();
 	return t === "doubleclick" ? "dblclick" : t;
 }
 function $(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
-export { re as _, ye as a, T as b, ve as c, ue as d, F as f, ie as g, ce as h, L as i, fe as l, k as m, me as n, de as o, _e as p, he as r, ge as s, be as t, pe as u, E as v, D as y };
+export { ie as _, be as a, T as b, ye as c, de as d, F as f, ae as g, le as h, _e as i, pe as l, k as m, he as n, fe as o, R as p, ge as r, ve as s, xe as t, me as u, re as v, E as y };

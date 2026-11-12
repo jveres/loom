@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { state } from "loom";
+import { type Read, state } from "loom";
 import {
   bind,
   bindAttr,
+  type Child,
   dispose,
   each,
   h,
@@ -947,6 +948,139 @@ describe("loom DOM when/match", () => {
     remove(host); // tears down the slot effect
     open(false); // slot effect, if alive, would re-read sel
     expect(sel).not.toHaveBeenCalled();
+  });
+});
+describe("loom DOM branch removal", () => {
+  const rows = (...ids: string[]): readonly Row[] => ids.map((id) => ({ id }));
+  function fixture() {
+    const items = state(rows("a", "b"));
+    const tick = state(0);
+    const runs = vi.fn();
+    const row = (item: Row) =>
+      h(
+        "li",
+        { class: "row" },
+        text(() => {
+          runs();
+          return `${item.id}${tick()}`;
+        }),
+      );
+    return { items, tick, runs, row };
+  }
+  type Fixture = ReturnType<typeof fixture>;
+  const outers = {
+    match: (page: Read<string>, rows: () => Child, other: () => Child) =>
+      match(page, { rows, other }),
+    when: (page: Read<string>, rows: () => Child, other: () => Child) =>
+      when(() => page() === "rows", rows, other),
+  };
+  const shapes = {
+    "an each as the branch": (f: Fixture) => each(f.items, f.row, (r) => r.id),
+    "an each inside an element": (f: Fixture) =>
+      h(
+        "ul",
+        null,
+        each(f.items, f.row, (r) => r.id),
+      ),
+    "an each among several nodes": (f: Fixture) => [
+      "head",
+      each(f.items, f.row, (r) => r.id),
+      h("hr"),
+      "tail",
+    ],
+    "a list inside an element": (f: Fixture) => {
+      const container = h("ul");
+      list(container, f.items, { key: (r) => r.id, render: f.row });
+      return container;
+    },
+  };
+  const changes = {
+    unchanged: rows("a", "b"),
+    grown: rows("a", "b", "c", "d"),
+    reordered: rows("b", "a"),
+    replaced: rows("c"),
+  };
+  const cases = Object.keys(outers).flatMap((outer) =>
+    Object.keys(shapes).flatMap((shape) =>
+      Object.keys(changes).map((change) => ({ outer, shape, change })),
+    ),
+  ) as {
+    outer: keyof typeof outers;
+    shape: keyof typeof shapes;
+    change: keyof typeof changes;
+  }[];
+  it.each(cases)(
+    "$outer removes $shape with every row when the rows were $change",
+    ({ outer, shape, change }) => {
+      const f = fixture();
+      const page = state("rows");
+      const root = h("div", null, [
+        "before",
+        outers[outer](
+          page,
+          () => shapes[shape](f),
+          () => h("p", null, "other"),
+        ),
+        "after",
+      ]);
+      f.items(changes[change]);
+      page("other");
+      expect(root.querySelectorAll(".row")).toHaveLength(0);
+      expect(root.textContent).toBe("beforeotherafter");
+      f.runs.mockClear();
+      f.tick(1);
+      expect(f.runs).not.toHaveBeenCalled();
+      page("rows");
+      expect(root.querySelectorAll(".row")).toHaveLength(
+        changes[change].length,
+      );
+    },
+  );
+  it("removes what a nested when inserted after the branch was built", () => {
+    const page = state("rows");
+    const inner = state(false);
+    const root = h("div", null, [
+      "before",
+      match(page, {
+        rows: () => [
+          "head",
+          when(inner, () => [
+            h("b", { class: "row" }, "1"),
+            h("b", { class: "row" }, "2"),
+          ]),
+        ],
+        other: () => "other",
+      }),
+      "after",
+    ]);
+    inner(true);
+    page("other");
+    expect(root.querySelectorAll(".row")).toHaveLength(0);
+    expect(root.textContent).toBe("beforeotherafter");
+  });
+  it("removes what a nested match inserted after the branch was built", () => {
+    const page = state(true);
+    const inner = state("one");
+    const root = h("div", null, [
+      "before",
+      when(
+        page,
+        () =>
+          match(inner, {
+            one: () => h("b", { class: "row" }, "1"),
+            two: () => [
+              h("b", { class: "row" }, "2"),
+              h("b", { class: "row" }, "3"),
+            ],
+          }),
+        () => "other",
+      ),
+      "after",
+    ]);
+    inner("two");
+    page(false);
+    expect(root.querySelectorAll(".row")).toHaveLength(0);
+    expect(root.textContent).toBe("beforeotherafter");
   });
 });
 describe("loom DOM each", () => {

@@ -119,6 +119,112 @@ export async function runDatabaseChecks(): Promise<string[]> {
       next.length === 1 && next[0]?.key === "beta",
       "primary key continuation",
     );
+    // Key reads must not open value cursors, so value cursors fail here.
+    const storeCursor = IDBObjectStore.prototype.openCursor;
+    const indexCursor = IDBIndex.prototype.openCursor;
+    const valueCursor = () => {
+      throw new DOMException("Synthetic value cursor", "InvalidStateError");
+    };
+    IDBObjectStore.prototype.openCursor = valueCursor;
+    IDBIndex.prototype.openCursor = valueCursor;
+    try {
+      const keys = await db.read(["items"], (tx) => {
+        const items = tx.store("items");
+        return Promise.all([
+          items.keys({ limit: 10 }),
+          items.keys({ range: { lower: "one", upper: "three" }, limit: 10 }),
+          items.keys({
+            range: {
+              lower: "one",
+              upper: "two",
+              lowerOpen: true,
+              upperOpen: true,
+            },
+            limit: 10,
+          }),
+          items.keys({ range: { only: "two" }, limit: 10 }),
+          items.keys({ direction: "prev", limit: 2 }),
+          items.keys({ range: { lower: "x" }, limit: 10 }),
+          items.index("byGroup").keys({ limit: 10 }),
+          items.index("byGroup").keys({
+            range: { lower: ["a", 2] },
+            direction: "prev",
+            limit: 1,
+          }),
+        ]);
+      });
+      check(
+        keys.map((row) => row.join()).join("|") ===
+          "one,three,two|one,three|three|two|two,three||one,two,three|three",
+        "key reads honour ranges, direction, and limits without value cursors",
+      );
+    } finally {
+      IDBObjectStore.prototype.openCursor = storeCursor;
+      IDBIndex.prototype.openCursor = indexCursor;
+    }
+    let ownWrites: readonly string[] = [];
+    await rejected(
+      db.write(["items"], async (tx) => {
+        const items = tx.store("items");
+        await items.put("five", value(5));
+        await items.delete("one");
+        ownWrites = await items.keys({ limit: 10 });
+        throw new Error("rollback");
+      }),
+      "Error",
+    );
+    check(
+      ownWrites.join() === "five,three,two" &&
+        (
+          await db.read(["items"], (tx) =>
+            tx.store("items").keys({ limit: 10 }),
+          )
+        ).join() === "one,three,two",
+      "key reads see their own transaction's writes",
+    );
+    await rejected(
+      db.read(["items"], (tx) => tx.store("items").keys({ limit: 0 })),
+      "RangeError",
+    );
+    await rejected(
+      db.read(["items"], (tx) =>
+        tx.store("items").keys({ limit: 1, range: { lower: "b", upper: "a" } }),
+      ),
+      "DataError",
+    );
+    const keyCursor = IDBObjectStore.prototype.openKeyCursor;
+    IDBObjectStore.prototype.openKeyCursor = () => {
+      throw new DOMException("Synthetic key cursor", "UnknownError");
+    };
+    try {
+      await rejected(
+        db.read(["items"], async (tx) => {
+          try {
+            await tx.store("items").keys({ limit: 1 });
+          } catch {
+            /* A caught key read failure still aborts the transaction. */
+          }
+        }),
+        "UnknownError",
+      );
+    } finally {
+      IDBObjectStore.prototype.openKeyCursor = keyCursor;
+    }
+    const escapedItems = await db.read(["items"], (tx) => tx.store("items"));
+    await rejected(escapedItems.keys({ limit: 1 }), "TransactionInactiveError");
+    const keyQuery = peer.query(["items"], (tx) =>
+      tx.store("items").keys({ range: { lower: "s" }, limit: 10 }),
+    );
+    await until(() => keyQuery.ready());
+    await db.write(["items"], (tx) => tx.store("items").put("six", value(6)));
+    await until(() => keyQuery()?.join() === "six,three,two");
+    await db.write(["items"], (tx) => tx.store("items").delete("six"));
+    await until(() => keyQuery()?.join() === "three,two");
+    check(
+      keyQuery.error() === undefined,
+      "key queries follow added and removed keys",
+    );
+    keyQuery.stop();
     check(
       await db.read(["items"], (tx) => !("put" in tx.store("items"))),
       "readonly facade omits mutations",

@@ -66,7 +66,14 @@ and version without tracking its factory. These utilities have one home in
 
 `h`, `svgElement`, and `template` construct nodes; `text` binds a text node.
 `bind`, `bindAttr`, `bindClass`, `bindStyle`, and `bindValue` expose early teardown.
-`bindValue` retains its explicit value/checked modes and focus protection.
+`bindValue` retains its explicit value/checked modes. The field's own `input`
+or `change` event writes the state and is never written back, so typing keeps
+the caret. A state that rewrites the typed value shows its value when focus
+leaves. Any other state change is written to the element, also while it has the
+focus, unless it equals the element's value. During an IME composition the
+write waits for `compositionend`, and the last value wins. A write that changes
+a focused text field leaves the caret where the browser puts it, at the end;
+the binding does not preserve a selection.
 
 `list` owns rows in a container, and `each` supplies an inline dynamic child.
 Both share keyed reconciliation. `when` and `match` select dynamic children.

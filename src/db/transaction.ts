@@ -174,14 +174,20 @@ export function transact<S extends Schema<S>, N extends StoreName<S>, T>(
         }),
       );
     const reader = (source: IDBObjectStore | IDBIndex) => {
-      const scan = (options: Scan<DbKey>, entries: boolean) =>
+      // One bounded cursor loop; each read chooses its cursor and row shape.
+      const scan = <C extends IDBCursor>(
+        options: Scan<DbKey>,
+        open: (
+          range: IDBKeyRange | undefined,
+          direction: IDBCursorDirection,
+        ) => IDBRequest<C | null>,
+        row: (cursor: C) => unknown,
+      ) =>
         observed(
           new Promise<readonly unknown[]>((res, rej) => {
             try {
               const spec = attempt(() => scanOptions(options));
-              const req = attempt(() =>
-                source.openCursor(spec.range, spec.direction),
-              );
+              const req = attempt(() => open(spec.range, spec.direction));
               const rows: unknown[] = [];
               req.onerror = (event) => {
                 event.preventDefault();
@@ -196,11 +202,7 @@ export function transact<S extends Schema<S>, N extends StoreName<S>, T>(
                     res(rows);
                     return;
                   }
-                  rows.push(
-                    entries
-                      ? { key: cursor.primaryKey, value: cursor.value }
-                      : cursor.value,
-                  );
+                  rows.push(row(cursor));
                   if (rows.length === spec.limit) res(rows);
                   else cursor.continue();
                 } catch (error) {
@@ -213,9 +215,25 @@ export function transact<S extends Schema<S>, N extends StoreName<S>, T>(
             }
           }),
         );
+      const values = (
+        range: IDBKeyRange | undefined,
+        direction: IDBCursorDirection,
+      ) => source.openCursor(range, direction);
       return {
-        scan: (options: Scan<DbKey>) => scan(options, false),
-        entries: (options: Scan<DbKey>) => scan(options, true),
+        scan: (options: Scan<DbKey>) =>
+          scan(options, values, (cursor) => cursor.value),
+        entries: (options: Scan<DbKey>) =>
+          scan(options, values, (cursor) => ({
+            key: cursor.primaryKey,
+            value: cursor.value,
+          })),
+        // A key cursor never loads or clones the record values.
+        keys: (options: Scan<DbKey>) =>
+          scan(
+            options,
+            (range, direction) => source.openKeyCursor(range, direction),
+            (cursor) => cursor.primaryKey,
+          ),
       };
     };
     const facade = {

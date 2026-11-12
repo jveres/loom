@@ -174,6 +174,61 @@ describe("database transaction settlement", () => {
     }
   });
 
+  it("should read primary keys through a key cursor without loading values", async () => {
+    const cursor = {
+      result: null as unknown,
+      onsuccess: null as (() => void) | null,
+    };
+    const store = {
+      keyPath: null,
+      autoIncrement: false,
+      openCursor: vi.fn(),
+      openKeyCursor: vi.fn(() => cursor),
+    };
+    const transaction = {
+      objectStore: () => store,
+      abort() {},
+    } as unknown as IDBTransaction;
+    const native = {
+      name: "key-cursor-fixture",
+      version: 1,
+      close() {},
+      transaction: () => transaction,
+    };
+    const request = { result: native } as unknown as IDBOpenDBRequest;
+    vi.stubGlobal("indexedDB", { open: () => request });
+    vi.stubGlobal("BroadcastChannel", undefined);
+    const opening = openDatabase<{
+      items: { key: string; value: string; indexes: Record<never, never> };
+    }>({ name: native.name, version: 1 });
+    request.onsuccess?.call(request, new Event("success"));
+    const db = await opening;
+    try {
+      const reading = db.read(["items"], (tx) =>
+        tx.store("items").keys({ direction: "prev", limit: 2 }),
+      );
+      const advance = vi.fn();
+      for (const primaryKey of ["c", "b"]) {
+        cursor.result = {
+          primaryKey,
+          get value(): never {
+            throw new Error("A key read must not load values");
+          },
+          continue: advance,
+        };
+        cursor.onsuccess?.();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      transaction.oncomplete?.call(transaction, new Event("complete"));
+      await expect(reading).resolves.toEqual(["c", "b"]);
+      expect(store.openKeyCursor).toHaveBeenCalledWith(undefined, "prev");
+      expect(store.openCursor).not.toHaveBeenCalled();
+      expect(advance).toHaveBeenCalledOnce();
+    } finally {
+      db.close();
+    }
+  });
+
   it("should finish closing even if notification transport cleanup throws", async () => {
     vi.stubGlobal(
       "BroadcastChannel",

@@ -179,9 +179,9 @@ function _(e, n, r, i, a, o, s) {
 				r(e);
 			}
 		})), D = (e) => {
-			let t = (t, n) => T(new Promise((r, i) => {
+			let t = (e, t, n) => T(new Promise((r, i) => {
 				try {
-					let a = w(() => g(t)), o = w(() => e.openCursor(a.range, a.direction)), s = [];
+					let a = w(() => g(e)), o = w(() => t(a.range, a.direction)), s = [];
 					o.onerror = (e) => {
 						e.preventDefault();
 						let t = o.error;
@@ -193,10 +193,7 @@ function _(e, n, r, i, a, o, s) {
 								r(s);
 								return;
 							}
-							s.push(n ? {
-								key: e.primaryKey,
-								value: e.value
-							} : e.value), s.length === a.limit ? r(s) : e.continue();
+							s.push(n(e)), s.length === a.limit ? r(s) : e.continue();
 						} catch (e) {
 							b(e), i(e);
 						}
@@ -204,10 +201,14 @@ function _(e, n, r, i, a, o, s) {
 				} catch (e) {
 					i(e);
 				}
-			}));
+			})), n = (t, n) => e.openCursor(t, n);
 			return {
-				scan: (e) => t(e, !1),
-				entries: (e) => t(e, !0)
+				scan: (e) => t(e, n, (e) => e.value),
+				entries: (e) => t(e, n, (e) => ({
+					key: e.primaryKey,
+					value: e.value
+				})),
+				keys: (n) => t(n, (t, n) => e.openKeyCursor(t, n), (e) => e.primaryKey)
 			};
 		}, O = { store(e) {
 			return w(() => {

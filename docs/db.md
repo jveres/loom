@@ -12,7 +12,7 @@ chooses whether its records are primary local data or a rebuildable cache.
 ## Availability
 
 This entrypoint is included in v0.10.0. Install with
-`pnpm add github:jveres/loom#v0.10.1`; the earlier v0.9.0 tag does not contain it.
+`pnpm add github:jveres/loom#v0.11.0`; the earlier v0.9.0 tag does not contain it.
 See the [release notes](release-0.10.0.md) and
 [Stockroom demo guide](https://github.com/jveres/loom/blob/v0.10.0/demo/db/README.md) for qualification and examples.
 
@@ -102,7 +102,8 @@ at runtime.
 | `db.query(stores, callback)` | `Resource<T>`; starts a reactive readonly query immediately. |
 | `tx.store(name).get(key)` | Promise of the stored value or `undefined`. |
 | `store.scan(options)` / `store.entries(options)` | Promise of bounded values or primary-key/value entries. |
-| `store.index(name)` | A typed index reader with `scan` and `entries`. |
+| `store.keys(options)` | Promise of bounded primary keys; reads no values. |
+| `store.index(name)` | A typed index reader with `scan`, `entries`, and `keys`. |
 | `store.put(key, value)` | `Promise<void>`; insert or replace the complete value at an explicit key. No merge or generated key. |
 | `store.delete(key)` | `Promise<void>`; remove the key, including a harmless missing-key delete. |
 | `store.clear()` | `Promise<void>`; remove all records in that store, preserving schema and indexes. |
@@ -119,10 +120,12 @@ and recovery behavior are described below.
 ## Bound every collection read
 
 `scan` returns values; `entries` returns `{ key, value }` records with the primary
-key preserved. Each operation requires a positive safe-integer `limit` and uses
-a native cursor that stops at that limit. `direction` is `next` or `prev`.
-Index order breaks ties with the primary key. Index ranges use index keys;
-entry keys remain primary keys.
+key preserved. `keys` returns only the primary keys, in the same order, through
+a native key cursor that does not load or clone values. Use it when a read needs
+identities but not records. Each operation requires a positive safe-integer
+`limit` and uses a native cursor that stops at that limit. `direction` is `next`
+or `prev`. Index order breaks ties with the primary key. Index ranges use index
+keys; entry keys and `keys` results remain primary keys.
 
 Use `range: { only: key }` for an exact key, or `lower`, `upper`, `lowerOpen`,
 and `upperOpen` for bounds. An omitted/empty range is unbounded, but the result

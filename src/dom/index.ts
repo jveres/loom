@@ -520,7 +520,9 @@ export function list<T>(
 
 // Single-branch slot: an effect keyed off `key()`. On a key change the previous subtree is removed —
 // disposing its owned effects — and `pick(key)` is built **untracked** before the anchor, so only the
-// key subscribes the slot, not whatever the branch content reads.
+// key subscribes the slot, not whatever the branch content reads. The branch owns every node between
+// a start marker and the anchor, so nodes that a child slot (`each`, `when`, `match`) inserts after
+// the build are removed with it.
 function dynamic(
   key: Read<string>,
   pick: (key: string) => Child,
@@ -528,7 +530,8 @@ function dynamic(
   return brand<DynamicChild>({
     __loomDynamic: true,
     mount(anchor) {
-      let mounted: Node[] = [];
+      const start = document.createComment("loom-slot-start");
+      anchor.parentNode?.insertBefore(start, anchor);
       let currentKey: string | undefined;
       return domEffect(
         () => {
@@ -536,6 +539,14 @@ function dynamic(
           if (k === currentKey) return;
           const parent = anchor.parentNode;
           if (parent === null) return;
+          if (start.parentNode !== parent) parent.insertBefore(start, anchor);
+          const mounted: Node[] = [];
+          for (
+            let node = start.nextSibling;
+            node !== null && node !== anchor;
+            node = node.nextSibling
+          )
+            mounted.push(node);
           const next: Node[] = withConstructionRollback(() => {
             const frag = (
               parent.ownerDocument ?? document
@@ -551,7 +562,6 @@ function dynamic(
             }
           });
           const outgoing = mounted.filter((node) => !next.includes(node));
-          mounted = next;
           currentKey = k;
           removeNodes(outgoing);
         },

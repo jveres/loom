@@ -151,6 +151,13 @@ export async function databaseConsumer() {
     tx.store("labels").entries({ limit: 100 }),
   );
   const primary: string | undefined = entries[0]?.key;
+  const ids: readonly string[] = await db.read(["records"], (tx) =>
+    tx
+      .store("records")
+      .index("byRank")
+      .keys({ range: { lower: 1 }, limit: 10 }),
+  );
+  void ids;
   const rows = db.query(["records"], (tx) =>
     tx
       .store("records")
@@ -190,7 +197,10 @@ export async function databaseTypeFailures(
     const entries = await index.entries({ limit: 10 });
     // @ts-expect-error Entry keys remain string primary keys.
     const numeric: number | undefined = entries[0]?.key;
-    return numeric;
+    const keys = await index.keys({ limit: 10 });
+    // @ts-expect-error Index key reads return string primary keys.
+    const rank: number | undefined = keys[0];
+    return [numeric, rank];
   });
   // @ts-expect-error Unknown database stores are rejected.
   db.read(["missing"], () => undefined);

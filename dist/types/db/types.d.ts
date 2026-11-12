@@ -34,6 +34,7 @@ export interface DbEntry<V, P extends DbKey> {
 }
 export interface IndexRead<V, K extends DbKey, P extends DbKey> {
     entries(options: Scan<K>): Promise<readonly DbEntry<V, P>[]>;
+    keys(options: Scan<K>): Promise<readonly P[]>;
     scan(options: Scan<K>): Promise<readonly V[]>;
 }
 export interface ReadStore<D extends StoreShape> extends IndexRead<D["value"], D["key"], D["key"]> {
