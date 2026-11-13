@@ -17,11 +17,13 @@ Canonical family entrypoints curate the operations described in the
 | `src/db/db.test.ts`, `bench/db-browser-checks.ts`, `scripts/check-db.mjs` | Node fault checks, real-browser contracts, and cross-tab/latency workloads, consumed by library qualification. |
 | `docs/release-0.10.1.md` | Dependency-only patch release and checks, consumed by package users through the README. |
 | `docs/release-0.11.0.md` | Key-only database reads, the `when`/`match` branch removal fix, the `bindValue` focus change, and release checks, consumed by package users through the README. |
+| `docs/release-0.12.0.md` | Cross-layer runtime/DOM/SSR optimizations, the Loom Observatory demo, and release checks, consumed by package users through the README. |
 | `docs/release-0.10.0.md` | Release changes and qualification limits, consumed by package users through the README. |
 | `docs/db.md` | Public generic database guide and design rationale, consumed by package users. |
+| `index.html`, `demo/main.tsx`, `demo/styles.css` | Loom Observatory interactive showcase of reactive telemetry, subtree pause/resume, atomic LIS moves, and streaming `morph`; not part of the package. |
 | `db/index.html`, `demo/db/`, `scripts/check-db-demo.mjs` | Stockroom demo of the public database API and its three-engine UI check; not part of the package. |
 | `src/index.ts` | Public reactive primitives and helper exports. |
-| `src/loom.ts` | Reactive nodes, bitflag node/lifecycle state, tracking context, scheduler, computed recovery, and scope operations that coordinate effect queues. |
+| `src/loom.ts` | Reactive nodes, bitflag node/lifecycle state, lazy symbol-cached direct `StateNode` resolution for `mutate`/`trigger`, tracking context, scheduler, computed recovery, and scope operations that coordinate effect queues. |
 | `src/jsx-props.ts` | Shared JSX prop and attribute helpers (`cssPropName`, `isAriaAttr`, `propsWithoutKey`) used across DOM and HTML runtimes. |
 | `src/core/tracking.ts` | Small untrack callback hook; active tracking state stays local to the reactive engine. |
 | `src/core/lifetime.ts` | Terminal manual/signal lifetime and all-cleanup-before-error behavior. |
@@ -29,8 +31,9 @@ Canonical family entrypoints curate the operations described in the
 | `src/core/scope-ownership.ts` | Scope/resource types, indexed removal, transition-guarded pause counts, terminal resource stop, and resource traversal. |
 | `src/core/errors.ts` | Shared synchronous-callback guard (`SyncResult`, `isPromiseLike`, `ignorePromiseRejection`), single-error rethrow, and multi-error aggregation. |
 | `src/dom/index.ts` | DOM factories, bindings, dynamic slots, and public list adapters. |
-| `src/dom/keyed-reconcile.ts` | Single-pass key validation and lookup, staged row construction, item updates, placement, and outgoing-row cleanup. |
-| `src/dom/place.ts` | Contiguous-region fast path and minimum-move LIS fallback. |
+| `src/dom/keyed-reconcile.ts` | Single-pass key validation and identity fast paths, per-element item baselines, staged row construction, item updates, placement, and outgoing-row cleanup. |
+| `src/dom/place.ts` | Contiguous-region fast path, prefix/suffix + 1-move/2-swap reorder fast paths, and minimum-move LIS fallback. |
+| `src/dom/morph.ts` | Positional zero-allocation live HTML reconciliation with `data-key` matching, protected subtrees, and cursor preservation. |
 | `src/dom/ownership-base.ts` | Node-owned resources, construction rollback, resource groups, and subtree disposal. |
 | `src/dom/ownership.ts` | Adapter between raw reactive effects and DOM ownership. |
 | `src/dom/virtual-list.ts` | Standalone fixed-height windowing, using only the small ownership layer. |

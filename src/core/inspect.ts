@@ -262,12 +262,9 @@ function linkedIds(
 // The snapshot's value read, discriminated by the registered kind (watchers are never registered,
 // so state/computed are the only value-bearing kinds here).
 function nodeValue(node: NodeBase, meta: InspectMeta): unknown {
-  switch (meta.kind) {
-    case "state":
-      return (node as StateNode<unknown>).pendingValue;
-    case "computed":
-      return (node as ComputedNode<unknown>).value;
-    default:
-      return undefined;
-  }
+  return meta.kind === "state"
+    ? (node as StateNode<unknown>).pendingValue
+    : meta.kind === "computed"
+      ? (node as ComputedNode<unknown>).value
+      : undefined;
 }

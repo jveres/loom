@@ -305,9 +305,9 @@ function createState<T>(
  * writing `undefined` through a `State<T | undefined>` is a WRITE, exactly like `state()` itself.
  */
 export function writable<T>(read: () => T, write: (next: T) => void): State<T> {
-  return ((...args: [] | [T]) => {
+  return ((...args: [] | [T]): T | undefined => {
     if (args.length === 0) return read();
-    write(args[0] as T);
+    write(args[0]);
     return undefined;
   }) as State<T>;
 }
@@ -525,8 +525,10 @@ export function domEffect(
   if (activeScope === undefined) {
     return startEffectNode(fn, resolved, true);
   }
-  const attributed = mergeOptions(activeScope.options, resolved);
-  return withoutScope(() => startEffectNode(fn, attributed, true));
+  const scopeOptions = activeScope.options;
+  return withoutScope(() =>
+    startEffectNode(fn, resolved && mergeOptions(scopeOptions, resolved), true),
+  );
 }
 
 /** @internal Stop a raw owner-bound DOM effect. */
@@ -685,13 +687,16 @@ function stopScope(node: ScopeNode): void {
   throwCollected(errors, "Multiple Loom scope cleanups failed.");
 }
 
+const pauseOwnedResource = (r: OwnedScopeResource): void => r.pause();
+const resumeOwnedResource = (r: OwnedScopeResource): void => r.resume();
+
 function pauseScope(node: ScopeNode): void {
   if (node.paused || node.stopped) return;
   // Suspend resources only when this newly pauses the chain (an ancestor pause already did so).
   const newlySuspends = node.pausedCount === 0;
   node.paused = true;
   bumpPausedCount(node, 1);
-  if (newlySuspends) walkResources(node, (r) => r.pause());
+  if (newlySuspends) walkResources(node, pauseOwnedResource);
 }
 
 function resumeScope(node: ScopeNode): void {
@@ -700,19 +705,18 @@ function resumeScope(node: ScopeNode): void {
   bumpPausedCount(node, -1);
   // If an ancestor is still paused, the chain stays suspended — do nothing yet.
   if (node.pausedCount > 0) return;
-  const errors: unknown[] = [];
+  let errors: unknown[] | undefined;
   try {
-    walkResources(node, (r) => r.resume());
+    walkResources(node, resumeOwnedResource);
   } catch (error) {
-    errors.push(error);
+    errors = [error];
   }
   // A broken resource must not strand dirty effects after the scope itself became active again.
   try {
     flushScope(node);
-    // If we're resuming from inside an effect run (e.g. a tab switch), the re-queued effects ride
-    // the in-progress flush; only drive a fresh flush when at the top level.
     flushPendingAtTopLevel();
   } catch (error) {
+    errors ??= [];
     errors.push(error);
   }
   throwCollected(errors, "Multiple Loom scope resumes failed.");
@@ -722,8 +726,6 @@ function resumeScope(node: ScopeNode): void {
 // children stay deferred. The caller flushes the queued effects.
 function flushScope(node: ScopeNode): void {
   if (node.pausedCount > 0) return;
-  // A synchronous deferred scheduler can stop/swap-remove an effect while it is enqueued. Iterate
-  // a stable snapshot so that mutation cannot skip the sibling moved into its slot.
   for (const effectNode of node.effects.slice()) {
     const flags = effectNode.flags;
     if (!(flags & Paused) && (flags & (Dirty | Pending)) !== 0)
@@ -784,28 +786,73 @@ export function poll<T>(
   return Object.assign((): T => signal(), { stop });
 }
 
-/** Internal cold-path query for plain state cells; does not subscribe the caller. */
-export function hasStateSubscribers<T>(source: State<T>): boolean {
+let stateNodeSymbol: symbol | undefined;
+type TaggedState<T> = State<T> &
+  Record<symbol, StateNode<T> | null | undefined>;
+
+function resolveDirectState<T>(source: State<T>): StateNode<T> | null {
+  stateNodeSymbol ??= Symbol();
+  const sym = stateNodeSymbol;
+  const cached = (source as TaggedState<T>)[sym];
+  if (cached !== undefined) return cached;
   const sub = createWatcherNode();
   const previous = setActiveSub(sub);
+  let direct: StateNode<T> | null = null;
   try {
     source();
-    const first = sub.deps?.dep.subs;
-    return (
-      first !== undefined && (first.sub !== sub || first.nextSub !== undefined)
-    );
+    const first = sub.deps;
+    if (
+      first !== undefined &&
+      first === sub.depsTail &&
+      !(first.dep.flags & (Computed | Source))
+    ) {
+      direct = first.dep as StateNode<T>;
+    }
   } finally {
     restoreActiveSub(previous);
     sub.flags = 0;
     disposeDeps(sub);
   }
+  if (Object.isExtensible(source)) (source as TaggedState<T>)[sym] = direct;
+  return direct;
+}
+
+function notifyStateNode<T>(node: StateNode<T>): void {
+  if (node.flags & Dirty) commitState(node);
+  const subs = node.subs;
+  if (subs !== undefined) {
+    const sub = subs.sub;
+    if (
+      subs.nextSub === undefined &&
+      sub.flags === Watching &&
+      sub.subs === undefined
+    ) {
+      sub.flags = Dirty;
+      queued[queuedLength++] = sub as EffectNode;
+      if (batchDepth === 0 && !flushing) flush();
+      return;
+    }
+    propagate(subs, runDepth > 0);
+    shallowPropagate(subs);
+    if (batchDepth === 0 && !flushing && notifyIndex < queuedLength) flush();
+  }
+}
+
+/** Internal cold-path query for plain state cells; does not subscribe the caller. */
+export function hasStateSubscribers<T>(source: State<T>): boolean {
+  return resolveDirectState(source)?.subs !== undefined;
 }
 
 export function trigger<T>(source: State<T>): void {
-  // Discover every dependency read by the public accessor. This intentionally uses the same path
-  // with and without inspection, and also supports derived writable/read adapters that touch more
-  // than one underlying signal. The watcher setup mirrors hasStateSubscribers; it stays inline here
-  // because a shared callback-taking helper measurably slowed trigger().
+  let direct =
+    stateNodeSymbol !== undefined
+      ? (source as TaggedState<T>)[stateNodeSymbol]
+      : undefined;
+  if (direct === undefined) direct = resolveDirectState(source);
+  if (direct !== null) {
+    notifyStateNode(direct);
+    return;
+  }
   const sub = createWatcherNode();
   const previous = setActiveSub(sub);
   try {
@@ -846,7 +893,7 @@ installUntrack(untrack);
  * self-dependency foot-gun can't happen through this helper.
  */
 export function update<T>(source: State<T>, fn: (value: T) => T): void {
-  source(fn(untrack(() => source())));
+  source(fn(untrack(source as Read<T>)));
 }
 
 /**
@@ -881,6 +928,16 @@ export function mutate<T extends object>(
   source: State<T>,
   fn: (value: T) => void,
 ): void {
+  const sym = stateNodeSymbol;
+  let direct = sym !== undefined ? (source as TaggedState<T>)[sym] : undefined;
+  if (direct === undefined) direct = resolveDirectState(source);
+  if (direct !== null) {
+    if (direct.flags & Dirty) commitState(direct);
+    if (activeSub !== undefined) trackRead(direct, activeSub);
+    fn(direct.currentValue);
+    notifyStateNode(direct);
+    return;
+  }
   fn(source());
   trigger(source);
 }
@@ -1177,7 +1234,7 @@ function evaluateComputed<T>(node: ComputedNode<T>): void {
 }
 
 function updateComputed<T>(node: ComputedNode<T>): boolean {
-  if (node.flags & HasChildEffect) disposeChildDeps(node);
+  if (node.flags & HasChildEffect) disposeDeps(node, true);
   node.depsTail = undefined;
   node.flags = Computed | Mutable | RecursedCheck;
   const previous = setActiveSub(node);
@@ -1238,7 +1295,7 @@ function runEffect(node: EffectNode): boolean {
     flags & Dirty ||
     (flags & Pending && checkDirty(node.deps as Link, node))
   ) {
-    if (flags & HasChildEffect) disposeChildDeps(node);
+    if (flags & HasChildEffect) disposeDeps(node, true);
     if (node.cleanup && !cleanupBeforeRun(node)) return false;
     node.depsTail = undefined;
     node.flags = (node.flags & (Paused | Deferred)) | Watching | RecursedCheck;
@@ -1294,17 +1351,14 @@ function settleEffectResult(node: EffectNode, result: unknown): void {
     ignorePromiseRejection(result);
     throw new TypeError("effect() callbacks must be synchronous.");
   }
-  const cleanup = typeof result === "function" ? (result as Stop) : undefined;
-  if (node.flags === 0 && cleanup !== undefined) {
+  node.cleanup = typeof result === "function" ? (result as Stop) : undefined;
+  if (node.flags === 0 && node.cleanup !== undefined) {
     // A cleanup returned after self-stop belongs to already-disposed work, so run it now.
-    node.cleanup = cleanup;
     try {
       runCleanup(node);
     } catch (error) {
       reportEffectError(error, node);
     }
-  } else {
-    node.cleanup = cleanup;
   }
 }
 
@@ -1333,21 +1387,12 @@ function flush(): void {
   flushing = true;
   const hooks = runtimeHooks;
   const start = hooks?.beginFlush();
-  const metered = start !== undefined;
   let appBatchSize = 0;
   try {
-    if (metered) {
-      while (notifyIndex < queuedLength) {
-        const node = queued[notifyIndex] as EffectNode;
-        queued[notifyIndex++] = undefined;
-        if (runEffect(node)) appBatchSize++;
-      }
-    } else {
-      while (notifyIndex < queuedLength) {
-        const node = queued[notifyIndex] as EffectNode;
-        queued[notifyIndex++] = undefined;
-        runEffect(node);
-      }
+    while (notifyIndex < queuedLength) {
+      const node = queued[notifyIndex] as EffectNode;
+      queued[notifyIndex++] = undefined;
+      if (runEffect(node) && start !== undefined) appBatchSize++;
     }
   } finally {
     while (notifyIndex < queuedLength) {
@@ -1400,12 +1445,9 @@ function stopEffect(this: EffectNode): void {
       cleanupError = error;
     }
   }
-  if (inspectHooks) {
-    const meta = this.meta;
-    if (meta) {
-      meta.disposed = true;
-      inspectHooks.unregister(meta.id);
-    }
+  if (inspectHooks && this.meta) {
+    this.meta.disposed = true;
+    inspectHooks.unregister(this.meta.id);
   }
   runtimeHooks?.dispose(this);
   if (failed) reportEffectError(cleanupError, this);
@@ -1434,20 +1476,12 @@ function runCleanup(node: EffectNode): void {
   }
 }
 
-function disposeChildDeps(sub: NodeBase): void {
-  let dep = sub.depsTail;
-  while (dep !== undefined) {
+function disposeDeps(sub: NodeBase, childrenOnly = false): void {
+  for (let dep = sub.depsTail; dep !== undefined; ) {
     const previous = dep.prevDep;
-    if (!(dep.dep.flags & (Mutable | Computed))) unlink(dep, sub);
-    dep = previous;
-  }
-}
-
-function disposeDeps(sub: NodeBase): void {
-  let dep = sub.depsTail;
-  while (dep !== undefined) {
-    const previous = dep.prevDep;
-    unlink(dep, sub);
+    if (!childrenOnly || !(dep.dep.flags & (Mutable | Computed))) {
+      unlink(dep, sub);
+    }
     dep = previous;
   }
 }

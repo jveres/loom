@@ -11,10 +11,13 @@ const ENTITIES: Readonly<Record<EntityChar, string>> = {
   "'": "&#39;",
 };
 
+const ENTITY_FAST = /[&<>"']/;
+const ENTITY_ALL = /[&<>"']/g;
+
 export function escapeText(value: string): string {
-  // The regex matches only EntityChar, so the cast is a guarded narrowing (and indexing a finite-key
-  // record yields string, never undefined) — no `as string` on a possibly-missing lookup.
-  return value.replace(/[&<>"']/g, (char) => ENTITIES[char as EntityChar]);
+  return ENTITY_FAST.test(value)
+    ? value.replace(ENTITY_ALL, (char) => ENTITIES[char as EntityChar])
+    : value;
 }
 
 // Quoted-attribute escaping needs the same entities as text content (escaping
@@ -24,12 +27,11 @@ export function escapeAttribute(value: string): string {
   return escapeText(value);
 }
 
-const CHARS: Readonly<Record<string, string>> = Object.fromEntries(
-  Object.entries(ENTITIES).map(([char, entity]) => [entity, char]),
-);
+const DECODE: Record<string, string> = {};
+for (const char in ENTITIES) DECODE[ENTITIES[char as EntityChar]] = char;
 const ENTITY_PATTERN = new RegExp(Object.values(ENTITIES).join("|"), "g");
 
 /** @internal Reverse escapeText's entities in one pass (so `&amp;lt;` reads back as `&lt;`). */
 export function unescapeAttribute(value: string): string {
-  return value.replace(ENTITY_PATTERN, (entity) => CHARS[entity] ?? entity);
+  return value.replace(ENTITY_PATTERN, (e) => DECODE[e] ?? e);
 }

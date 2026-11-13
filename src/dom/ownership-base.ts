@@ -1,6 +1,7 @@
 import {
   ignorePromiseRejection,
   isPromiseLike,
+  rollbackWith,
   type SyncResult,
   throwCollected,
 } from "../core/errors.js";
@@ -26,22 +27,12 @@ export function installOwnedResourceDriver(driver: OwnedResourceDriver): void {
   resourceDriver = driver;
 }
 
-interface RegisteredStop {
-  readonly [REGISTERED_STOP]: true;
-  active: boolean;
-  owner: Node | undefined;
-  stop: OwnershipStop | undefined;
-  release?: OwnershipStop | undefined;
-  dispose: OwnershipStop;
-}
-
-const REGISTERED_STOP = Symbol("loom.registered-stop");
-type TrackedResource = RegisteredStop | OwnedResource;
-type OwnedEntry = OwnershipStop | TrackedResource;
+type TrackedResource = OwnershipStop | OwnedResource;
+type OwnedEntry = TrackedResource;
 type OwnedEffects = OwnedEntry | OwnedEntry[];
 interface GroupEntry {
-  readonly owner: Node;
-  readonly resource: TrackedResource;
+  owner: Node | undefined;
+  resource: TrackedResource | undefined;
   readonly index: number;
 }
 
@@ -55,54 +46,56 @@ interface ResourceArena {
   stopping: boolean;
 }
 
-// Store ownership on the node itself. A private symbol keeps the slot invisible to normal DOM
-// enumeration, preserves the same lifetime semantics as a WeakMap (the entry dies with its node),
-// and avoids a WeakMap lookup for every binding. That lookup is particularly expensive in
-// JavaScriptCore on large initial mounts.
-const OWNED = Symbol("loom.owned");
-type OwnedNode = Node & { [OWNED]?: OwnedEffects | undefined };
+let ownedKey: symbol | undefined;
+type OwnedNode = Record<symbol, OwnedEffects | undefined>;
 
 function runOwned(
   root: Node,
   fn: (owned: OwnedEntry) => void,
   clear: boolean,
 ): void {
-  // Collect with one growing array, pushing siblings right-to-left. Reverse iteration then visits
-  // descendants before their ancestors while retaining left-to-right sibling disposal order.
-  const nodes: Node[] = [root];
-  for (let index = 0; index < nodes.length; index++) {
-    const node = nodes[index] as Node;
-    for (let child = node.lastChild; child; child = child.previousSibling) {
-      nodes.push(child);
+  const sym = ownedKey;
+  if (sym === undefined) return;
+  const onlyChild = root.lastChild;
+  const nodes: Node[] | null =
+    onlyChild === null ||
+    (onlyChild.previousSibling === null &&
+      onlyChild.lastChild === null &&
+      (onlyChild as unknown as OwnedNode)[sym] === undefined)
+      ? null
+      : [root];
+  if (nodes !== null) {
+    for (let index = 0; index < nodes.length; index++) {
+      for (
+        let child = (nodes[index] as Node).lastChild;
+        child;
+        child = child.previousSibling
+      ) {
+        nodes.push(child);
+      }
     }
   }
   let errors: unknown[] | undefined;
-  for (let index = nodes.length - 1; index >= 0; index--) {
-    const node = nodes[index] as Node;
-    const target = node as OwnedNode;
-    const owned = target[OWNED];
+  const invoke = (entry: OwnedEntry): void => {
+    try {
+      fn(entry);
+    } catch (error) {
+      errors ??= [];
+      errors.push(error);
+    }
+  };
+  for (let index = nodes === null ? 0 : nodes.length - 1; index >= 0; index--) {
+    const target = (nodes === null
+      ? root
+      : nodes[index]) as unknown as OwnedNode;
+    const owned = target[sym];
     if (!owned) continue;
-    if (clear) target[OWNED] = undefined;
-
+    if (clear) target[sym] = undefined;
     if (Array.isArray(owned)) {
-      for (const entry of clear ? owned : [...owned]) {
-        if (isRegisteredStop(entry) && !entry.active) continue;
-        try {
-          fn(entry);
-        } catch (error) {
-          if (errors === undefined) errors = [error];
-          else errors.push(error);
-        }
-      }
+      const list = clear ? owned : [...owned];
+      for (let i = 0; i < list.length; i++) invoke(list[i] as OwnedEntry);
     } else {
-      const entry = owned;
-      if (isRegisteredStop(entry) && !entry.active) continue;
-      try {
-        fn(entry);
-      } catch (error) {
-        if (errors === undefined) errors = [error];
-        else errors.push(error);
-      }
+      invoke(owned);
     }
   }
 
@@ -110,15 +103,22 @@ function runOwned(
 }
 
 function attachOwned(node: Node, entry: OwnedEntry): void {
-  const target = node as OwnedNode;
-  const owned = target[OWNED];
-  if (!owned) target[OWNED] = entry;
+  ownedKey ??= Symbol();
+  const sym = ownedKey;
+  const target = node as unknown as OwnedNode;
+  const owned = target[sym];
+  if (!owned) target[sym] = entry;
   else if (Array.isArray(owned)) owned.push(entry);
-  else target[OWNED] = [owned, entry];
+  else target[sym] = [owned, entry];
 }
 
-function addOwned(node: Node, entry: TrackedResource): void {
+function addOwned(
+  node: Node,
+  entry: TrackedResource,
+  skipDriverHook = false,
+): OwnershipStop | undefined {
   attachOwned(node, entry);
+  let release: OwnershipStop | undefined;
   const group = activeResourceGroup;
   if (group !== undefined) {
     const captured: ArenaEntry = {
@@ -128,10 +128,12 @@ function addOwned(node: Node, entry: TrackedResource): void {
       slot: group.entries.length,
     };
     group.entries.push(captured);
-    const release = (): void => {
+    release = (): void => {
       const slot = captured.slot;
       if (slot < 0) return;
       captured.slot = -1;
+      captured.owner = undefined;
+      captured.resource = undefined;
       if (group.stopping) return;
       const last = group.entries.pop() as ArenaEntry;
       if (last !== captured) {
@@ -139,8 +141,9 @@ function addOwned(node: Node, entry: TrackedResource): void {
         last.slot = slot;
       }
     };
-    if (isRegisteredStop(entry)) entry.release = release;
-    else resourceDriver?.onStop(entry, release);
+    if (!skipDriverHook && typeof entry !== "function") {
+      resourceDriver?.onStop(entry, release);
+    }
   }
   const construction = activeConstruction;
   if (construction !== undefined) {
@@ -150,26 +153,24 @@ function addOwned(node: Node, entry: TrackedResource): void {
       index: construction.length,
     });
   }
-}
-
-function isRegisteredStop(entry: OwnedEntry): entry is RegisteredStop {
-  return typeof entry !== "function" && REGISTERED_STOP in entry;
+  return release;
 }
 
 function unregister(node: Node, entry: OwnedEntry): void {
-  const target = node as OwnedNode;
-  const owned = target[OWNED];
+  if (ownedKey === undefined) return;
+  const target = node as unknown as OwnedNode;
+  const owned = target[ownedKey];
   if (!owned) return;
   if (!Array.isArray(owned)) {
-    if (owned === entry) target[OWNED] = undefined;
+    if (owned === entry) target[ownedKey] = undefined;
     return;
   }
   const index = owned.indexOf(entry);
   if (index < 0) return;
   const last = owned.pop() as OwnedEntry;
   if (index < owned.length) owned[index] = last;
-  if (owned.length === 1) target[OWNED] = owned[0] as OwnedEntry;
-  else if (owned.length === 0) target[OWNED] = undefined;
+  if (owned.length === 1) target[ownedKey] = owned[0] as OwnedEntry;
+  else if (owned.length === 0) target[ownedKey] = undefined;
 }
 
 /** Register a stop that is only driven by ownership (no separately exposed manual stop). */
@@ -186,25 +187,31 @@ export function ownResource(node: Node, resource: OwnedResource): void {
   addOwned(node, resource);
 }
 
+function requireDriver(): OwnedResourceDriver {
+  if (resourceDriver === undefined) {
+    throw new Error("No Loom DOM resource driver is installed.");
+  }
+  return resourceDriver;
+}
+
 /** A manually stoppable raw binding still participates in DOM pause/resume. */
 export function ownStoppableResource(
   node: Node,
   resource: OwnedResource,
   signal?: AbortSignal,
 ): OwnershipStop {
-  const driver = resourceDriver as OwnedResourceDriver;
+  const driver = requireDriver();
   let owner: Node | undefined = node;
   let held: OwnedResource | undefined = resource;
+  let release = addOwned(node, resource, true);
   const stop = (): void => {
-    const current = held;
-    if (current !== undefined) driver.stop(current);
+    if (held !== undefined) driver.stop(held);
   };
-  addOwned(node, resource);
   driver.onStop(resource, () => {
     signal?.removeEventListener("abort", stop);
+    release?.();
     if (owner !== undefined && held !== undefined) unregister(owner, held);
-    owner = undefined;
-    held = undefined;
+    owner = held = release = undefined;
   });
   if (signal?.aborted) stop();
   else if (held !== undefined)
@@ -224,15 +231,11 @@ export function withConstructionRollback<T>(build: () => T): T {
     return build();
   } catch (error) {
     activeConstruction = previous;
-    try {
-      stopResourceGroup(resources.splice(start));
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [error, cleanupError],
-        "Loom DOM construction and cleanup both failed.",
-      );
-    }
-    throw error;
+    return rollbackWith(
+      () => stopResourceGroup(resources.splice(start)),
+      error,
+      "Loom DOM construction and cleanup both failed.",
+    );
   } finally {
     activeConstruction = previous;
   }
@@ -271,8 +274,10 @@ export function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T> {
       "resourceGroup() cannot be nested; use one flat group per replaceable region.",
     );
   }
+  const syncError = (): TypeError =>
+    new TypeError("resourceGroup() callbacks must be synchronous.");
   if (Object.prototype.toString.call(fn) === "[object AsyncFunction]") {
-    throw new TypeError("resourceGroup() callbacks must be synchronous.");
+    throw syncError();
   }
   const arena: ResourceArena = { entries: [], nextIndex: 0, stopping: false };
   const stopArena = (): void => {
@@ -285,19 +290,15 @@ export function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T> {
     value = fn() as T;
     if (isPromiseLike(value)) {
       ignorePromiseRejection(value);
-      throw new TypeError("resourceGroup() callbacks must be synchronous.");
+      throw syncError();
     }
   } catch (error) {
     activeResourceGroup = undefined;
-    try {
-      stopArena();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [error, cleanupError],
-        "Loom resource group creation and cleanup both failed.",
-      );
-    }
-    throw error;
+    return rollbackWith(
+      stopArena,
+      error,
+      "Loom resource group creation and cleanup both failed.",
+    );
   } finally {
     activeResourceGroup = undefined;
   }
@@ -313,44 +314,48 @@ export function resourceGroup<T>(fn: () => SyncResult<T>): ResourceGroup<T> {
 }
 
 function compareGroupEntries(left: GroupEntry, right: GroupEntry): number {
-  if (left.owner === right.owner) return left.index - right.index;
-  const position = left.owner.compareDocumentPosition(right.owner);
-  if ((position & Node.DOCUMENT_POSITION_DISCONNECTED) !== 0) {
+  const leftOwner = left.owner;
+  const rightOwner = right.owner;
+  if (leftOwner === rightOwner || !leftOwner || !rightOwner) {
     return left.index - right.index;
   }
-  if ((position & Node.DOCUMENT_POSITION_CONTAINED_BY) !== 0) return 1;
-  if ((position & Node.DOCUMENT_POSITION_CONTAINS) !== 0) return -1;
-  return (position & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 ? -1 : 1;
+  const pos = leftOwner.compareDocumentPosition(rightOwner);
+  return pos & 1 ? left.index - right.index : pos & 16 ? 1 : pos & 12 ? -1 : 1;
 }
 
 function stopResourceGroup(resources: GroupEntry[]): void {
+  if (resources.length === 0) return;
   let errors: unknown[] | undefined;
-  const driver = resourceDriver;
-  const ordered: GroupEntry[] = [];
+  let ordered: GroupEntry[] | undefined;
   const stop = (resource: TrackedResource): void => {
     try {
-      if (isRegisteredStop(resource)) resource.dispose();
-      else if (driver !== undefined) driver.stop(resource);
-      else throw new Error("No Loom DOM resource driver is installed.");
+      if (typeof resource === "function") resource();
+      else requireDriver().stop(resource);
     } catch (error) {
-      if (errors === undefined) errors = [error];
-      else errors.push(error);
+      errors ??= [];
+      errors.push(error);
     }
   };
-  for (const entry of resources) {
+  for (let i = 0; i < resources.length; i++) {
+    const entry = resources[i] as GroupEntry;
     const resource = entry.resource;
+    if (resource === undefined) continue;
     if (
-      isRegisteredStop(resource) ||
-      driver?.requiresOrderedStop(resource) === true
+      typeof resource === "function" ||
+      resourceDriver?.requiresOrderedStop(resource) === true
     ) {
+      ordered ??= [];
       ordered.push(entry);
     } else {
       stop(resource);
     }
   }
-  ordered.sort(compareGroupEntries);
-  for (const entry of ordered) {
-    stop(entry.resource);
+  if (ordered !== undefined) {
+    if (ordered.length > 1) ordered.sort(compareGroupEntries);
+    for (let i = 0; i < ordered.length; i++) {
+      const resource = (ordered[i] as GroupEntry).resource;
+      if (resource !== undefined) stop(resource);
+    }
   }
   resources.length = 0;
   throwCollected(errors, "Multiple Loom DOM resources failed.");
@@ -361,30 +366,21 @@ function stopResourceGroup(resources: GroupEntry[]): void {
  * allowing early manual teardown without retaining the stopped resource on a long-lived node.
  */
 export function onUnmount(node: Node, stop: OwnershipStop): OwnershipStop {
-  const entry: RegisteredStop = {
-    [REGISTERED_STOP]: true,
-    active: true,
-    owner: node,
-    stop,
-    dispose: () => undefined,
-  };
-  entry.dispose = () => {
-    if (!entry.active) return;
-    entry.active = false;
-    const owner = entry.owner;
-    const current = entry.stop;
-    // A caller may retain the returned handle indefinitely. Clear its captured resource graph
-    // before cleanup so a stopped handle does not keep the DOM node or callback alive.
-    entry.owner = undefined;
-    entry.stop = undefined;
-    const release = entry.release;
-    entry.release = undefined;
+  let owner: Node | undefined = node;
+  let current: OwnershipStop | undefined = stop;
+  let release: OwnershipStop | undefined;
+  const dispose = (): void => {
+    const heldStop = current;
+    if (!heldStop) return;
+    const heldOwner = owner;
+    owner = current = undefined;
     release?.();
-    if (owner !== undefined) unregister(owner, entry);
-    if (current) untrack(current);
+    release = undefined;
+    if (heldOwner) unregister(heldOwner, dispose);
+    untrack(heldStop);
   };
-  addOwned(node, entry);
-  return entry.dispose;
+  release = addOwned(node, dispose, true);
+  return dispose;
 }
 
 function driveOwnedResources(
@@ -394,11 +390,7 @@ function driveOwnedResources(
   runOwned(
     root,
     (owned) => {
-      if (typeof owned === "function" || isRegisteredStop(owned)) return;
-      if (resourceDriver === undefined) {
-        throw new Error("No Loom DOM resource driver is installed.");
-      }
-      drive(resourceDriver, owned);
+      if (typeof owned !== "function") drive(requireDriver(), owned);
     },
     false,
   );
@@ -414,18 +406,14 @@ export function resumeOwnedResources(root: Node): void {
   driveOwnedResources(root, (driver, resource) => driver.resume(resource));
 }
 
+function disposeSingleEntry(owned: OwnedEntry): void {
+  if (typeof owned === "function") untrack(owned as OwnershipStop);
+  else requireDriver().stop(owned);
+}
+
 /** Dispose every owned resource in a subtree, descendants before ancestors. */
 export function dispose(root: Node): void {
-  runOwned(
-    root,
-    (owned) => {
-      if (typeof owned === "function") untrack(owned as OwnershipStop);
-      else if (isRegisteredStop(owned)) owned.dispose();
-      else if (resourceDriver !== undefined) resourceDriver.stop(owned);
-      else throw new Error("No Loom DOM resource driver is installed.");
-    },
-    true,
-  );
+  runOwned(root, disposeSingleEntry, true);
 }
 
 /** Dispose a subtree and detach it even when one of its disposers fails. */
@@ -439,7 +427,7 @@ export function remove(node: Node): void {
   try {
     node.parentNode?.removeChild(node);
   } catch (error) {
-    if (errors === undefined) throw error;
+    errors ??= [];
     errors.push(error);
   }
   throwCollected(errors, "Loom DOM disposal and removal both failed.");

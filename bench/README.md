@@ -126,6 +126,52 @@ Representative `vitest bench` (`bench/core-algorithm.bench.ts` and
 | `minimal (state+computed+effect)` | 3,080 B gzip | 3,031 B gzip | -49 B |
 | `minimal dom (h+text)` | 5,994 B gzip | 5,826 B gzip | -168 B |
 
+## Version 0.12.0 cross-layer optimization pass
+
+Comparing `v0.11.0` (`942fbe5`) against `v0.12.0` on Node `v24.21.0` and Headless
+Chromium `158.0.8127.18` (arm64):
+
+- **Core (`src/loom.ts`)**: `state()` remains zero-extra-allocation at creation;
+  `mutate()`, `trigger()`, and `revisions.prune()` lazily attach a symbol-keyed
+  direct `StateNode` reference on first use instead of allocating a diagnostic
+  watcher probe on every call, and `notifyStateNode` fast-paths single direct
+  armed effects.
+- **Keyed DOM & placement (`src/dom/keyed-reconcile.ts`, `src/dom/place.ts`)**:
+  per-element `keyedItem` baseline property eliminates a secondary baseline `Map`,
+  identity/prefix-suffix scans avoid `Map` construction when keys match, and
+  `positionOrdered` adds bounded prefix/suffix trimming plus `O(1)` 1-move and
+  2-swap fast paths ahead of the LIS fallback.
+- **Live HTML `morph()` (`src/dom/morph.ts`)**: positional traversal with
+  targeted `querySelectorAll("[data-key]")` lookup replaces per-node child-array
+  snapshots and redundant `.trim()` allocations.
+- **SSR HTML (`src/html/*`)**: regex fast-return in `escapeText`, single-pass
+  attribute serialization, shared root-attribute parsing, and allocation-free
+  style serialization.
+
+| Suite / Workload | `v0.11.0` | `v0.12.0` | Speedup |
+| --- | ---: | ---: | ---: |
+| `core-production`: `mutate/50000` | 2.9194 ms | 1.3177 ms | **2.22×** |
+| `core-production`: `trigger/50000` | 2.7752 ms | 1.3500 ms | **2.06×** |
+| `dom-performance`: `keyed/swap` (1,000 rows) | 0.1690 ms | 0.0440 ms | **3.84×** |
+| `dom-performance`: `keyed/unchanged` (1,000 rows) | 0.0750 ms | 0.0305 ms | **2.46×** |
+| `dom-performance`: `keyed/remove` (1,000 rows) | 0.1405 ms | 0.0640 ms | **2.20×** |
+| `dom-performance`: `keyed/prepend` (1,000 rows) | 0.0985 ms | 0.0555 ms | **1.77×** |
+| `dom-performance`: `keyed/append` (1,000 rows) | 0.1000 ms | 0.0580 ms | **1.72×** |
+| `dom-performance`: `regions/20` | 0.0080 ms | 0.0045 ms | **1.78×** |
+| `morph-stream`: `loom full` (180 ticks) | 65.2 ms | 41.7 ms | **1.56×** (2.55× vs Idiomorph 106.4 ms) |
+| `html-production`: `escapeText/200-clean` | 0.01322 ms | 0.00627 ms | **2.11×** |
+| `html-production`: `serializeAttributes/200-rich` | 0.28501 ms | 0.15977 ms | **1.78×** |
+| `html-production`: `html-template/200-rows` | 0.09431 ms | 0.05886 ms | **1.60×** |
+| `html-production`: `html-jsx/200-cards` | 0.45554 ms | 0.29633 ms | **1.54×** |
+
+Production Node micro-benchmarks run directly against built `dist/`:
+
+```sh
+pnpm run build
+node bench/core-production.mjs
+node bench/html-production.mjs
+```
+
 ## Reproduce
 
 Start Vite from the repository:

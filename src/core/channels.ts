@@ -47,10 +47,11 @@ export function makeChannelNode(
 
 // A built-in channel node: cap values here are powers of two by construction.
 function builtin(
-  name: string,
+  suffix: string,
   cap = 0,
   fields: readonly string[] = [],
 ): ChannelNode {
+  const name = `loom:${suffix}`;
   const node = makeChannelNode(name, cap, fields);
   channelRegistry.set(name, node);
   return node;
@@ -68,20 +69,20 @@ function builtin(
 // reads (the Trace tab); a "count" meter (the read rate) ignores the ring. Reads are the
 // highest-frequency event, so the per-read recording is paid only while metered and stays zero-alloc.
 // `by` is the running effect/computed that performed the read — i.e. who consumed the signal.
-export const readCh = builtin("loom:read", 1024, ["id", "by", "t"]);
+export const readCh = builtin("read", 1024, ["id", "by", "t"]);
 // write carries detail so a "samples" meter can stream individual mutations (id + prev→next + the
 // node that wrote it + a wall-clock timestamp), e.g. the inspector's Trace tab; a "count" meter
 // (the rates) ignores the ring and allocates nothing. `by` is the effect/computed that wrote during
 // a reactive cascade, or undefined for a top-level (event-handler) write.
-export const writeCh = builtin("loom:write", 1024, [
+export const writeCh = builtin("write", 1024, [
   "id",
   "prev",
   "next",
   "by",
   "t",
 ]);
-export const computeCh = builtin("loom:compute");
-export const effectCh = builtin("loom:effect");
-export const flushCh = builtin("loom:flush", 8, ["batchSize", "durationMs"]);
-export const createCh = builtin("loom:create");
-export const disposeCh = builtin("loom:dispose");
+export const computeCh = builtin("compute");
+export const effectCh = builtin("effect");
+export const flushCh = builtin("flush", 8, ["batchSize", "durationMs"]);
+export const createCh = builtin("create");
+export const disposeCh = builtin("dispose");

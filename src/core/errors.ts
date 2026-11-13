@@ -23,3 +23,17 @@ export function throwCollected(
   if (errors?.length === 1) throw errors[0];
   if (errors && errors.length > 1) throw new AggregateError(errors, message);
 }
+
+/** Run rollback cleanup after a primary failure, aggregating if cleanup also throws. */
+export function rollbackWith(
+  cleanup: () => void,
+  error: unknown,
+  message: string,
+): never {
+  try {
+    cleanup();
+  } catch (cleanupError) {
+    throw new AggregateError([error, cleanupError], message);
+  }
+  throw error;
+}

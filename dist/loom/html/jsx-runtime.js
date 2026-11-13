@@ -1,22 +1,7 @@
-import { r as e } from "../jsx-props-DuIVfWzo.js";
-import { a as t, i as n, s as r } from "../html-BiAw8QUW.js";
+import { r as e } from "../jsx-props-BmFOdt8N.js";
+import { a as t, i as n, s as r } from "../html-ZPCYPlg6.js";
 // src/html/jsx-runtime.ts
-var i = /^[A-Za-z][A-Za-z0-9:._-]*$/, a = /* @__PURE__ */ new Set([
-	"area",
-	"base",
-	"br",
-	"col",
-	"embed",
-	"hr",
-	"img",
-	"input",
-	"link",
-	"meta",
-	"param",
-	"source",
-	"track",
-	"wbr"
-]);
+var i = /^[A-Za-z][A-Za-z0-9:._-]*$/, a = new Set("area base br col embed hr img input link meta param source track wbr".split(" "));
 function o(e, t, n) {
 	return u(e, t, !1);
 }
@@ -34,6 +19,6 @@ function d(e, o, s) {
 	if (!i.test(e)) throw Error(`Invalid HTML tag name "${e}".`);
 	let c = `<${e}`, l;
 	if (o) for (let t in o) Object.hasOwn(o, t) && (t === "children" ? l = o[t] : c += r(e, t, o[t], s));
-	return c += ">", a.has(e) || (c += n(l), c += `</${e}>`), t(c);
+	return c += ">", a.has(e) || (l !== void 0 && (c += n(l)), c += `</${e}>`), t(c);
 }
 export { c as Fragment, o as jsx, l as jsxDEV, s as jsxs };

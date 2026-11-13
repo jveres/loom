@@ -9,12 +9,20 @@ function n(e, t) {
 	if (e?.length === 1) throw e[0];
 	if (e && e.length > 1) throw AggregateError(e, t);
 }
+function r(e, t, n) {
+	try {
+		e();
+	} catch (e) {
+		throw AggregateError([t, e], n);
+	}
+	throw t;
+}
 // src/core/tracking.ts
-var r = (e) => e();
-function i(e) {
-	r = e;
-}
+var i = (e) => e();
 function a(e) {
-	return r(e);
+	i = e;
 }
-export { n as a, e as i, a as n, t as r, i as t };
+function o(e) {
+	return i(e);
+}
+export { r as a, e as i, o as n, n as o, t as r, a as t };

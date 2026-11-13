@@ -45,16 +45,21 @@ export function bumpPausedCount(node: ScopeNode, delta: number): void {
   const next = previous + delta;
   node.pausedCount = next;
   if (previous === 0 || next === 0) {
-    for (const effectNode of node.effects) {
-      if (effectNode.flags === 0) continue;
-      if (next > 0 || effectNode.directPausedCount) {
-        effectNode.flags |= Paused;
-      } else {
-        effectNode.flags &= ~Paused;
-      }
+    const effects = node.effects;
+    for (let i = 0; i < effects.length; i++) {
+      const effectNode = effects[i] as EffectNode;
+      const flags = effectNode.flags;
+      if (flags === 0) continue;
+      effectNode.flags =
+        next > 0 || effectNode.directPausedCount
+          ? flags | Paused
+          : flags & ~Paused;
     }
   }
-  for (const child of node.children) bumpPausedCount(child, delta);
+  const children = node.children;
+  for (let i = 0; i < children.length; i++) {
+    bumpPausedCount(children[i] as ScopeNode, delta);
+  }
 }
 
 export function stopScopeResource(resource: OwnedScopeResource): void {
@@ -93,15 +98,16 @@ export function walkResources(
   node: ScopeNode,
   act: (resource: OwnedScopeResource) => void,
 ): void {
-  const resources: OwnedScopeResource[] = [];
-  collectResources(node, resources);
-  if (resources.length === 0) return;
-  const errors: unknown[] = [];
-  for (const resource of resources) {
+  const resources = collectResources(node, undefined);
+  if (resources === undefined) return;
+  let errors: unknown[] | undefined;
+  for (let i = 0; i < resources.length; i++) {
+    const resource = resources[i] as OwnedScopeResource;
     if (resource.stopped) continue;
     try {
       act(resource);
     } catch (error) {
+      errors ??= [];
       errors.push(error);
     }
   }
@@ -111,10 +117,20 @@ export function walkResources(
 // Independently-paused child subtrees are already in the matching resource state.
 function collectResources(
   node: ScopeNode,
-  resources: OwnedScopeResource[],
-): void {
-  for (const resource of node.resources) resources.push(resource);
-  for (const child of node.children) {
-    if (!child.paused) collectResources(child, resources);
+  into: OwnedScopeResource[] | undefined,
+): OwnedScopeResource[] | undefined {
+  let resources = into;
+  const owned = node.resources;
+  if (owned.length > 0) {
+    if (resources === undefined) resources = owned.slice();
+    else
+      for (let i = 0; i < owned.length; i++)
+        resources.push(owned[i] as OwnedScopeResource);
   }
+  const children = node.children;
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i] as ScopeNode;
+    if (!child.paused) resources = collectResources(child, resources);
+  }
+  return resources;
 }

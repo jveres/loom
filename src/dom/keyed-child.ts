@@ -18,10 +18,7 @@ export function keyedChild(
   return (key, build) => {
     if (!active || held === key) return;
     const outgoing = [...host.childNodes];
-    withConstructionRollback(() => {
-      const next = untrack(build);
-      host.replaceChildren(next);
-    });
+    withConstructionRollback(() => host.replaceChildren(untrack(build)));
     // Placement committed. A failure retiring old content must not rebuild this key.
     held = key;
     removeNodes(outgoing.filter((node) => node.parentNode !== host));

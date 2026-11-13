@@ -11,10 +11,12 @@ export function observeDocumentTree(
   document: Document,
   onChange: () => void,
 ): MutationObserver {
-  const view = document.defaultView as
-    | (Window & { readonly MutationObserver?: typeof MutationObserver })
-    | null;
-  const Observer = view?.MutationObserver ?? globalThis.MutationObserver;
+  const Observer =
+    (
+      document.defaultView as
+        | (Window & { readonly MutationObserver?: typeof MutationObserver })
+        | null
+    )?.MutationObserver ?? MutationObserver;
   const observer = new Observer(onChange);
   observer.observe(document.documentElement ?? document, {
     childList: true,

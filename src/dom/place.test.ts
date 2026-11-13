@@ -45,6 +45,20 @@ describe("positionOrdered", () => {
       expect(insert).toHaveBeenCalledTimes(minimumMoves(order));
     }
   });
+  it("retains minimal moves for every six-node permutation including end anchors", () => {
+    for (const order of permutations([0, 1, 2, 3, 4, 5])) {
+      const parent = document.createElement("div");
+      const nodes = order.map(() => document.createElement("i"));
+      const end = document.createComment("end");
+      parent.append(...nodes, end);
+      Object.defineProperty(parent, "moveBefore", { value: undefined });
+      const insert = vi.spyOn(parent, "insertBefore");
+      const desired = order.map((index) => nodes[index] as Node);
+      positionOrdered(parent, desired, end);
+      expect([...parent.childNodes]).toEqual([...desired, end]);
+      expect(insert).toHaveBeenCalledTimes(minimumMoves(order));
+    }
+  });
   it("inserts around a contiguous region without moving its neighbors or existing rows", () => {
     const parent = document.createElement("div");
     const before = document.createElement("b");

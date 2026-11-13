@@ -10,15 +10,17 @@ nodes; reactive bindings update those nodes in place.
 
 See it running:
 
-- [Stockroom database demo](https://jveres.github.io/loom/db/): bounded local
-  inventory reads, atomic writes, real failure scenarios, and multiple tabs.
+- [Loom Observatory](https://jveres.github.io/loom/): a 336-cell live DOM signal
+  matrix with subtree `pause`/`resume` time-freeze, DOM X-Ray highlighting,
+  atomic `moveBefore` LIS reconciliation, live streaming `morph()` around
+  protected islands, and the Loom inspector.
 - [Live Wikipedia edits](https://jveres.github.io/loom/live/): every edit to the
   Wikimedia wikis, streamed and woven into a live dashboard, with its own DOM
   writes and effect runs per edit on display.
-- [Realtime stress demo](https://jveres.github.io/loom/): a card board under
-  adjustable event load, with the Loom inspector.
+- [Stockroom database demo](https://jveres.github.io/loom/db/): bounded local
+  inventory reads, atomic writes, real failure scenarios, and multiple tabs.
 
-The current release is `0.11.0` ([release notes](docs/release-0.11.0.md)). Version
+The current release is `0.12.0` ([release notes](docs/release-0.12.0.md)). Version
 `0.6.0` introduced the breaking API consolidation
 ([release notes](docs/release-0.6.0.md)). If you are upgrading from `0.5.0` or earlier, follow the
 [migration guide](docs/migration.md) to update imports and lifetimes.
@@ -222,7 +224,7 @@ Loom is distributed through GitHub with committed ESM bundles and declarations.
 Install the current release from its GitHub tag:
 
 ```sh
-pnpm add github:jveres/loom#v0.11.0
+pnpm add github:jveres/loom#v0.12.0
 ```
 
 The optional `loom/db` entrypoint is included from v0.10.0. See the
@@ -248,7 +250,7 @@ pnpm run check:db-demo
 pnpm run dev
 ```
 
-Open `/` for the UI demo, `/live/` for live Wikipedia edits streamed through
+Open `/` for the Loom Observatory demo, `/live/` for live Wikipedia edits streamed through
 Loom, [`/db/`](demo/db/README.md) for the IndexedDB demo, or `/bench/` for browser
 workloads. Rebuild `dist`
 after source changes. `pnpm run build:demo` writes to `dist/demo`, preserving

@@ -1,4 +1,4 @@
-import { throwCollected } from "./errors.js";
+import { rollbackWith, throwCollected } from "./errors.js";
 
 /** Internal terminal lifetime. Register cleanup before installing fallible work. */
 export function lifetime(signal?: AbortSignal): {
@@ -12,11 +12,12 @@ export function lifetime(signal?: AbortSignal): {
     if (!active) return;
     active = false;
     signal?.removeEventListener("abort", stop);
-    const errors: unknown[] = [];
+    let errors: unknown[] | undefined;
     for (const cleanup of cleanups.splice(0)) {
       try {
         cleanup();
       } catch (error) {
+        errors ??= [];
         errors.push(error);
       }
     }
@@ -37,13 +38,5 @@ export function lifetime(signal?: AbortSignal): {
 
 /** Preserve the setup failure when rollback also fails. */
 export function failSetup(life: { stop: () => void }, error: unknown): never {
-  try {
-    life.stop();
-  } catch (cleanupError) {
-    throw new AggregateError(
-      [error, cleanupError],
-      "Loom setup and cleanup both failed.",
-    );
-  }
-  throw error;
+  return rollbackWith(life.stop, error, "Loom setup and cleanup both failed.");
 }

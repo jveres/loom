@@ -40,42 +40,79 @@ export interface MorphOptions {
   skip?: ((el: Element) => boolean) | string;
 }
 
-function shouldSkip(el: Element, options: MorphOptions): boolean {
-  const skip = options.skip;
-  if (skip === undefined) return false;
-  return typeof skip === "string" ? el.matches(skip) : skip(el);
+const EMPTY_OPTIONS: MorphOptions = {};
+
+function shouldSkip(el: Element, skip: MorphOptions["skip"]): boolean {
+  return skip === undefined
+    ? false
+    : typeof skip === "string"
+      ? el.matches(skip)
+      : skip(el);
 }
 
 export function morph(
   from: Element,
   to: Element,
-  options: MorphOptions = {},
+  options: MorphOptions = EMPTY_OPTIONS,
 ): Element {
-  if (from === to || shouldSkip(from, options)) return from;
+  if (from === to || shouldSkip(from, options.skip)) return from;
   if (from.tagName !== to.tagName) {
     from.replaceWith(to);
     return to;
   }
   syncAttributes(from, to);
   syncFormState(from, to);
-  reconcileChildren(from, to.childNodes, options);
+  if (options.key === undefined && options.skip === undefined) {
+    morphPositionalChildren(from, to);
+  } else {
+    reconcileChildren(from, to.childNodes, options);
+  }
   return from;
 }
 
+function syncMatched(live: Node, next: Node, options?: MorphOptions): void {
+  if (live.nodeType === 1) morph(live as Element, next as Element, options);
+  else if (live.nodeValue !== next.nodeValue) live.nodeValue = next.nodeValue;
+}
+
+function sameShape(a: Node, b: Node): boolean {
+  return (
+    a.nodeType === b.nodeType &&
+    (a.nodeType !== 1 || (a as Element).tagName === (b as Element).tagName)
+  );
+}
+
+// Zero-allocation positional walk when neither `key` nor `skip` is active.
+function morphPositionalChildren(from: Element, to: Element): void {
+  let cur = from.firstChild;
+  for (let next = to.firstChild, after: ChildNode | null; next; next = after) {
+    after = next.nextSibling;
+    if (cur && sameShape(cur, next)) {
+      syncMatched(cur, next);
+      cur = cur.nextSibling;
+    } else {
+      from.insertBefore(next, cur);
+    }
+  }
+  while (cur) {
+    const after = cur.nextSibling;
+    from.removeChild(cur);
+    cur = after;
+  }
+}
+
 function syncAttributes(from: Element, to: Element): void {
-  // Backwards index walk is removal-safe on the live NamedNodeMap — no snapshot allocations
-  // (this runs for every matched element on every morph).
+  if (!from.hasAttributes() && !to.hasAttributes()) return;
+  // Backwards index walk is removal-safe on the live NamedNodeMap — no snapshot allocations.
   const fromAttrs = from.attributes;
   for (let i = fromAttrs.length - 1; i >= 0; i--) {
-    const name = (fromAttrs[i] as Attr).name;
+    const { name } = fromAttrs[i] as Attr;
     if (!to.hasAttribute(name)) from.removeAttribute(name);
   }
   const toAttrs = to.attributes;
   for (let i = 0; i < toAttrs.length; i++) {
-    const attr = toAttrs[i] as Attr;
-    if (from.getAttribute(attr.name) !== attr.value) {
-      from.setAttribute(attr.name, attr.value);
-    }
+    const { name, value } = toAttrs[i] as Attr;
+    if (from.getAttribute(name) !== value) from.setAttribute(name, value);
   }
 }
 
@@ -94,27 +131,30 @@ function syncFormState(from: Element, to: Element): void {
   // pair already proves the shape, so the narrowing is a cast, never a brand
   // check.
   const name = from.nodeName;
-  if (name !== "INPUT" && name !== "TEXTAREA" && name !== "OPTION") return;
-  if (to.nodeName !== name) return;
-  if (from.ownerDocument.activeElement === from) return;
-  if (name === "INPUT") {
-    const live = from as HTMLInputElement;
-    const next = to as HTMLInputElement;
-    if (live.value !== next.value) live.value = next.value;
-    if (live.checked !== next.checked && !radioGroupFocused(live)) {
-      live.checked = next.checked;
-    }
-  } else if (name === "TEXTAREA") {
-    const live = from as HTMLTextAreaElement;
-    const next = to as HTMLTextAreaElement;
-    if (live.value !== next.value) live.value = next.value;
-  } else {
+  if (
+    (name !== "INPUT" && name !== "TEXTAREA" && name !== "OPTION") ||
+    to.nodeName !== name ||
+    from.ownerDocument.activeElement === from
+  )
+    return;
+  if (name === "OPTION") {
     const live = from as HTMLOptionElement;
     const next = to as HTMLOptionElement;
     const select = live.closest("select");
     if (select === null || select.ownerDocument.activeElement !== select) {
       if (live.selected !== next.selected) live.selected = next.selected;
     }
+    return;
+  }
+  const live = from as HTMLInputElement;
+  const next = to as HTMLInputElement;
+  if (live.value !== next.value) live.value = next.value;
+  if (
+    name === "INPUT" &&
+    live.checked !== next.checked &&
+    !radioGroupFocused(live)
+  ) {
+    live.checked = next.checked;
   }
 }
 
@@ -147,10 +187,11 @@ const keyOf = (node: Node, options: MorphOptions): string | null =>
 export function morphChildren(
   from: Element,
   children: readonly Node[],
-  options: MorphOptions = {},
+  options: MorphOptions = EMPTY_OPTIONS,
 ): Node[] {
   let retained: Set<Node> | undefined;
-  for (const child of children) {
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i] as Node;
     if (child.parentNode === from) {
       retained ??= new Set();
       if (retained.has(child))
@@ -159,6 +200,10 @@ export function morphChildren(
     }
   }
   return reconcileChildren(from, children, options, retained);
+}
+
+function dupMorphKey(key: string): never {
+  throw new Error(`Duplicate morph key "${key}".`);
 }
 
 function reconcileChildren(
@@ -171,62 +216,48 @@ function reconcileChildren(
   // text child — both skip all of the matching scaffold below. (Elements are
   // excluded from the single-child path: they need key/skip handling.)
   const fromFirst = from.firstChild;
-  const toFirst = children[0] ?? null;
-  if (fromFirst === null && toFirst === null) return [];
+  if (!fromFirst && !children.length) return [];
   if (
-    fromFirst !== null &&
-    toFirst !== null &&
-    fromFirst.nextSibling === null &&
+    fromFirst &&
+    !fromFirst.nextSibling &&
     children.length === 1 &&
     fromFirst.nodeType !== 1 &&
-    fromFirst.nodeType === toFirst.nodeType
+    fromFirst.nodeType === (children[0] as Node).nodeType
   ) {
-    if (fromFirst.nodeValue !== toFirst.nodeValue) {
-      fromFirst.nodeValue = toFirst.nodeValue;
-    }
+    syncMatched(fromFirst, children[0] as Node);
     return [fromFirst];
   }
 
   const oldNodes = Array.from(from.childNodes);
-
-  // Every old element's key is computed exactly once here; `keyedNodes` marks
-  // them so the positional cursor can skip keyed nodes without re-keying.
-  const keyed = new Map<string, Element>();
-  const keyedNodes = new Set<Node>();
-  if (options.key) {
+  const keyed = options.key && new Map<string, Element>();
+  const reserved = new Set<Node>(retained);
+  if (keyed) {
     for (const node of oldNodes) {
       const key = keyOf(node, options);
       if (key !== null) {
-        // Same contract as list()/each()'s reconcileKeyed: a duplicate key breaks matching, so it
-        // throws instead of silently reassigning identity.
-        if (keyed.has(key)) throw new Error(`Duplicate morph key "${key}".`);
+        if (keyed.has(key)) dupMorphKey(key);
         keyed.set(key, node as Element);
-        keyedNodes.add(node);
+        reserved.add(node);
       }
     }
   }
 
-  // Skipped old elements are TRANSPARENT to the positional cursor: as a
-  // candidate, an injected node (which the new tree never contains) blocked
-  // the walk — every managed sibling after it failed its match and was torn
-  // down and rebuilt on every morph. Computed once per element; the removal
-  // loop reads the same set. Stays null when nothing matches (the common
-  // case) so the hot cursor loop short-circuits, and builds in one pass —
-  // no intermediate array (this runs per element-with-children per morph).
   let skippedNodes: Set<Node> | null = null;
   const unkeyedSkipped: Element[] = [];
-  if (options.skip !== undefined) {
+  const skip = options.skip;
+  if (skip !== undefined) {
     for (const node of oldNodes) {
-      if (node.nodeType === 1 && shouldSkip(node as Element, options)) {
+      if (node.nodeType === 1 && shouldSkip(node as Element, skip)) {
         skippedNodes ??= new Set();
         skippedNodes.add(node);
-        if (!keyedNodes.has(node)) unkeyedSkipped.push(node as Element);
+        if (!reserved.has(node)) unkeyedSkipped.push(node as Element);
+        reserved.add(node);
       }
     }
   }
 
   const used = new Set<Node>();
-  let seenNewKeys: Set<string> | undefined;
+  const seenNewKeys = keyed && new Set<string>();
   const result: Node[] = [];
   let cursor = 0;
   let skippedCursor = 0;
@@ -235,31 +266,23 @@ function reconcileChildren(
     const next = children[index] as Node;
     let match: Node | undefined;
 
-    // Each new node's key is computed exactly once per pass.
     const key = keyOf(next, options);
     const skipped =
       key === null &&
+      skip !== undefined &&
       next.nodeType === 1 &&
-      shouldSkip(next as Element, options);
+      shouldSkip(next as Element, skip);
     const skippedMatch = skipped ? unkeyedSkipped[skippedCursor++] : undefined;
-    if (key !== null) {
-      seenNewKeys ??= new Set();
-      if (seenNewKeys.has(key))
-        throw new Error(`Duplicate morph key "${key}".`);
+    if (key !== null && keyed && seenNewKeys) {
+      if (seenNewKeys.has(key)) dupMorphKey(key);
       seenNewKeys.add(key);
       const hit = keyed.get(key);
-      // A key match still requires the same tag: morphing across tags would hit the recursive
-      // replaceWith path whose replacement can't be threaded back into this walk — adopt instead.
       if (hit && !used.has(hit) && hit.tagName === (next as Element).tagName) {
         match = hit;
       }
-      // A keyed new node never matches positionally, so no cursor work here.
     } else if (next.parentNode === from && !used.has(next)) {
-      // A retained child is an explicit identity match, even when skipped.
       match = next;
     } else if (skipped) {
-      // Declarative protected siblings match by ordinal, independently of
-      // managed positions. Injected nodes absent from the snapshot survive.
       if (
         skippedMatch?.tagName === (next as Element).tagName &&
         !used.has(skippedMatch)
@@ -267,26 +290,13 @@ function reconcileChildren(
         match = skippedMatch;
       }
     } else {
-      // Skip used, keyed AND skipped old nodes: none of them may match positionally, and any
-      // absent from the new tree would otherwise block every unkeyed sibling behind it.
       while (cursor < oldNodes.length) {
         const blocked = oldNodes[cursor] as Node;
-        if (
-          !used.has(blocked) &&
-          !keyedNodes.has(blocked) &&
-          !retained?.has(blocked) &&
-          !skippedNodes?.has(blocked)
-        )
-          break;
+        if (!used.has(blocked) && !reserved.has(blocked)) break;
         cursor++;
       }
       const candidate = oldNodes[cursor];
-      if (
-        candidate &&
-        candidate.nodeType === next.nodeType &&
-        (candidate.nodeType !== 1 ||
-          (candidate as Element).tagName === (next as Element).tagName)
-      ) {
+      if (candidate && sameShape(candidate, next)) {
         match = candidate;
         cursor++;
       }
@@ -294,28 +304,17 @@ function reconcileChildren(
 
     if (match) {
       used.add(match);
-      if (match === next) {
-        // Retained snapshots do not synchronize attributes or descendants.
-      } else if (match.nodeType === 1) {
-        morph(match as Element, next as Element, options);
-      } else if (match.nodeValue !== next.nodeValue) {
-        match.nodeValue = next.nodeValue;
-      }
-      result.push(match);
-    } else {
-      result.push(next);
+      if (match !== next) syncMatched(match, next, options);
     }
+    result.push(match ?? next);
   }
 
   for (const old of oldNodes) {
-    if (used.has(old) || old.parentNode !== from) continue;
-    if (skippedNodes?.has(old)) continue;
-    from.removeChild(old);
+    if (!used.has(old) && !skippedNodes?.has(old) && old.parentNode === from) {
+      from.removeChild(old);
+    }
   }
 
-  // Keep unmatched protected children before their next surviving old sibling,
-  // or at the end when there is none. New trailing content therefore lands
-  // before an enhancer's trailing controls, not after them.
   let ordered = result;
   if (skippedNodes !== null) {
     const before = new Map<Node | null, Node[]>();

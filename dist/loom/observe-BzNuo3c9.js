@@ -1,4 +1,4 @@
-import { d as e, f as t, m as n, p as r, t as i, y as a } from "./loom-Bchrc-TP.js";
+import { d as e, f as t, m as n, p as r, t as i, y as a } from "./loom-C8fvwr1e.js";
 // src/core/channels.ts
 var o = /* @__PURE__ */ new Map();
 function s(e, t, n) {
@@ -15,20 +15,20 @@ function s(e, t, n) {
 	};
 }
 function c(e, t = 0, n = []) {
-	let r = s(e, t, n);
-	return o.set(e, r), r;
+	let r = `loom:${e}`, i = s(r, t, n);
+	return o.set(r, i), i;
 }
-var l = c("loom:read", 1024, [
+var l = c("read", 1024, [
 	"id",
 	"by",
 	"t"
-]), u = c("loom:write", 1024, [
+]), u = c("write", 1024, [
 	"id",
 	"prev",
 	"next",
 	"by",
 	"t"
-]), d = c("loom:compute"), f = c("loom:effect"), p = c("loom:flush", 8, ["batchSize", "durationMs"]), m = c("loom:create"), h = c("loom:dispose"), g = 0, _ = 0, v = !1, y = /* @__PURE__ */ new Map(), b = typeof FinalizationRegistry > "u" ? void 0 : new FinalizationRegistry((e) => {
+]), d = c("compute"), f = c("effect"), p = c("flush", 8, ["batchSize", "durationMs"]), m = c("create"), h = c("dispose"), g = 0, _ = 0, v = !1, y = /* @__PURE__ */ new Map(), b = typeof FinalizationRegistry > "u" ? void 0 : new FinalizationRegistry((e) => {
 	y.delete(e);
 });
 function x(e, t, r) {
@@ -131,11 +131,7 @@ function D(e, t, n) {
 	return r;
 }
 function O(e, t) {
-	switch (t.kind) {
-		case "state": return e.pendingValue;
-		case "computed": return e.value;
-		default: return;
-	}
+	return t.kind === "state" ? e.pendingValue : t.kind === "computed" ? e.value : void 0;
 }
 // src/core/meter.ts
 var k = 1 << 20, A = 5;
@@ -181,7 +177,7 @@ t({
 	},
 	read(e, t) {
 		let n = e.meta;
-		l.meters !== 0 && n?.internal !== !0 && (n !== void 0 && l.samples !== 0 ? P(l, n.id, t.meta?.id, Date.now(), void 0, void 0) : l.seq++);
+		l.meters !== 0 && n?.internal !== !0 && (n !== void 0 && l.samples !== 0 ? P(l, n.id, t.meta?.id, Date.now()) : l.seq++);
 	},
 	write(e, t, n, r) {
 		let i = e.meta;
@@ -197,7 +193,7 @@ t({
 		return p.meters === 0 ? void 0 : F();
 	},
 	endFlush(e, t) {
-		P(p, e, F() - t, void 0, void 0, void 0);
+		P(p, e, F() - t);
 	},
 	dispose(e) {
 		h.meters !== 0 && e.meta?.internal !== !0 && h.seq++;

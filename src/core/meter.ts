@@ -70,11 +70,11 @@ function ensureRing(node: ChannelNode): void {
 // positional value per field (up to 5) so nothing is allocated on the producer path.
 function recordChannel(
   node: ChannelNode,
-  a: unknown,
-  b: unknown,
-  c: unknown,
-  d: unknown,
-  e: unknown,
+  a?: unknown,
+  b?: unknown,
+  c?: unknown,
+  d?: unknown,
+  e?: unknown,
 ): void {
   const cols = node.cols;
   if (cols !== undefined) {
@@ -105,14 +105,7 @@ const runtimeHooks: RuntimeHooks = {
     const meta = node.meta;
     if (readCh.meters === 0 || meta?.internal === true) return;
     if (meta !== undefined && readCh.samples !== 0) {
-      recordChannel(
-        readCh,
-        meta.id,
-        sub.meta?.id,
-        Date.now(),
-        undefined,
-        undefined,
-      );
+      recordChannel(readCh, meta.id, sub.meta?.id, Date.now());
     } else {
       readCh.seq++;
     }
@@ -143,14 +136,7 @@ const runtimeHooks: RuntimeHooks = {
     return flushCh.meters !== 0 ? now() : undefined;
   },
   endFlush(appBatchSize, startedAt) {
-    recordChannel(
-      flushCh,
-      appBatchSize,
-      now() - startedAt,
-      undefined,
-      undefined,
-      undefined,
-    );
+    recordChannel(flushCh, appBatchSize, now() - startedAt);
   },
   dispose(node) {
     if (disposeCh.meters !== 0 && node.meta?.internal !== true) disposeCh.seq++;

@@ -13,27 +13,21 @@ import {
 installOwnedResourceDriver({
   onStop: (resource, release) => {
     const node = resource as EffectNode;
-    if (node.flags === 0) release();
+    if (!node.flags) release();
     else {
       const previous = node.releaseOwnership;
-      node.releaseOwnership =
-        previous === undefined
-          ? release
-          : () => {
-              previous();
-              release();
-            };
+      node.releaseOwnership = previous
+        ? () => {
+            previous();
+            release();
+          }
+        : release;
     }
   },
-  stop: (resource) => stopEffectNode(resource as EffectNode),
-  pause: (resource) => {
-    pauseEffectNode(resource as EffectNode);
-  },
-  resume: (resource) => {
-    resumeEffectNode(resource as EffectNode);
-  },
-  requiresOrderedStop: (resource) =>
-    (resource as EffectNode).cleanup !== undefined,
+  stop: stopEffectNode as (resource: object) => void,
+  pause: pauseEffectNode as (resource: object) => void,
+  resume: resumeEffectNode as (resource: object) => void,
+  requiresOrderedStop: (resource) => Boolean((resource as EffectNode).cleanup),
 });
 
 export {

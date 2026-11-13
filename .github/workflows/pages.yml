@@ -1,7 +1,7 @@
 name: Pages
 
-# Publishes the demos to GitHub Pages: the realtime demo at /<repo>/, the live Wikipedia demo at
-# /<repo>/live/, and the database demo at /<repo>/db/. Requires Settings → Pages → Source: GitHub Actions.
+# Publishes the demos to GitHub Pages: the Loom Observatory demo at /<repo>/, the live Wikipedia
+# demo at /<repo>/live/, and the database demo at /<repo>/db/. Requires Settings → Pages → Source: GitHub Actions.
 on:
   push:
     branches: [main]

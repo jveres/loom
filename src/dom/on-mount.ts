@@ -18,12 +18,18 @@ import { nodeDocument, observeDocumentTree } from "./document-observer.js";
 import { onUnmount } from "./ownership-base.js";
 
 interface DocumentPool {
-  readonly document: Document;
   readonly pending: Map<Node, Set<(node: Node) => void>>;
   observer: MutationObserver | null;
 }
 
 const pools = new WeakMap<Document, DocumentPool>();
+
+function trimPool(pool: DocumentPool): void {
+  if (pool.pending.size === 0) {
+    pool.observer?.disconnect();
+    pool.observer = null;
+  }
+}
 
 function sweep(pool: DocumentPool): void {
   for (const [node, fns] of pool.pending) {
@@ -31,10 +37,7 @@ function sweep(pool: DocumentPool): void {
     pool.pending.delete(node);
     for (const fn of fns) fn(node);
   }
-  if (pool.pending.size === 0) {
-    pool.observer?.disconnect();
-    pool.observer = null;
-  }
+  trimPool(pool);
 }
 
 function enqueue(
@@ -45,7 +48,7 @@ function enqueue(
   if (!document) return undefined;
   let pool = pools.get(document);
   if (!pool) {
-    pool = { document, pending: new Map(), observer: null };
+    pool = { pending: new Map(), observer: null };
     pools.set(document, pool);
   }
   let fns = pool.pending.get(node);
@@ -71,7 +74,7 @@ export function onMount(
   if (options?.signal?.aborted) return () => {};
   let cancelled = false;
   let pendingPool: DocumentPool | undefined;
-  let release: Stop = () => undefined;
+  let release: Stop = () => {};
   const run = (n: Node): void => {
     if (cancelled) return;
     cancelled = true; // once
@@ -87,23 +90,19 @@ export function onMount(
     if (node.isConnected) run(node);
     else pendingPool = enqueue(node, run);
   });
-  const cancel = (): void => {
+  // A node torn down the Loom way before it ever mounts must not pin the transient observer.
+  release = onUnmount(node, () => {
     cancelled = true;
     options?.signal?.removeEventListener("abort", release);
     const fns = pendingPool?.pending.get(node);
-    if (fns) {
+    if (fns && pendingPool) {
       fns.delete(run);
       if (fns.size === 0) {
-        pendingPool?.pending.delete(node);
-        if (pendingPool?.pending.size === 0) {
-          pendingPool.observer?.disconnect();
-          pendingPool.observer = null;
-        }
+        pendingPool.pending.delete(node);
+        trimPool(pendingPool);
       }
     }
-  };
-  // A node torn down the Loom way before it ever mounts must not pin the transient observer.
-  release = onUnmount(node, cancel);
+  });
   options?.signal?.addEventListener("abort", release, { once: true });
   return release;
 }

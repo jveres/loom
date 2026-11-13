@@ -1,5 +1,5 @@
-import { a as e, n as t } from "./tracking-wsSu4LCy.js";
-import { c as n, r, t as i } from "./ownership-base-SRCUIJtL.js";
+import { n as e, o as t } from "./tracking-HwerCAqq.js";
+import { c as n, r, t as i } from "./ownership-base-BPvhwEHR.js";
 // src/dom/virtual-list.ts
 function a(a) {
 	let o = a.rowHeight, s = a.overscan ?? 6;
@@ -20,24 +20,24 @@ function a(a) {
 		if (S > f && (S = f), !r && g === y && S === b && _ === x) return;
 		x = -1;
 		let C = ++v, w = [];
-		for (let e = g; e < S; e++) {
-			let r = p.at(e);
+		for (let t = g; t < S; t++) {
+			let r = p.at(t);
 			if (r === void 0) continue;
 			let i = a.key(r), s = m.get(i);
-			if (s !== void 0 && (s.pass = C, s.revision === _ && s.index === e)) continue;
-			let c = s?.row ?? null, u = t(() => a.render(r, c));
-			if (u.style.transform = `translateY(${e * o}px)`, s === void 0) l.append(u), m.set(i, {
+			if (s !== void 0 && (s.pass = C, s.revision === _ && s.index === t)) continue;
+			let c = s?.row ?? null, u = e(() => a.render(r, c));
+			if (u.style.transform = `translateY(${t * o}px)`, s === void 0) l.append(u), m.set(i, {
 				row: u,
 				revision: _,
-				index: e,
+				index: t,
 				pass: C
 			});
 			else {
-				let t = s.row;
-				if (s.revision = _, s.index = e, u !== t) {
-					t.before(u), s.row = u;
+				let e = s.row;
+				if (s.revision = _, s.index = t, u !== e) {
+					e.before(u), s.row = u;
 					try {
-						n(t);
+						n(e);
 					} catch (e) {
 						w.push(e);
 					}
@@ -52,7 +52,7 @@ function a(a) {
 				w.push(e);
 			}
 		}
-		e(w, "Multiple virtual-list rows failed to dispose."), y = g, b = S, x = _;
+		t(w, "Multiple virtual-list rows failed to dispose."), y = g, b = S, x = _;
 	}, C = () => {
 		g || d || (g = u.requestAnimationFrame(() => {
 			g = 0, S(!1);

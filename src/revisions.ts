@@ -34,33 +34,17 @@ export interface RevisionsOptions extends NodeOptions {
   readonly separator?: string;
 }
 
+const incrementRevision = (n: number): number => n + 1;
+
 export function revisions(options: RevisionsOptions = {}): Revisions {
   const separator = options.separator ?? ".";
   if (separator.length === 0)
     throw new RangeError("Revision separator must not be empty.");
+  const labelPrefix = options.label;
+  const baseOptions: NodeOptions | undefined = options.internal
+    ? { internal: true }
+    : undefined;
   const cells = new Map<string, State<number>>();
-  const cell = (path: string): State<number> => {
-    let found = cells.get(path);
-    if (!found) {
-      found = state(0, {
-        ...(options.label
-          ? { label: `${options.label}.${path || "root"}` }
-          : {}),
-        ...(options.internal ? { internal: true } : {}),
-      });
-      cells.set(path, found);
-    }
-    return found;
-  };
-  const ancestors = (path: string, into: Set<string>): void => {
-    let current = path;
-    for (;;) {
-      into.add(current);
-      if (current === "") return;
-      const split = current.lastIndexOf(separator);
-      current = split === -1 ? "" : current.slice(0, split);
-    }
-  };
   return {
     get size() {
       return cells.size;
@@ -70,10 +54,13 @@ export function revisions(options: RevisionsOptions = {}): Revisions {
         const test =
           typeof match === "string"
             ? (path: string): boolean => path.includes(match)
-            : (match ?? (() => true));
+            : match;
         let dropped = 0;
         for (const [path, found] of cells) {
-          if (test(path) && !hasStateSubscribers(found)) {
+          if (
+            (test === undefined || test(path)) &&
+            !hasStateSubscribers(found)
+          ) {
             cells.delete(path);
             dropped++;
           }
@@ -81,14 +68,38 @@ export function revisions(options: RevisionsOptions = {}): Revisions {
         return dropped;
       });
     },
-    read: (path) => cell(path)(),
+    read(path) {
+      let found = cells.get(path);
+      if (found === undefined) {
+        found = state(
+          0,
+          labelPrefix !== undefined
+            ? {
+                label: `${labelPrefix}.${path || "root"}`,
+                ...(baseOptions ?? {}),
+              }
+            : baseOptions,
+        );
+        cells.set(path, found);
+      }
+      return found();
+    },
     invalidate(...paths) {
-      const affected = new Set<string>();
-      for (const path of paths) ancestors(path, affected);
+      if (!cells.size || !paths.length) return;
+      const seen = paths.length > 1 ? new Set<string>() : undefined;
       batch(() => {
-        for (const path of affected) {
-          const found = cells.get(path);
-          if (found) update(found, (n) => n + 1);
+        for (let current of paths) {
+          for (;;) {
+            if (seen) {
+              if (seen.has(current)) break;
+              seen.add(current);
+            }
+            const found = cells.get(current);
+            if (found) update(found, incrementRevision);
+            if (!current) break;
+            const split = current.lastIndexOf(separator);
+            current = split < 0 ? "" : current.slice(0, split);
+          }
         }
       });
     },

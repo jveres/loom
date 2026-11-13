@@ -18,22 +18,11 @@ type JsxType = string | Component<object>;
 
 const safeTagNamePattern = /^[A-Za-z][A-Za-z0-9:._-]*$/;
 
-const voidElements = new Set([
-  "area",
-  "base",
-  "br",
-  "col",
-  "embed",
-  "hr",
-  "img",
-  "input",
-  "link",
-  "meta",
-  "param",
-  "source",
-  "track",
-  "wbr",
-]);
+const voidElements = new Set(
+  "area base br col embed hr img input link meta param source track wbr".split(
+    " ",
+  ),
+);
 
 export function jsx(type: string, props: JsxProps, key?: string | number): Html;
 export function jsx<P extends object>(
@@ -102,7 +91,7 @@ function renderElement(type: string, props: JsxProps, dev: boolean): Html {
   out += ">";
 
   if (!voidElements.has(type)) {
-    out += renderToString(children);
+    if (children !== undefined) out += renderToString(children);
     out += `</${type}>`;
   }
 

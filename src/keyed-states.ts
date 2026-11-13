@@ -21,7 +21,7 @@ export function keyedStates<Schema extends object = never>(
     ? [schemaRequired: never]
     : [options?: NodeOptions]
 ): KeyedStates<Schema> {
-  const options: NodeOptions = args[0] ?? {};
+  const options = args[0];
   type Key = Extract<keyof Schema, string>;
   const cells = new Map<Key, State<unknown>>();
   const factory = <K extends Key>(
@@ -42,10 +42,12 @@ export function keyedStates<Schema extends object = never>(
     factory,
     value: (key, initial) =>
       factory(key, () =>
-        state(initial, {
-          ...options,
-          ...(options.label ? { label: `${options.label}.${key}` } : {}),
-        }),
+        state(
+          initial,
+          options?.label
+            ? { ...options, label: `${options.label}.${key}` }
+            : options,
+        ),
       ),
     prune(match) {
       const test =

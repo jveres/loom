@@ -11,7 +11,6 @@ import {
   type State,
   type Stop,
   state,
-  trigger,
   untrack,
 } from "../loom.js";
 
@@ -56,6 +55,7 @@ export function resource<T>(
   const ready = state(false, options); // first-success latch; never resets (see Resource.ready)
   const error = state<unknown>(undefined, options);
   const pulse = state(0, options); // refresh()'s handle: a tracked dep the effect re-runs on
+  let tick = 0;
 
   const stop = effect(() => {
     pulse();
@@ -104,7 +104,8 @@ export function resource<T>(
     ready: () => ready(),
     error: () => error(),
     refresh: () => {
-      trigger(pulse);
+      tick = (tick + 1) | 0;
+      pulse(tick);
     },
     stop,
   });

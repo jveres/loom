@@ -1,39 +1,39 @@
-import { D as e, E as t, c as n, n as r, w as i } from "./loom-Bchrc-TP.js";
+import { D as e, c as t, n, w as r } from "./loom-C8fvwr1e.js";
 // src/async/index.ts
-function a(a, o) {
-	let s = i(void 0, o), c = i(!0, o), l = i(!1, o), u = i(void 0, o), d = i(0, o), f = n(() => {
-		d();
-		let t = !0, n = new AbortController();
-		c(!0);
-		let i = e(() => s()), o;
+function i(i, a) {
+	let o = r(void 0, a), s = r(!0, a), c = r(!1, a), l = r(void 0, a), u = r(0, a), d = 0, f = t(() => {
+		u();
+		let t = !0, r = new AbortController();
+		s(!0);
+		let a = e(() => o()), d;
 		try {
-			o = a(i, n.signal);
+			d = i(a, r.signal);
 		} catch (e) {
-			o = Promise.reject(e);
+			d = Promise.reject(e);
 		}
-		return o.then((e) => {
-			t && r(() => {
-				s(e), u(void 0), c(!1), l(!0);
+		return d.then((e) => {
+			t && n(() => {
+				o(e), l(void 0), s(!1), c(!0);
 			});
 		}, (e) => {
-			t && r(() => {
-				u(e), c(!1);
+			t && n(() => {
+				l(e), s(!1);
 			});
 		}), () => {
-			t = !1, n.abort();
+			t = !1, r.abort();
 		};
-	}, o);
-	return Object.assign(() => s(), {
-		loading: () => c(),
-		ready: () => l(),
-		error: () => u(),
+	}, a);
+	return Object.assign(() => o(), {
+		loading: () => s(),
+		ready: () => c(),
+		error: () => l(),
 		refresh: () => {
-			t(d);
+			d = d + 1 | 0, u(d);
 		},
 		stop: f
 	});
 }
-function o(...e) {
+function a(...e) {
 	return () => e.some((e) => e.loading());
 }
-export { o as pending, a as resource };
+export { a as pending, i as resource };

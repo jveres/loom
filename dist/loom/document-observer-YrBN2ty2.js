@@ -3,7 +3,7 @@ function e(e) {
 	return e.nodeType === 9 ? e : e.ownerDocument;
 }
 function t(e, t) {
-	let n = new ((e.defaultView?.MutationObserver) ?? globalThis.MutationObserver)(t);
+	let n = new ((e.defaultView?.MutationObserver) ?? MutationObserver)(t);
 	return n.observe(e.documentElement ?? e, {
 		childList: !0,
 		subtree: !0

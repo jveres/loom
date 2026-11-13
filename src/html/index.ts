@@ -23,14 +23,15 @@ export type HtmlChild =
   | undefined
   | readonly HtmlChild[];
 
+function htmlToString(this: { readonly value: string }): string {
+  return this.value;
+}
+
 export function unsafeHtml(value: string): Html {
-  // The one construction site for an Html value. `htmlMarker` is a runtime brand isHtml() checks
-  // for; it can't be typed as a property (it's a `Symbol.for`, not a `unique symbol`), so this
-  // single localized `as Html` is the trust boundary — mirrors the `brand()` seam in loom/dom.
   return {
     [htmlMarker]: true,
     value,
-    toString: () => value,
+    toString: htmlToString,
   } as unknown as Html;
 }
 
@@ -40,33 +41,38 @@ export function html(
 ): Html {
   let out = strings[0] ?? "";
   for (let index = 0; index < values.length; index++) {
-    out += renderToString(values[index]);
-    out += strings[index + 1] ?? "";
+    out += renderToString(values[index]) + (strings[index + 1] ?? "");
   }
   return unsafeHtml(out);
 }
 
 export function renderToString(value: HtmlChild): string {
+  if (typeof value === "string") return escapeText(value);
+  if (value == null || typeof value === "boolean") return "";
   if (Array.isArray(value)) {
     let out = "";
-    for (const child of value) out += renderToString(child);
+    for (let i = 0; i < value.length; i++) out += renderToString(value[i]);
     return out;
   }
-  if (value == null || value === true || value === false) return "";
-  if (isHtml(value)) return value.value;
-  return escapeText(String(value));
+  return isHtml(value) ? value.value : escapeText(`${value}`);
 }
 
 export function isHtml(value: unknown): value is Html {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.hasOwn(value, htmlMarker) &&
-    (value as { readonly [htmlMarker]?: unknown })[htmlMarker] === true &&
-    typeof (value as { readonly value?: unknown }).value === "string" &&
-    typeof (value as { readonly toString?: unknown }).toString === "function"
+  const candidate = value as
+    | (Partial<Html> & { readonly [htmlMarker]?: unknown })
+    | null;
+  return !!(
+    candidate &&
+    typeof candidate === "object" &&
+    candidate[htmlMarker] === true &&
+    typeof candidate.value === "string" &&
+    typeof candidate.toString === "function" &&
+    Object.hasOwn(candidate, htmlMarker)
   );
 }
+
+const attrPattern = (name: string, tail: string): RegExp =>
+  new RegExp(`\\s${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${tail}`, "i");
 
 /** Read one attribute off a rendered value's ROOT opening tag — the
  *  reader twin of serializeAttributes for a static tree a parent
@@ -80,27 +86,23 @@ export function attributeOf(
   name: string,
 ): string | undefined {
   const tag = rootOpenTag(typeof value === "string" ? value : value.value);
-  if (tag === undefined) return undefined;
-  const escaped = escapeRegExp(name);
-  const valued = new RegExp(
-    `\\s${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`,
-    "i",
+  if (!tag) return undefined;
+  const valued = attrPattern(
+    name,
+    `\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`,
   ).exec(tag);
-  if (valued)
-    return unescapeAttribute(valued[1] ?? valued[2] ?? valued[3] ?? "");
-  return new RegExp(`\\s${escaped}(?=\\s|$)`, "i").test(tag) ? "" : undefined;
+  return valued
+    ? unescapeAttribute(valued[1] ?? valued[2] ?? valued[3] ?? "")
+    : attrPattern(name, "(?=\\s|$)").test(tag)
+      ? ""
+      : undefined;
 }
 
 // The root element's opening tag up to (not including) its `>`, or undefined when the markup does
 // not start with an element tag.
 function rootOpenTag(html: string): string | undefined {
-  if (!/^\s*<[a-zA-Z]/.test(html)) return undefined;
-  const end = html.indexOf(">");
-  return end === -1 ? undefined : html.slice(0, end);
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const end = /^\s*<[a-zA-Z]/.test(html) ? html.indexOf(">") : -1;
+  return end < 0 ? undefined : html.slice(0, end);
 }
 
 /** SPLICE attributes into a rendered value's ROOT opening tag — the
@@ -122,24 +124,20 @@ export function withRootAttributes(
     readonly merge?: Record<string, string>;
   } = {},
 ): Html {
-  const root = rootOpenTag(value.value);
-  if (root === undefined) {
+  let openTag = rootOpenTag(value.value);
+  if (!openTag) {
     throw new Error("withRootAttributes: the value has no root element tag.");
   }
-  let openTag = root;
-  const rest = value.value.slice(root.length);
+  const rest = value.value.slice(openTag.length);
   const out: Record<string, unknown> = {};
   for (const [name, raw] of Object.entries(attrs)) {
     const joiner = options.merge?.[name];
-    if (joiner !== undefined && raw != null && raw !== false) {
+    if (joiner != null && raw != null && raw !== false) {
       // Same case-insensitive name match as attributeOf; the joined value re-serializes through
       // the one attribute rule (name check, URL filter, escaping).
-      const existing = new RegExp(
-        `\\s${escapeRegExp(name)}="([^"]*)"`,
-        "i",
-      ).exec(openTag);
+      const existing = attrPattern(name, '="([^"]*)"').exec(openTag);
       if (existing) {
-        const joined = `${unescapeAttribute(existing[1] ?? "")}${joiner}${raw === true ? "" : String(raw)}`;
+        const joined = `${unescapeAttribute(existing[1] ?? "")}${joiner}${raw === true ? "" : raw}`;
         openTag = openTag.replace(existing[0], () =>
           serializeAttributes({ [name]: joined }),
         );
@@ -148,9 +146,7 @@ export function withRootAttributes(
     }
     out[name] = raw;
   }
-  return unsafeHtml(
-    `${openTag}${serializeAttributes(out, options.tag ? { tag: options.tag } : {})}${rest}`,
-  );
+  return unsafeHtml(`${openTag}${serializeAttributes(out, options)}${rest}`);
 }
 
 export { escapeAttribute, escapeText } from "./escape.js";

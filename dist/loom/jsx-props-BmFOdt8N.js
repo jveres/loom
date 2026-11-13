@@ -2,12 +2,11 @@
 function e(e) {
 	if (!e) return {};
 	if (!Object.hasOwn(e, "key")) return e;
-	let t = {};
-	for (let n in e) Object.hasOwn(e, n) && n !== "key" && (t[n] = e[n]);
-	return t;
+	let { key: t, ...n } = e;
+	return n;
 }
 function t(e) {
-	return e.startsWith("--") ? e : e.replace(/[A-Z]/g, (e) => `-${e.toLowerCase()}`);
+	return e.startsWith("--") || !/[A-Z]/.test(e) ? e : e.replace(/[A-Z]/g, (e) => `-${e.toLowerCase()}`);
 }
 function n(e) {
 	return e.startsWith("aria-");

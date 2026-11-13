@@ -6,38 +6,23 @@
 // hand-built markup (a highlighter's token spans, a static tag builder),
 // so a second copy of the name pattern never drifts.
 import { cssPropName, isAriaAttr } from "../jsx-props.js";
-import { escapeAttribute } from "./escape.js";
+import { escapeText } from "./escape.js";
 
 const safeAttrNamePattern = /^[A-Za-z_:][A-Za-z0-9:._-]*$/;
-
-const safeCssPropPattern =
-  /^(-{2}[A-Za-z][A-Za-z0-9-]*|-?[A-Za-z][A-Za-z0-9-]*)$/;
+const safeCssPropPattern = /^(?:--|-?)[A-Za-z][A-Za-z0-9-]*$/;
+const styleStripAll = /["<>{};]/g;
 
 const unsafeUrlPattern =
-  /^(?:javascript:|vbscript:|data:text\/html|data:text\/xml|data:application\/xhtml\+xml|data:image\/svg)/i;
+  /^(?:(?:java|vb)script:|data:(?:text\/(?:html|xml)|application\/xhtml\+xml|image\/svg))/i;
 
 // Browsers strip ASCII tab/newline/CR from anywhere in a URL and trim leading C0 controls/spaces
-// before resolving the scheme, so `jav\tascript:` or `\x01javascript:` parse as `javascript:`. The
-// scheme filter (used below) must test against the same normalized form or those tricks smuggle a
-// dangerous scheme past it, so we strip this whole range first — matching C0 controls here is
-// deliberate, not the mistake the lint guards against.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: see above — intentional.
+// before resolving the scheme, so `jav\tascript:` or `\x01javascript:` parse as `javascript:`.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional C0/space strip for URL scheme check.
 const urlControlChars = /[\u0000-\u0020]/g;
 
-const urlAttrs = new Set([
-  "href",
-  "src",
-  "action",
-  "formaction",
-  "cite",
-  "data",
-  "poster",
-]);
+const urlAttrPattern =
+  /^(?:[^:]+:)?(?:href|src|action|formaction|cite|data|poster)$/;
 
-// A silently-dropped attribute is invisible in the rendered string, so the dev runtime (jsxDEV)
-// warns for the two drops that almost always mean a bug — a malformed attribute name and a
-// dangerous URL scheme that got stripped. The by-design drops (nullish/false values, reserved
-// keys, `on*` handlers that SSR can't attach) stay silent to avoid noise on legitimate markup.
 function warnDropped(tag: string, name: string, reason: string): void {
   console.warn(`[loom/html] dropped <${tag}> attribute "${name}": ${reason}`);
 }
@@ -53,20 +38,15 @@ export function renderAttribute(
     name === "key" ||
     name === "__proto__" ||
     name === "constructor" ||
-    name === "prototype"
+    name === "prototype" ||
+    name.startsWith("on")
   ) {
     return "";
   }
 
-  let attrName = name;
-  let attrValue = value;
-  if (attrName === "className") attrName = "class";
-  if (attrName === "htmlFor") attrName = "for";
-  if (attrName.startsWith("on")) return "";
-
-  // DOM JSX treats function-valued props as reactive reads. SSR has no reactive lifetime, but it
-  // must produce the same initial markup, so evaluate each read exactly once.
-  if (typeof attrValue === "function") attrValue = attrValue();
+  const attrName =
+    name === "className" ? "class" : name === "htmlFor" ? "for" : name;
+  let attrValue = typeof value === "function" ? value() : value;
   if (attrValue == null || (attrValue === false && !isAriaAttr(attrName))) {
     return "";
   }
@@ -75,89 +55,86 @@ export function renderAttribute(
     return "";
   }
 
-  if (attrName === "class") attrValue = normalizeClass(attrValue);
-  if (attrName === "style" && attrValue && typeof attrValue === "object") {
+  if (attrName === "class" && typeof attrValue !== "string") {
+    attrValue = normalizeClass(attrValue);
+  } else if (
+    attrName === "style" &&
+    attrValue &&
+    typeof attrValue === "object"
+  ) {
     attrValue = serializeStyle(attrValue);
   }
 
   if (attrValue === true) return ` ${attrName}`;
 
-  const stringValue = String(attrValue);
+  const stringValue =
+    typeof attrValue === "string" ? attrValue : `${attrValue}`;
   if (
-    isUrlAttr(attrName) &&
+    stringValue.includes(":") &&
+    urlAttrPattern.test(attrName) &&
     unsafeUrlPattern.test(stringValue.replace(urlControlChars, ""))
   ) {
     if (dev) warnDropped(tag, name, "unsafe URL scheme");
     return "";
   }
 
-  return ` ${attrName}="${escapeAttribute(stringValue)}"`;
+  return ` ${attrName}="${escapeText(stringValue)}"`;
 }
 
 function normalizeClass(value: unknown): string {
+  if (typeof value === "string") return value;
   if (typeof value === "function") return normalizeClass(value());
+  let out = "";
   if (Array.isArray(value)) {
-    const parts: string[] = [];
     for (const item of value) {
-      if (!item) continue;
-      const normalized = normalizeClass(item);
-      if (normalized) parts.push(normalized);
+      const normalized = item && normalizeClass(item);
+      if (normalized) out = out ? `${out} ${normalized}` : normalized;
     }
-    return parts.join(" ");
+    return out;
   }
   if (value && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .filter(([, enabled]) =>
-        Boolean(typeof enabled === "function" ? enabled() : enabled),
-      )
-      .map(([name]) => name)
-      .join(" ");
+    for (const key in value) {
+      const raw =
+        Object.hasOwn(value, key) && (value as Record<string, unknown>)[key];
+      if (typeof raw === "function" ? raw() : raw) {
+        out = out ? `${out} ${key}` : key;
+      }
+    }
+    return out;
   }
-  return String(value);
+  return `${value}`;
 }
 
 // Mirrors the DOM runtime's style prop: arrays apply in order, a string replaces the whole inline
 // style so far, and a map adds declarations.
-function serializeStyle(value: unknown): string {
-  const parts: string[] = [];
-  appendStyle(value, parts);
-  return parts.join(";");
-}
-
-function appendStyle(value: unknown, parts: string[]): void {
+function serializeStyle(value: unknown, out = ""): string {
   if (Array.isArray(value)) {
-    for (const item of value) appendStyle(item, parts);
-    return;
+    for (const item of value) out = serializeStyle(item, out);
+    return out;
   }
-  if (!value) return;
-  if (typeof value === "string") {
-    parts.length = 0;
-    parts.push(value);
-    return;
-  }
-  if (typeof value !== "object") return;
-  for (const [name, rawValue] of Object.entries(value)) {
-    const resolved = typeof rawValue === "function" ? rawValue() : rawValue;
-    if (resolved == null || !safeCssPropPattern.test(name)) continue;
-
-    const cssValue = String(resolved).replace(/["<>{};]/g, "");
-    // Test the scheme guard against a control-char-stripped copy, same as the URL-attribute path —
-    // otherwise `jav\tascript:` slips through here too (lower risk, since CSS url() schemes don't
-    // execute in modern browsers, but the evasion shape is identical).
-    const scheme = cssValue.replace(urlControlChars, "");
-    if (/expression\(/i.test(scheme) || /^\s*javascript:/i.test(scheme)) {
-      continue;
+  if (!value) return out;
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    for (const name in value) {
+      if (!Object.hasOwn(value, name)) continue;
+      let resolved = (value as Record<string, unknown>)[name];
+      if (typeof resolved === "function") resolved = resolved();
+      if (resolved == null || !safeCssPropPattern.test(name)) continue;
+      const cssValue =
+        typeof resolved === "number"
+          ? `${resolved}`
+          : `${resolved}`.replace(styleStripAll, "");
+      if (
+        (cssValue.includes("(") || cssValue.includes(":")) &&
+        /expression\(|^\s*javascript:/i.test(
+          cssValue.replace(urlControlChars, ""),
+        )
+      )
+        continue;
+      out = `${out ? `${out};` : ""}${cssPropName(name)}:${cssValue}`;
     }
-
-    parts.push(`${cssPropName(name)}:${cssValue}`);
   }
-}
-
-function isUrlAttr(name: string): boolean {
-  return (
-    urlAttrs.has(name) ||
-    /:(href|src|action|formaction|cite|data|poster)$/.test(name)
-  );
+  return out;
 }
 
 export interface SerializeAttributesOptions {
@@ -173,13 +150,14 @@ export interface SerializeAttributesOptions {
  *  straight after a tag name; an all-dropped bag is "". */
 export function serializeAttributes(
   attrs: Record<string, unknown>,
-  options: SerializeAttributesOptions = {},
+  options?: SerializeAttributesOptions,
 ): string {
   let out = "";
-  const tag = options.tag ?? "element";
+  const tag = options?.tag ?? "element";
+  const dev = options?.dev === true;
   for (const name in attrs) {
     if (!Object.hasOwn(attrs, name)) continue;
-    out += renderAttribute(tag, name, attrs[name], options.dev === true);
+    out += renderAttribute(tag, name, attrs[name], dev);
   }
   return out;
 }

@@ -4,15 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="./assets/loom.svg" />
-    <title>Loom realtime demo</title>
-    <!-- Paint the scheme-matched background before the bundled CSS loads, so a dark OS doesn't
-         flash white on reload (styles.css is imported by the JS module, not linked here). -->
+    <title>Loom Observatory — Surgical Reactive Runtime</title>
+    <meta
+      name="description"
+      content="Interactive performance observatory for Loom: 336-cell live DOM signal matrix, subtree pause/resume time-freeze, atomic moveBefore LIS reconciliation, and 60fps streaming HTML morph."
+    />
+    <!-- Paint the saved or system ground before bundled CSS arrives so reload never flashes. -->
     <style>
       :root {
         color-scheme: light dark;
-        background: light-dark(#f6f6f9, #0d0d12);
+        background: light-dark(#f2f4f8, #090c12);
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
       }
     </style>
+    <script>
+      try {
+        const theme = localStorage.getItem("loom-observatory-theme");
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.theme = theme;
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

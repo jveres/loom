@@ -135,7 +135,15 @@ const SVG_TAG_LIST = [
   "feTurbulence",
   "feDisplacementMap",
 ] as const;
-const SVG_TAGS = new Set<string>(SVG_TAG_LIST);
+let svgTags: Set<string> | undefined;
+const isSvgTag = (tag: string): boolean => {
+  svgTags ??= new Set(
+    "svg g defs symbol use switch foreignObject image path rect circle ellipse line polyline polygon text tspan textPath linearGradient radialGradient stop clipPath mask pattern marker filter feGaussianBlur feOffset feBlend feColorMatrix feComposite feFlood feMerge feMergeNode feMorphology feDropShadow feImage feTile feTurbulence feDisplacementMap".split(
+      " ",
+    ),
+  );
+  return svgTags.has(tag);
+};
 export type SvgTagName = (typeof SVG_TAG_LIST)[number];
 
 /**
@@ -173,13 +181,18 @@ export function template(
     const holder = document.createElement("template");
     holder.innerHTML = strings[0] ?? "";
     const root = holder.content.firstElementChild;
-    const hasExtraContent = [...holder.content.childNodes].some(
-      (node) =>
-        (node.nodeType === Node.ELEMENT_NODE && node !== root) ||
-        (node.nodeType === Node.TEXT_NODE &&
-          (node.textContent ?? "").trim() !== ""),
-    );
-    if (root === null || hasExtraContent) {
+    let extra = !root;
+    for (
+      let node = holder.content.firstChild;
+      node && !extra;
+      node = node.nextSibling
+    ) {
+      extra =
+        node !== root &&
+        (node.nodeType === 1 ||
+          (node.nodeType === 3 && Boolean(node.nodeValue?.trim())));
+    }
+    if (extra || !root) {
       throw new TypeError("template() requires exactly one root element.");
     }
     if (root.localName !== rootTag) {
@@ -211,11 +224,9 @@ export function h(
   props: ElementProps | null = null,
   children?: Child,
 ): Element {
-  const isSvg = SVG_TAGS.has(tag);
-  const node = isSvg
-    ? document.createElementNS(SVG_NS, tag)
-    : document.createElement(tag);
-  return finishElement(node, props, children, !isSvg);
+  return isSvgTag(tag)
+    ? svgElement(tag, props, children)
+    : finishElement(document.createElement(tag), props, children, true);
 }
 
 function finishElement<T extends Element>(
@@ -261,30 +272,38 @@ export function replaceChildren(
       return;
     }
     incoming.add(child);
-    if (child.parentNode) {
-      const parent = child.parentNode;
-      if (!originalChildren.has(parent)) {
-        originalChildren.set(parent, [...parent.childNodes]);
-      }
+    const currentParent = child.parentNode;
+    if (currentParent && !originalChildren.has(currentParent)) {
+      originalChildren.set(currentParent, [...currentParent.childNodes]);
     }
     // Appending a DocumentFragment consumes its children rather than moving
     // the fragment node. Treat those children as caller-owned inputs too so
     // failure can reconstruct the fragment verbatim.
-    if (child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-      for (const nested of [...child.childNodes]) remember(nested);
+    if (child.nodeType === 11) {
+      for (let nested = child.firstChild; nested; nested = nested.nextSibling) {
+        remember(nested);
+      }
     }
   };
-  for (const child of children) remember(child);
+  remember(children);
 
-  const rollback = (failure: unknown): never => {
+  let outgoing: Node[] = [];
+  // Do not stop live bindings until native replacement has succeeded. A
+  // hierarchy error can leave the old DOM in place, where those resources
+  // must remain live.
+  try {
+    appendChild(next, children);
+    outgoing = [...parent.childNodes];
+    parent.replaceChildren(next);
+  } catch (failure) {
     const errors = [failure];
     // Reconstruct every original parent from right to left. Using the
     // parent's captured child order (not argument/move order) restores
     // reversed siblings and nested inputs exactly.
-    for (const [originalParent, children] of originalChildren) {
+    for (const [originalParent, saved] of originalChildren) {
       let before: Node | null = null;
-      for (let index = children.length - 1; index >= 0; index--) {
-        const child = children[index] as Node;
+      for (let index = saved.length - 1; index >= 0; index--) {
+        const child = saved[index] as Node;
         if (incoming.has(child)) {
           try {
             originalParent.insertBefore(child, before);
@@ -300,17 +319,11 @@ export function replaceChildren(
     // Nodes supplied already detached still belong to the caller. Detach the
     // outermost ones from the staging fragment so cleanup cannot consume them.
     for (const node of incoming) {
-      if (!next.contains(node)) continue;
       let ancestor = node.parentNode;
-      let nestedIncoming = false;
-      while (ancestor && ancestor !== next) {
-        if (incoming.has(ancestor)) {
-          nestedIncoming = true;
-          break;
-        }
+      while (ancestor && ancestor !== next && !incoming.has(ancestor)) {
         ancestor = ancestor.parentNode;
       }
-      if (!nestedIncoming) node.parentNode?.removeChild(node);
+      if (ancestor === next) next.removeChild(node);
     }
     try {
       dispose(next);
@@ -321,38 +334,9 @@ export function replaceChildren(
       errors,
       "Loom DOM child replacement and staging cleanup failed.",
     );
-    throw failure;
-  };
-
-  try {
-    for (const child of children) appendChild(next, child);
-  } catch (error) {
-    rollback(error);
   }
 
-  const outgoing = [...parent.childNodes];
-  // Do not stop live bindings until native replacement has succeeded. A
-  // hierarchy error can leave the old DOM in place, where those resources
-  // must remain live.
-  try {
-    parent.replaceChildren(next);
-  } catch (error) {
-    rollback(error);
-  }
-
-  const errors: unknown[] = [];
-  for (const child of outgoing) {
-    try {
-      dispose(child);
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-
-  throwCollected(
-    errors,
-    "Multiple Loom DOM child-replacement operations failed.",
-  );
+  removeNodes(outgoing);
 }
 
 /**
@@ -391,7 +375,8 @@ export function text(read: Read<unknown>, options?: EffectOptions): Text {
     node,
     domEffect(
       () => {
-        const next = stringValue(read());
+        const raw = read();
+        const next = raw == null || raw === false ? "" : String(raw);
         if (next === previous) return;
         previous = next;
         node.data = next;
@@ -474,37 +459,31 @@ export function list<T>(
   read: State<readonly T[]> | Read<readonly T[]>,
   options: ListOptions<NoInfer<T>>,
 ): Stop {
-  if (options.signal?.aborted) return () => {};
+  const life = nodeLifetime(container, options.signal);
+  if (!life.active) return life.stop;
   const nodes = new Map<LoomKey, Element>();
-  const updates = options.update
-    ? { update: options.update, items: new Map<LoomKey, T>() }
-    : undefined;
   const stop = ownStoppableResource(
     container,
     domEffect(
-      () => {
-        const shouldReorder = options.reorder?.() !== false;
-        const items = read();
+      () =>
         reconcileKeyed(
           container,
           null,
-          items,
+          read(),
           nodes,
           options.key,
           options.render,
-          shouldReorder,
-          updates,
-        );
-      },
+          options.reorder?.() !== false,
+          options.update,
+        ),
       "dom.list",
       container,
     ),
   );
 
-  const stopList = (): void => {
+  life.add(() => {
     const outgoing = [...nodes.values()];
     nodes.clear();
-    updates?.items.clear();
     const errors: unknown[] = [];
     try {
       stop();
@@ -512,9 +491,7 @@ export function list<T>(
       errors.push(error);
     }
     removeNodes(outgoing, errors);
-  };
-  const life = nodeLifetime(container, options.signal);
-  life.add(stopList);
+  });
   return life.stop;
 }
 
@@ -530,20 +507,19 @@ function dynamic(
   return brand<DynamicChild>({
     __loomDynamic: true,
     mount(anchor) {
-      const start = document.createComment("loom-slot-start");
+      const start = document.createComment("");
       anchor.parentNode?.insertBefore(start, anchor);
       let currentKey: string | undefined;
       return domEffect(
         () => {
           const k = key();
-          if (k === currentKey) return;
           const parent = anchor.parentNode;
-          if (parent === null) return;
+          if (k === currentKey || !parent) return;
           if (start.parentNode !== parent) parent.insertBefore(start, anchor);
           const mounted: Node[] = [];
           for (
             let node = start.nextSibling;
-            node !== null && node !== anchor;
+            node && node !== anchor;
             node = node.nextSibling
           )
             mounted.push(node);
@@ -553,17 +529,16 @@ function dynamic(
             ).createDocumentFragment();
             try {
               untrack(() => appendChild(frag, pick(k)));
-              const next = [...frag.childNodes];
+              const added = [...frag.childNodes];
               parent.insertBefore(frag, anchor);
-              return next;
+              return added;
             } catch (error) {
               removeNodes([...frag.childNodes], [error]);
               throw error;
             }
           });
-          const outgoing = mounted.filter((node) => !next.includes(node));
           currentKey = k;
-          removeNodes(outgoing);
+          removeNodes(mounted.filter((node) => !next.includes(node)));
         },
         "dom.dynamic",
         slotTarget(anchor),
@@ -586,7 +561,7 @@ export function when(
 ): Child {
   return dynamic(
     () => (cond() ? "1" : "0"),
-    (key) => (key === "1" ? render() : fallback ? fallback() : null),
+    (key) => (key === "1" ? render() : fallback?.()),
   );
 }
 
@@ -603,11 +578,8 @@ export function match(
 ): Child {
   return dynamic(
     () => String(selector()),
-    (key) => {
-      const branch =
-        (Object.hasOwn(cases, key) ? cases[key] : undefined) ?? fallback;
-      return branch ? branch() : null;
-    },
+    (key) =>
+      ((Object.hasOwn(cases, key) ? cases[key] : undefined) ?? fallback)?.(),
   );
 }
 
@@ -631,9 +603,6 @@ export function each<T>(
     __loomDynamic: true,
     mount(anchor) {
       const nodes = new Map<LoomKey, Element>();
-      const updates = options.update
-        ? { update: options.update, items: new Map<LoomKey, T>() }
-        : undefined;
       return domEffect(
         () => {
           const values = items();
@@ -647,7 +616,7 @@ export function each<T>(
               key,
               render,
               true,
-              updates,
+              options.update,
             );
         },
         "dom.each",
@@ -704,40 +673,23 @@ function applyProps(
       applyStyleProp(node, value as StyleProp);
       continue;
     }
-    // Loom lifecycle hooks (not DOM events), grouped with the other Loom-owned props above rather
-    // than the DOM `on*` listeners below. onMount runs once after insertion (see ./on-mount.ts).
-    if (
-      (name === "onmount" || name === "onMount") &&
-      typeof value === "function"
-    ) {
-      onMount(node, value as (node: Node) => void);
-      continue;
-    }
-    // onUnmount is a cleanup run when the node is torn down the Loom way (`remove()` / `dispose()`,
-    // or an ancestor slot swapping it out). It rides the node-owned disposer channel (same as the
-    // reactive bindings), so it fires exactly when they do.
-    if (
-      (name === "onunmount" || name === "onUnmount") &&
-      typeof value === "function"
-    ) {
-      own(node, value as Stop);
-      continue;
-    }
-    if (
-      name === "ontap" ||
-      name === "onTap" ||
-      name.toLowerCase() === "ondoublepress"
-    ) {
-      throw new TypeError("Install tap behavior from loom/events.");
-    }
-    if (name.startsWith("on") && typeof value === "function") {
-      const type = eventName(name);
-      const listener = (event: Event): void => {
-        untrack(() => (value as EventListener)(event));
-      };
-      node.addEventListener(type, listener);
-      own(node, () => node.removeEventListener(type, listener));
-      continue;
+    if (name[0] === "o" || name[0] === "O") {
+      const lower = name.toLowerCase();
+      if (name === "ontap" || name === "onTap" || lower === "ondoublepress") {
+        throw new TypeError("Install tap behavior from loom/events.");
+      }
+      if (name.startsWith("on") && typeof value === "function") {
+        if (lower === "onmount") onMount(node, value as (node: Node) => void);
+        else if (lower === "onunmount") own(node, value as Stop);
+        else {
+          const type = lower === "ondoubleclick" ? "dblclick" : lower.slice(2);
+          const listener = (event: Event): void =>
+            untrack(() => (value as EventListener)(event));
+          node.addEventListener(type, listener);
+          own(node, () => node.removeEventListener(type, listener));
+        }
+        continue;
+      }
     }
     if (isFormControlProperty(node, name)) {
       if (typeof value === "function") {
@@ -746,7 +698,7 @@ function applyProps(
           valueUpdater(
             value as Read<unknown>,
             (next) => setFormControlProperty(node, name, next),
-            FORM_CONTROL_UNSET,
+            formControlUnset,
           ),
           `dom.prop.${name}`,
         );
@@ -764,7 +716,7 @@ function applyProps(
       );
       continue;
     }
-    setAttr(node, name, value);
+    setAttrValue(node, name, attrValue(name, value));
   }
 }
 
@@ -773,65 +725,60 @@ function appendChild(parent: Node, child: Child): void {
     for (const item of child) appendChild(parent, item);
     return;
   }
-  if (isDynamic(child)) {
-    mountSlot(parent, child);
-    return;
-  }
-  if (child == null || child === true || child === false) return;
+  if (child == null || typeof child === "boolean") return;
   if (typeof child === "function") {
     parent.appendChild(text(child as Read<unknown>));
     return;
   }
-  // Primitive text is the dominant h()/JSX child. Keep it off the cross-realm node path.
-  if (typeof child !== "object") {
-    parent.appendChild(document.createTextNode(String(child)));
-    return;
-  }
-  if (isNode(child)) {
-    parent.appendChild(child);
-    return;
-  }
-  // Wrong-runtime guard: a loom/html Html value stringifies to its raw markup, so the silent
-  // fallback below would render escaped HTML as visible text — the most confusing possible
-  // symptom of a mixed-up jsxImportSource. The brand is a registered symbol, so this costs no
-  // import from loom/html.
-  if (Symbol.for("loom.html") in child) {
-    throw new Error(
-      "loom/html Html value used as a loom/dom child — wrong jsxImportSource? Mount SSR strings via morph()/innerHTML.",
-    );
+  if (typeof child === "object") {
+    if (isDynamic(child)) {
+      mountSlot(parent, child);
+      return;
+    }
+    if (isNode(child)) {
+      parent.appendChild(child);
+      return;
+    }
+    // Wrong-runtime guard: a loom/html Html value stringifies to its raw markup, so the silent
+    // fallback below would render escaped HTML as visible text — the most confusing possible
+    // symptom of a mixed-up jsxImportSource. The brand is a registered symbol, so this costs no
+    // import from loom/html.
+    if (Symbol.for("loom.html") in child) {
+      throw new Error(
+        "loom/html Html value used as a loom/dom child — wrong jsxImportSource? Mount SSR strings via morph()/innerHTML.",
+      );
+    }
   }
   parent.appendChild(document.createTextNode(String(child)));
 }
 
 function isNode(value: object): value is Node {
   const globalNode = (globalThis as { readonly Node?: typeof Node }).Node;
-  if (globalNode !== undefined && value instanceof globalNode) return true;
+  if (globalNode && value instanceof globalNode) return true;
   // `instanceof globalThis.Node` rejects nodes created by an iframe or another Window. Prefer the
   // common same-realm check above; discover the candidate's own realm only on that uncommon miss.
   const candidate = value as {
     readonly defaultView?: Window | null;
     readonly ownerDocument?: Document | null;
   };
-  const view = candidate.ownerDocument?.defaultView ?? candidate.defaultView;
   const ownNode = (
-    view as (Window & { readonly Node?: typeof Node }) | null | undefined
+    (candidate.ownerDocument?.defaultView ?? candidate.defaultView) as
+      | (Window & { readonly Node?: typeof Node })
+      | null
+      | undefined
   )?.Node;
-  return ownNode !== undefined && value instanceof ownNode;
+  return Boolean(ownNode && value instanceof ownNode);
 }
 
-function isDynamic(child: Child): child is DynamicChild {
-  return (
-    typeof child === "object" &&
-    child !== null &&
-    (child as { readonly __loomDynamic?: unknown }).__loomDynamic === true
-  );
+function isDynamic(child: object): child is DynamicChild {
+  return (child as { readonly __loomDynamic?: unknown }).__loomDynamic === true;
 }
 
 // Drive a slot: append a trailing comment anchor (now, while `parent` exists, so there is no
 // detached-node timing gap), wire the slot's effect via `mount(anchor)`, and own its disposer on the
 // anchor so removing the parent subtree tears it down.
 function mountSlot(parent: Node, desc: DynamicChild): void {
-  const anchor = document.createComment("loom-slot");
+  const anchor = document.createComment("");
   parent.appendChild(anchor);
   ownResource(anchor, brand<SlotDescriptor>(desc).mount(anchor));
 }
@@ -845,61 +792,49 @@ function slotTarget(anchor: Comment): Node {
 function applyClassProp(node: Element, value: ClassProp): void {
   if (Array.isArray(value)) {
     for (const item of value) applyClassProp(node, item);
-    return;
-  }
-  if (!value) return;
-  if (typeof value === "string") {
-    appendClassName(node, value);
-    return;
-  }
-  if (!isPlainRecord(value)) return;
-  for (const name in value) {
-    if (!Object.hasOwn(value, name)) continue;
-    const item = value[name];
-    if (typeof item === "function") {
-      ownEffect(
-        node,
-        classUpdater(node, name, item as Read<unknown>),
-        `dom.class.${name}`,
-      );
-    } else if (item) {
-      node.classList.add(name);
+  } else if (typeof value === "string") {
+    const next = value.trim();
+    if (next) {
+      const current = node.getAttribute("class");
+      node.setAttribute("class", current ? `${current} ${next}` : next);
+    }
+  } else if (value && typeof value === "object") {
+    for (const name in value) {
+      if (!Object.hasOwn(value, name)) continue;
+      const item = (value as ClassMap)[name];
+      if (typeof item === "function") {
+        ownEffect(
+          node,
+          classUpdater(node, name, item as Read<unknown>),
+          `dom.class.${name}`,
+        );
+      } else if (item) {
+        node.classList.add(name);
+      }
     }
   }
-}
-
-function appendClassName(node: Element, value: string): void {
-  const next = value.trim();
-  if (!next) return;
-
-  const current = node.getAttribute("class");
-  node.setAttribute("class", current ? `${current} ${next}` : next);
 }
 
 function applyStyleProp(node: Element, value: StyleProp): void {
   if (Array.isArray(value)) {
     for (const item of value) applyStyleProp(node, item);
-    return;
-  }
-  if (!value) return;
-  if (typeof value === "string") {
-    node.setAttribute("style", value);
-    return;
-  }
-  if (!isPlainRecord(value)) return;
-  const styleDecl = (node as StyledElement).style;
-  for (const name in value) {
-    if (!Object.hasOwn(value, name)) continue;
-    const styleValue = value[name];
-    const property = cssPropName(name);
-    if (typeof styleValue === "function") {
-      ownEffect(
-        node,
-        styleUpdater(node, property, styleValue as Read<unknown>),
-        `dom.style.${property}`,
-      );
-    } else if (styleValue != null) {
-      styleDecl.setProperty(property, String(styleValue));
+  } else if (typeof value === "string") {
+    if (value) node.setAttribute("style", value);
+  } else if (value && typeof value === "object") {
+    const styleDecl = (node as StyledElement).style;
+    for (const name in value) {
+      if (!Object.hasOwn(value, name)) continue;
+      const styleValue = (value as StyleMap)[name];
+      const property = cssPropName(name);
+      if (typeof styleValue === "function") {
+        ownEffect(
+          node,
+          styleUpdater(node, property, styleValue as Read<unknown>),
+          `dom.style.${property}`,
+        );
+      } else if (styleValue != null) {
+        styleDecl.setProperty(property, String(styleValue));
+      }
     }
   }
 }
@@ -930,7 +865,7 @@ function attrUpdater(
 }
 
 type FormControlProperty = "checked" | "selected" | "value";
-const FORM_CONTROL_UNSET = Symbol("form-control-unset");
+const formControlUnset = /* @__PURE__ */ Symbol();
 type FormControlElement = Element & {
   checked?: boolean;
   selected?: boolean;
@@ -941,31 +876,17 @@ function isFormControlProperty(
   node: Element,
   name: string,
 ): name is FormControlProperty {
-  if (name !== "checked" && name !== "selected" && name !== "value")
+  if (
+    (name !== "checked" && name !== "selected" && name !== "value") ||
+    node.namespaceURI !== "http://www.w3.org/1999/xhtml"
+  )
     return false;
-  if (node.namespaceURI !== "http://www.w3.org/1999/xhtml") return false;
   const tag = node.localName;
-  if (name === "checked") return tag === "input";
-  if (name === "selected") return tag === "option";
-  return (
-    name === "value" &&
-    (tag === "button" ||
-      tag === "input" ||
-      tag === "option" ||
-      tag === "select" ||
-      tag === "textarea")
-  );
-}
-
-function formControlValue(
-  name: FormControlProperty,
-  value: unknown,
-): boolean | string {
-  return name === "value"
-    ? value == null
-      ? ""
-      : String(value)
-    : Boolean(value);
+  return name === "checked"
+    ? tag === "input"
+    : name === "selected"
+      ? tag === "option"
+      : /^(?:button|input|option|select|textarea)$/.test(tag);
 }
 
 function setFormControlProperty(
@@ -976,18 +897,16 @@ function setFormControlProperty(
   setAttrValue(node, name, attrValue(name, value));
   const control = node as FormControlElement;
   if (name === "value") {
-    const next = formControlValue(name, value) as string;
-    // Browsers reject non-empty programmatic values on file inputs. Preserve the declarative
-    // attribute without turning h()/a reactive update into a DOMException.
+    const next = value == null ? "" : String(value);
     if (
-      next === "" ||
+      !next ||
       node.localName !== "input" ||
-      node.getAttribute("type")?.toLowerCase() !== "file"
+      (node as HTMLInputElement).type !== "file"
     ) {
       control.value = next;
     }
   } else {
-    control[name] = formControlValue(name, value) as boolean;
+    control[name] = Boolean(value);
   }
 }
 
@@ -1022,10 +941,6 @@ function valueUpdater<T>(
   };
 }
 
-function setAttr(node: Element, name: string, value: unknown): void {
-  setAttrValue(node, name, attrValue(name, value));
-}
-
 function setAttrValue(node: Element, name: string, value: string | null): void {
   if (value === null) node.removeAttribute(name);
   else node.setAttribute(name, value);
@@ -1033,23 +948,11 @@ function setAttrValue(node: Element, name: string, value: string | null): void {
 
 function attrValue(name: string, value: unknown): string | null {
   if (isAriaAttr(name) && typeof value === "boolean") return String(value);
-  if (value == null || value === false) return null;
-  if (value === true) return "";
-  return String(value);
-}
-
-function stringValue(value: unknown): string {
-  if (value == null || value === false) return "";
-  return String(value);
-}
-
-function eventName(name: string): string {
-  const event = name.slice(2).toLowerCase();
-  return event === "doubleclick" ? "dblclick" : event;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return value == null || value === false
+    ? null
+    : value === true
+      ? ""
+      : String(value);
 }
 
 export { type BindValueOptions, bindValue } from "./bind-value.js";

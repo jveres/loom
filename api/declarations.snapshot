@@ -60,6 +60,8 @@ export declare function isPromiseLike(value: unknown): value is PromiseLike<unkn
 export declare function ignorePromiseRejection(promise: PromiseLike<unknown>): void;
 /** Preserve a single thrown value; aggregate only when several operations failed. */
 export declare function throwCollected(errors: readonly unknown[] | undefined, message: string): void;
+/** Run rollback cleanup after a primary failure, aggregating if cleanup also throws. */
+export declare function rollbackWith(cleanup: () => void, error: unknown, message: string): never;
 
 // dist/types/core/graph.d.ts
 /**
@@ -702,12 +704,7 @@ export interface ListOptions<T> extends EachOptions<T> {
     readonly reorder?: Read<boolean>;
 }
 export type LoomKey = string | number;
-interface RowUpdates<T> {
-    readonly update: ListUpdate<T>;
-    readonly items: Map<LoomKey, T>;
-}
-export declare function reconcileKeyed<T>(parent: Node, before: Node | null, items: readonly T[], nodes: Map<LoomKey, Element>, key: (item: T) => LoomKey, render: (item: T, key: string) => Element, reorder?: boolean, updates?: RowUpdates<T>): void;
-export {};
+export declare function reconcileKeyed<T>(parent: Node, before: Node | null, items: readonly T[], nodes: Map<LoomKey, Element>, key: (item: T) => LoomKey, render: (item: T, key: string) => Element, reorder?: boolean, update?: ListUpdate<T>): void;
 
 // dist/types/dom/listen.d.ts
 import type { Stop } from "../loom.js";
