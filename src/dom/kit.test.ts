@@ -101,7 +101,7 @@ describe("observeSize", () => {
     );
   }
   afterEach(() => vi.unstubAllGlobals());
-  it("shares one observer, routes entries, and tears down with the node", () => {
+  it("shares one observer, routes entries, and tears down with the node", async () => {
     stubRO();
     const a = h("div");
     const b = h("div");
@@ -116,7 +116,8 @@ describe("observeSize", () => {
     remove(a); // node teardown detaches both of a's callbacks
     fire(a);
     expect(seen).toEqual(["a", "a2", "b"]);
-    remove(b); // last watcher gone -> observer disconnected
+    remove(b); // last watcher gone -> observer disconnected on microtask
+    await Promise.resolve();
     expect(instances[0]?.disconnected).toBe(true);
   });
   it("manual stop detaches just that callback", () => {
@@ -129,6 +130,26 @@ describe("observeSize", () => {
     fire(el);
     expect(seen).toEqual(["two"]);
     remove(el);
+  });
+  it("reuses the pooled observer across synchronous stop and re-add, then disconnects on microtask when empty", async () => {
+    stubRO();
+    const a = h("div");
+    const b = h("div");
+    const seen: string[] = [];
+    const stop1 = observeSize(a, () => seen.push("a"));
+    expect(instances.length).toBe(1);
+    stop1();
+    const stop2 = observeSize(b, () => seen.push("b"));
+    expect(instances.length).toBe(1);
+    expect(instances[0]?.disconnected).toBe(false);
+    await Promise.resolve();
+    expect(instances[0]?.disconnected).toBe(false);
+    fire(b);
+    expect(seen).toEqual(["b"]);
+    stop2();
+    expect(instances[0]?.disconnected).toBe(false);
+    await Promise.resolve();
+    expect(instances[0]?.disconnected).toBe(true);
   });
 });
 describe("onMount", () => {
@@ -260,7 +281,7 @@ describe("observeIntersection", () => {
     );
   }
   afterEach(() => vi.unstubAllGlobals());
-  it("pools same-options observers and routes by target", () => {
+  it("pools same-options observers and routes by target", async () => {
     stubIO();
     const a = h("div");
     const b = h("div");
@@ -280,10 +301,11 @@ describe("observeIntersection", () => {
     expect(seen).toEqual(["a"]);
     remove(a);
     remove(b);
+    await Promise.resolve();
     expect(instances[0]?.disconnected).toBe(true);
     expect(instances[1]?.disconnected).toBe(true);
   });
-  it("pools equivalent options for viewport and custom roots", () => {
+  it("pools equivalent options for viewport and custom roots", async () => {
     stubIO();
     const a = h("div");
     const b = h("div");
@@ -296,7 +318,56 @@ describe("observeIntersection", () => {
     expect(instances.length).toBe(2);
     remove(a);
     remove(b);
+    await Promise.resolve();
     expect(instances.every((i) => i.disconnected)).toBe(true);
+  });
+  it("reuses the pooled observer across synchronous stop and re-observe of same or new targets", async () => {
+    stubIO();
+    const root = h("div");
+    const a = h("div");
+    const b = h("div");
+    const seen: string[] = [];
+    const stop1 = observeIntersection(a, () => seen.push("a1"), {
+      root,
+      rootMargin: "100px 0px 0px 0px",
+    });
+    expect(instances.length).toBe(1);
+    stop1();
+    expect(instances[0]?.observed).toEqual([]);
+    // Re-observing the same element or a different element in the same tick reuses the observer.
+    const stop2 = observeIntersection(a, () => seen.push("a2"), {
+      root,
+      rootMargin: "100px 0px 0px 0px",
+    });
+    expect(instances.length).toBe(1);
+    expect(instances[0]?.observed).toEqual([a]);
+    stop2();
+    const stop3 = observeIntersection(b, () => seen.push("b"), {
+      root,
+      rootMargin: "100px 0px 0px 0px",
+    });
+    expect(instances.length).toBe(1);
+    expect(instances[0]?.observed).toEqual([b]);
+    await Promise.resolve();
+    expect(instances[0]?.disconnected).toBe(false);
+    const inst = instances[0];
+    inst?.cb(
+      [{ target: b } as unknown as IntersectionObserverEntry],
+      inst as unknown as IntersectionObserver,
+    );
+    expect(seen).toEqual(["b"]);
+    stop3();
+    await Promise.resolve();
+    expect(instances[0]?.disconnected).toBe(true);
+    // A later observe after eviction creates a fresh observer cleanly.
+    const stop4 = observeIntersection(a, () => seen.push("a3"), {
+      root,
+      rootMargin: "100px 0px 0px 0px",
+    });
+    expect(instances.length).toBe(2);
+    stop4();
+    await Promise.resolve();
+    expect(instances[1]?.disconnected).toBe(true);
   });
 });
 describe("pause/resume (subtree)", () => {

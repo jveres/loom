@@ -5,7 +5,8 @@ interface TargetObserver {
 }
 export interface ObserverPool<Entry> {
     /** Route `callback` the entries for `el`. The returned stop is idempotent; the last stop for a
-     *  target unobserves it, and the last target disconnects the observer and calls `onEmpty`. */
+     *  target unobserves it synchronously, and when the pool stays empty through the microtask
+     *  checkpoint it disconnects the observer and calls `onEmpty`. */
     readonly add: (el: Element, callback: (entry: Entry) => void) => Stop;
 }
 export declare function observerPool<Entry extends {

@@ -129,28 +129,32 @@ function I(t) {
 }
 // src/dom/observer-pool.ts
 function L(e, t, n) {
-	let r = /* @__PURE__ */ new Map(), i = e((e) => {
+	let r = /* @__PURE__ */ new Map(), i = !1, a = !1, o = () => {
+		a || r.size !== 0 || (a = !0, s.disconnect(), n());
+	}, s = e((e) => {
 		for (let t of e) {
 			let e = r.get(t.target);
 			if (e) for (let n of [...e]) e.has(n) && l(() => n(t));
 		}
 	});
-	return { add(e, a) {
-		let o = r.get(e);
-		if (!o) {
-			o = /* @__PURE__ */ new Set();
+	return { add(e, n) {
+		let a = r.get(e);
+		if (!a) {
+			a = /* @__PURE__ */ new Set();
 			try {
-				t(i, e);
+				t(s, e);
 			} catch (e) {
-				throw r.size === 0 && (i.disconnect(), n()), e;
+				throw o(), e;
 			}
-			r.set(e, o);
+			r.set(e, a);
 		}
-		let s = (e) => a(e), c = o;
-		c.add(s);
-		let l = !0;
+		let c = (e) => n(e), l = a;
+		l.add(c);
+		let u = !0;
 		return () => {
-			l && (l = !1, c.delete(s), c.size === 0 && (r.delete(e), i.unobserve(e), r.size === 0 && (i.disconnect(), n())));
+			u && (u = !1, l.delete(c), l.size === 0 && (r.delete(e), s.unobserve(e), r.size === 0 && !i && (i = !0, queueMicrotask(() => {
+				i = !1, o();
+			}))));
 		};
 	} };
 }

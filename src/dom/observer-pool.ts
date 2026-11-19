@@ -10,7 +10,8 @@ interface TargetObserver {
 
 export interface ObserverPool<Entry> {
   /** Route `callback` the entries for `el`. The returned stop is idempotent; the last stop for a
-   *  target unobserves it, and the last target disconnects the observer and calls `onEmpty`. */
+   *  target unobserves it synchronously, and when the pool stays empty through the microtask
+   *  checkpoint it disconnects the observer and calls `onEmpty`. */
   readonly add: (el: Element, callback: (entry: Entry) => void) => Stop;
 }
 
@@ -23,6 +24,14 @@ export function observerPool<
   onEmpty: () => void,
 ): ObserverPool<Entry> {
   const watched = new Map<Element, Set<(entry: Entry) => void>>();
+  let evicting = false;
+  let dead = false;
+  const evict = (): void => {
+    if (dead || watched.size !== 0) return;
+    dead = true;
+    observer.disconnect();
+    onEmpty();
+  };
   const observer = create((entries) => {
     for (const entry of entries) {
       const callbacks = watched.get(entry.target);
@@ -41,10 +50,7 @@ export function observerPool<
           observe(observer, el);
         } catch (error) {
           // A pool that failed its first registration holds nothing; release it.
-          if (watched.size === 0) {
-            observer.disconnect();
-            onEmpty();
-          }
+          evict();
           throw error;
         }
         watched.set(el, callbacks);
@@ -61,9 +67,15 @@ export function observerPool<
         if (registered.size !== 0) return;
         watched.delete(el);
         observer.unobserve(el);
-        if (watched.size === 0) {
-          observer.disconnect();
-          onEmpty();
+        // Defer disconnect/eviction to the microtask checkpoint so synchronous
+        // stop -> re-observe churn (such as reactive effect re-runs) reuses the
+        // live platform observer without leaking it once idle.
+        if (watched.size === 0 && !evicting) {
+          evicting = true;
+          queueMicrotask(() => {
+            evicting = false;
+            evict();
+          });
         }
       };
     },
