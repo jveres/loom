@@ -17,6 +17,7 @@ export {
   observeSize,
   type SizeCallback,
 } from "./dom/observe-size.js";
+export { type PointerKind, pointerKind } from "./dom/pointer-kind.js";
 export { pressed } from "./dom/pressed.js";
 export {
   type ScrollEdges,

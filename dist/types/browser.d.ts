@@ -5,5 +5,6 @@ export { type MediaReadOptions, mediaRead } from "./dom/media-read.js";
 export { type IntersectionCallback, type ObserveIntersectionOptions, observeIntersection, } from "./dom/observe-intersection.js";
 export { type MutationsCallback, type ObserveMutationOptions, observeMutation, } from "./dom/observe-mutation.js";
 export { type ObserveSizeOptions, observeSize, type SizeCallback, } from "./dom/observe-size.js";
+export { type PointerKind, pointerKind } from "./dom/pointer-kind.js";
 export { pressed } from "./dom/pressed.js";
 export { type ScrollEdges, type ScrollEdgesOptions, scrollEdges, } from "./dom/scroll-edges.js";

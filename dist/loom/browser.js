@@ -82,23 +82,23 @@ function O(e, t, n, r) {
 	let a = i.get(n);
 	return a === void 0 && (a = r(), i.set(n, a)), a;
 }
-var k = /* @__PURE__ */ new WeakMap(), A = /* @__PURE__ */ new WeakMap();
-function j(e, n) {
+var k = /* @__PURE__ */ new WeakMap(), ee = /* @__PURE__ */ new WeakMap();
+function te(e, n) {
 	return O(k, e, n, () => {
 		let r = E(e, "class");
 		return t(() => (r(), e.classList.contains(n)));
 	});
 }
-function M(e, n) {
-	return O(A, e, n, () => {
+function A(e, n) {
+	return O(ee, e, n, () => {
 		let r = E(e, "style");
 		return t(() => (r(), e.style.getPropertyValue(n)));
 	});
 }
 // src/dom/hovered.ts
-var N = /* @__PURE__ */ new WeakMap(), P = /* @__PURE__ */ new WeakMap();
-function F(t) {
-	let n = N.get(t);
+var j = /* @__PURE__ */ new WeakMap(), M = /* @__PURE__ */ new WeakMap();
+function N(t) {
+	let n = j.get(t);
 	if (n) return n;
 	let r = e((e) => {
 		let n = (t) => {
@@ -108,10 +108,10 @@ function F(t) {
 			t.removeEventListener("pointerenter", n), t.removeEventListener("pointerleave", r), t.removeEventListener("pointercancel", r), e(!1);
 		};
 	}, !1);
-	return N.set(t, r), r;
+	return j.set(t, r), r;
 }
-function I(t) {
-	let n = P.get(t);
+function P(t) {
+	let n = M.get(t);
 	if (n) return n;
 	let r = e((e) => {
 		let n = () => {
@@ -125,10 +125,10 @@ function I(t) {
 			t.removeEventListener("focusin", r), t.removeEventListener("focusout", i), e(!1);
 		};
 	}, !1);
-	return P.set(t, r), r;
+	return M.set(t, r), r;
 }
 // src/dom/observer-pool.ts
-function L(e, t, n) {
+function F(e, t, n) {
 	let r = /* @__PURE__ */ new Map(), i = !1, a = !1, o = () => {
 		a || r.size !== 0 || (a = !0, s.disconnect(), n());
 	}, s = e((e) => {
@@ -159,8 +159,8 @@ function L(e, t, n) {
 	} };
 }
 // src/dom/observe-intersection.ts
-var R = /* @__PURE__ */ new WeakMap(), z = /* @__PURE__ */ new WeakMap();
-function B(e = "0px") {
+var I = /* @__PURE__ */ new WeakMap(), L = /* @__PURE__ */ new WeakMap();
+function R(e = "0px") {
 	let t = e.trim().split(/\s+/).filter(Boolean).map((e) => /^[+-]?0(?:\.0+)?(?:[a-z%]+)?$/i.test(e) ? "0px" : e), [n = "0px", r = n, i = n, a = r] = t.length === 3 ? [
 		t[0],
 		t[1],
@@ -174,54 +174,54 @@ function B(e = "0px") {
 	] : t;
 	return `${n} ${r} ${i} ${a}`;
 }
-function V(e) {
+function z(e) {
 	let t = e?.threshold, n = (typeof t == "number" ? [t] : t ? [...t] : [0]).sort((e, t) => e - t);
 	n.length === 0 && n.push(0);
 	let r = n.filter((e, t) => e !== n[t - 1]);
 	return {
-		rootMargin: B(e?.rootMargin),
+		rootMargin: R(e?.rootMargin),
 		threshold: r.length === 1 ? r[0] ?? 0 : r
 	};
 }
-function H(e) {
+function B(e) {
 	let t = e.threshold;
 	return `${e.rootMargin}|${Array.isArray(t) ? t.join(",") : t}`;
 }
-function U(e, t) {
+function V(e, t) {
 	if (e === null) {
-		let e = R.get(t);
-		return e || (e = /* @__PURE__ */ new Map(), R.set(t, e)), e;
+		let e = I.get(t);
+		return e || (e = /* @__PURE__ */ new Map(), I.set(t, e)), e;
 	}
-	let n = z.get(e);
-	return n || (n = /* @__PURE__ */ new Map(), z.set(e, n)), n;
+	let n = L.get(e);
+	return n || (n = /* @__PURE__ */ new Map(), L.set(e, n)), n;
 }
-function W(e, t, n, r, i, a, o) {
+function H(e, t, n, r, i, a, o) {
 	let s = i.get(a);
 	if (!s) {
 		let e = r.IntersectionObserver;
-		s = L((t) => new e(t, {
+		s = F((t) => new e(t, {
 			root: n,
 			rootMargin: o.rootMargin,
 			threshold: o.threshold
 		}), (e, t) => e.observe(t), () => {
-			i.delete(a), i.size === 0 && (n === null ? R.delete(r) : z.delete(n));
+			i.delete(a), i.size === 0 && (n === null ? I.delete(r) : L.delete(n));
 		}), i.set(a, s);
 	}
 	return s.add(e, t);
 }
-function G(e, t, n) {
+function U(e, t, n) {
 	let r = c(e, n?.signal);
 	if (!r.active) return r.stop;
-	let i = n?.root ?? null, a = e.ownerDocument.defaultView ?? globalThis, o = V(n), l = U(i, a);
+	let i = n?.root ?? null, a = e.ownerDocument.defaultView ?? globalThis, o = z(n), l = V(i, a);
 	try {
-		r.add(W(e, t, i, a, l, H(o), o));
+		r.add(H(e, t, i, a, l, B(o), o));
 	} catch (e) {
 		s(r, e);
 	}
 	return r.stop;
 }
 // src/dom/observe-mutation.ts
-function K(e, t, n) {
+function W(e, t, n) {
 	let i = r(e)?.defaultView ?? globalThis, a = !0, o = new i.MutationObserver((e) => {
 		a && l(() => t(e));
 	});
@@ -229,42 +229,65 @@ function K(e, t, n) {
 		a = !1, o.disconnect();
 	};
 }
-function q(e, t, n) {
+function G(e, t, n) {
 	let r = c(e, n.signal);
 	if (r.active) try {
-		r.add(K(e, t, n));
+		r.add(W(e, t, n));
 	} catch (e) {
 		s(r, e);
 	}
 	return r.stop;
 }
 // src/dom/observe-size.ts
-var J = /* @__PURE__ */ new WeakMap();
-function Y(e, t, n) {
-	let r = e.ownerDocument.defaultView ?? globalThis, i = n?.box ?? "content-box", a = J.get(r);
-	a || (a = /* @__PURE__ */ new Map(), J.set(r, a));
+var K = /* @__PURE__ */ new WeakMap();
+function q(e, t, n) {
+	let r = e.ownerDocument.defaultView ?? globalThis, i = n?.box ?? "content-box", a = K.get(r);
+	a || (a = /* @__PURE__ */ new Map(), K.set(r, a));
 	let o = a.get(i);
 	if (!o) {
 		let e = r.ResizeObserver;
-		o = L((t) => new e(t), (e, t) => e.observe(t, { box: i }), () => {
-			a.delete(i), a.size === 0 && J.delete(r);
+		o = F((t) => new e(t), (e, t) => e.observe(t, { box: i }), () => {
+			a.delete(i), a.size === 0 && K.delete(r);
 		}), a.set(i, o);
 	}
 	return o.add(e, t);
 }
-function X(e, t, n) {
+function J(e, t, n) {
 	let r = c(e, n?.signal);
 	if (r.active) try {
-		r.add(Y(e, t, n));
+		r.add(q(e, t, n));
 	} catch (e) {
 		s(r, e);
 	}
 	return r.stop;
 }
+// src/dom/pointer-kind.ts
+var Y = /* @__PURE__ */ new WeakMap(), X = /* @__PURE__ */ new Set([
+	"mouse",
+	"pen",
+	"touch"
+]), Z = {
+	capture: !0,
+	passive: !0
+};
+function ne(t = document) {
+	let n = Y.get(t);
+	if (n) return n;
+	let r = e((e) => {
+		let n = (t) => {
+			let n = t.pointerType;
+			X.has(n) && e(n);
+		};
+		return t.addEventListener("pointerover", n, Z), t.addEventListener("pointerdown", n, Z), () => {
+			t.removeEventListener("pointerover", n, Z), t.removeEventListener("pointerdown", n, Z);
+		};
+	}, "");
+	return Y.set(t, r), r;
+}
 // src/dom/pressed.ts
-var Z = /* @__PURE__ */ new WeakMap();
-function Q(t) {
-	let n = Z.get(t);
+var Q = /* @__PURE__ */ new WeakMap();
+function re(t) {
+	let n = Q.get(t);
 	if (n) return n;
 	let r = e((e) => {
 		let n = u(t, e);
@@ -272,14 +295,14 @@ function Q(t) {
 			n(), e(!1);
 		};
 	}, !1);
-	return Z.set(t, r), r;
+	return Q.set(t, r), r;
 }
 // src/dom/scroll-edges.ts
 var $ = {
 	start: !1,
 	end: !1
 };
-function ee(t, n = {}) {
+function ie(t, n = {}) {
 	let r = n.axis === "x", a = n.epsilon ?? 4;
 	return e((e) => {
 		let n = $, s = () => {
@@ -289,4 +312,4 @@ function ee(t, n = {}) {
 		return s(), c;
 	}, $);
 }
-export { E as attrRead, j as classRead, h as connected, I as focusWithin, F as hovered, a as mediaRead, G as observeIntersection, q as observeMutation, X as observeSize, Q as pressed, ee as scrollEdges, M as styleRead };
+export { E as attrRead, te as classRead, h as connected, P as focusWithin, N as hovered, a as mediaRead, U as observeIntersection, G as observeMutation, J as observeSize, ne as pointerKind, re as pressed, ie as scrollEdges, A as styleRead };

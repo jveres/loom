@@ -53,6 +53,7 @@
     "observeIntersection",
     "observeMutation",
     "observeSize",
+    "pointerKind",
     "pressed",
     "scrollEdges",
     "styleRead"

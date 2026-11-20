@@ -20,7 +20,7 @@ See it running:
 - [Stockroom database demo](https://jveres.github.io/loom/db/): bounded local
   inventory reads, atomic writes, real failure scenarios, and multiple tabs.
 
-The current release is `0.12.2` ([release notes](docs/release-0.12.2.md)). Version
+The current release is `0.12.3` ([release notes](docs/release-0.12.3.md)). Version
 `0.6.0` introduced the breaking API consolidation
 ([release notes](docs/release-0.6.0.md)). If you are upgrading from `0.5.0` or earlier, follow the
 [migration guide](docs/migration.md) to update imports and lifetimes.
@@ -224,7 +224,7 @@ Loom is distributed through GitHub with committed ESM bundles and declarations.
 Install the current release from its GitHub tag:
 
 ```sh
-pnpm add github:jveres/loom#v0.12.2
+pnpm add github:jveres/loom#v0.12.3
 ```
 
 The optional `loom/db` entrypoint is included from v0.10.0. See the

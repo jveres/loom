@@ -17,7 +17,7 @@ integration; the remaining families are named imports for application code.
 | `loom` | `batch`, `computed`, `configure`, `effect`, `mutate`, `poll`, `props`, `scope`, `source`, `state`, `trigger`, `untrack`, `update`, `watch`, `writable` | [Declarations](../dist/types/index.d.ts) |
 | `loom/model` | `keyedStates`, `lens`, `revisions`, `weakMemo` | [Declarations](../dist/types/model.d.ts) |
 | `loom/dom` | `bind`, `bindAttr`, `bindClass`, `bindStyle`, `bindValue`, `dispose`, `each`, `h`, `keyedChild`, `list`, `match`, `morph`, `morphChildren`, `onMount`, `onUnmount`, `pause`, `remove`, `replaceChildren`, `resourceGroup`, `resume`, `svgElement`, `template`, `text`, `when` | [Declarations](../dist/types/dom/index.d.ts) |
-| `loom/browser` | `attrRead`, `classRead`, `connected`, `focusWithin`, `hovered`, `mediaRead`, `observeIntersection`, `observeMutation`, `observeSize`, `pressed`, `scrollEdges`, `styleRead` | [Declarations](../dist/types/browser.d.ts) |
+| `loom/browser` | `attrRead`, `classRead`, `connected`, `focusWithin`, `hovered`, `mediaRead`, `observeIntersection`, `observeMutation`, `observeSize`, `pointerKind`, `pressed`, `scrollEdges`, `styleRead` | [Declarations](../dist/types/browser.d.ts) |
 | `loom/events` | `hoverClass`, `listen`, `onDoubleTap`, `onPress`, `onTap`, `pressClass`, `startPointerSession` | [Declarations](../dist/types/events.d.ts) |
 | `loom/layout` | `caretAtPoint`, `findScroller`, `offsetIn`, `placeAfter`, `positionOrdered`, `reveal`, `scrollMemory` | [Declarations](../dist/types/layout.d.ts) |
 | `loom/motion` | `afterAnimation`, `afterTransition`, `heightFold`, `scrollFade` | [Declarations](../dist/types/motion.d.ts) |
@@ -110,9 +110,14 @@ teardown. DOM pause/resume controls node-owned bindings, separately from scopes.
 ### Browser behavior and layout
 
 `attrRead`, `classRead`, `styleRead`, `connected`, `hovered`, `pressed`,
-`focusWithin`, `scrollEdges`, and `mediaRead` are reactive browser reads. The
-observer helpers install explicit callbacks and return `Stop`. Context comes
-from the target document, or the media read's window option.
+`focusWithin`, `pointerKind`, `scrollEdges`, and `mediaRead` are reactive
+browser reads. The observer helpers install explicit callbacks and return
+`Stop`. Context comes from the target document, or the media read's window
+option. `pointerKind(doc?)` is the `pointerType` (`"mouse"`, `"pen"`, or
+`"touch"`) of the last `pointerover` or `pointerdown` on the document, `""`
+before any; unlike CSS `(hover: …)`, which describes the device's primary
+pointer, it names the pointer in use, so hover rules can follow a pencil or
+trackpad on a touch-primary device.
 
 `listen` accepts an event target and an explicit node owner. `onTap` returns a
 controller with `.recent()` and `.stop()`; `recentMs` defaults to 600. The helper

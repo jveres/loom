@@ -48,6 +48,7 @@ export { type MediaReadOptions, mediaRead } from "./dom/media-read.js";
 export { type IntersectionCallback, type ObserveIntersectionOptions, observeIntersection, } from "./dom/observe-intersection.js";
 export { type MutationsCallback, type ObserveMutationOptions, observeMutation, } from "./dom/observe-mutation.js";
 export { type ObserveSizeOptions, observeSize, type SizeCallback, } from "./dom/observe-size.js";
+export { type PointerKind, pointerKind } from "./dom/pointer-kind.js";
 export { pressed } from "./dom/pressed.js";
 export { type ScrollEdges, type ScrollEdgesOptions, scrollEdges, } from "./dom/scroll-edges.js";
 
@@ -870,6 +871,11 @@ export declare function positionOrdered(parent: Node, ordered: readonly Node[], 
 /** Seat `node` immediately after `ref`. Already seated nodes are untouched; other moves
  * use the platform's state-preserving move when available, otherwise insertBefore(). */
 export declare function placeAfter(ref: Element, node: Node): void;
+
+// dist/types/dom/pointer-kind.d.ts
+import { type Read } from "../loom.js";
+export type PointerKind = "mouse" | "pen" | "touch" | "";
+export declare function pointerKind(doc?: Document): Read<PointerKind>;
 
 // dist/types/dom/pointer-session.d.ts
 import type { Stop } from "../loom.js";
