@@ -18,7 +18,7 @@ integration; the remaining families are named imports for application code.
 | `loom/model` | `keyedStates`, `lens`, `revisions`, `weakMemo` | [Declarations](../dist/types/model.d.ts) |
 | `loom/dom` | `bind`, `bindAttr`, `bindClass`, `bindStyle`, `bindValue`, `dispose`, `each`, `h`, `keyedChild`, `list`, `match`, `morph`, `morphChildren`, `onMount`, `onUnmount`, `pause`, `remove`, `replaceChildren`, `resourceGroup`, `resume`, `svgElement`, `template`, `text`, `when` | [Declarations](../dist/types/dom/index.d.ts) |
 | `loom/browser` | `attrRead`, `classRead`, `connected`, `focusWithin`, `hovered`, `mediaRead`, `observeIntersection`, `observeMutation`, `observeSize`, `pressed`, `scrollEdges`, `styleRead` | [Declarations](../dist/types/browser.d.ts) |
-| `loom/events` | `hoverClass`, `listen`, `onDoubleTap`, `onTap`, `pressClass`, `startPointerSession` | [Declarations](../dist/types/events.d.ts) |
+| `loom/events` | `hoverClass`, `listen`, `onDoubleTap`, `onPress`, `onTap`, `pressClass`, `startPointerSession` | [Declarations](../dist/types/events.d.ts) |
 | `loom/layout` | `caretAtPoint`, `findScroller`, `offsetIn`, `placeAfter`, `positionOrdered`, `reveal`, `scrollMemory` | [Declarations](../dist/types/layout.d.ts) |
 | `loom/motion` | `afterAnimation`, `afterTransition`, `heightFold`, `scrollFade` | [Declarations](../dist/types/motion.d.ts) |
 | `loom/schedule` | `afterFrames`, `eventOrTimeout`, `frameCoalescer`, `microtaskCoalescer`, `watchSettled` | [Declarations](../dist/types/schedule.d.ts) |
@@ -117,7 +117,14 @@ from the target document, or the media read's window option.
 `listen` accepts an event target and an explicit node owner. `onTap` returns a
 controller with `.recent()` and `.stop()`; `recentMs` defaults to 600. The helper
 recognizes pointer taps and leaves native click policy to the consumer.
-`onDoubleTap` returns `Stop`. `pressClass` accepts `{ name, when, signal }`;
+`onPress` returns `Stop`; it runs on a pointer tap (`pointerup` within `slop`) or
+a native `click` (keyboard activation, programmatic `.click()`, or an unconsumed
+click), and suppresses the tap's delayed synthetic `click` within `suppressMs`
+(default 600) whenever the handler does not return `false`, blurring any
+`contenteditable` host that iOS Safari focused underneath an unmounted control.
+Note that iOS 18 `UITextInteraction` swallows `pointerup` and `click` for touch
+taps inside an already-focused `contenteditable` subtree. `onDoubleTap` returns
+`Stop`. `pressClass` accepts `{ name, when, signal }`;
 `hoverClass` exposes `.set()` and `.stop()`. Pointer sessions filter pointer IDs
 and report exactly one terminal reason, including cancellation and manual stop.
 

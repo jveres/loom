@@ -1,7 +1,7 @@
 import { computed, type State, scope, state } from "loom";
 import { attrRead } from "loom/browser";
 import * as dom from "loom/dom";
-import { listen, onTap } from "loom/events";
+import { listen, onPress, onTap } from "loom/events";
 import { keyedStates } from "loom/model";
 import { afterFrames, frameCoalescer, watchSettled } from "loom/schedule";
 import { bindStorage, codecs, storageSlot } from "loom/storage";
@@ -32,6 +32,13 @@ export function temporaryView(
     },
     { signal },
   ).stop();
+  onPress(
+    node,
+    () => {
+      durable(durable() + 1);
+    },
+    { signal },
+  )();
   attrRead(node, "title");
   stop();
   return host;

@@ -1,6 +1,6 @@
 {
   "name": "loom",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "private": true,
   "type": "module",
   "description": "A tiny runtime reactive UI core.",

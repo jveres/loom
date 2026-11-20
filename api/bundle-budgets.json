@@ -3,7 +3,7 @@
   "loom/model": 3456,
   "loom/dom": 10240,
   "loom/browser": 6144,
-  "loom/events": 2304,
+  "loom/events": 2688,
   "loom/layout": 2560,
   "loom/motion": 6400,
   "loom/schedule": 3456,

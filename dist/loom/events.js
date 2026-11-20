@@ -1,1 +1,1 @@
-export { o as hoverClass, a as listen, t as onDoubleTap, n as onTap, r as pressClass, i as startPointerSession } from "./events-CoSbhb6t.js";
+export { s as hoverClass, o as listen, t as onDoubleTap, n as onPress, r as onTap, i as pressClass, a as startPointerSession } from "./events-C6D_MnlX.js";

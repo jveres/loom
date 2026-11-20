@@ -13,7 +13,9 @@ export { type PressClassOptions, pressClass } from "./dom/press-class.js";
 export {
   type DoubleTapOptions,
   onDoubleTap,
+  onPress,
   onTap,
+  type PressOptions,
   type TapController,
   type TapOptions,
 } from "./dom/tap.js";

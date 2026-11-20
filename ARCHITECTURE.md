@@ -19,6 +19,7 @@ Canonical family entrypoints curate the operations described in the
 | `docs/release-0.11.0.md` | Key-only database reads, the `when`/`match` branch removal fix, the `bindValue` focus change, and release checks, consumed by package users through the README. |
 | `docs/release-0.12.0.md` | Cross-layer runtime/DOM/SSR optimizations, the Loom Observatory demo, and release checks, consumed by package users through the README. |
 | `docs/release-0.12.1.md` | Microtask-deferred eviction in `observerPool` for `observeIntersection` and `observeSize` reuse across synchronous stop/re-observe cycles, consumed by package users through the README. |
+| `docs/release-0.12.2.md` | `onPress` in `loom/events` for unified tap/click activation with iOS ghost-click and ghost-focus suppression, consumed by package users through the README. |
 | `docs/release-0.10.0.md` | Release changes and qualification limits, consumed by package users through the README. |
 | `docs/db.md` | Public generic database guide and design rationale, consumed by package users. |
 | `index.html`, `demo/main.tsx`, `demo/styles.css` | Loom Observatory interactive showcase of reactive telemetry, subtree pause/resume, atomic LIS moves, and streaming `morph`; not part of the package. |

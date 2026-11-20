@@ -2,7 +2,7 @@ import "./defer.js";
 import { c as e } from "./ownership-base-BPvhwEHR.js";
 import { C as t, D as n, _ as r, c as i, i as a, w as o, x as s } from "./loom-C8fvwr1e.js";
 import { f as c, n as l, p as u, t as ee, v as te, y as ne } from "./dom-Haay-3Aq.js";
-import { i as re, n as d } from "./events-CoSbhb6t.js";
+import { a as re, r as d } from "./events-C6D_MnlX.js";
 import { t as ie } from "./motion-dhLvQ_vU.js";
 import { bindStorage as f, codecs as p, storageSlot as m } from "./storage.js";
 import { a as h, i as g, n as _, o as ae, r as v } from "./observe-BzNuo3c9.js";
